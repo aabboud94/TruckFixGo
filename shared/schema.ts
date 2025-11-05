@@ -44,6 +44,10 @@ export const biddingStrategyEnum = pgEnum('bidding_strategy', ['lowest_price', '
 export const bidAutoAcceptEnum = pgEnum('bid_auto_accept', ['never', 'lowest', 'lowest_with_rating', 'best_value']);
 export const checkProviderEnum = pgEnum('check_provider', ['efs', 'comdata']);
 export const checkStatusEnum = pgEnum('check_status', ['pending', 'authorized', 'captured', 'declined', 'voided', 'expired', 'partially_captured']);
+export const billingCycleEnum = pgEnum('billing_cycle', ['monthly', 'quarterly', 'annual']);
+export const subscriptionStatusEnum = pgEnum('subscription_status', ['active', 'paused', 'cancelled', 'expired', 'pending_cancellation']);
+export const billingHistoryStatusEnum = pgEnum('billing_history_status', ['success', 'failed', 'pending', 'processing', 'retrying']);
+export const planTypeEnum = pgEnum('plan_type', ['basic', 'standard', 'enterprise', 'custom']);
 
 // ====================
 // USERS & AUTH
@@ -1048,6 +1052,181 @@ export const fleetChecks = pgTable("fleet_checks", {
 }));
 
 // ====================
+// BILLING & SUBSCRIPTIONS
+// ====================
+
+export const billingSubscriptions = pgTable("billing_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Fleet association
+  fleetAccountId: varchar("fleet_account_id").notNull().references(() => fleetAccounts.id),
+  
+  // Plan details
+  planType: planTypeEnum("plan_type").notNull(),
+  planName: text("plan_name").notNull(),
+  planDescription: text("plan_description"),
+  customPlanDetails: jsonb("custom_plan_details"), // For custom plans
+  
+  // Billing details
+  billingCycle: billingCycleEnum("billing_cycle").notNull().default('monthly'),
+  baseAmount: decimal("base_amount", { precision: 10, scale: 2 }).notNull(),
+  discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default('0'),
+  discountPercentage: decimal("discount_percentage", { precision: 5, scale: 2 }),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }).default('0'),
+  currency: varchar("currency", { length: 3 }).notNull().default('USD'),
+  
+  // Plan limits
+  maxVehicles: integer("max_vehicles"),
+  maxUsersPerMonth: integer("max_users_per_month"),
+  includedEmergencyRepairs: integer("included_emergency_repairs"),
+  includedScheduledServices: integer("included_scheduled_services"),
+  
+  // Add-on services
+  addOns: jsonb("add_ons"), // Array of add-on services
+  prioritySupport: boolean("priority_support").notNull().default(false),
+  dedicatedAccountManager: boolean("dedicated_account_manager").notNull().default(false),
+  
+  // Payment method
+  paymentMethodId: varchar("payment_method_id").references(() => paymentMethods.id),
+  stripeSubscriptionId: varchar("stripe_subscription_id").unique(),
+  stripeCustomerId: varchar("stripe_customer_id"),
+  
+  // Status and dates
+  status: subscriptionStatusEnum("status").notNull().default('active'),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+  trialEndDate: timestamp("trial_end_date"),
+  nextBillingDate: timestamp("next_billing_date").notNull(),
+  lastBillingDate: timestamp("last_billing_date"),
+  pausedAt: timestamp("paused_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  cancellationReason: text("cancellation_reason"),
+  
+  // Contract details
+  contractTermMonths: integer("contract_term_months"), // For annual contracts
+  autoRenew: boolean("auto_renew").notNull().default(true),
+  earlyTerminationFee: decimal("early_termination_fee", { precision: 10, scale: 2 }),
+  
+  // Usage tracking
+  currentMonthUsage: jsonb("current_month_usage"), // Track usage for current billing period
+  
+  // Metadata
+  metadata: jsonb("metadata"),
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  fleetIdx: index("idx_billing_subscriptions_fleet").on(table.fleetAccountId),
+  statusIdx: index("idx_billing_subscriptions_status").on(table.status),
+  nextBillingIdx: index("idx_billing_subscriptions_next_billing").on(table.nextBillingDate),
+  stripeSubIdx: uniqueIndex("idx_billing_subscriptions_stripe").on(table.stripeSubscriptionId)
+}));
+
+export const billingHistory = pgTable("billing_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Subscription reference
+  subscriptionId: varchar("subscription_id").notNull().references(() => billingSubscriptions.id),
+  fleetAccountId: varchar("fleet_account_id").notNull().references(() => fleetAccounts.id),
+  
+  // Billing details
+  billingPeriodStart: timestamp("billing_period_start").notNull(),
+  billingPeriodEnd: timestamp("billing_period_end").notNull(),
+  billingDate: timestamp("billing_date").notNull(),
+  dueDate: timestamp("due_date"),
+  
+  // Amount details
+  baseAmount: decimal("base_amount", { precision: 10, scale: 2 }).notNull(),
+  addOnsAmount: decimal("add_ons_amount", { precision: 10, scale: 2 }).default('0'),
+  overageAmount: decimal("overage_amount", { precision: 10, scale: 2 }).default('0'),
+  discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default('0'),
+  taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }).default('0'),
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
+  paidAmount: decimal("paid_amount", { precision: 10, scale: 2 }).default('0'),
+  balanceDue: decimal("balance_due", { precision: 10, scale: 2 }).default('0'),
+  currency: varchar("currency", { length: 3 }).notNull().default('USD'),
+  
+  // Payment details
+  paymentMethodId: varchar("payment_method_id").references(() => paymentMethods.id),
+  stripeChargeId: varchar("stripe_charge_id"),
+  stripeInvoiceId: varchar("stripe_invoice_id").unique(),
+  stripePaymentIntentId: varchar("stripe_payment_intent_id"),
+  
+  // Invoice reference
+  invoiceId: varchar("invoice_id").references(() => invoices.id),
+  invoiceNumber: varchar("invoice_number", { length: 20 }),
+  
+  // Status tracking
+  status: billingHistoryStatusEnum("status").notNull().default('pending'),
+  paymentAttempts: integer("payment_attempts").notNull().default(0),
+  lastPaymentAttempt: timestamp("last_payment_attempt"),
+  nextRetryAt: timestamp("next_retry_at"),
+  paidAt: timestamp("paid_at"),
+  
+  // Usage summary for the period
+  usageSummary: jsonb("usage_summary"), // Detailed usage for the billing period
+  vehiclesUsed: integer("vehicles_used"),
+  emergencyRepairsUsed: integer("emergency_repairs_used"),
+  scheduledServicesUsed: integer("scheduled_services_used"),
+  
+  // Line items
+  lineItems: jsonb("line_items"), // Detailed breakdown of charges
+  
+  // Error tracking
+  failureReason: text("failure_reason"),
+  failureCode: varchar("failure_code", { length: 50 }),
+  errorDetails: jsonb("error_details"),
+  
+  // Metadata
+  metadata: jsonb("metadata"),
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  subscriptionIdx: index("idx_billing_history_subscription").on(table.subscriptionId),
+  fleetIdx: index("idx_billing_history_fleet").on(table.fleetAccountId),
+  statusIdx: index("idx_billing_history_status").on(table.status),
+  billingDateIdx: index("idx_billing_history_billing_date").on(table.billingDate),
+  invoiceIdx: index("idx_billing_history_invoice").on(table.invoiceId),
+  stripeInvoiceIdx: uniqueIndex("idx_billing_history_stripe_invoice").on(table.stripeInvoiceId)
+}));
+
+// Billing usage tracking for overage calculations
+export const billingUsageTracking = pgTable("billing_usage_tracking", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  subscriptionId: varchar("subscription_id").notNull().references(() => billingSubscriptions.id),
+  fleetAccountId: varchar("fleet_account_id").notNull().references(() => fleetAccounts.id),
+  
+  // Period for tracking
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Service usage counts
+  emergencyRepairsCount: integer("emergency_repairs_count").notNull().default(0),
+  scheduledServicesCount: integer("scheduled_services_count").notNull().default(0),
+  activeVehiclesCount: integer("active_vehicles_count").notNull().default(0),
+  
+  // Usage alerts
+  usageAlert80Sent: boolean("usage_alert_80_sent").notNull().default(false),
+  usageAlert90Sent: boolean("usage_alert_90_sent").notNull().default(false),
+  usageAlert100Sent: boolean("usage_alert_100_sent").notNull().default(false),
+  
+  // Overage details
+  hasOverage: boolean("has_overage").notNull().default(false),
+  overageCalculatedAt: timestamp("overage_calculated_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  subscriptionIdx: index("idx_billing_usage_subscription").on(table.subscriptionId),
+  fleetIdx: index("idx_billing_usage_fleet").on(table.fleetAccountId),
+  periodIdx: index("idx_billing_usage_period").on(table.periodStart, table.periodEnd)
+}));
+
+// ====================
 // ADMIN CONFIGURATION
 // ====================
 
@@ -1759,3 +1938,28 @@ export const insertReminderMetricsSchema = createInsertSchema(reminderMetrics).o
 });
 export type InsertReminderMetrics = z.infer<typeof insertReminderMetricsSchema>;
 export type ReminderMetrics = typeof reminderMetrics.$inferSelect;
+
+// Billing subscription schemas and types
+export const insertBillingSubscriptionSchema = createInsertSchema(billingSubscriptions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertBillingSubscription = z.infer<typeof insertBillingSubscriptionSchema>;
+export type BillingSubscription = typeof billingSubscriptions.$inferSelect;
+
+export const insertBillingHistorySchema = createInsertSchema(billingHistory).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertBillingHistory = z.infer<typeof insertBillingHistorySchema>;
+export type BillingHistory = typeof billingHistory.$inferSelect;
+
+export const insertBillingUsageTrackingSchema = createInsertSchema(billingUsageTracking).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertBillingUsageTracking = z.infer<typeof insertBillingUsageTrackingSchema>;
+export type BillingUsageTracking = typeof billingUsageTracking.$inferSelect;

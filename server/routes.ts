@@ -8,6 +8,7 @@ import aiService from "./ai-service";
 import { reminderService } from "./reminder-service";
 import { reminderScheduler } from "./reminder-scheduler";
 import efsComdataService from "./efs-comdata-service";
+import stripeService from "./stripe-service";
 import { 
   insertUserSchema,
   insertDriverProfileSchema,
@@ -42,6 +43,9 @@ import {
   insertJobBidSchema,
   insertBidTemplateSchema,
   insertBiddingConfigSchema,
+  insertBillingSubscriptionSchema,
+  insertBillingHistorySchema,
+  insertBillingUsageTrackingSchema,
   type User,
   type Job,
   type ContractorProfile,
@@ -50,6 +54,9 @@ import {
   type JobBid,
   type BidTemplate,
   type BiddingConfig,
+  type BillingSubscription,
+  type BillingHistory,
+  type BillingUsageTracking,
   userRoleEnum,
   jobStatusEnum,
   jobTypeEnum,
@@ -59,7 +66,11 @@ import {
   biddingStrategyEnum,
   bidAutoAcceptEnum,
   checkProviderEnum,
-  checkStatusEnum
+  checkStatusEnum,
+  billingCycleEnum,
+  subscriptionStatusEnum,
+  billingHistoryStatusEnum,
+  planTypeEnum
 } from "@shared/schema";
 
 // Extend Express Request to include user
@@ -5547,6 +5558,535 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== BILLING SUBSCRIPTION ROUTES ====================
+
+  // Create new subscription for fleet
+  app.post('/api/billing/subscriptions',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    validateRequest(insertBillingSubscriptionSchema.extend({
+      fleetAccountId: z.string(),
+      planType: z.enum(['basic', 'standard', 'enterprise', 'custom']),
+      billingCycle: z.enum(['monthly', 'quarterly', 'annual']),
+      paymentMethodId: z.string(),
+      addOns: z.array(z.string()).optional(),
+      customAmount: z.number().optional(),
+      trialDays: z.number().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const {
+          fleetAccountId,
+          planType,
+          billingCycle,
+          paymentMethodId,
+          addOns,
+          customAmount,
+          trialDays
+        } = req.body;
+
+        // Check if fleet already has an active subscription
+        const existingSubscription = await storage.getFleetActiveSubscription(fleetAccountId);
+        if (existingSubscription) {
+          return res.status(400).json({
+            message: 'Fleet already has an active subscription'
+          });
+        }
+
+        // Create Stripe subscription
+        const stripeSubscription = await stripeService.createSubscription(
+          fleetAccountId,
+          planType,
+          billingCycle,
+          paymentMethodId,
+          addOns,
+          customAmount,
+          trialDays
+        );
+
+        // Get plan details
+        const planDetails = stripeService.SUBSCRIPTION_PLANS[planType as keyof typeof stripeService.SUBSCRIPTION_PLANS];
+
+        // Create local subscription record
+        const subscription = await storage.createBillingSubscription({
+          fleetAccountId,
+          planType,
+          planName: planType === 'custom' ? 'Custom Fleet Plan' : planDetails.name,
+          planDescription: planType === 'custom' ? 'Customized plan' : planDetails.description,
+          billingCycle,
+          baseAmount: customAmount?.toString() || stripeSubscription.items.data[0].price.unit_amount / 100,
+          paymentMethodId,
+          stripeSubscriptionId: stripeSubscription.id,
+          stripeCustomerId: stripeSubscription.customer as string,
+          status: 'active',
+          startDate: new Date(stripeSubscription.current_period_start * 1000),
+          nextBillingDate: new Date(stripeSubscription.current_period_end * 1000),
+          trialEndDate: stripeSubscription.trial_end ? new Date(stripeSubscription.trial_end * 1000) : undefined,
+          autoRenew: true,
+          maxVehicles: planType === 'custom' ? 999999 : planDetails.features.maxVehicles,
+          includedEmergencyRepairs: planType === 'custom' ? 999999 : planDetails.features.includedEmergencyRepairs,
+          includedScheduledServices: planType === 'custom' ? 999999 : planDetails.features.includedScheduledServices,
+          prioritySupport: addOns?.includes('priority_support') || planDetails.features.prioritySupport,
+          dedicatedAccountManager: addOns?.includes('dedicated_account_manager') || planDetails.features.dedicatedAccountManager,
+          addOns: addOns || []
+        });
+
+        // Create initial usage tracking record
+        await storage.createBillingUsageTracking({
+          subscriptionId: subscription.id,
+          fleetAccountId,
+          periodStart: subscription.startDate,
+          periodEnd: subscription.nextBillingDate,
+        });
+
+        res.status(201).json({
+          message: 'Subscription created successfully',
+          subscription,
+          stripeSubscriptionId: stripeSubscription.id
+        });
+      } catch (error) {
+        console.error('Create subscription error:', error);
+        res.status(500).json({ message: 'Failed to create subscription' });
+      }
+    }
+  );
+
+  // Get subscription details
+  app.get('/api/billing/subscriptions/:id',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const subscription = await storage.getBillingSubscription(req.params.id);
+        
+        if (!subscription) {
+          return res.status(404).json({ message: 'Subscription not found' });
+        }
+
+        // Check permissions
+        if (req.session.role === 'fleet_manager') {
+          const fleetUser = await storage.getFleetContactByUserId(req.session.userId!);
+          if (!fleetUser || fleetUser.fleetAccountId !== subscription.fleetAccountId) {
+            return res.status(403).json({ message: 'Access denied' });
+          }
+        }
+
+        // Get current usage
+        const usage = await storage.getCurrentBillingUsage(subscription.id);
+
+        res.json({
+          subscription,
+          usage
+        });
+      } catch (error) {
+        console.error('Get subscription error:', error);
+        res.status(500).json({ message: 'Failed to get subscription' });
+      }
+    }
+  );
+
+  // Update subscription (upgrade/downgrade)
+  app.put('/api/billing/subscriptions/:id',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { planType, billingCycle, addOns, customAmount } = req.body;
+
+        const subscription = await storage.getBillingSubscription(req.params.id);
+        if (!subscription || !subscription.stripeSubscriptionId) {
+          return res.status(404).json({ message: 'Subscription not found' });
+        }
+
+        // Update Stripe subscription
+        const updatedStripeSubscription = await stripeService.updateSubscription(
+          subscription.stripeSubscriptionId,
+          {
+            planType,
+            billingCycle,
+            addOns,
+            customAmount
+          }
+        );
+
+        // Update local subscription
+        const updates: Partial<BillingSubscription> = {};
+        if (planType) updates.planType = planType;
+        if (billingCycle) updates.billingCycle = billingCycle;
+        if (addOns) updates.addOns = addOns;
+        if (customAmount) updates.baseAmount = customAmount.toString();
+
+        const updatedSubscription = await storage.updateBillingSubscription(
+          req.params.id,
+          updates
+        );
+
+        res.json({
+          message: 'Subscription updated successfully',
+          subscription: updatedSubscription
+        });
+      } catch (error) {
+        console.error('Update subscription error:', error);
+        res.status(500).json({ message: 'Failed to update subscription' });
+      }
+    }
+  );
+
+  // Cancel subscription
+  app.post('/api/billing/subscriptions/:id/cancel',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const { immediately, reason } = req.body;
+
+        const subscription = await storage.getBillingSubscription(req.params.id);
+        if (!subscription) {
+          return res.status(404).json({ message: 'Subscription not found' });
+        }
+
+        // Check permissions
+        if (req.session.role === 'fleet_manager') {
+          const fleetUser = await storage.getFleetContactByUserId(req.session.userId!);
+          if (!fleetUser || fleetUser.fleetAccountId !== subscription.fleetAccountId) {
+            return res.status(403).json({ message: 'Access denied' });
+          }
+        }
+
+        // Cancel Stripe subscription
+        if (subscription.stripeSubscriptionId) {
+          await stripeService.cancelSubscription(
+            subscription.stripeSubscriptionId,
+            immediately,
+            reason
+          );
+        }
+
+        // Update local subscription
+        await storage.cancelSubscription(req.params.id, reason);
+
+        res.json({
+          message: immediately ? 'Subscription cancelled immediately' : 'Subscription will cancel at period end'
+        });
+      } catch (error) {
+        console.error('Cancel subscription error:', error);
+        res.status(500).json({ message: 'Failed to cancel subscription' });
+      }
+    }
+  );
+
+  // Pause subscription
+  app.post('/api/billing/subscriptions/:id/pause',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const subscription = await storage.getBillingSubscription(req.params.id);
+        if (!subscription || !subscription.stripeSubscriptionId) {
+          return res.status(404).json({ message: 'Subscription not found' });
+        }
+
+        // Pause Stripe subscription
+        await stripeService.pauseSubscription(subscription.stripeSubscriptionId);
+
+        // Update local subscription
+        await storage.pauseSubscription(req.params.id);
+
+        res.json({
+          message: 'Subscription paused successfully'
+        });
+      } catch (error) {
+        console.error('Pause subscription error:', error);
+        res.status(500).json({ message: 'Failed to pause subscription' });
+      }
+    }
+  );
+
+  // Resume subscription
+  app.post('/api/billing/subscriptions/:id/resume',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const subscription = await storage.getBillingSubscription(req.params.id);
+        if (!subscription || !subscription.stripeSubscriptionId) {
+          return res.status(404).json({ message: 'Subscription not found' });
+        }
+
+        // Resume Stripe subscription
+        await stripeService.resumeSubscription(subscription.stripeSubscriptionId);
+
+        // Update local subscription
+        await storage.resumeSubscription(req.params.id);
+
+        res.json({
+          message: 'Subscription resumed successfully'
+        });
+      } catch (error) {
+        console.error('Resume subscription error:', error);
+        res.status(500).json({ message: 'Failed to resume subscription' });
+      }
+    }
+  );
+
+  // Get all active subscriptions (admin)
+  app.get('/api/admin/billing/subscriptions',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const subscriptions = await storage.getAllActiveSubscriptions();
+        const statistics = await storage.getBillingStatistics();
+
+        res.json({
+          subscriptions,
+          statistics
+        });
+      } catch (error) {
+        console.error('Get all subscriptions error:', error);
+        res.status(500).json({ message: 'Failed to get subscriptions' });
+      }
+    }
+  );
+
+  // Get fleet's own subscription
+  app.get('/api/billing/my-subscription',
+    requireAuth,
+    requireRole('fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetUser = await storage.getFleetContactByUserId(req.session.userId!);
+        if (!fleetUser) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+
+        const subscription = await storage.getFleetActiveSubscription(fleetUser.fleetAccountId);
+        if (!subscription) {
+          return res.status(404).json({ message: 'No active subscription found' });
+        }
+
+        const usage = await storage.getCurrentBillingUsage(subscription.id);
+
+        res.json({
+          subscription,
+          usage
+        });
+      } catch (error) {
+        console.error('Get my subscription error:', error);
+        res.status(500).json({ message: 'Failed to get subscription' });
+      }
+    }
+  );
+
+  // Get fleet billing history
+  app.get('/api/billing/history',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        let fleetAccountId: string | undefined;
+
+        // If fleet manager, only show their fleet's history
+        if (req.session.role === 'fleet_manager') {
+          const fleetUser = await storage.getFleetContactByUserId(req.session.userId!);
+          if (!fleetUser) {
+            return res.status(403).json({ message: 'Access denied' });
+          }
+          fleetAccountId = fleetUser.fleetAccountId;
+        } else if (req.query.fleetAccountId) {
+          fleetAccountId = req.query.fleetAccountId as string;
+        }
+
+        const history = fleetAccountId
+          ? await storage.getFleetBillingHistory(fleetAccountId)
+          : await storage.getUnpaidInvoices();
+
+        res.json({
+          history
+        });
+      } catch (error) {
+        console.error('Get billing history error:', error);
+        res.status(500).json({ message: 'Failed to get billing history' });
+      }
+    }
+  );
+
+  // Process manual charge
+  app.post('/api/billing/charge',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { subscriptionId } = req.body;
+
+        const subscription = await storage.getBillingSubscription(subscriptionId);
+        if (!subscription || !subscription.stripeSubscriptionId) {
+          return res.status(404).json({ message: 'Subscription not found' });
+        }
+
+        // Process charge via Stripe
+        const invoice = await stripeService.processRecurringCharge(subscription.stripeSubscriptionId);
+
+        // Create billing history record
+        const billingHistory = await storage.createBillingHistory({
+          subscriptionId: subscription.id,
+          fleetAccountId: subscription.fleetAccountId,
+          billingPeriodStart: new Date(invoice.period_start * 1000),
+          billingPeriodEnd: new Date(invoice.period_end * 1000),
+          billingDate: new Date(),
+          dueDate: invoice.due_date ? new Date(invoice.due_date * 1000) : undefined,
+          baseAmount: subscription.baseAmount,
+          totalAmount: (invoice.total / 100).toString(),
+          stripeInvoiceId: invoice.id,
+          stripeChargeId: invoice.charge as string,
+          status: invoice.paid ? 'success' : 'pending'
+        });
+
+        res.json({
+          message: 'Charge processed successfully',
+          billingHistory,
+          invoice
+        });
+      } catch (error) {
+        console.error('Process charge error:', error);
+        res.status(500).json({ message: 'Failed to process charge' });
+      }
+    }
+  );
+
+  // Retry failed payment
+  app.post('/api/billing/retry-failed',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { billingHistoryId } = req.body;
+
+        const billingHistory = await storage.getBillingHistory(billingHistoryId);
+        if (!billingHistory || !billingHistory.stripeInvoiceId) {
+          return res.status(404).json({ message: 'Billing record not found' });
+        }
+
+        // Retry payment via Stripe
+        const invoice = await stripeService.retryFailedPayment(billingHistory.stripeInvoiceId);
+
+        // Update billing history
+        const updatedHistory = await storage.updateBillingHistory(billingHistoryId, {
+          status: invoice.paid ? 'success' : 'failed',
+          paymentAttempts: billingHistory.paymentAttempts + 1,
+          lastPaymentAttempt: new Date(),
+          paidAt: invoice.paid ? new Date() : undefined,
+          failureReason: invoice.last_finalization_error?.message
+        });
+
+        res.json({
+          message: invoice.paid ? 'Payment successful' : 'Payment failed',
+          billingHistory: updatedHistory
+        });
+      } catch (error) {
+        console.error('Retry payment error:', error);
+        res.status(500).json({ message: 'Failed to retry payment' });
+      }
+    }
+  );
+
+  // Get usage statistics for subscription
+  app.get('/api/billing/subscriptions/:id/usage',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const subscription = await storage.getBillingSubscription(req.params.id);
+        if (!subscription) {
+          return res.status(404).json({ message: 'Subscription not found' });
+        }
+
+        // Check permissions
+        if (req.session.role === 'fleet_manager') {
+          const fleetUser = await storage.getFleetContactByUserId(req.session.userId!);
+          if (!fleetUser || fleetUser.fleetAccountId !== subscription.fleetAccountId) {
+            return res.status(403).json({ message: 'Access denied' });
+          }
+        }
+
+        const usage = await storage.getCurrentBillingUsage(subscription.id);
+        const alerts = await storage.checkUsageAlerts(subscription.id);
+
+        res.json({
+          usage,
+          alerts,
+          limits: {
+            maxVehicles: subscription.maxVehicles,
+            includedEmergencyRepairs: subscription.includedEmergencyRepairs,
+            includedScheduledServices: subscription.includedScheduledServices
+          }
+        });
+      } catch (error) {
+        console.error('Get usage statistics error:', error);
+        res.status(500).json({ message: 'Failed to get usage statistics' });
+      }
+    }
+  );
+
+  // Update payment method for subscription
+  app.put('/api/billing/subscriptions/:id/payment-method',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const { paymentMethodId } = req.body;
+
+        const subscription = await storage.getBillingSubscription(req.params.id);
+        if (!subscription || !subscription.stripeSubscriptionId) {
+          return res.status(404).json({ message: 'Subscription not found' });
+        }
+
+        // Check permissions
+        if (req.session.role === 'fleet_manager') {
+          const fleetUser = await storage.getFleetContactByUserId(req.session.userId!);
+          if (!fleetUser || fleetUser.fleetAccountId !== subscription.fleetAccountId) {
+            return res.status(403).json({ message: 'Access denied' });
+          }
+        }
+
+        // Update payment method in Stripe
+        await stripeService.updatePaymentMethod(subscription.stripeSubscriptionId, paymentMethodId);
+
+        // Update local subscription
+        await storage.updateBillingSubscription(req.params.id, { paymentMethodId });
+
+        res.json({
+          message: 'Payment method updated successfully'
+        });
+      } catch (error) {
+        console.error('Update payment method error:', error);
+        res.status(500).json({ message: 'Failed to update payment method' });
+      }
+    }
+  );
+
+  // Get billing statistics (admin dashboard)
+  app.get('/api/admin/billing/statistics',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const statistics = await storage.getBillingStatistics();
+        const failedPayments = await storage.getFailedPayments();
+        const upcomingBillings = await storage.getSubscriptionsDueForBilling(10);
+
+        res.json({
+          statistics,
+          failedPayments,
+          upcomingBillings
+        });
+      } catch (error) {
+        console.error('Get billing statistics error:', error);
+        res.status(500).json({ message: 'Failed to get statistics' });
+      }
+    }
+  );
+
   // ==================== WEBHOOK ROUTES ====================
 
   // Stripe payment webhook
@@ -5554,19 +6094,206 @@ export async function registerRoutes(app: Express): Promise<Server> {
     express.raw({ type: 'application/json' }),
     async (req: Request, res: Response) => {
       try {
-        // Here you would verify Stripe webhook signature
-        // and process the event
+        // Verify webhook signature
+        const sig = req.headers['stripe-signature'];
+        const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
         
-        const event = req.body;
+        let event: any;
+        
+        if (endpointSecret && sig) {
+          // Verify the webhook signature
+          try {
+            event = stripeService.constructEvent(req.body, sig, endpointSecret);
+          } catch (err) {
+            console.error('Webhook signature verification failed:', err);
+            return res.status(400).send('Webhook Error: Invalid signature');
+          }
+        } else {
+          // For testing without signature verification
+          event = req.body;
+        }
         
         // Process different event types
         switch (event.type) {
+          // Subscription events
+          case 'customer.subscription.created':
+            console.log('Subscription created:', event.data.object.id);
+            // Subscription is already created in our DB when we create it via API
+            break;
+            
+          case 'customer.subscription.updated':
+            const updatedSub = event.data.object;
+            console.log('Subscription updated:', updatedSub.id);
+            // Update local subscription status
+            const localSub = await storage.getSubscriptionByStripeId(updatedSub.id);
+            if (localSub) {
+              await storage.updateBillingSubscription(localSub.id, {
+                status: updatedSub.status,
+                currentPeriodEnd: new Date(updatedSub.current_period_end * 1000),
+                cancelAtPeriodEnd: updatedSub.cancel_at_period_end,
+              });
+            }
+            break;
+            
+          case 'customer.subscription.deleted':
+            const deletedSub = event.data.object;
+            console.log('Subscription deleted:', deletedSub.id);
+            // Mark subscription as cancelled
+            const cancelledSub = await storage.getSubscriptionByStripeId(deletedSub.id);
+            if (cancelledSub) {
+              await storage.updateBillingSubscription(cancelledSub.id, {
+                status: 'cancelled',
+                endDate: new Date(),
+              });
+            }
+            break;
+            
+          case 'customer.subscription.paused':
+            const pausedSub = event.data.object;
+            console.log('Subscription paused:', pausedSub.id);
+            const pausedLocalSub = await storage.getSubscriptionByStripeId(pausedSub.id);
+            if (pausedLocalSub) {
+              await storage.updateBillingSubscription(pausedLocalSub.id, {
+                status: 'paused',
+                pausedAt: new Date(),
+              });
+            }
+            break;
+            
+          case 'customer.subscription.resumed':
+            const resumedSub = event.data.object;
+            console.log('Subscription resumed:', resumedSub.id);
+            const resumedLocalSub = await storage.getSubscriptionByStripeId(resumedSub.id);
+            if (resumedLocalSub) {
+              await storage.updateBillingSubscription(resumedLocalSub.id, {
+                status: 'active',
+                resumedAt: new Date(),
+              });
+            }
+            break;
+            
+          case 'customer.subscription.trial_will_end':
+            const trialEndingSub = event.data.object;
+            console.log('Trial ending soon:', trialEndingSub.id);
+            // Send trial ending notification
+            break;
+
+          // Invoice events
+          case 'invoice.created':
+            console.log('Invoice created:', event.data.object.id);
+            break;
+            
+          case 'invoice.payment_succeeded':
+            const successInvoice = event.data.object;
+            console.log('Invoice payment succeeded:', successInvoice.id);
+            
+            // Update billing history
+            const successHistory = await storage.getBillingHistoryByStripeInvoiceId(successInvoice.id);
+            if (successHistory) {
+              await storage.updateBillingHistory(successHistory.id, {
+                status: 'success',
+                paidAt: new Date(),
+                stripeChargeId: successInvoice.charge as string,
+              });
+            }
+            
+            // Update subscription next billing date
+            if (successInvoice.subscription) {
+              const subscription = await storage.getSubscriptionByStripeId(successInvoice.subscription as string);
+              if (subscription) {
+                const nextBillingDate = new Date(successInvoice.period_end * 1000);
+                await storage.updateBillingSubscription(subscription.id, {
+                  nextBillingDate,
+                  lastBillingDate: new Date(),
+                });
+              }
+            }
+            break;
+            
+          case 'invoice.payment_failed':
+            const failedInvoice = event.data.object;
+            console.log('Invoice payment failed:', failedInvoice.id);
+            
+            // Update billing history
+            const failedHistory = await storage.getBillingHistoryByStripeInvoiceId(failedInvoice.id);
+            if (failedHistory) {
+              await storage.updateBillingHistory(failedHistory.id, {
+                status: 'failed',
+                failureReason: failedInvoice.last_finalization_error?.message || 'Payment failed',
+                paymentAttempts: failedHistory.paymentAttempts + 1,
+                lastPaymentAttempt: new Date(),
+              });
+              
+              // Send payment failure notification
+              // await emailService.sendPaymentFailureNotification(failedHistory);
+            }
+            break;
+            
+          case 'invoice.finalized':
+            console.log('Invoice finalized:', event.data.object.id);
+            // Invoice is ready to be paid
+            break;
+            
+          case 'invoice.upcoming':
+            const upcomingInvoice = event.data.object;
+            console.log('Upcoming invoice:', upcomingInvoice.id);
+            // Send upcoming charge reminder (3 days before)
+            if (upcomingInvoice.subscription) {
+              const subscription = await storage.getSubscriptionByStripeId(upcomingInvoice.subscription as string);
+              if (subscription) {
+                // Send reminder notification
+                // await emailService.sendUpcomingChargeReminder(subscription);
+              }
+            }
+            break;
+
+          // Payment method events
+          case 'payment_method.attached':
+            console.log('Payment method attached:', event.data.object.id);
+            break;
+            
+          case 'payment_method.card_automatically_updated':
+            console.log('Card automatically updated:', event.data.object.id);
+            // Notify customer of card update
+            break;
+            
+          case 'payment_method.detached':
+            console.log('Payment method detached:', event.data.object.id);
+            break;
+
+          // Payment intent events (for one-time payments)
           case 'payment_intent.succeeded':
-            // Update transaction status
+            console.log('Payment intent succeeded:', event.data.object.id);
+            // Update transaction status if this is a one-time payment
             break;
-          case 'payment_intent.failed':
-            // Handle failed payment
+            
+          case 'payment_intent.payment_failed':
+            console.log('Payment intent failed:', event.data.object.id);
+            // Handle failed one-time payment
             break;
+
+          // Charge events
+          case 'charge.succeeded':
+            console.log('Charge succeeded:', event.data.object.id);
+            break;
+            
+          case 'charge.failed':
+            console.log('Charge failed:', event.data.object.id);
+            break;
+            
+          case 'charge.refunded':
+            const refundedCharge = event.data.object;
+            console.log('Charge refunded:', refundedCharge.id);
+            // Create refund record
+            const billingHistory = await storage.getBillingHistoryByStripeChargeId(refundedCharge.id);
+            if (billingHistory) {
+              await storage.updateBillingHistory(billingHistory.id, {
+                refundedAmount: (refundedCharge.amount_refunded / 100).toString(),
+                refundedAt: new Date(),
+              });
+            }
+            break;
+
           default:
             console.log(`Unhandled event type ${event.type}`);
         }

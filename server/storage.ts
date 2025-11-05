@@ -42,6 +42,9 @@ import {
   bidTemplates,
   biddingConfig,
   bidAnalytics,
+  billingSubscriptions,
+  billingHistory,
+  billingUsageTracking,
   type User,
   type InsertUser,
   type Session,
@@ -128,7 +131,17 @@ import {
   type InsertBiddingConfig,
   type BidAnalytics,
   type InsertBidAnalytics,
+  type BillingSubscription,
+  type InsertBillingSubscription,
+  type BillingHistory,
+  type InsertBillingHistory,
+  type BillingUsageTracking,
+  type InsertBillingUsageTracking,
   performanceTierEnum,
+  billingCycleEnum,
+  subscriptionStatusEnum,
+  billingHistoryStatusEnum,
+  planTypeEnum,
   bidStatusEnum,
   biddingStrategyEnum,
   bidAutoAcceptEnum,
@@ -3347,6 +3360,327 @@ export class PostgreSQLStorage implements IStorage {
     return await db.select().from(backgroundChecks)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(backgroundChecks.requestedAt));
+  }
+
+  // ==================== BILLING SUBSCRIPTION OPERATIONS ====================
+
+  async createBillingSubscription(data: InsertBillingSubscription): Promise<BillingSubscription> {
+    const result = await db.insert(billingSubscriptions).values(data).returning();
+    return result[0];
+  }
+
+  async getBillingSubscription(id: string): Promise<BillingSubscription | null> {
+    const result = await db.select().from(billingSubscriptions)
+      .where(eq(billingSubscriptions.id, id))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getFleetActiveSubscription(fleetAccountId: string): Promise<BillingSubscription | null> {
+    const result = await db.select().from(billingSubscriptions)
+      .where(
+        and(
+          eq(billingSubscriptions.fleetAccountId, fleetAccountId),
+          eq(billingSubscriptions.status, 'active')
+        )
+      )
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getFleetSubscriptions(fleetAccountId: string): Promise<BillingSubscription[]> {
+    return await db.select().from(billingSubscriptions)
+      .where(eq(billingSubscriptions.fleetAccountId, fleetAccountId))
+      .orderBy(desc(billingSubscriptions.createdAt));
+  }
+
+  async updateBillingSubscription(id: string, data: Partial<InsertBillingSubscription>): Promise<BillingSubscription | null> {
+    const result = await db.update(billingSubscriptions)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(billingSubscriptions.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async updateSubscriptionByStripeId(stripeSubscriptionId: string, data: Partial<InsertBillingSubscription>): Promise<BillingSubscription | null> {
+    const result = await db.update(billingSubscriptions)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(billingSubscriptions.stripeSubscriptionId, stripeSubscriptionId))
+      .returning();
+    return result[0] || null;
+  }
+
+  async updateSubscriptionBillingDates(stripeSubscriptionId: string): Promise<void> {
+    await db.update(billingSubscriptions)
+      .set({ 
+        lastBillingDate: new Date(),
+        updatedAt: new Date() 
+      })
+      .where(eq(billingSubscriptions.stripeSubscriptionId, stripeSubscriptionId));
+  }
+
+  async getSubscriptionsDueForBilling(limit: number = 100): Promise<BillingSubscription[]> {
+    const now = new Date();
+    return await db.select().from(billingSubscriptions)
+      .where(
+        and(
+          eq(billingSubscriptions.status, 'active'),
+          lte(billingSubscriptions.nextBillingDate, now)
+        )
+      )
+      .orderBy(asc(billingSubscriptions.nextBillingDate))
+      .limit(limit);
+  }
+
+  async pauseSubscription(id: string): Promise<BillingSubscription | null> {
+    const result = await db.update(billingSubscriptions)
+      .set({ 
+        status: 'paused',
+        pausedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(billingSubscriptions.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async resumeSubscription(id: string): Promise<BillingSubscription | null> {
+    const result = await db.update(billingSubscriptions)
+      .set({ 
+        status: 'active',
+        pausedAt: null,
+        updatedAt: new Date()
+      })
+      .where(eq(billingSubscriptions.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async cancelSubscription(id: string, reason?: string): Promise<BillingSubscription | null> {
+    const result = await db.update(billingSubscriptions)
+      .set({ 
+        status: 'cancelled',
+        cancelledAt: new Date(),
+        cancellationReason: reason,
+        updatedAt: new Date()
+      })
+      .where(eq(billingSubscriptions.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async getAllActiveSubscriptions(): Promise<BillingSubscription[]> {
+    return await db.select().from(billingSubscriptions)
+      .where(eq(billingSubscriptions.status, 'active'))
+      .orderBy(desc(billingSubscriptions.createdAt));
+  }
+
+  // ==================== BILLING HISTORY OPERATIONS ====================
+
+  async createBillingHistory(data: InsertBillingHistory): Promise<BillingHistory> {
+    const result = await db.insert(billingHistory).values(data).returning();
+    return result[0];
+  }
+
+  async getBillingHistory(id: string): Promise<BillingHistory | null> {
+    const result = await db.select().from(billingHistory)
+      .where(eq(billingHistory.id, id))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getFleetBillingHistory(fleetAccountId: string, limit: number = 50): Promise<BillingHistory[]> {
+    return await db.select().from(billingHistory)
+      .where(eq(billingHistory.fleetAccountId, fleetAccountId))
+      .orderBy(desc(billingHistory.billingDate))
+      .limit(limit);
+  }
+
+  async getSubscriptionBillingHistory(subscriptionId: string): Promise<BillingHistory[]> {
+    return await db.select().from(billingHistory)
+      .where(eq(billingHistory.subscriptionId, subscriptionId))
+      .orderBy(desc(billingHistory.billingDate));
+  }
+
+  async updateBillingHistory(id: string, data: Partial<InsertBillingHistory>): Promise<BillingHistory | null> {
+    const result = await db.update(billingHistory)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(billingHistory.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async updateBillingHistoryByStripeInvoice(stripeInvoiceId: string, data: Partial<InsertBillingHistory>): Promise<BillingHistory | null> {
+    const result = await db.update(billingHistory)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(billingHistory.stripeInvoiceId, stripeInvoiceId))
+      .returning();
+    return result[0] || null;
+  }
+
+  async getFailedPayments(limit: number = 50): Promise<BillingHistory[]> {
+    return await db.select().from(billingHistory)
+      .where(
+        and(
+          eq(billingHistory.status, 'failed'),
+          lt(billingHistory.paymentAttempts, 3) // Max 3 retry attempts
+        )
+      )
+      .orderBy(asc(billingHistory.lastPaymentAttempt))
+      .limit(limit);
+  }
+
+  async getUnpaidInvoices(fleetAccountId?: string): Promise<BillingHistory[]> {
+    const conditions = [
+      inArray(billingHistory.status, ['pending', 'failed']),
+      gt(billingHistory.balanceDue, '0')
+    ];
+    
+    if (fleetAccountId) {
+      conditions.push(eq(billingHistory.fleetAccountId, fleetAccountId));
+    }
+    
+    return await db.select().from(billingHistory)
+      .where(and(...conditions))
+      .orderBy(asc(billingHistory.dueDate));
+  }
+
+  // ==================== BILLING USAGE TRACKING OPERATIONS ====================
+
+  async createBillingUsageTracking(data: InsertBillingUsageTracking): Promise<BillingUsageTracking> {
+    const result = await db.insert(billingUsageTracking).values(data).returning();
+    return result[0];
+  }
+
+  async getCurrentBillingUsage(subscriptionId: string): Promise<BillingUsageTracking | null> {
+    const now = new Date();
+    const result = await db.select().from(billingUsageTracking)
+      .where(
+        and(
+          eq(billingUsageTracking.subscriptionId, subscriptionId),
+          lte(billingUsageTracking.periodStart, now),
+          gte(billingUsageTracking.periodEnd, now)
+        )
+      )
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async updateBillingUsage(id: string, data: Partial<InsertBillingUsageTracking>): Promise<BillingUsageTracking | null> {
+    const result = await db.update(billingUsageTracking)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(billingUsageTracking.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async incrementUsageCount(
+    subscriptionId: string,
+    field: 'emergencyRepairsCount' | 'scheduledServicesCount' | 'activeVehiclesCount',
+    increment: number = 1
+  ): Promise<void> {
+    const usage = await this.getCurrentBillingUsage(subscriptionId);
+    if (usage) {
+      await db.update(billingUsageTracking)
+        .set({ 
+          [field]: sql`${billingUsageTracking[field]} + ${increment}`,
+          updatedAt: new Date()
+        })
+        .where(eq(billingUsageTracking.id, usage.id));
+    }
+  }
+
+  async checkUsageAlerts(subscriptionId: string): Promise<{
+    percentageUsed: number;
+    alert80: boolean;
+    alert90: boolean;
+    alert100: boolean;
+  } | null> {
+    const subscription = await db.select().from(billingSubscriptions)
+      .where(eq(billingSubscriptions.id, subscriptionId))
+      .limit(1);
+    
+    if (!subscription[0]) return null;
+    
+    const usage = await this.getCurrentBillingUsage(subscriptionId);
+    if (!usage) return null;
+    
+    const sub = subscription[0];
+    let percentageUsed = 0;
+    
+    // Calculate percentage based on the most constrained resource
+    const vehiclePercent = sub.maxVehicles ? (usage.activeVehiclesCount / sub.maxVehicles) * 100 : 0;
+    const emergencyPercent = sub.includedEmergencyRepairs ? 
+      (usage.emergencyRepairsCount / sub.includedEmergencyRepairs) * 100 : 0;
+    const scheduledPercent = sub.includedScheduledServices ? 
+      (usage.scheduledServicesCount / sub.includedScheduledServices) * 100 : 0;
+    
+    percentageUsed = Math.max(vehiclePercent, emergencyPercent, scheduledPercent);
+    
+    return {
+      percentageUsed,
+      alert80: percentageUsed >= 80 && !usage.usageAlert80Sent,
+      alert90: percentageUsed >= 90 && !usage.usageAlert90Sent,
+      alert100: percentageUsed >= 100 && !usage.usageAlert100Sent
+    };
+  }
+
+  async markUsageAlertSent(id: string, alertLevel: '80' | '90' | '100'): Promise<void> {
+    const field = `usageAlert${alertLevel}Sent` as const;
+    await db.update(billingUsageTracking)
+      .set({ 
+        [field]: true,
+        updatedAt: new Date()
+      })
+      .where(eq(billingUsageTracking.id, id));
+  }
+
+  async getBillingStatistics(fleetAccountId?: string): Promise<{
+    activeSubscriptions: number;
+    monthlyRevenue: number;
+    annualRevenue: number;
+    averageSubscriptionValue: number;
+    churnRate: number;
+  }> {
+    const conditions = [eq(billingSubscriptions.status, 'active')];
+    if (fleetAccountId) {
+      conditions.push(eq(billingSubscriptions.fleetAccountId, fleetAccountId));
+    }
+
+    const active = await db.select({
+      count: sql<number>`count(*)`,
+      monthlySum: sql<number>`sum(CASE WHEN billing_cycle = 'monthly' THEN base_amount ELSE 0 END)`,
+      quarterlySum: sql<number>`sum(CASE WHEN billing_cycle = 'quarterly' THEN base_amount / 3 ELSE 0 END)`,
+      annualSum: sql<number>`sum(CASE WHEN billing_cycle = 'annual' THEN base_amount / 12 ELSE 0 END)`
+    })
+    .from(billingSubscriptions)
+    .where(and(...conditions));
+
+    const monthlyRevenue = Number(active[0]?.monthlySum || 0) + 
+                          Number(active[0]?.quarterlySum || 0) + 
+                          Number(active[0]?.annualSum || 0);
+    
+    const cancelled = await db.select({
+      count: sql<number>`count(*)`
+    })
+    .from(billingSubscriptions)
+    .where(
+      and(
+        eq(billingSubscriptions.status, 'cancelled'),
+        gte(billingSubscriptions.cancelledAt, sql`NOW() - INTERVAL '30 days'`)
+      )
+    );
+
+    const activeCount = Number(active[0]?.count || 0);
+    const cancelledCount = Number(cancelled[0]?.count || 0);
+    
+    return {
+      activeSubscriptions: activeCount,
+      monthlyRevenue,
+      annualRevenue: monthlyRevenue * 12,
+      averageSubscriptionValue: activeCount > 0 ? monthlyRevenue / activeCount : 0,
+      churnRate: activeCount > 0 ? (cancelledCount / (activeCount + cancelledCount)) * 100 : 0
+    };
   }
 }
 
