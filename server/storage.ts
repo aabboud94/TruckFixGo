@@ -144,16 +144,25 @@ export interface PlatformMetrics {
   totalRevenue: number;
   totalContractors: number;
   totalFleets: number;
+  onlineContractors: number;
+  totalUsers: number;
+  avgJobValue: number;
+  platformFees: number;
 }
 
 export interface ContractorPerformanceMetrics {
   contractorId: string;
+  contractorName: string;
   totalJobs: number;
   completedJobs: number;
   averageRating: number;
   totalEarnings: number;
   averageResponseTime: number;
   completionRate: number;
+  acceptanceRate: number;
+  onTimeArrivalRate: number;
+  tier: string;
+  lastActive: Date;
 }
 
 export interface RevenueReport {
@@ -164,15 +173,120 @@ export interface RevenueReport {
   revenueByFleet: Record<string, number>;
   averageJobValue: number;
   transactionCount: number;
+  platformFees: number;
+  outstandingPayments: number;
+  paymentMethodBreakdown: Record<string, number>;
+  emergencyVsScheduled: { emergency: number; scheduled: number };
+  surgePricingRevenue: number;
 }
 
 export interface FleetUsageStats {
   fleetId: string;
+  fleetName: string;
   totalJobs: number;
   totalVehicles: number;
   totalSpent: number;
   averageJobsPerVehicle: number;
   mostUsedServices: Array<{serviceType: string, count: number}>;
+  pmComplianceRate: number;
+  breakdownFrequency: number;
+  costPerMile: number;
+  tier: string;
+  savings: number;
+}
+
+export interface SLAMetrics {
+  averageResponseTime: number;
+  slaComplianceRate: number;
+  breachedSLAs: Array<{
+    jobId: string;
+    reason: string;
+    breachTime: number;
+    serviceType: string;
+  }>;
+  responseTimeByService: Record<string, number>;
+  responseTimeTrends: Array<{
+    date: Date;
+    avgTime: number;
+    slaRate: number;
+  }>;
+  geographicPerformance: Record<string, { avgTime: number; slaRate: number }>;
+  fleetSLATracking: Record<string, { avgTime: number; slaRate: number }>;
+}
+
+export interface ResponseTimeAnalytics {
+  jobAcceptanceTime: number;
+  travelTime: number;
+  serviceTime: number;
+  totalResolutionTime: number;
+  comparedToTarget: {
+    acceptance: { actual: number; target: number; variance: number };
+    travel: { actual: number; target: number; variance: number };
+    service: { actual: number; target: number; variance: number };
+    total: { actual: number; target: number; variance: number };
+  };
+  byUrgencyLevel: Record<string, number>;
+  hourlyPatterns: Array<{ hour: number; avgTime: number; jobs: number }>;
+}
+
+export interface JobAnalytics {
+  totalJobs: number;
+  byStatus: Record<string, number>;
+  completionRate: number;
+  cancellationReasons: Record<string, number>;
+  jobTypeDistribution: Record<string, number>;
+  peakHours: Array<{ hour: number; jobs: number }>;
+  seasonalTrends: Array<{ month: string; jobs: number; revenue: number }>;
+  repeatCustomerRate: number;
+  averageJobDuration: number;
+}
+
+export interface CustomerAnalytics {
+  totalCustomers: number;
+  newCustomers: number;
+  acquisitionTrend: Array<{ date: Date; new: number; total: number }>;
+  customerLifetimeValue: number;
+  retentionRate: number;
+  guestVsRegistered: { guest: number; registered: number };
+  satisfactionScore: number;
+  referralPerformance: { referrals: number; conversionRate: number };
+  churnRate: number;
+  topCustomers: Array<{ id: string; name: string; jobs: number; spent: number }>;
+}
+
+export interface GeographicAnalytics {
+  serviceRequestHeatmap: Array<{ lat: number; lng: number; intensity: number }>;
+  coverageGaps: Array<{ area: string; demand: number; contractors: number; gap: number }>;
+  contractorDensity: Array<{ area: string; contractors: number; radius: number }>;
+  revenueByRegion: Record<string, number>;
+  responseTimeByZone: Record<string, number>;
+  popularLocations: Array<{ location: string; jobs: number; revenue: number }>;
+  averageTravelDistance: number;
+}
+
+export interface OperationalEfficiency {
+  contractorUtilization: number;
+  averageIdleTime: number;
+  routeOptimizationSavings: number;
+  multiJobBatchingRate: number;
+  platformUptime: number;
+  apiResponseTime: number;
+  errorRate: number;
+  systemHealth: {
+    database: boolean;
+    api: boolean;
+    websocket: boolean;
+    payments: boolean;
+  };
+}
+
+export interface PredictiveAnalytics {
+  demandForecast: Array<{ date: Date; predicted: number; confidence: number }>;
+  contractorAvailability: Array<{ hour: number; predicted: number; needed: number }>;
+  maintenanceNeeds: Array<{ vehicleId: string; predictedDate: Date; service: string }>;
+  revenueProjection: Array<{ month: string; projected: number; confidence: number }>;
+  seasonalTrends: Array<{ period: string; trend: string; impact: number }>;
+  growthTrajectory: { currentRate: number; projectedRate: number; target: number };
 }
 
 // Main storage interface
@@ -333,6 +447,17 @@ export interface IStorage {
   generateRevenueReport(fromDate: Date, toDate: Date): Promise<RevenueReport>;
   getFleetUsageStatistics(fleetId: string, fromDate?: Date, toDate?: Date): Promise<FleetUsageStats>;
   getResponseTimeStats(): Promise<{average: number, median: number, percentile95: number}>;
+  
+  // New comprehensive analytics methods
+  getSLAMetrics(fromDate?: Date, toDate?: Date): Promise<SLAMetrics>;
+  getResponseTimeAnalytics(fromDate?: Date, toDate?: Date): Promise<ResponseTimeAnalytics>;
+  getContractorPerformanceDetail(contractorId?: string, fromDate?: Date, toDate?: Date): Promise<ContractorPerformanceMetrics[]>;
+  getJobAnalytics(fromDate?: Date, toDate?: Date): Promise<JobAnalytics>;
+  getCustomerAnalytics(fromDate?: Date, toDate?: Date): Promise<CustomerAnalytics>;
+  getGeographicAnalytics(fromDate?: Date, toDate?: Date): Promise<GeographicAnalytics>;
+  getOperationalEfficiency(): Promise<OperationalEfficiency>;
+  getPredictiveAnalytics(fromDate?: Date, toDate?: Date): Promise<PredictiveAnalytics>;
+  getAllFleetAnalytics(fromDate?: Date, toDate?: Date): Promise<FleetUsageStats[]>;
 }
 
 // PostgreSQL implementation using Drizzle ORM
