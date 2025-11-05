@@ -34,7 +34,7 @@ export default function AdminLayout({ children, title, breadcrumbs = [] }: Admin
   }, [adminSession, isLoading, error, setLocation]);
 
   // Check for notifications
-  const { data: notifications } = useQuery({
+  const { data: notifications } = useQuery<{ unread: number }>({
     queryKey: ['/api/admin/notifications'],
     refetchInterval: 30000, // Refresh every 30 seconds
     enabled: !!adminSession
