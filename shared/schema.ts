@@ -34,6 +34,11 @@ export const reminderTypeEnum = pgEnum('reminder_type', ['sms', 'email', 'both']
 export const reminderStatusEnum = pgEnum('reminder_status', ['pending', 'queued', 'sent', 'delivered', 'failed', 'cancelled']);
 export const reminderTimingEnum = pgEnum('reminder_timing', ['24hr_before', '12hr_before', '1hr_before', 'on_completion', 'invoice_delivery', 'payment_reminder']);
 export const communicationChannelEnum = pgEnum('communication_channel', ['sms', 'email', 'both', 'none']);
+export const applicationStatusEnum = pgEnum('application_status', ['draft', 'pending', 'under_review', 'approved', 'rejected', 'withdrawn']);
+export const documentVerificationStatusEnum = pgEnum('document_verification_status', ['pending', 'verified', 'rejected', 'expired']);
+export const applicationDocumentTypeEnum = pgEnum('application_document_type', ['cdl', 'insurance', 'w9', 'vehicle_registration', 'dot_medical', 'ase_certification', 'other_certification', 'reference_letter', 'portfolio_photo']);
+export const backgroundCheckStatusEnum = pgEnum('background_check_status', ['pending', 'in_progress', 'passed', 'failed', 'expired']);
+export const backgroundCheckTypeEnum = pgEnum('background_check_type', ['criminal', 'driving_record', 'business_verification', 'insurance_validation']);
 
 // ====================
 // USERS & AUTH
@@ -547,6 +552,171 @@ export const contractorDocuments = pgTable("contractor_documents", {
   contractorIdx: index("idx_contractor_documents_contractor").on(table.contractorId),
   typeIdx: index("idx_contractor_documents_type").on(table.documentType),
   expiryIdx: index("idx_contractor_documents_expiry").on(table.expiryDate)
+}));
+
+// ====================
+// CONTRACTOR APPLICATIONS
+// ====================
+
+export const contractorApplications = pgTable("contractor_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Applicant details
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email").notNull(),
+  phone: varchar("phone", { length: 20 }).notNull(),
+  address: text("address").notNull(),
+  city: varchar("city", { length: 100 }).notNull(),
+  state: varchar("state", { length: 2 }).notNull(),
+  zip: varchar("zip", { length: 10 }).notNull(),
+  
+  // Business information
+  companyName: text("company_name"),
+  dotNumber: varchar("dot_number", { length: 20 }),
+  mcNumber: varchar("mc_number", { length: 20 }),
+  businessType: varchar("business_type", { length: 50 }), // sole_proprietor, llc, corporation
+  yearsInBusiness: integer("years_in_business"),
+  insuranceProvider: text("insurance_provider"),
+  insurancePolicyNumber: varchar("insurance_policy_number", { length: 100 }),
+  insuranceExpiryDate: timestamp("insurance_expiry_date"),
+  
+  // Experience and qualifications
+  experienceLevel: varchar("experience_level", { length: 20 }).notNull(), // entry, intermediate, expert
+  totalYearsExperience: integer("total_years_experience"),
+  certifications: jsonb("certifications").default('[]'), // Array of certification names
+  specializations: jsonb("specializations").default('[]'), // Array of specializations
+  previousEmployers: jsonb("previous_employers").default('[]'), // Array of previous employment
+  
+  // Service capabilities
+  serviceTypes: jsonb("service_types").notNull().default('[]'), // Array of service type IDs
+  serviceRadius: integer("service_radius").notNull().default(50),
+  coverageAreas: jsonb("coverage_areas").default('[]'), // Array of zip codes or cities
+  hasOwnTools: boolean("has_own_tools").notNull().default(false),
+  hasOwnVehicle: boolean("has_own_vehicle").notNull().default(false),
+  vehicleInfo: jsonb("vehicle_info"), // Vehicle details if has_own_vehicle
+  
+  // Application metadata
+  status: applicationStatusEnum("status").notNull().default('draft'),
+  submittedAt: timestamp("submitted_at"),
+  reviewStartedAt: timestamp("review_started_at"),
+  reviewCompletedAt: timestamp("review_completed_at"),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  reviewNotes: text("review_notes"),
+  internalNotes: text("internal_notes"),
+  
+  // Background checks
+  backgroundCheckConsent: boolean("background_check_consent").notNull().default(false),
+  backgroundCheckConsentDate: timestamp("background_check_consent_date"),
+  backgroundCheckStatus: backgroundCheckStatusEnum("background_check_status"),
+  backgroundCheckCompletedAt: timestamp("background_check_completed_at"),
+  backgroundCheckResults: jsonb("background_check_results"),
+  
+  // Verification results
+  emailVerified: boolean("email_verified").notNull().default(false),
+  phoneVerified: boolean("phone_verified").notNull().default(false),
+  dotNumberVerified: boolean("dot_number_verified").notNull().default(false),
+  mcNumberVerified: boolean("mc_number_verified").notNull().default(false),
+  insuranceVerified: boolean("insurance_verified").notNull().default(false),
+  
+  // References
+  references: jsonb("references").default('[]'), // Array of reference contacts
+  referencesVerified: boolean("references_verified").notNull().default(false),
+  
+  // Terms and conditions
+  termsAccepted: boolean("terms_accepted").notNull().default(false),
+  termsAcceptedAt: timestamp("terms_accepted_at"),
+  termsVersion: varchar("terms_version", { length: 20 }),
+  
+  // Tracking
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: text("user_agent"),
+  source: varchar("source", { length: 50 }), // web, mobile, referral, etc.
+  referralCode: varchar("referral_code", { length: 50 }),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  emailIdx: index("idx_contractor_applications_email").on(table.email),
+  statusIdx: index("idx_contractor_applications_status").on(table.status),
+  submittedIdx: index("idx_contractor_applications_submitted").on(table.submittedAt),
+  createdIdx: index("idx_contractor_applications_created").on(table.createdAt)
+}));
+
+export const applicationDocuments = pgTable("application_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => contractorApplications.id, { onDelete: 'cascade' }),
+  
+  documentType: applicationDocumentTypeEnum("document_type").notNull(),
+  documentName: text("document_name").notNull(),
+  documentUrl: text("document_url").notNull(),
+  fileSize: integer("file_size").notNull(), // in bytes
+  mimeType: varchar("mime_type", { length: 100 }).notNull(),
+  
+  // Verification
+  verificationStatus: documentVerificationStatusEnum("verification_status").notNull().default('pending'),
+  verifiedBy: varchar("verified_by").references(() => users.id),
+  verifiedAt: timestamp("verified_at"),
+  verificationNotes: text("verification_notes"),
+  rejectionReason: text("rejection_reason"),
+  
+  // Document metadata
+  expirationDate: timestamp("expiration_date"),
+  issueDate: timestamp("issue_date"),
+  issuingAuthority: text("issuing_authority"),
+  documentNumber: varchar("document_number", { length: 100 }), // License number, policy number, etc.
+  
+  // Version control
+  version: integer("version").notNull().default(1),
+  replacedBy: varchar("replaced_by").references(() => applicationDocuments.id),
+  isActive: boolean("is_active").notNull().default(true),
+  
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  applicationIdx: index("idx_application_documents_application").on(table.applicationId),
+  typeIdx: index("idx_application_documents_type").on(table.documentType),
+  statusIdx: index("idx_application_documents_status").on(table.verificationStatus),
+  expirationIdx: index("idx_application_documents_expiration").on(table.expirationDate),
+  activeIdx: index("idx_application_documents_active").on(table.isActive)
+}));
+
+// Background check records
+export const backgroundChecks = pgTable("background_checks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => contractorApplications.id),
+  
+  checkType: backgroundCheckTypeEnum("check_type").notNull(),
+  status: backgroundCheckStatusEnum("status").notNull().default('pending'),
+  provider: varchar("provider", { length: 50 }), // Checkr, Samba Safety, etc.
+  providerRefId: varchar("provider_ref_id", { length: 100 }),
+  
+  // Results
+  passed: boolean("passed"),
+  score: integer("score"), // Provider-specific score
+  riskLevel: varchar("risk_level", { length: 20 }), // low, medium, high
+  report: jsonb("report"), // Full report from provider
+  flaggedItems: jsonb("flagged_items").default('[]'), // Array of concerning items
+  
+  // Expiration
+  validUntil: timestamp("valid_until"),
+  expirationWarningDays: integer("expiration_warning_days").notNull().default(30),
+  
+  requestedBy: varchar("requested_by").references(() => users.id),
+  requestedAt: timestamp("requested_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  applicationIdx: index("idx_background_checks_application").on(table.applicationId),
+  typeIdx: index("idx_background_checks_type").on(table.checkType),
+  statusIdx: index("idx_background_checks_status").on(table.status),
+  validUntilIdx: index("idx_background_checks_valid_until").on(table.validUntil)
 }));
 
 // ====================
@@ -1100,6 +1270,44 @@ export const insertContractorDocumentSchema = createInsertSchema(contractorDocum
 });
 export type InsertContractorDocument = z.infer<typeof insertContractorDocumentSchema>;
 export type ContractorDocument = typeof contractorDocuments.$inferSelect;
+
+// Application schemas
+export const insertContractorApplicationSchema = createInsertSchema(contractorApplications).omit({ 
+  id: true, 
+  status: true,
+  emailVerified: true,
+  phoneVerified: true,
+  dotNumberVerified: true,
+  mcNumberVerified: true,
+  insuranceVerified: true,
+  referencesVerified: true,
+  createdAt: true, 
+  updatedAt: true 
+});
+export type InsertContractorApplication = z.infer<typeof insertContractorApplicationSchema>;
+export type ContractorApplication = typeof contractorApplications.$inferSelect;
+
+export const insertApplicationDocumentSchema = createInsertSchema(applicationDocuments).omit({ 
+  id: true,
+  verificationStatus: true,
+  version: true,
+  isActive: true,
+  uploadedAt: true,
+  createdAt: true, 
+  updatedAt: true 
+});
+export type InsertApplicationDocument = z.infer<typeof insertApplicationDocumentSchema>;
+export type ApplicationDocument = typeof applicationDocuments.$inferSelect;
+
+export const insertBackgroundCheckSchema = createInsertSchema(backgroundChecks).omit({ 
+  id: true,
+  status: true,
+  requestedAt: true,
+  createdAt: true, 
+  updatedAt: true 
+});
+export type InsertBackgroundCheck = z.infer<typeof insertBackgroundCheckSchema>;
+export type BackgroundCheck = typeof backgroundChecks.$inferSelect;
 
 // Pricing & Payments
 export const insertPricingRuleSchema = createInsertSchema(pricingRules).omit({ 

@@ -10,6 +10,7 @@ import PaymentMethodsPage from "@/pages/payment-methods";
 
 // Contractor Pages
 import ContractorAuth from "@/pages/contractor/auth";
+import ContractorApply from "@/pages/contractor-apply";
 import ContractorDashboard from "@/pages/contractor/dashboard";
 import ContractorJobs from "@/pages/contractor/jobs";
 import ContractorEarnings from "@/pages/contractor/earnings";
@@ -34,6 +35,7 @@ import AdminDashboard from "@/pages/admin";
 import AdminSettings from "@/pages/admin/settings";
 import AdminJobs from "@/pages/admin/jobs";
 import AdminContractors from "@/pages/admin/contractors";
+import AdminApplications from "@/pages/admin/applications";
 import AdminTemplates from "@/pages/admin/templates";
 import AdminPricingRules from "@/pages/admin/pricing-rules";
 
@@ -56,6 +58,7 @@ function Router() {
       
       {/* Contractor Pages */}
       <Route path="/contractor/auth" component={ContractorAuth} />
+      <Route path="/contractor/apply" component={ContractorApply} />
       <Route path="/contractor/dashboard" component={ContractorDashboard} />
       <Route path="/contractor/jobs" component={ContractorJobs} />
       <Route path="/contractor/jobs/:jobId" component={ContractorJobs} />
@@ -81,6 +84,7 @@ function Router() {
       <Route path="/admin/settings" component={AdminSettings} />
       <Route path="/admin/jobs" component={AdminJobs} />
       <Route path="/admin/contractors" component={AdminContractors} />
+      <Route path="/admin/applications" component={AdminApplications} />
       <Route path="/admin/templates" component={AdminTemplates} />
       <Route path="/admin/pricing-rules" component={AdminPricingRules} />
       
