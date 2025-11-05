@@ -3366,6 +3366,404 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== FLEET ANALYTICS ROUTES ====================
+  
+  // Get comprehensive fleet analytics overview
+  app.get('/api/fleet/:id/analytics',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.id;
+        
+        // Get fleet analytics summary
+        const summary = await storage.getFleetAnalyticsSummary(fleetId);
+        
+        // Get recent alerts
+        const alerts = await storage.getActiveAlerts(fleetId);
+        
+        // Get cost analysis
+        const costAnalysis = await storage.getFleetCostAnalysis(fleetId, 'monthly');
+        
+        // Get maintenance schedule
+        const maintenanceSchedule = await storage.generateFleetMaintenanceSchedule(fleetId);
+        
+        res.json({
+          summary,
+          alerts,
+          costAnalysis,
+          maintenanceSchedule,
+          timestamp: new Date()
+        });
+      } catch (error) {
+        console.error('Get fleet analytics error:', error);
+        res.status(500).json({ message: 'Failed to get fleet analytics' });
+      }
+    }
+  );
+  
+  // Get vehicle-specific analytics
+  app.get('/api/vehicles/:id/analytics',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.id;
+        
+        // Get vehicle analytics
+        const analytics = await storage.getVehicleAnalytics(vehicleId);
+        
+        if (!analytics) {
+          // Create analytics record if it doesn't exist
+          const vehicle = await storage.getFleetVehicle(vehicleId);
+          if (!vehicle) {
+            return res.status(404).json({ message: 'Vehicle not found' });
+          }
+          
+          const newAnalytics = await storage.createVehicleAnalytics({
+            vehicleId,
+            fleetAccountId: vehicle.fleetAccountId
+          });
+          
+          return res.json({ analytics: newAnalytics });
+        }
+        
+        // Get breakdown patterns
+        const patterns = await storage.getBreakdownPatterns(vehicleId);
+        
+        // Get predictive maintenance
+        const predictions = await storage.getPredictiveMaintenance(vehicleId);
+        
+        // Get cost per mile
+        const cpm = await storage.calculateCostPerMile(vehicleId);
+        
+        res.json({
+          analytics,
+          patterns,
+          predictions,
+          costPerMile: cpm
+        });
+      } catch (error) {
+        console.error('Get vehicle analytics error:', error);
+        res.status(500).json({ message: 'Failed to get vehicle analytics' });
+      }
+    }
+  );
+  
+  // Get breakdown patterns for fleet
+  app.get('/api/fleet/:id/patterns',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.id;
+        const { issueCategory, minFrequency, fromDate, toDate } = req.query;
+        
+        const patterns = await storage.getFleetBreakdownPatterns(fleetId, {
+          issueCategory: issueCategory as string,
+          minFrequency: minFrequency ? parseInt(minFrequency as string) : undefined,
+          fromDate: fromDate ? new Date(fromDate as string) : undefined,
+          toDate: toDate ? new Date(toDate as string) : undefined
+        });
+        
+        // Analyze patterns
+        const analysis = await storage.analyzeBreakdownPatterns(fleetId);
+        
+        res.json({
+          patterns,
+          analysis,
+          totalPatterns: patterns.length
+        });
+      } catch (error) {
+        console.error('Get breakdown patterns error:', error);
+        res.status(500).json({ message: 'Failed to get breakdown patterns' });
+      }
+    }
+  );
+  
+  // Get predictive maintenance for fleet
+  app.get('/api/fleet/:id/predictions',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.id;
+        
+        // Get all vehicles for the fleet
+        const vehicles = await storage.getFleetVehicles(fleetId);
+        
+        // Get predictions for each vehicle
+        const predictions = await Promise.all(
+          vehicles.map(async (vehicle) => {
+            const prediction = await storage.getPredictiveMaintenance(vehicle.id);
+            return {
+              vehicleId: vehicle.id,
+              unitNumber: vehicle.unitNumber,
+              ...prediction
+            };
+          })
+        );
+        
+        // Sort by risk score (highest first)
+        predictions.sort((a, b) => b.riskScore - a.riskScore);
+        
+        res.json({
+          predictions,
+          highRiskVehicles: predictions.filter(p => p.riskScore > 70).length,
+          totalPredictedCost: predictions.reduce((sum, p) => 
+            sum + p.predictedServices.reduce((s, srv) => s + srv.estimatedCost, 0), 0
+          )
+        });
+      } catch (error) {
+        console.error('Get maintenance predictions error:', error);
+        res.status(500).json({ message: 'Failed to get maintenance predictions' });
+      }
+    }
+  );
+  
+  // Get cost per mile analysis
+  app.get('/api/fleet/:id/cpm',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.id;
+        const { fromDate, toDate, period } = req.query;
+        
+        // Get all vehicles for the fleet
+        const vehicles = await storage.getFleetVehicles(fleetId);
+        
+        // Calculate CPM for each vehicle
+        const vehicleCPM = await Promise.all(
+          vehicles.map(async (vehicle) => {
+            const cpm = await storage.calculateCostPerMile(
+              vehicle.id,
+              fromDate ? new Date(fromDate as string) : undefined,
+              toDate ? new Date(toDate as string) : undefined
+            );
+            return {
+              vehicleId: vehicle.id,
+              unitNumber: vehicle.unitNumber,
+              make: vehicle.make,
+              model: vehicle.model,
+              ...cpm
+            };
+          })
+        );
+        
+        // Get historical trend
+        const costTrend = await storage.getFleetCostAnalysis(
+          fleetId, 
+          (period as 'daily' | 'weekly' | 'monthly' | 'yearly') || 'monthly'
+        );
+        
+        // Calculate fleet average
+        const totalMiles = vehicleCPM.reduce((sum, v) => sum + v.totalMiles, 0);
+        const totalCost = vehicleCPM.reduce((sum, v) => sum + v.totalCost, 0);
+        const fleetAvgCPM = totalMiles > 0 ? totalCost / totalMiles : 0;
+        
+        res.json({
+          vehicleBreakdown: vehicleCPM,
+          fleetAverage: {
+            costPerMile: fleetAvgCPM,
+            totalMiles,
+            totalCost
+          },
+          historicalTrend: costTrend,
+          industryBenchmark: 1.25 // Example industry average
+        });
+      } catch (error) {
+        console.error('Get CPM analysis error:', error);
+        res.status(500).json({ message: 'Failed to get cost per mile analysis' });
+      }
+    }
+  );
+  
+  // Configure alerts for fleet
+  app.post('/api/fleet/:id/alerts',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    validateRequest(z.object({
+      alertType: z.enum(['maintenance_due', 'cost_threshold', 'breakdown_risk', 'compliance', 'budget']),
+      alertTitle: z.string(),
+      alertMessage: z.string(),
+      severity: z.enum(['low', 'medium', 'high', 'critical']),
+      thresholdValue: z.number().optional(),
+      vehicleId: z.string().optional(),
+      notificationMethod: z.enum(['email', 'sms', 'push', 'webhook']).optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.id;
+        const alertData = req.body;
+        
+        const alert = await storage.createFleetAnalyticsAlert({
+          fleetAccountId: fleetId,
+          ...alertData
+        });
+        
+        res.status(201).json({ alert });
+      } catch (error) {
+        console.error('Create alert error:', error);
+        res.status(500).json({ message: 'Failed to create alert' });
+      }
+    }
+  );
+  
+  // Get fleet alerts
+  app.get('/api/fleet/:id/alerts',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.id;
+        const { active, limit } = req.query;
+        
+        let alerts;
+        if (active === 'true') {
+          alerts = await storage.getActiveAlerts(fleetId);
+        } else {
+          alerts = await storage.getAlertHistory(fleetId, limit ? parseInt(limit as string) : 50);
+        }
+        
+        res.json({ alerts });
+      } catch (error) {
+        console.error('Get alerts error:', error);
+        res.status(500).json({ message: 'Failed to get alerts' });
+      }
+    }
+  );
+  
+  // Acknowledge an alert
+  app.put('/api/alerts/:id/acknowledge',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const alertId = req.params.id;
+        const userId = req.session.userId!;
+        
+        const alert = await storage.acknowledgeAlert(alertId, userId);
+        
+        if (!alert) {
+          return res.status(404).json({ message: 'Alert not found' });
+        }
+        
+        res.json({ alert });
+      } catch (error) {
+        console.error('Acknowledge alert error:', error);
+        res.status(500).json({ message: 'Failed to acknowledge alert' });
+      }
+    }
+  );
+  
+  // Update vehicle metrics (for tracking miles and costs)
+  app.post('/api/vehicles/:id/metrics',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    validateRequest(z.object({
+      milesDriven: z.number().optional(),
+      maintenanceCost: z.number().optional(),
+      fuelCost: z.number().optional(),
+      breakdownCount: z.number().optional(),
+      downtimeHours: z.number().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.id;
+        const metrics = req.body;
+        
+        const analytics = await storage.updateVehicleMetrics(vehicleId, metrics);
+        
+        if (!analytics) {
+          return res.status(404).json({ message: 'Vehicle analytics not found' });
+        }
+        
+        // Check for alerts that need to be triggered
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (vehicle) {
+          await storage.triggerPredictiveAlerts(vehicle.fleetAccountId);
+        }
+        
+        res.json({ analytics });
+      } catch (error) {
+        console.error('Update vehicle metrics error:', error);
+        res.status(500).json({ message: 'Failed to update vehicle metrics' });
+      }
+    }
+  );
+  
+  // Report a breakdown pattern
+  app.post('/api/vehicles/:id/breakdown',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher', 'contractor'),
+    validateRequest(z.object({
+      issueType: z.string(),
+      issueCategory: z.string().optional(),
+      cost: z.number(),
+      location: z.object({
+        lat: z.number(),
+        lng: z.number(),
+        address: z.string().optional()
+      }).optional(),
+      weatherConditions: z.string().optional(),
+      routeType: z.string().optional(),
+      description: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.id;
+        const breakdownData = req.body;
+        
+        // Get vehicle details
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        // Check if pattern exists and update or create new
+        const existingPatterns = await storage.getBreakdownPatterns(vehicleId);
+        const existingPattern = existingPatterns.find(p => p.issueType === breakdownData.issueType);
+        
+        if (existingPattern) {
+          // Update existing pattern
+          await storage.updateBreakdownPattern(existingPattern.id, {
+            frequency: (existingPattern.frequency || 0) + 1,
+            totalCost: String(parseFloat(existingPattern.totalCost || '0') + breakdownData.cost),
+            avgCostPerIncident: String(
+              (parseFloat(existingPattern.totalCost || '0') + breakdownData.cost) / 
+              ((existingPattern.frequency || 0) + 1)
+            ),
+            lastOccurrenceDate: new Date()
+          });
+        } else {
+          // Create new pattern
+          await storage.createBreakdownPattern({
+            vehicleId,
+            fleetAccountId: vehicle.fleetAccountId,
+            issueType: breakdownData.issueType,
+            issueCategory: breakdownData.issueCategory,
+            frequency: 1,
+            totalCost: String(breakdownData.cost),
+            avgCostPerIncident: String(breakdownData.cost),
+            lastOccurrenceDate: new Date()
+          });
+        }
+        
+        // Update vehicle analytics
+        await storage.updateVehicleMetrics(vehicleId, {
+          breakdownCount: 1,
+          maintenanceCost: breakdownData.cost
+        });
+        
+        res.status(201).json({ message: 'Breakdown reported successfully' });
+      } catch (error) {
+        console.error('Report breakdown error:', error);
+        res.status(500).json({ message: 'Failed to report breakdown' });
+      }
+    }
+  );
+
   // ==================== SERVICE & PRICING ROUTES ====================
 
   // List all service types

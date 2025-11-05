@@ -146,6 +146,15 @@ import {
   type InsertPaymentSplit,
   type SplitPaymentTemplate,
   type InsertSplitPaymentTemplate,
+  vehicleAnalytics,
+  breakdownPatterns,
+  fleetAnalyticsAlerts,
+  type VehicleAnalytics,
+  type InsertVehicleAnalytics,
+  type BreakdownPattern,
+  type InsertBreakdownPattern,
+  type FleetAnalyticsAlert,
+  type InsertFleetAnalyticsAlert,
   performanceTierEnum,
   billingCycleEnum,
   subscriptionStatusEnum,
@@ -646,6 +655,84 @@ export interface IStorage {
     checkType?: string;
     status?: string;
   }): Promise<BackgroundCheck[]>;
+  
+  // ==================== ANALYTICS OPERATIONS ====================
+  // Vehicle Analytics
+  createVehicleAnalytics(data: InsertVehicleAnalytics): Promise<VehicleAnalytics>;
+  getVehicleAnalytics(vehicleId: string): Promise<VehicleAnalytics | undefined>;
+  updateVehicleAnalytics(id: string, updates: Partial<InsertVehicleAnalytics>): Promise<VehicleAnalytics | undefined>;
+  updateVehicleMetrics(vehicleId: string, metrics: {
+    milesDriven?: number;
+    maintenanceCost?: number;
+    fuelCost?: number;
+    breakdownCount?: number;
+    downtimeHours?: number;
+  }): Promise<VehicleAnalytics | undefined>;
+  getFleetAnalyticsSummary(fleetAccountId: string): Promise<{
+    totalVehicles: number;
+    fleetHealthScore: number;
+    totalMaintenanceCost: number;
+    avgCostPerMile: number;
+    vehiclesAtRisk: number;
+    upcomingMaintenance: Array<{ vehicleId: string; date: Date; service: string }>;
+  }>;
+  calculateVehicleHealthScore(vehicleId: string): Promise<number>;
+  
+  // Breakdown Patterns
+  createBreakdownPattern(data: InsertBreakdownPattern): Promise<BreakdownPattern>;
+  updateBreakdownPattern(id: string, updates: Partial<InsertBreakdownPattern>): Promise<BreakdownPattern | undefined>;
+  getBreakdownPatterns(vehicleId: string): Promise<BreakdownPattern[]>;
+  getFleetBreakdownPatterns(fleetAccountId: string, filters?: {
+    issueCategory?: string;
+    minFrequency?: number;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<BreakdownPattern[]>;
+  analyzeBreakdownPatterns(fleetAccountId: string): Promise<{
+    topIssues: Array<{ issueType: string; frequency: number; avgCost: number }>;
+    timePatterns: Record<string, number>;
+    seasonalPatterns: Record<string, number>;
+    locationClusters: Array<{ location: string; incidentCount: number }>;
+  }>;
+  
+  // Fleet Analytics Alerts
+  createFleetAnalyticsAlert(data: InsertFleetAnalyticsAlert): Promise<FleetAnalyticsAlert>;
+  updateFleetAnalyticsAlert(id: string, updates: Partial<InsertFleetAnalyticsAlert>): Promise<FleetAnalyticsAlert | undefined>;
+  acknowledgeAlert(alertId: string, userId: string): Promise<FleetAnalyticsAlert | undefined>;
+  getActiveAlerts(fleetAccountId: string): Promise<FleetAnalyticsAlert[]>;
+  getAlertHistory(fleetAccountId: string, limit?: number): Promise<FleetAnalyticsAlert[]>;
+  triggerPredictiveAlerts(fleetAccountId: string): Promise<FleetAnalyticsAlert[]>;
+  
+  // Cost Analytics
+  calculateCostPerMile(vehicleId: string, fromDate?: Date, toDate?: Date): Promise<{
+    totalCost: number;
+    totalMiles: number;
+    costPerMile: number;
+    maintenanceCPM: number;
+    fuelCPM: number;
+  }>;
+  getFleetCostAnalysis(fleetAccountId: string, period: 'daily' | 'weekly' | 'monthly' | 'yearly'): Promise<Array<{
+    date: Date;
+    totalCost: number;
+    maintenanceCost: number;
+    fuelCost: number;
+    avgCostPerMile: number;
+  }>>;
+  
+  // Predictive Maintenance
+  getPredictiveMaintenance(vehicleId: string): Promise<{
+    nextMaintenanceDate: Date;
+    predictedServices: Array<{ service: string; probability: number; estimatedCost: number }>;
+    riskScore: number;
+    recommendations: string[];
+  }>;
+  generateFleetMaintenanceSchedule(fleetAccountId: string): Promise<Array<{
+    vehicleId: string;
+    scheduledDate: Date;
+    services: string[];
+    estimatedCost: number;
+    priority: 'low' | 'medium' | 'high' | 'critical';
+  }>>;
 }
 
 // PostgreSQL implementation using Drizzle ORM

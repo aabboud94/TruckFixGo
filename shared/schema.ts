@@ -2087,6 +2087,98 @@ export const splitPaymentTemplates = pgTable("split_payment_templates", {
   priorityIdx: index("idx_split_payment_templates_priority").on(table.priority)
 }));
 
+// ====================
+// ANALYTICS TABLES
+// ====================
+
+export const vehicleAnalytics = pgTable("vehicle_analytics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vehicleId: varchar("vehicle_id").references(() => fleetVehicles.id).notNull(),
+  fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id).notNull(),
+  totalMilesDriven: decimal("total_miles_driven", { precision: 10, scale: 2 }).notNull().default('0'),
+  totalMaintenanceCost: decimal("total_maintenance_cost", { precision: 10, scale: 2 }).notNull().default('0'),
+  totalFuelCost: decimal("total_fuel_cost", { precision: 10, scale: 2 }).notNull().default('0'),
+  costPerMile: decimal("cost_per_mile", { precision: 6, scale: 4 }).notNull().default('0'),
+  fuelCostPerMile: decimal("fuel_cost_per_mile", { precision: 6, scale: 4 }).notNull().default('0'),
+  maintenanceCostPerMile: decimal("maintenance_cost_per_mile", { precision: 6, scale: 4 }).notNull().default('0'),
+  breakdownCount: integer("breakdown_count").notNull().default(0),
+  avgTimeBetweenBreakdowns: integer("avg_time_between_breakdowns"), // in hours
+  nextPredictedMaintenance: timestamp("next_predicted_maintenance"),
+  healthScore: integer("health_score").notNull().default(100), // 0-100
+  riskLevel: varchar("risk_level", { length: 20 }).notNull().default('low'), // low, medium, high
+  lastServiceDate: timestamp("last_service_date"),
+  lastBreakdownDate: timestamp("last_breakdown_date"),
+  totalDowntimeHours: decimal("total_downtime_hours", { precision: 8, scale: 2 }).notNull().default('0'),
+  avgRepairTime: decimal("avg_repair_time", { precision: 6, scale: 2 }), // in hours
+  utilizationRate: decimal("utilization_rate", { precision: 5, scale: 2 }), // percentage
+  complianceScore: integer("compliance_score").notNull().default(100), // 0-100
+  performanceMetrics: jsonb("performance_metrics"), // detailed metrics
+  predictiveInsights: jsonb("predictive_insights"), // ML predictions
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  vehicleIdx: index("idx_vehicle_analytics_vehicle").on(table.vehicleId),
+  fleetIdx: index("idx_vehicle_analytics_fleet").on(table.fleetAccountId),
+  healthScoreIdx: index("idx_vehicle_analytics_health").on(table.healthScore),
+  riskLevelIdx: index("idx_vehicle_analytics_risk").on(table.riskLevel)
+}));
+
+export const breakdownPatterns = pgTable("breakdown_patterns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vehicleId: varchar("vehicle_id").references(() => fleetVehicles.id).notNull(),
+  fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id).notNull(),
+  issueType: varchar("issue_type", { length: 100 }).notNull(),
+  issueCategory: varchar("issue_category", { length: 50 }), // engine, brakes, electrical, etc.
+  frequency: integer("frequency").notNull().default(1),
+  avgCostPerIncident: decimal("avg_cost_per_incident", { precision: 10, scale: 2 }),
+  totalCost: decimal("total_cost", { precision: 10, scale: 2 }),
+  commonLocations: text("common_locations").array(), 
+  timeOfDayPattern: jsonb("time_of_day_pattern"), // { morning: 5, afternoon: 2, evening: 3, night: 1 }
+  seasonalPattern: jsonb("seasonal_pattern"), // { spring: 2, summer: 5, fall: 3, winter: 8 }
+  weatherCorrelation: jsonb("weather_correlation"), // { hot: 3, cold: 8, rain: 5, snow: 2 }
+  routeTypeCorrelation: jsonb("route_type_correlation"), // { highway: 5, city: 3, mountain: 8 }
+  mileageAtFirstOccurrence: decimal("mileage_at_first_occurrence", { precision: 10, scale: 2 }),
+  avgMileageBetweenOccurrences: decimal("avg_mileage_between_occurrences", { precision: 10, scale: 2 }),
+  lastOccurrenceDate: timestamp("last_occurrence_date"),
+  predictedNextOccurrence: timestamp("predicted_next_occurrence"),
+  preventiveActions: text("preventive_actions").array(),
+  rootCauseAnalysis: text("root_cause_analysis"),
+  confidenceScore: decimal("confidence_score", { precision: 3, scale: 2 }), // 0.00 to 1.00
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  vehicleIdx: index("idx_breakdown_patterns_vehicle").on(table.vehicleId),
+  fleetIdx: index("idx_breakdown_patterns_fleet").on(table.fleetAccountId),
+  issueTypeIdx: index("idx_breakdown_patterns_issue").on(table.issueType),
+  frequencyIdx: index("idx_breakdown_patterns_frequency").on(table.frequency)
+}));
+
+export const fleetAnalyticsAlerts = pgTable("fleet_analytics_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id).notNull(),
+  vehicleId: varchar("vehicle_id").references(() => fleetVehicles.id),
+  alertType: varchar("alert_type", { length: 50 }).notNull(), // maintenance_due, cost_threshold, breakdown_risk, compliance, budget
+  alertTitle: varchar("alert_title", { length: 200 }).notNull(),
+  alertMessage: text("alert_message").notNull(),
+  severity: varchar("severity", { length: 20 }).notNull(), // low, medium, high, critical
+  triggerValue: decimal("trigger_value", { precision: 10, scale: 2 }),
+  thresholdValue: decimal("threshold_value", { precision: 10, scale: 2 }),
+  isActive: boolean("is_active").notNull().default(true),
+  isAcknowledged: boolean("is_acknowledged").notNull().default(false),
+  acknowledgedBy: varchar("acknowledged_by").references(() => users.id),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  notificationSent: boolean("notification_sent").notNull().default(false),
+  notificationMethod: varchar("notification_method", { length: 20 }), // email, sms, push, webhook
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at")
+}, (table) => ({
+  fleetIdx: index("idx_fleet_alerts_fleet").on(table.fleetAccountId),
+  vehicleIdx: index("idx_fleet_alerts_vehicle").on(table.vehicleId),
+  typeIdx: index("idx_fleet_alerts_type").on(table.alertType),
+  activeIdx: index("idx_fleet_alerts_active").on(table.isActive)
+}));
+
 // Billing subscription schemas and types
 export const insertBillingSubscriptionSchema = createInsertSchema(billingSubscriptions).omit({
   id: true,
@@ -2136,3 +2228,28 @@ export const insertSplitPaymentTemplateSchema = createInsertSchema(splitPaymentT
 });
 export type InsertSplitPaymentTemplate = z.infer<typeof insertSplitPaymentTemplateSchema>;
 export type SplitPaymentTemplate = typeof splitPaymentTemplates.$inferSelect;
+
+// Analytics schemas and types
+export const insertVehicleAnalyticsSchema = createInsertSchema(vehicleAnalytics).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertVehicleAnalytics = z.infer<typeof insertVehicleAnalyticsSchema>;
+export type VehicleAnalytics = typeof vehicleAnalytics.$inferSelect;
+
+export const insertBreakdownPatternSchema = createInsertSchema(breakdownPatterns).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertBreakdownPattern = z.infer<typeof insertBreakdownPatternSchema>;
+export type BreakdownPattern = typeof breakdownPatterns.$inferSelect;
+
+export const insertFleetAnalyticsAlertSchema = createInsertSchema(fleetAnalyticsAlerts).omit({
+  id: true,
+  createdAt: true,
+  resolvedAt: true
+});
+export type InsertFleetAnalyticsAlert = z.infer<typeof insertFleetAnalyticsAlertSchema>;
+export type FleetAnalyticsAlert = typeof fleetAnalyticsAlerts.$inferSelect;
