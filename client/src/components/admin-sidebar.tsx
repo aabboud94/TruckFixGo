@@ -31,7 +31,8 @@ import {
   BarChart3,
   MessageSquare,
   MapPin,
-  Palette
+  Palette,
+  FileSignature
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
@@ -51,6 +52,7 @@ const menuItems = [
       { title: "Applications", url: "/admin/applications", icon: FileText, badge: "new" },
       { title: "Contractors", url: "/admin/contractors", icon: Users, badge: null },
       { title: "Fleet Accounts", url: "/admin/fleets", icon: Building2, badge: null },
+      { title: "Contracts", url: "/admin/contracts", icon: FileSignature, badge: null },
       { title: "Users", url: "/admin/users", icon: UserCog, badge: null },
     ]
   },

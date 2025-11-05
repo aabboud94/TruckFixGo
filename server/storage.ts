@@ -48,6 +48,11 @@ import {
   splitPayments,
   paymentSplits,
   splitPaymentTemplates,
+  fleetContracts,
+  contractSlaMetrics,
+  contractPenalties,
+  contractAmendments,
+  contractPerformanceMetrics,
   type User,
   type InsertUser,
   type Session,
@@ -155,6 +160,21 @@ import {
   type InsertBreakdownPattern,
   type FleetAnalyticsAlert,
   type InsertFleetAnalyticsAlert,
+  type FleetContract,
+  type InsertFleetContract,
+  type ContractSlaMetric,
+  type InsertContractSlaMetric,
+  type ContractPenalty,
+  type InsertContractPenalty,
+  type ContractAmendment,
+  type InsertContractAmendment,
+  type ContractPerformanceMetric,
+  type InsertContractPerformanceMetric,
+  contractStatusEnum,
+  slaMetricTypeEnum,
+  penaltyStatusEnum,
+  amendmentStatusEnum,
+  contractTemplateEnum,
   performanceTierEnum,
   billingCycleEnum,
   subscriptionStatusEnum,
@@ -229,6 +249,24 @@ export interface FleetCheckFilterOptions extends PaginationOptions {
   checkNumber?: string;
   fromDate?: Date;
   toDate?: Date;
+}
+
+export interface ContractFilterOptions extends PaginationOptions {
+  fleetAccountId?: string;
+  status?: typeof contractStatusEnum.enumValues[number];
+  templateType?: typeof contractTemplateEnum.enumValues[number];
+  fromDate?: Date;
+  toDate?: Date;
+  expiringDays?: number;
+  priorityLevel?: number;
+}
+
+export interface ContractMetricsFilterOptions extends PaginationOptions {
+  contractId?: string;
+  metricType?: typeof slaMetricTypeEnum.enumValues[number];
+  breached?: boolean;
+  periodStart?: Date;
+  periodEnd?: Date;
 }
 
 // Analytics data types
@@ -4003,6 +4041,415 @@ export class PostgreSQLStorage implements IStorage {
       }
       return acc;
     }, {} as Record<string, number>);
+  }
+
+  // ====================
+  // CONTRACT MANAGEMENT
+  // ====================
+
+  async createFleetContract(contract: InsertFleetContract): Promise<FleetContract> {
+    const contractNumber = `CNT-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+    const result = await db.insert(fleetContracts)
+      .values({
+        ...contract,
+        contractNumber,
+        status: 'draft'
+      })
+      .returning();
+    return result[0];
+  }
+
+  async getFleetContract(id: string): Promise<FleetContract | null> {
+    const result = await db.select()
+      .from(fleetContracts)
+      .where(eq(fleetContracts.id, id))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getFleetContracts(filters?: ContractFilterOptions): Promise<FleetContract[]> {
+    let query = db.select().from(fleetContracts);
+
+    if (filters) {
+      const conditions = [];
+      
+      if (filters.fleetAccountId) {
+        conditions.push(eq(fleetContracts.fleetAccountId, filters.fleetAccountId));
+      }
+      
+      if (filters.status) {
+        conditions.push(eq(fleetContracts.status, filters.status));
+      }
+      
+      if (filters.templateType) {
+        conditions.push(eq(fleetContracts.templateType, filters.templateType));
+      }
+      
+      if (filters.fromDate) {
+        conditions.push(gte(fleetContracts.startDate, filters.fromDate));
+      }
+      
+      if (filters.toDate) {
+        conditions.push(lte(fleetContracts.endDate, filters.toDate));
+      }
+      
+      if (filters.expiringDays) {
+        const futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + filters.expiringDays);
+        conditions.push(
+          and(
+            eq(fleetContracts.status, 'active'),
+            lte(fleetContracts.endDate, futureDate)
+          )
+        );
+      }
+      
+      if (filters.priorityLevel) {
+        conditions.push(eq(fleetContracts.priorityLevel, filters.priorityLevel));
+      }
+      
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions));
+      }
+      
+      // Apply ordering
+      const orderDir = filters.orderDir === 'asc' ? asc : desc;
+      if (filters.orderBy === 'startDate') {
+        query = query.orderBy(orderDir(fleetContracts.startDate));
+      } else if (filters.orderBy === 'endDate') {
+        query = query.orderBy(orderDir(fleetContracts.endDate));
+      } else if (filters.orderBy === 'contractValue') {
+        query = query.orderBy(orderDir(fleetContracts.contractValue));
+      } else {
+        query = query.orderBy(orderDir(fleetContracts.createdAt));
+      }
+      
+      // Apply pagination
+      if (filters.limit) query = query.limit(filters.limit);
+      if (filters.offset) query = query.offset(filters.offset);
+    }
+
+    return await query;
+  }
+
+  async updateFleetContract(id: string, updates: Partial<FleetContract>): Promise<FleetContract | null> {
+    const result = await db.update(fleetContracts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(fleetContracts.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async activateContract(id: string, approvedBy: string): Promise<FleetContract | null> {
+    const result = await db.update(fleetContracts)
+      .set({
+        status: 'active',
+        approvedBy,
+        approvedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(fleetContracts.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async createContractSlaMetric(metric: InsertContractSlaMetric): Promise<ContractSlaMetric> {
+    const result = await db.insert(contractSlaMetrics)
+      .values(metric)
+      .returning();
+    return result[0];
+  }
+
+  async getContractSlaMetrics(contractId: string): Promise<ContractSlaMetric[]> {
+    return await db.select()
+      .from(contractSlaMetrics)
+      .where(eq(contractSlaMetrics.contractId, contractId))
+      .orderBy(asc(contractSlaMetrics.metricType));
+  }
+
+  async updateSlaMetricPerformance(
+    id: string, 
+    currentValue: number, 
+    breached: boolean
+  ): Promise<ContractSlaMetric | null> {
+    const updates: any = {
+      currentValue: currentValue.toString(),
+      lastMeasuredAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    if (breached) {
+      updates.breachCount = sql`${contractSlaMetrics.breachCount} + 1`;
+    }
+    
+    const result = await db.update(contractSlaMetrics)
+      .set(updates)
+      .where(eq(contractSlaMetrics.id, id))
+      .returning();
+    
+    return result[0] || null;
+  }
+
+  async createContractPenalty(penalty: InsertContractPenalty): Promise<ContractPenalty> {
+    const result = await db.insert(contractPenalties)
+      .values(penalty)
+      .returning();
+    return result[0];
+  }
+
+  async getContractPenalties(contractId: string, filters?: { status?: typeof penaltyStatusEnum.enumValues[number] }): Promise<ContractPenalty[]> {
+    let query = db.select()
+      .from(contractPenalties)
+      .where(eq(contractPenalties.contractId, contractId));
+    
+    if (filters?.status) {
+      query = query.where(
+        and(
+          eq(contractPenalties.contractId, contractId),
+          eq(contractPenalties.status, filters.status)
+        )
+      );
+    }
+    
+    return await query.orderBy(desc(contractPenalties.penaltyDate));
+  }
+
+  async applyPenaltyToInvoice(penaltyId: string, invoiceId: string): Promise<ContractPenalty | null> {
+    const result = await db.update(contractPenalties)
+      .set({
+        status: 'applied',
+        appliedToInvoiceId: invoiceId,
+        appliedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(contractPenalties.id, penaltyId))
+      .returning();
+    return result[0] || null;
+  }
+
+  async requestPenaltyWaiver(
+    penaltyId: string,
+    reason: string,
+    requestedBy: string
+  ): Promise<ContractPenalty | null> {
+    const result = await db.update(contractPenalties)
+      .set({
+        waiverRequested: true,
+        waiverReason: reason,
+        waiverRequestedBy: requestedBy,
+        waiverRequestedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(contractPenalties.id, penaltyId))
+      .returning();
+    return result[0] || null;
+  }
+
+  async createContractAmendment(amendment: InsertContractAmendment): Promise<ContractAmendment> {
+    // Get the latest version number for this contract
+    const latestAmendment = await db.select({ versionNumber: contractAmendments.versionNumber })
+      .from(contractAmendments)
+      .where(eq(contractAmendments.contractId, amendment.contractId))
+      .orderBy(desc(contractAmendments.versionNumber))
+      .limit(1);
+    
+    const versionNumber = (latestAmendment[0]?.versionNumber || 0) + 1;
+    const amendmentNumber = `AMD-${amendment.contractId.substring(0, 8)}-V${versionNumber}`;
+    
+    const result = await db.insert(contractAmendments)
+      .values({
+        ...amendment,
+        amendmentNumber,
+        versionNumber
+      })
+      .returning();
+    
+    return result[0];
+  }
+
+  async getContractAmendments(contractId: string): Promise<ContractAmendment[]> {
+    return await db.select()
+      .from(contractAmendments)
+      .where(eq(contractAmendments.contractId, contractId))
+      .orderBy(desc(contractAmendments.versionNumber));
+  }
+
+  async approveAmendment(id: string, approvedBy: string): Promise<ContractAmendment | null> {
+    const result = await db.update(contractAmendments)
+      .set({
+        status: 'approved',
+        approvedBy,
+        approvedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(contractAmendments.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async recordContractPerformanceMetric(metric: InsertContractPerformanceMetric): Promise<ContractPerformanceMetric> {
+    const result = await db.insert(contractPerformanceMetrics)
+      .values(metric)
+      .returning();
+    return result[0];
+  }
+
+  async getContractPerformanceMetrics(
+    contractId: string,
+    filters?: ContractMetricsFilterOptions
+  ): Promise<ContractPerformanceMetric[]> {
+    let query = db.select()
+      .from(contractPerformanceMetrics)
+      .where(eq(contractPerformanceMetrics.contractId, contractId));
+    
+    if (filters) {
+      const conditions = [eq(contractPerformanceMetrics.contractId, contractId)];
+      
+      if (filters.metricType) {
+        conditions.push(eq(contractPerformanceMetrics.metricType, filters.metricType));
+      }
+      
+      if (filters.breached !== undefined) {
+        conditions.push(eq(contractPerformanceMetrics.breachOccurred, filters.breached));
+      }
+      
+      if (filters.periodStart) {
+        conditions.push(gte(contractPerformanceMetrics.periodStart, filters.periodStart));
+      }
+      
+      if (filters.periodEnd) {
+        conditions.push(lte(contractPerformanceMetrics.periodEnd, filters.periodEnd));
+      }
+      
+      query = query.where(and(...conditions));
+      
+      // Apply ordering
+      query = query.orderBy(desc(contractPerformanceMetrics.periodStart));
+      
+      // Apply pagination
+      if (filters.limit) query = query.limit(filters.limit);
+      if (filters.offset) query = query.offset(filters.offset);
+    }
+    
+    return await query;
+  }
+
+  async getContractComplianceRate(contractId: string, fromDate: Date, toDate: Date): Promise<number> {
+    const metrics = await this.getContractPerformanceMetrics(contractId, {
+      periodStart: fromDate,
+      periodEnd: toDate
+    });
+    
+    if (metrics.length === 0) return 100;
+    
+    const compliantMetrics = metrics.filter(m => !m.breachOccurred);
+    return (compliantMetrics.length / metrics.length) * 100;
+  }
+
+  async getExpiringContracts(daysAhead: number = 30): Promise<FleetContract[]> {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + daysAhead);
+    
+    return await db.select()
+      .from(fleetContracts)
+      .where(
+        and(
+          eq(fleetContracts.status, 'active'),
+          lte(fleetContracts.endDate, futureDate),
+          gte(fleetContracts.endDate, new Date())
+        )
+      )
+      .orderBy(asc(fleetContracts.endDate));
+  }
+
+  async getContractValueByStatus(): Promise<Record<string, number>> {
+    const result = await db.select({
+      status: fleetContracts.status,
+      total: sql<number>`sum(cast(contract_value as numeric))`
+    })
+    .from(fleetContracts)
+    .groupBy(fleetContracts.status);
+    
+    return result.reduce((acc, row) => {
+      if (row.status) {
+        acc[row.status] = Number(row.total || 0);
+      }
+      return acc;
+    }, {} as Record<string, number>);
+  }
+
+  async checkSlaBreachForJob(jobId: string): Promise<{
+    breached: boolean;
+    contractId?: string;
+    metricId?: string;
+    breachDetails?: any;
+  }> {
+    // Get the job details
+    const job = await this.getJob(jobId);
+    if (!job || !job.fleetAccountId) {
+      return { breached: false };
+    }
+    
+    // Get active contracts for this fleet
+    const contracts = await this.getFleetContracts({
+      fleetAccountId: job.fleetAccountId,
+      status: 'active'
+    });
+    
+    if (contracts.length === 0) {
+      return { breached: false };
+    }
+    
+    // Check each contract's SLA metrics
+    for (const contract of contracts) {
+      const metrics = await this.getContractSlaMetrics(contract.id);
+      
+      for (const metric of metrics) {
+        if (!metric.isActive) continue;
+        
+        // Check response time metric
+        if (metric.metricType === 'response_time' && job.acceptedAt && job.createdAt) {
+          const responseTime = (job.acceptedAt.getTime() - job.createdAt.getTime()) / 60000; // in minutes
+          const targetValue = Number(metric.targetValue);
+          
+          if (responseTime > targetValue) {
+            return {
+              breached: true,
+              contractId: contract.id,
+              metricId: metric.id,
+              breachDetails: {
+                metricType: 'response_time',
+                targetValue,
+                actualValue: responseTime,
+                variance: responseTime - targetValue
+              }
+            };
+          }
+        }
+        
+        // Check resolution time metric
+        if (metric.metricType === 'resolution_time' && job.completedAt && job.createdAt) {
+          const resolutionTime = (job.completedAt.getTime() - job.createdAt.getTime()) / 3600000; // in hours
+          const targetValue = Number(metric.targetValue);
+          
+          if (resolutionTime > targetValue) {
+            return {
+              breached: true,
+              contractId: contract.id,
+              metricId: metric.id,
+              breachDetails: {
+                metricType: 'resolution_time',
+                targetValue,
+                actualValue: resolutionTime,
+                variance: resolutionTime - targetValue
+              }
+            };
+          }
+        }
+      }
+    }
+    
+    return { breached: false };
   }
 }
 

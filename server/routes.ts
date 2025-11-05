@@ -50,6 +50,11 @@ import {
   insertBillingUsageTrackingSchema,
   insertSplitPaymentTemplateSchema,
   splitPayments,
+  insertFleetContractSchema,
+  insertContractSlaMetricSchema,
+  insertContractPenaltySchema,
+  insertContractAmendmentSchema,
+  insertContractPerformanceMetricSchema,
   type User,
   type Job,
   type ContractorProfile,
@@ -61,7 +66,16 @@ import {
   type BillingSubscription,
   type BillingHistory,
   type BillingUsageTracking,
+  type FleetContract,
+  type ContractSlaMetric,
+  type ContractPenalty,
+  type ContractAmendment,
+  type ContractPerformanceMetric,
   userRoleEnum,
+  contractStatusEnum,
+  slaMetricTypeEnum,
+  penaltyStatusEnum,
+  amendmentStatusEnum,
   jobStatusEnum,
   jobTypeEnum,
   paymentStatusEnum,
@@ -6837,6 +6851,560 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   );
+
+  // ==================== CONTRACT MANAGEMENT ROUTES ====================
+  
+  // Create a new fleet contract
+  app.post('/api/contracts',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(insertFleetContractSchema),
+    async (req: Request, res: Response) => {
+      try {
+        const contract = await storage.createFleetContract(req.body);
+        
+        // Create default SLA metrics based on template
+        if (contract.templateType) {
+          const defaultMetrics = getDefaultSlaMetrics(contract.templateType);
+          for (const metric of defaultMetrics) {
+            await storage.createContractSlaMetric({
+              ...metric,
+              contractId: contract.id
+            });
+          }
+        }
+        
+        res.json(contract);
+      } catch (error) {
+        console.error('Create contract error:', error);
+        res.status(500).json({ message: 'Failed to create contract' });
+      }
+    }
+  );
+  
+  // Get contract details
+  app.get('/api/contracts/:id',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const contract = await storage.getFleetContract(req.params.id);
+        
+        if (!contract) {
+          return res.status(404).json({ message: 'Contract not found' });
+        }
+        
+        // Check fleet manager permissions
+        if (req.session.role === 'fleet_manager') {
+          const fleetUser = await storage.getFleetContactByUserId(req.session.userId!);
+          if (!fleetUser || fleetUser.fleetAccountId !== contract.fleetAccountId) {
+            return res.status(403).json({ message: 'Access denied' });
+          }
+        }
+        
+        // Get related data
+        const slaMetrics = await storage.getContractSlaMetrics(contract.id);
+        const penalties = await storage.getContractPenalties(contract.id);
+        const amendments = await storage.getContractAmendments(contract.id);
+        
+        res.json({
+          ...contract,
+          slaMetrics,
+          penalties,
+          amendments
+        });
+      } catch (error) {
+        console.error('Get contract error:', error);
+        res.status(500).json({ message: 'Failed to get contract details' });
+      }
+    }
+  );
+  
+  // Get all contracts with filters
+  app.get('/api/contracts',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const filters: any = {};
+        
+        // Parse query parameters
+        if (req.query.fleetAccountId) filters.fleetAccountId = req.query.fleetAccountId as string;
+        if (req.query.status) filters.status = req.query.status;
+        if (req.query.templateType) filters.templateType = req.query.templateType;
+        if (req.query.expiringDays) filters.expiringDays = parseInt(req.query.expiringDays as string);
+        if (req.query.priorityLevel) filters.priorityLevel = parseInt(req.query.priorityLevel as string);
+        
+        // Check fleet manager permissions
+        if (req.session.role === 'fleet_manager') {
+          const fleetUser = await storage.getFleetContactByUserId(req.session.userId!);
+          if (!fleetUser) {
+            return res.status(403).json({ message: 'Access denied' });
+          }
+          filters.fleetAccountId = fleetUser.fleetAccountId;
+        }
+        
+        const { limit, offset } = getPagination(req);
+        const contracts = await storage.getFleetContracts({
+          ...filters,
+          limit,
+          offset
+        });
+        
+        res.json(contracts);
+      } catch (error) {
+        console.error('Get contracts error:', error);
+        res.status(500).json({ message: 'Failed to get contracts' });
+      }
+    }
+  );
+  
+  // Update contract
+  app.put('/api/contracts/:id',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const contract = await storage.updateFleetContract(req.params.id, req.body);
+        
+        if (!contract) {
+          return res.status(404).json({ message: 'Contract not found' });
+        }
+        
+        res.json(contract);
+      } catch (error) {
+        console.error('Update contract error:', error);
+        res.status(500).json({ message: 'Failed to update contract' });
+      }
+    }
+  );
+  
+  // Activate contract
+  app.post('/api/contracts/:id/activate',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const contract = await storage.activateContract(req.params.id, req.session.userId!);
+        
+        if (!contract) {
+          return res.status(404).json({ message: 'Contract not found' });
+        }
+        
+        res.json(contract);
+      } catch (error) {
+        console.error('Activate contract error:', error);
+        res.status(500).json({ message: 'Failed to activate contract' });
+      }
+    }
+  );
+  
+  // Get SLA metrics for a contract
+  app.get('/api/contracts/:id/sla-metrics',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const contract = await storage.getFleetContract(req.params.id);
+        
+        if (!contract) {
+          return res.status(404).json({ message: 'Contract not found' });
+        }
+        
+        // Check fleet manager permissions
+        if (req.session.role === 'fleet_manager') {
+          const fleetUser = await storage.getFleetContactByUserId(req.session.userId!);
+          if (!fleetUser || fleetUser.fleetAccountId !== contract.fleetAccountId) {
+            return res.status(403).json({ message: 'Access denied' });
+          }
+        }
+        
+        const metrics = await storage.getContractSlaMetrics(req.params.id);
+        
+        res.json(metrics);
+      } catch (error) {
+        console.error('Get SLA metrics error:', error);
+        res.status(500).json({ message: 'Failed to get SLA metrics' });
+      }
+    }
+  );
+  
+  // Get contract performance metrics
+  app.get('/api/contracts/:id/performance',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const contract = await storage.getFleetContract(req.params.id);
+        
+        if (!contract) {
+          return res.status(404).json({ message: 'Contract not found' });
+        }
+        
+        // Check fleet manager permissions
+        if (req.session.role === 'fleet_manager') {
+          const fleetUser = await storage.getFleetContactByUserId(req.session.userId!);
+          if (!fleetUser || fleetUser.fleetAccountId !== contract.fleetAccountId) {
+            return res.status(403).json({ message: 'Access denied' });
+          }
+        }
+        
+        const filters: any = {};
+        if (req.query.periodStart) filters.periodStart = new Date(req.query.periodStart as string);
+        if (req.query.periodEnd) filters.periodEnd = new Date(req.query.periodEnd as string);
+        if (req.query.metricType) filters.metricType = req.query.metricType;
+        if (req.query.breached !== undefined) filters.breached = req.query.breached === 'true';
+        
+        const { limit, offset } = getPagination(req);
+        const metrics = await storage.getContractPerformanceMetrics(req.params.id, {
+          ...filters,
+          limit,
+          offset
+        });
+        
+        // Calculate compliance rate
+        const complianceRate = await storage.getContractComplianceRate(
+          req.params.id,
+          filters.periodStart || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          filters.periodEnd || new Date()
+        );
+        
+        res.json({
+          metrics,
+          complianceRate
+        });
+      } catch (error) {
+        console.error('Get performance metrics error:', error);
+        res.status(500).json({ message: 'Failed to get performance metrics' });
+      }
+    }
+  );
+  
+  // Get contract penalties
+  app.get('/api/contracts/:id/penalties',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const contract = await storage.getFleetContract(req.params.id);
+        
+        if (!contract) {
+          return res.status(404).json({ message: 'Contract not found' });
+        }
+        
+        // Check fleet manager permissions
+        if (req.session.role === 'fleet_manager') {
+          const fleetUser = await storage.getFleetContactByUserId(req.session.userId!);
+          if (!fleetUser || fleetUser.fleetAccountId !== contract.fleetAccountId) {
+            return res.status(403).json({ message: 'Access denied' });
+          }
+        }
+        
+        const filters: any = {};
+        if (req.query.status) filters.status = req.query.status;
+        
+        const penalties = await storage.getContractPenalties(req.params.id, filters);
+        
+        res.json(penalties);
+      } catch (error) {
+        console.error('Get penalties error:', error);
+        res.status(500).json({ message: 'Failed to get penalties' });
+      }
+    }
+  );
+  
+  // Create contract amendment
+  app.post('/api/contracts/:id/amend',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(insertContractAmendmentSchema),
+    async (req: Request, res: Response) => {
+      try {
+        const amendment = await storage.createContractAmendment({
+          ...req.body,
+          contractId: req.params.id,
+          requestedBy: req.session.userId
+        });
+        
+        res.json(amendment);
+      } catch (error) {
+        console.error('Create amendment error:', error);
+        res.status(500).json({ message: 'Failed to create amendment' });
+      }
+    }
+  );
+  
+  // Approve contract amendment
+  app.post('/api/contracts/amendments/:id/approve',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const amendment = await storage.approveAmendment(req.params.id, req.session.userId!);
+        
+        if (!amendment) {
+          return res.status(404).json({ message: 'Amendment not found' });
+        }
+        
+        // Apply amendment changes to contract
+        if (amendment.status === 'approved') {
+          const newTerms = amendment.newTerms as any;
+          await storage.updateFleetContract(amendment.contractId, newTerms);
+        }
+        
+        res.json(amendment);
+      } catch (error) {
+        console.error('Approve amendment error:', error);
+        res.status(500).json({ message: 'Failed to approve amendment' });
+      }
+    }
+  );
+  
+  // Request penalty waiver
+  app.post('/api/contracts/penalties/:id/waiver',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const { reason } = req.body;
+        
+        const penalty = await storage.requestPenaltyWaiver(
+          req.params.id,
+          reason,
+          req.session.userId!
+        );
+        
+        if (!penalty) {
+          return res.status(404).json({ message: 'Penalty not found' });
+        }
+        
+        res.json(penalty);
+      } catch (error) {
+        console.error('Request waiver error:', error);
+        res.status(500).json({ message: 'Failed to request waiver' });
+      }
+    }
+  );
+  
+  // Renew contract
+  app.post('/api/contracts/:id/renew',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const existingContract = await storage.getFleetContract(req.params.id);
+        
+        if (!existingContract) {
+          return res.status(404).json({ message: 'Contract not found' });
+        }
+        
+        // Create renewal as new contract
+        const renewalContract = await storage.createFleetContract({
+          fleetAccountId: existingContract.fleetAccountId,
+          contractName: `${existingContract.contractName} (Renewal)`,
+          templateType: existingContract.templateType,
+          startDate: existingContract.endDate,
+          endDate: new Date(existingContract.endDate.getTime() + 365 * 24 * 60 * 60 * 1000), // +1 year
+          contractValue: existingContract.contractValue,
+          billingFrequency: existingContract.billingFrequency,
+          paymentTerms: existingContract.paymentTerms,
+          slaTerms: existingContract.slaTerms,
+          guaranteedResponseTime: existingContract.guaranteedResponseTime,
+          guaranteedResolutionTime: existingContract.guaranteedResolutionTime,
+          uptimeCommitment: existingContract.uptimeCommitment,
+          coverageZones: existingContract.coverageZones,
+          serviceHours: existingContract.serviceHours,
+          exclusions: existingContract.exclusions,
+          penaltyConfiguration: existingContract.penaltyConfiguration,
+          maxMonthlyPenalty: existingContract.maxMonthlyPenalty,
+          maxAnnualPenalty: existingContract.maxAnnualPenalty,
+          priorityLevel: existingContract.priorityLevel,
+          dedicatedAccountManager: existingContract.dedicatedAccountManager,
+          accountManagerId: existingContract.accountManagerId,
+          autoRenew: existingContract.autoRenew,
+          renewalNotificationDays: existingContract.renewalNotificationDays,
+          notes: `Renewal of contract ${existingContract.contractNumber}`,
+          createdBy: req.session.userId
+        });
+        
+        // Copy SLA metrics
+        const slaMetrics = await storage.getContractSlaMetrics(existingContract.id);
+        for (const metric of slaMetrics) {
+          await storage.createContractSlaMetric({
+            contractId: renewalContract.id,
+            metricType: metric.metricType,
+            metricName: metric.metricName,
+            description: metric.description,
+            targetValue: metric.targetValue,
+            targetUnit: metric.targetUnit,
+            measurementPeriod: metric.measurementPeriod,
+            penaltyEnabled: metric.penaltyEnabled,
+            penaltyThreshold: metric.penaltyThreshold,
+            penaltyAmount: metric.penaltyAmount,
+            penaltyType: metric.penaltyType,
+            penaltyTiers: metric.penaltyTiers,
+            graceValue: metric.graceValue,
+            graceOccurrences: metric.graceOccurrences,
+            isActive: metric.isActive
+          });
+        }
+        
+        res.json(renewalContract);
+      } catch (error) {
+        console.error('Renew contract error:', error);
+        res.status(500).json({ message: 'Failed to renew contract' });
+      }
+    }
+  );
+  
+  // Get expiring contracts
+  app.get('/api/contracts/expiring',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const daysAhead = parseInt(req.query.days as string) || 30;
+        const contracts = await storage.getExpiringContracts(daysAhead);
+        
+        res.json(contracts);
+      } catch (error) {
+        console.error('Get expiring contracts error:', error);
+        res.status(500).json({ message: 'Failed to get expiring contracts' });
+      }
+    }
+  );
+  
+  // Get contract statistics
+  app.get('/api/contracts/statistics',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const valueByStatus = await storage.getContractValueByStatus();
+        const expiringContracts = await storage.getExpiringContracts(90);
+        const activeContracts = await storage.getFleetContracts({ status: 'active' });
+        
+        // Calculate overall compliance rate
+        let totalCompliance = 0;
+        for (const contract of activeContracts) {
+          const compliance = await storage.getContractComplianceRate(
+            contract.id,
+            new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+            new Date()
+          );
+          totalCompliance += compliance;
+        }
+        
+        res.json({
+          totalContracts: activeContracts.length,
+          valueByStatus,
+          expiringCount: expiringContracts.length,
+          avgComplianceRate: activeContracts.length > 0 ? totalCompliance / activeContracts.length : 100,
+          expiringContracts: expiringContracts.slice(0, 5) // Top 5 expiring
+        });
+      } catch (error) {
+        console.error('Get contract statistics error:', error);
+        res.status(500).json({ message: 'Failed to get statistics' });
+      }
+    }
+  );
+  
+  // Helper function for default SLA metrics
+  function getDefaultSlaMetrics(templateType: string): any[] {
+    const baseMetrics = [];
+    
+    switch (templateType) {
+      case 'basic_enterprise':
+        baseMetrics.push({
+          metricType: 'response_time',
+          metricName: 'Emergency Response Time',
+          description: 'Maximum time to accept emergency repair requests',
+          targetValue: 120, // 2 hours in minutes
+          targetUnit: 'minutes',
+          measurementPeriod: 'monthly',
+          penaltyEnabled: true,
+          penaltyThreshold: 120,
+          penaltyAmount: 100,
+          penaltyType: 'fixed',
+          graceOccurrences: 2,
+          isActive: true
+        });
+        baseMetrics.push({
+          metricType: 'uptime',
+          metricName: 'Service Availability',
+          description: 'Minimum platform uptime percentage',
+          targetValue: 99,
+          targetUnit: 'percentage',
+          measurementPeriod: 'monthly',
+          penaltyEnabled: true,
+          penaltyThreshold: 99,
+          penaltyAmount: 500,
+          penaltyType: 'fixed',
+          isActive: true
+        });
+        break;
+        
+      case 'premium_enterprise':
+        baseMetrics.push({
+          metricType: 'response_time',
+          metricName: 'Emergency Response Time',
+          description: 'Maximum time to accept emergency repair requests',
+          targetValue: 30, // 30 minutes
+          targetUnit: 'minutes',
+          measurementPeriod: 'monthly',
+          penaltyEnabled: true,
+          penaltyThreshold: 30,
+          penaltyAmount: 250,
+          penaltyType: 'fixed',
+          graceOccurrences: 1,
+          isActive: true
+        });
+        baseMetrics.push({
+          metricType: 'resolution_time',
+          metricName: 'Service Resolution Time',
+          description: 'Maximum time to complete repairs',
+          targetValue: 4, // 4 hours
+          targetUnit: 'hours',
+          measurementPeriod: 'monthly',
+          penaltyEnabled: true,
+          penaltyThreshold: 4,
+          penaltyAmount: 500,
+          penaltyType: 'fixed',
+          graceOccurrences: 1,
+          isActive: true
+        });
+        baseMetrics.push({
+          metricType: 'uptime',
+          metricName: 'Service Availability',
+          description: 'Minimum platform uptime percentage',
+          targetValue: 99.9,
+          targetUnit: 'percentage',
+          measurementPeriod: 'monthly',
+          penaltyEnabled: true,
+          penaltyThreshold: 99.9,
+          penaltyAmount: 1000,
+          penaltyType: 'fixed',
+          isActive: true
+        });
+        baseMetrics.push({
+          metricType: 'first_fix_rate',
+          metricName: 'First Fix Rate',
+          description: 'Percentage of issues resolved on first attempt',
+          targetValue: 85,
+          targetUnit: 'percentage',
+          measurementPeriod: 'monthly',
+          penaltyEnabled: false,
+          isActive: true
+        });
+        break;
+        
+      case 'custom':
+        // Custom contracts have metrics defined manually
+        break;
+    }
+    
+    return baseMetrics;
+  }
 
   // ==================== WEBHOOK ROUTES ====================
 

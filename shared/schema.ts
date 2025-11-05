@@ -1940,6 +1940,289 @@ export type InsertReminderMetrics = z.infer<typeof insertReminderMetricsSchema>;
 export type ReminderMetrics = typeof reminderMetrics.$inferSelect;
 
 // ====================
+// CONTRACT MANAGEMENT
+// ====================
+
+export const contractStatusEnum = pgEnum('contract_status', ['draft', 'pending_approval', 'active', 'expired', 'cancelled', 'terminated']);
+export const slaMetricTypeEnum = pgEnum('sla_metric_type', ['response_time', 'resolution_time', 'uptime', 'availability', 'first_fix_rate']);
+export const penaltyStatusEnum = pgEnum('penalty_status', ['pending', 'applied', 'waived', 'disputed', 'resolved']);
+export const amendmentStatusEnum = pgEnum('amendment_status', ['draft', 'pending_approval', 'approved', 'rejected', 'superseded']);
+export const contractTemplateEnum = pgEnum('contract_template', ['basic_enterprise', 'premium_enterprise', 'custom']);
+
+// Fleet contracts table
+export const fleetContracts = pgTable("fleet_contracts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Fleet reference
+  fleetAccountId: varchar("fleet_account_id").notNull().references(() => fleetAccounts.id),
+  
+  // Contract details
+  contractNumber: varchar("contract_number", { length: 50 }).unique().notNull(),
+  contractName: text("contract_name").notNull(),
+  templateType: contractTemplateEnum("template_type"),
+  
+  // Contract duration
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  autoRenew: boolean("auto_renew").notNull().default(false),
+  renewalNotificationDays: integer("renewal_notification_days").default(90),
+  
+  // Financial terms
+  contractValue: decimal("contract_value", { precision: 12, scale: 2 }).notNull(),
+  billingFrequency: varchar("billing_frequency", { length: 20 }).notNull().default('monthly'),
+  paymentTerms: text("payment_terms"),
+  
+  // SLA configuration
+  slaTerms: jsonb("sla_terms").notNull(), // Detailed SLA configuration
+  guaranteedResponseTime: integer("guaranteed_response_time"), // In minutes
+  guaranteedResolutionTime: integer("guaranteed_resolution_time"), // In hours
+  uptimeCommitment: decimal("uptime_commitment", { precision: 5, scale: 2 }), // Percentage
+  
+  // Coverage
+  coverageZones: jsonb("coverage_zones"), // Geographic zones covered
+  serviceHours: jsonb("service_hours"), // 24/7 or business hours definition
+  exclusions: jsonb("exclusions"), // Force majeure and exclusions
+  
+  // Penalties
+  penaltyConfiguration: jsonb("penalty_configuration"), // Penalty rules and amounts
+  maxMonthlyPenalty: decimal("max_monthly_penalty", { precision: 10, scale: 2 }),
+  maxAnnualPenalty: decimal("max_annual_penalty", { precision: 10, scale: 2 }),
+  
+  // Priority and support
+  priorityLevel: integer("priority_level").notNull().default(1), // 1 = standard, 2 = premium, 3 = VIP
+  dedicatedAccountManager: boolean("dedicated_account_manager").notNull().default(false),
+  accountManagerId: varchar("account_manager_id").references(() => users.id),
+  
+  // Status
+  status: contractStatusEnum("status").notNull().default('draft'),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  
+  // Digital signature fields (ready for integration)
+  signatureRequired: boolean("signature_required").notNull().default(true),
+  fleetSignatureData: jsonb("fleet_signature_data"),
+  fleetSignedAt: timestamp("fleet_signed_at"),
+  companySignatureData: jsonb("company_signature_data"),
+  companySignedAt: timestamp("company_signed_at"),
+  
+  // Metadata
+  notes: text("notes"),
+  metadata: jsonb("metadata"),
+  
+  // Audit
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  deletedAt: timestamp("deleted_at")
+}, (table) => ({
+  fleetIdx: index("idx_fleet_contracts_fleet").on(table.fleetAccountId),
+  statusIdx: index("idx_fleet_contracts_status").on(table.status),
+  contractNumberIdx: uniqueIndex("idx_fleet_contracts_number").on(table.contractNumber),
+  datesIdx: index("idx_fleet_contracts_dates").on(table.startDate, table.endDate)
+}));
+
+// Contract SLA metrics table
+export const contractSlaMetrics = pgTable("contract_sla_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Contract reference
+  contractId: varchar("contract_id").notNull().references(() => fleetContracts.id),
+  
+  // Metric definition
+  metricType: slaMetricTypeEnum("metric_type").notNull(),
+  metricName: text("metric_name").notNull(),
+  description: text("description"),
+  
+  // Target values
+  targetValue: decimal("target_value", { precision: 10, scale: 2 }).notNull(),
+  targetUnit: varchar("target_unit", { length: 20 }).notNull(), // minutes, hours, percentage
+  measurementPeriod: varchar("measurement_period", { length: 20 }).notNull(), // daily, weekly, monthly
+  
+  // Penalty configuration
+  penaltyEnabled: boolean("penalty_enabled").notNull().default(true),
+  penaltyThreshold: decimal("penalty_threshold", { precision: 10, scale: 2 }), // Threshold before penalty applies
+  penaltyAmount: decimal("penalty_amount", { precision: 10, scale: 2 }),
+  penaltyType: varchar("penalty_type", { length: 20 }), // fixed, percentage, tiered
+  penaltyTiers: jsonb("penalty_tiers"), // Tiered penalty structure
+  
+  // Grace periods
+  graceValue: decimal("grace_value", { precision: 10, scale: 2 }),
+  graceOccurrences: integer("grace_occurrences"), // Number of allowed breaches before penalties
+  
+  // Current performance
+  currentValue: decimal("current_value", { precision: 10, scale: 2 }),
+  lastMeasuredAt: timestamp("last_measured_at"),
+  breachCount: integer("breach_count").notNull().default(0),
+  
+  // Status
+  isActive: boolean("is_active").notNull().default(true),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  contractIdx: index("idx_contract_sla_metrics_contract").on(table.contractId),
+  typeIdx: index("idx_contract_sla_metrics_type").on(table.metricType)
+}));
+
+// Contract penalties table
+export const contractPenalties = pgTable("contract_penalties", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // References
+  contractId: varchar("contract_id").notNull().references(() => fleetContracts.id),
+  slaMetricId: varchar("sla_metric_id").references(() => contractSlaMetrics.id),
+  jobId: varchar("job_id").references(() => jobs.id),
+  
+  // Penalty details
+  penaltyDate: timestamp("penalty_date").notNull(),
+  penaltyReason: text("penalty_reason").notNull(),
+  breachDetails: jsonb("breach_details"), // Detailed breach information
+  
+  // Amount
+  penaltyAmount: decimal("penalty_amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default('USD'),
+  
+  // Application
+  status: penaltyStatusEnum("status").notNull().default('pending'),
+  appliedToInvoiceId: varchar("applied_to_invoice_id").references(() => invoices.id),
+  appliedAt: timestamp("applied_at"),
+  
+  // Waiver/Dispute
+  waiverRequested: boolean("waiver_requested").notNull().default(false),
+  waiverReason: text("waiver_reason"),
+  waiverRequestedBy: varchar("waiver_requested_by").references(() => users.id),
+  waiverRequestedAt: timestamp("waiver_requested_at"),
+  waiverApprovedBy: varchar("waiver_approved_by").references(() => users.id),
+  waiverApprovedAt: timestamp("waiver_approved_at"),
+  
+  // Dispute
+  disputeRaised: boolean("dispute_raised").notNull().default(false),
+  disputeReason: text("dispute_reason"),
+  disputeRaisedBy: varchar("dispute_raised_by").references(() => users.id),
+  disputeRaisedAt: timestamp("dispute_raised_at"),
+  disputeResolution: text("dispute_resolution"),
+  disputeResolvedBy: varchar("dispute_resolved_by").references(() => users.id),
+  disputeResolvedAt: timestamp("dispute_resolved_at"),
+  
+  // Metadata
+  notes: text("notes"),
+  metadata: jsonb("metadata"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  contractIdx: index("idx_contract_penalties_contract").on(table.contractId),
+  statusIdx: index("idx_contract_penalties_status").on(table.status),
+  dateIdx: index("idx_contract_penalties_date").on(table.penaltyDate)
+}));
+
+// Contract amendments table
+export const contractAmendments = pgTable("contract_amendments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Contract reference
+  contractId: varchar("contract_id").notNull().references(() => fleetContracts.id),
+  amendmentNumber: varchar("amendment_number", { length: 50 }).notNull(),
+  
+  // Amendment details
+  amendmentType: varchar("amendment_type", { length: 50 }).notNull(), // sla_change, term_extension, value_change
+  effectiveDate: timestamp("effective_date").notNull(),
+  
+  // Changes
+  changesSummary: text("changes_summary").notNull(),
+  previousTerms: jsonb("previous_terms").notNull(),
+  newTerms: jsonb("new_terms").notNull(),
+  
+  // Approval workflow
+  status: amendmentStatusEnum("status").notNull().default('draft'),
+  requestedBy: varchar("requested_by").references(() => users.id),
+  requestedAt: timestamp("requested_at"),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  
+  // Version control
+  versionNumber: integer("version_number").notNull(),
+  parentAmendmentId: varchar("parent_amendment_id").references(() => contractAmendments.id),
+  
+  // Digital signature (ready for integration)
+  signatureRequired: boolean("signature_required").notNull().default(true),
+  fleetSignatureData: jsonb("fleet_signature_data"),
+  fleetSignedAt: timestamp("fleet_signed_at"),
+  companySignatureData: jsonb("company_signature_data"),
+  companySignedAt: timestamp("company_signed_at"),
+  
+  // Metadata
+  notes: text("notes"),
+  attachments: jsonb("attachments"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  contractIdx: index("idx_contract_amendments_contract").on(table.contractId),
+  statusIdx: index("idx_contract_amendments_status").on(table.status),
+  versionIdx: index("idx_contract_amendments_version").on(table.contractId, table.versionNumber)
+}));
+
+// Contract performance metrics table (for tracking and reporting)
+export const contractPerformanceMetrics = pgTable("contract_performance_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // References
+  contractId: varchar("contract_id").notNull().references(() => fleetContracts.id),
+  slaMetricId: varchar("sla_metric_id").references(() => contractSlaMetrics.id),
+  
+  // Period
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  periodType: varchar("period_type", { length: 20 }).notNull(), // hourly, daily, weekly, monthly
+  
+  // Performance data
+  metricType: slaMetricTypeEnum("metric_type").notNull(),
+  targetValue: decimal("target_value", { precision: 10, scale: 2 }).notNull(),
+  actualValue: decimal("actual_value", { precision: 10, scale: 2 }).notNull(),
+  compliancePercentage: decimal("compliance_percentage", { precision: 5, scale: 2 }),
+  
+  // Breach information
+  breachOccurred: boolean("breach_occurred").notNull().default(false),
+  breachSeverity: varchar("breach_severity", { length: 20 }), // minor, major, critical
+  breachDuration: integer("breach_duration"), // In minutes
+  
+  // Job metrics
+  totalJobs: integer("total_jobs").notNull().default(0),
+  compliantJobs: integer("compliant_jobs").notNull().default(0),
+  breachedJobs: integer("breached_jobs").notNull().default(0),
+  
+  // Response times (for response_time metric)
+  avgResponseTime: integer("avg_response_time"), // In minutes
+  minResponseTime: integer("min_response_time"),
+  maxResponseTime: integer("max_response_time"),
+  p95ResponseTime: integer("p95_response_time"), // 95th percentile
+  
+  // Resolution times (for resolution_time metric)
+  avgResolutionTime: integer("avg_resolution_time"), // In hours
+  minResolutionTime: integer("min_resolution_time"),
+  maxResolutionTime: integer("max_resolution_time"),
+  
+  // Uptime (for uptime metric)
+  totalMinutes: integer("total_minutes"),
+  uptimeMinutes: integer("uptime_minutes"),
+  downtimeMinutes: integer("downtime_minutes"),
+  downtimeIncidents: integer("downtime_incidents"),
+  
+  // Penalties
+  penaltyApplied: boolean("penalty_applied").notNull().default(false),
+  penaltyAmount: decimal("penalty_amount", { precision: 10, scale: 2 }),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  contractIdx: index("idx_contract_performance_contract").on(table.contractId),
+  periodIdx: index("idx_contract_performance_period").on(table.periodStart, table.periodEnd),
+  metricIdx: index("idx_contract_performance_metric").on(table.slaMetricId),
+  breachIdx: index("idx_contract_performance_breach").on(table.breachOccurred)
+}));
+
+// ====================
 // SPLIT PAYMENTS
 // ====================
 
@@ -2253,3 +2536,51 @@ export const insertFleetAnalyticsAlertSchema = createInsertSchema(fleetAnalytics
 });
 export type InsertFleetAnalyticsAlert = z.infer<typeof insertFleetAnalyticsAlertSchema>;
 export type FleetAnalyticsAlert = typeof fleetAnalyticsAlerts.$inferSelect;
+
+// Contract management schemas and types
+export const insertFleetContractSchema = createInsertSchema(fleetContracts).omit({
+  id: true,
+  contractNumber: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+  deletedAt: true
+});
+export type InsertFleetContract = z.infer<typeof insertFleetContractSchema>;
+export type FleetContract = typeof fleetContracts.$inferSelect;
+
+export const insertContractSlaMetricSchema = createInsertSchema(contractSlaMetrics).omit({
+  id: true,
+  currentValue: true,
+  lastMeasuredAt: true,
+  breachCount: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertContractSlaMetric = z.infer<typeof insertContractSlaMetricSchema>;
+export type ContractSlaMetric = typeof contractSlaMetrics.$inferSelect;
+
+export const insertContractPenaltySchema = createInsertSchema(contractPenalties).omit({
+  id: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertContractPenalty = z.infer<typeof insertContractPenaltySchema>;
+export type ContractPenalty = typeof contractPenalties.$inferSelect;
+
+export const insertContractAmendmentSchema = createInsertSchema(contractAmendments).omit({
+  id: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertContractAmendment = z.infer<typeof insertContractAmendmentSchema>;
+export type ContractAmendment = typeof contractAmendments.$inferSelect;
+
+export const insertContractPerformanceMetricSchema = createInsertSchema(contractPerformanceMetrics).omit({
+  id: true,
+  createdAt: true
+});
+export type InsertContractPerformanceMetric = z.infer<typeof insertContractPerformanceMetricSchema>;
+export type ContractPerformanceMetric = typeof contractPerformanceMetrics.$inferSelect;
