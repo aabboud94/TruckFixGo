@@ -70,10 +70,10 @@
             .then(registration => {
               console.log('[PWA] Service Worker registered successfully:', registration.scope);
               
-              // Check for updates periodically
+              // Check for updates periodically (every 5 minutes)
               setInterval(() => {
                 registration.update();
-              }, 60000); // Check every minute
+              }, 300000);
               
               // Handle updates
               registration.addEventListener('updatefound', () => {
@@ -85,7 +85,7 @@
                     // New service worker installed, show update prompt
                     console.log('[PWA] New Service Worker installed, update available');
                     
-                    // You can trigger an update notification here
+                    // Show a non-intrusive update notification instead of auto-reload
                     if (window.showUpdatePrompt) {
                       window.showUpdatePrompt();
                     }
@@ -96,16 +96,6 @@
             .catch(error => {
               console.error('[PWA] Service Worker registration failed:', error);
             });
-          
-          // Handle controller change (when service worker is updated)
-          let refreshing = false;
-          navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (!refreshing) {
-              refreshing = true;
-              console.log('[PWA] Controller changed, reloading page...');
-              window.location.reload();
-            }
-          });
         });
       } else {
         console.log('[PWA] Service Workers are not supported in this browser');
