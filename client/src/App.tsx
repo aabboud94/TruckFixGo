@@ -35,6 +35,7 @@ import AdminSettings from "@/pages/admin/settings";
 import AdminJobs from "@/pages/admin/jobs";
 import AdminContractors from "@/pages/admin/contractors";
 import AdminTemplates from "@/pages/admin/templates";
+import AdminPricingRules from "@/pages/admin/pricing-rules";
 
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
@@ -81,6 +82,7 @@ function Router() {
       <Route path="/admin/jobs" component={AdminJobs} />
       <Route path="/admin/contractors" component={AdminContractors} />
       <Route path="/admin/templates" component={AdminTemplates} />
+      <Route path="/admin/pricing-rules" component={AdminPricingRules} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />

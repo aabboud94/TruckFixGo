@@ -2117,6 +2117,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== PRICING CALCULATION ENDPOINTS ====================
+  
+  // Calculate price estimate
+  app.post('/api/pricing/calculate',
+    async (req: Request, res: Response) => {
+      try {
+        const pricingEngine = (await import('./pricing-engine')).default;
+        const breakdown = await pricingEngine.calculatePrice(req.body);
+        
+        res.json({ breakdown });
+      } catch (error) {
+        console.error('Calculate pricing error:', error);
+        res.status(500).json({ message: 'Failed to calculate pricing' });
+      }
+    }
+  );
+
+  // Get surge status for location
+  app.get('/api/pricing/surge-status',
+    async (req: Request, res: Response) => {
+      try {
+        const location = JSON.parse(req.query.location as string || '{}');
+        const pricingEngine = (await import('./pricing-engine')).default;
+        
+        const surgeMultiplier = await pricingEngine.getSurgeMultiplier({
+          jobType: 'emergency',
+          serviceTypeId: 'emergency-repair',
+          location
+        });
+        
+        res.json({ 
+          surgeActive: surgeMultiplier > 1,
+          multiplier: surgeMultiplier,
+          message: surgeMultiplier > 2 ? 
+            'High demand - surge pricing is in effect' :
+            surgeMultiplier > 1.5 ?
+            'Moderate demand - slight price increase' :
+            surgeMultiplier > 1 ?
+            'Low surge pricing active' :
+            'Normal pricing'
+        });
+      } catch (error) {
+        console.error('Get surge status error:', error);
+        res.status(500).json({ message: 'Failed to get surge status' });
+      }
+    }
+  );
+
   // Get performance metrics
   app.get('/api/contractors/:id/performance',
     requireAuth,
@@ -3166,6 +3214,150 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Get contractors for approval error:', error);
         res.status(500).json({ message: 'Failed to get contractors' });
+      }
+    }
+  );
+
+  // ==================== PRICING RULES MANAGEMENT ====================
+  
+  // Get all pricing rules
+  app.get('/api/admin/pricing-rules',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const includeInactive = req.query.includeInactive === 'true';
+        const rules = includeInactive 
+          ? await storage.getAllPricingRules()
+          : await storage.getActivePricingRules();
+        
+        res.json({ rules });
+      } catch (error) {
+        console.error('Get pricing rules error:', error);
+        res.status(500).json({ message: 'Failed to get pricing rules' });
+      }
+    }
+  );
+
+  // Create new pricing rule
+  app.post('/api/admin/pricing-rules',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(insertPricingRuleSchema),
+    async (req: Request, res: Response) => {
+      try {
+        const rule = await storage.createPricingRule(req.body);
+        
+        res.status(201).json({
+          message: 'Pricing rule created successfully',
+          rule
+        });
+      } catch (error) {
+        console.error('Create pricing rule error:', error);
+        res.status(500).json({ message: 'Failed to create pricing rule' });
+      }
+    }
+  );
+
+  // Update pricing rule
+  app.put('/api/admin/pricing-rules/:id',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(insertPricingRuleSchema.partial()),
+    async (req: Request, res: Response) => {
+      try {
+        const rule = await storage.updatePricingRule(req.params.id, req.body);
+        
+        if (!rule) {
+          return res.status(404).json({ message: 'Pricing rule not found' });
+        }
+        
+        res.json({
+          message: 'Pricing rule updated successfully',
+          rule
+        });
+      } catch (error) {
+        console.error('Update pricing rule error:', error);
+        res.status(500).json({ message: 'Failed to update pricing rule' });
+      }
+    }
+  );
+
+  // Delete pricing rule
+  app.delete('/api/admin/pricing-rules/:id',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const success = await storage.deletePricingRule(req.params.id);
+        
+        if (!success) {
+          return res.status(404).json({ message: 'Pricing rule not found' });
+        }
+        
+        res.json({ message: 'Pricing rule deleted successfully' });
+      } catch (error) {
+        console.error('Delete pricing rule error:', error);
+        res.status(500).json({ message: 'Failed to delete pricing rule' });
+      }
+    }
+  );
+
+  // Test pricing rules
+  app.post('/api/admin/pricing-rules/test',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { scenarios } = req.body;
+        const pricingEngine = (await import('./pricing-engine')).default;
+        
+        const results = await pricingEngine.testPricingRules(scenarios);
+        
+        res.json({ 
+          message: 'Pricing rules tested successfully',
+          results 
+        });
+      } catch (error) {
+        console.error('Test pricing rules error:', error);
+        res.status(500).json({ message: 'Failed to test pricing rules' });
+      }
+    }
+  );
+
+  // Get pricing analytics
+  app.get('/api/admin/pricing-analytics',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const fromDate = new Date(req.query.fromDate as string || Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const toDate = new Date(req.query.toDate as string || Date.now());
+        
+        const pricingEngine = (await import('./pricing-engine')).default;
+        const analytics = await pricingEngine.getPricingAnalytics(fromDate, toDate);
+        
+        res.json({ analytics });
+      } catch (error) {
+        console.error('Get pricing analytics error:', error);
+        res.status(500).json({ message: 'Failed to get pricing analytics' });
+      }
+    }
+  );
+
+  // Initialize default pricing rules
+  app.post('/api/admin/pricing-rules/initialize',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const pricingEngine = (await import('./pricing-engine')).default;
+        await pricingEngine.createDefaultPricingRules();
+        
+        res.json({ message: 'Default pricing rules created successfully' });
+      } catch (error) {
+        console.error('Initialize pricing rules error:', error);
+        res.status(500).json({ message: 'Failed to initialize pricing rules' });
       }
     }
   );

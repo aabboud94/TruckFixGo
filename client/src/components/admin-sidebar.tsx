@@ -57,7 +57,7 @@ const menuItems = [
     group: "Configuration",
     items: [
       { title: "Platform Settings", url: "/admin/settings", icon: Settings, badge: null },
-      { title: "Pricing Rules", url: "/admin/pricing", icon: DollarSign, badge: null },
+      { title: "Pricing Rules", url: "/admin/pricing-rules", icon: DollarSign, badge: "new" },
       { title: "Service Areas", url: "/admin/areas", icon: MapPin, badge: null },
       { title: "Templates", url: "/admin/templates", icon: Mail, badge: null },
       { title: "Content", url: "/admin/content", icon: FileText, badge: null },

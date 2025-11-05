@@ -261,6 +261,8 @@ export interface IStorage {
   createPricingRule(rule: InsertPricingRule): Promise<PricingRule>;
   updatePricingRule(id: string, updates: Partial<InsertPricingRule>): Promise<PricingRule | undefined>;
   getActivePricingRules(): Promise<PricingRule[]>;
+  getAllPricingRules(): Promise<PricingRule[]>;
+  deletePricingRule(id: string): Promise<boolean>;
   
   // ==================== CONTRACTOR OPERATIONS ====================
   linkContractorService(service: InsertContractorService): Promise<ContractorService>;
@@ -896,6 +898,18 @@ export class PostgreSQLStorage implements IStorage {
         )
       )
       .orderBy(desc(pricingRules.priority));
+  }
+  
+  async getAllPricingRules(): Promise<PricingRule[]> {
+    return await db.select().from(pricingRules)
+      .orderBy(desc(pricingRules.priority), desc(pricingRules.createdAt));
+  }
+  
+  async deletePricingRule(id: string): Promise<boolean> {
+    const result = await db.delete(pricingRules)
+      .where(eq(pricingRules.id, id))
+      .returning();
+    return result.length > 0;
   }
 
   // ==================== CONTRACTOR OPERATIONS ====================

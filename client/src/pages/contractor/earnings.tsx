@@ -31,13 +31,16 @@ import {
   AlertCircle,
   Info,
   Banknote,
-  Award
+  Award,
   FileText,
   Receipt,
   FileSpreadsheet,
   Printer,
   FileTax2,
-  FileUp
+  FileUp,
+  Zap,
+  MapPin,
+  Percent
 } from "lucide-react";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -70,6 +73,11 @@ interface EarningsData {
     total: number;
     status: "pending" | "processing" | "paid";
     customerName: string;
+    pricingMultipliers?: Array<{
+      name: string;
+      multiplier: number;
+      amount: number;
+    }>;
   }>;
   payoutHistory: Array<{
     id: string;
@@ -98,6 +106,18 @@ interface EarningsData {
     streakBonus: number;
     referralBonus: number;
   };
+  surgeOpportunities?: Array<{
+    zone: string;
+    multiplier: number;
+    activeJobs: number;
+    distance: number;
+  }>;
+  upcomingPeaks?: Array<{
+    time: string;
+    day: string;
+    multiplier: number;
+    typical: string;
+  }>;
 }
 
 export default function ContractorEarnings() {
@@ -674,6 +694,70 @@ export default function ContractorEarnings() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Surge Opportunities & Peak Times */}
+        {(earningsData?.surgeOpportunities || earningsData?.upcomingPeaks) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Active Surge Zones */}
+            {earningsData?.surgeOpportunities && earningsData.surgeOpportunities.length > 0 && (
+              <Card className="border-orange-200 dark:border-orange-800">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="h-5 w-5 text-orange-500" />
+                    Surge Zones Active
+                  </CardTitle>
+                  <CardDescription>Higher earnings available in these areas</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {earningsData.surgeOpportunities.map((zone, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-orange-50 dark:bg-orange-950/20">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-orange-500" />
+                          <span className="font-medium">{zone.zone}</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {zone.distance} miles • {zone.activeJobs} active jobs
+                        </p>
+                      </div>
+                      <Badge className="bg-orange-500 text-white">
+                        {zone.multiplier}x
+                      </Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Upcoming Peak Times */}
+            {earningsData?.upcomingPeaks && earningsData.upcomingPeaks.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-blue-500" />
+                    Upcoming Peak Times
+                  </CardTitle>
+                  <CardDescription>Plan your schedule for maximum earnings</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {earningsData.upcomingPeaks.map((peak, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20">
+                      <div>
+                        <div className="font-medium">{peak.day} {peak.time}</div>
+                        <p className="text-sm text-muted-foreground">
+                          Typically: {peak.typical}
+                        </p>
+                      </div>
+                      <Badge variant="secondary">
+                        +{((peak.multiplier - 1) * 100).toFixed(0)}%
+                      </Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
 
         {/* Earnings Chart */}
         <Card>
