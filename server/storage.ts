@@ -25,6 +25,7 @@ import {
   transactions,
   invoices,
   refunds,
+  fleetChecks,
   adminSettings,
   emailTemplates,
   smsTemplates,
@@ -93,6 +94,8 @@ import {
   type InsertInvoice,
   type Refund,
   type InsertRefund,
+  type FleetCheck,
+  type InsertFleetCheck,
   type AdminSetting,
   type InsertAdminSetting,
   type EmailTemplate,
@@ -136,7 +139,9 @@ import {
   jobTypeEnum,
   jobStatusEnum,
   paymentStatusEnum,
-  refundStatusEnum
+  refundStatusEnum,
+  checkProviderEnum,
+  checkStatusEnum
 } from "@shared/schema";
 
 import { db } from "./db";
@@ -180,6 +185,17 @@ export interface TransactionFilterOptions extends PaginationOptions {
   userId?: string;
   jobId?: string;
   status?: typeof paymentStatusEnum.enumValues[number];
+  fromDate?: Date;
+  toDate?: Date;
+}
+
+export interface FleetCheckFilterOptions extends PaginationOptions {
+  provider?: typeof checkProviderEnum.enumValues[number];
+  status?: typeof checkStatusEnum.enumValues[number];
+  jobId?: string;
+  userId?: string;
+  fleetAccountId?: string;
+  checkNumber?: string;
   fromDate?: Date;
   toDate?: Date;
 }
@@ -500,6 +516,21 @@ export interface IStorage {
   createRefund(refund: InsertRefund): Promise<Refund>;
   updateRefundStatus(id: string, status: typeof refundStatusEnum.enumValues[number]): Promise<Refund | undefined>;
   getRefundsByTransaction(transactionId: string): Promise<Refund[]>;
+  
+  // ==================== FLEET CHECK OPERATIONS ====================
+  createFleetCheck(check: InsertFleetCheck): Promise<FleetCheck>;
+  getFleetCheck(id: string): Promise<FleetCheck | undefined>;
+  getFleetCheckByCheckNumber(checkNumber: string): Promise<FleetCheck | undefined>;
+  updateFleetCheck(id: string, updates: Partial<InsertFleetCheck>): Promise<FleetCheck | undefined>;
+  updateFleetCheckStatus(id: string, status: typeof checkStatusEnum.enumValues[number], response?: any): Promise<FleetCheck | undefined>;
+  findFleetChecks(filters: FleetCheckFilterOptions): Promise<FleetCheck[]>;
+  captureFleetCheck(id: string, amount: number, captureResponse: any): Promise<FleetCheck | undefined>;
+  voidFleetCheck(id: string, voidResponse: any): Promise<FleetCheck | undefined>;
+  getActiveFleetCheckForJob(jobId: string): Promise<FleetCheck | undefined>;
+  getTotalCapturedAmount(checkNumber: string): Promise<number>;
+  getFleetChecksByUser(userId: string, limit?: number): Promise<FleetCheck[]>;
+  getFleetChecksByFleet(fleetAccountId: string, filters?: FleetCheckFilterOptions): Promise<FleetCheck[]>;
+  getPendingFleetChecksForCapture(): Promise<FleetCheck[]>;
   
   // ==================== BIDDING OPERATIONS ====================
   createJobBid(bid: InsertJobBid): Promise<JobBid>;
@@ -1878,6 +1909,225 @@ export class PostgreSQLStorage implements IStorage {
     return await db.select().from(refunds)
       .where(eq(refunds.transactionId, transactionId))
       .orderBy(desc(refunds.createdAt));
+  }
+
+  // ==================== FLEET CHECK OPERATIONS ====================
+
+  async createFleetCheck(check: InsertFleetCheck): Promise<FleetCheck> {
+    // Mask the check number for storage
+    const maskedCheckNumber = check.checkNumber.length > 4 
+      ? '*'.repeat(check.checkNumber.length - 4) + check.checkNumber.slice(-4)
+      : check.checkNumber;
+
+    const result = await db.insert(fleetChecks).values({
+      ...check,
+      maskedCheckNumber,
+      status: 'pending',
+      retryCount: 0,
+      capturedAmount: '0'
+    }).returning();
+    return result[0];
+  }
+
+  async getFleetCheck(id: string): Promise<FleetCheck | undefined> {
+    const result = await db.select().from(fleetChecks).where(eq(fleetChecks.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getFleetCheckByCheckNumber(checkNumber: string): Promise<FleetCheck | undefined> {
+    const result = await db.select().from(fleetChecks)
+      .where(eq(fleetChecks.checkNumber, checkNumber))
+      .orderBy(desc(fleetChecks.createdAt))
+      .limit(1);
+    return result[0];
+  }
+
+  async updateFleetCheck(id: string, updates: Partial<InsertFleetCheck>): Promise<FleetCheck | undefined> {
+    const result = await db.update(fleetChecks)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(fleetChecks.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async updateFleetCheckStatus(
+    id: string, 
+    status: typeof checkStatusEnum.enumValues[number], 
+    response?: any
+  ): Promise<FleetCheck | undefined> {
+    const updates: any = { status, updatedAt: new Date() };
+    
+    if (status === 'authorized') {
+      updates.authorizedAt = new Date();
+      if (response) updates.authorizationResponse = response;
+    } else if (status === 'captured' || status === 'partially_captured') {
+      updates.capturedAt = new Date();
+      if (response) updates.captureResponse = response;
+    } else if (status === 'voided') {
+      updates.voidedAt = new Date();
+      if (response) updates.voidResponse = response;
+    } else if (status === 'declined') {
+      if (response) {
+        updates.failureReason = response.errorCode || 'Declined';
+        updates.lastError = response.message || 'Check declined';
+      }
+    }
+    
+    const result = await db.update(fleetChecks)
+      .set(updates)
+      .where(eq(fleetChecks.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async findFleetChecks(filters: FleetCheckFilterOptions): Promise<FleetCheck[]> {
+    const conditions: any[] = [];
+    
+    if (filters.provider) {
+      conditions.push(eq(fleetChecks.provider, filters.provider));
+    }
+    if (filters.status) {
+      conditions.push(eq(fleetChecks.status, filters.status));
+    }
+    if (filters.jobId) {
+      conditions.push(eq(fleetChecks.jobId, filters.jobId));
+    }
+    if (filters.userId) {
+      conditions.push(eq(fleetChecks.userId, filters.userId));
+    }
+    if (filters.fleetAccountId) {
+      conditions.push(eq(fleetChecks.fleetAccountId, filters.fleetAccountId));
+    }
+    if (filters.checkNumber) {
+      conditions.push(eq(fleetChecks.checkNumber, filters.checkNumber));
+    }
+    if (filters.fromDate) {
+      conditions.push(gte(fleetChecks.createdAt, filters.fromDate));
+    }
+    if (filters.toDate) {
+      conditions.push(lte(fleetChecks.createdAt, filters.toDate));
+    }
+    
+    let query = db.select().from(fleetChecks);
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    const limit = filters.limit || 50;
+    const offset = filters.offset || 0;
+    const orderBy = filters.orderBy || 'createdAt';
+    const orderDir = filters.orderDir || 'desc';
+    
+    if (orderDir === 'desc') {
+      query = query.orderBy(desc(fleetChecks[orderBy]));
+    } else {
+      query = query.orderBy(asc(fleetChecks[orderBy]));
+    }
+    
+    query = query.limit(limit).offset(offset);
+    
+    return await query;
+  }
+
+  async captureFleetCheck(id: string, amount: number, captureResponse: any): Promise<FleetCheck | undefined> {
+    const check = await this.getFleetCheck(id);
+    if (!check) return undefined;
+    
+    const currentCaptured = parseFloat(check.capturedAmount || '0');
+    const newCaptured = currentCaptured + amount;
+    const authorized = parseFloat(check.authorizedAmount);
+    
+    const status = newCaptured >= authorized ? 'captured' : 'partially_captured';
+    
+    const result = await db.update(fleetChecks)
+      .set({
+        capturedAmount: newCaptured.toString(),
+        status,
+        capturedAt: new Date(),
+        captureResponse,
+        updatedAt: new Date()
+      })
+      .where(eq(fleetChecks.id, id))
+      .returning();
+    
+    return result[0];
+  }
+
+  async voidFleetCheck(id: string, voidResponse: any): Promise<FleetCheck | undefined> {
+    const result = await db.update(fleetChecks)
+      .set({
+        status: 'voided',
+        voidedAt: new Date(),
+        voidResponse,
+        updatedAt: new Date()
+      })
+      .where(eq(fleetChecks.id, id))
+      .returning();
+    
+    return result[0];
+  }
+
+  async getActiveFleetCheckForJob(jobId: string): Promise<FleetCheck | undefined> {
+    const result = await db.select().from(fleetChecks)
+      .where(
+        and(
+          eq(fleetChecks.jobId, jobId),
+          inArray(fleetChecks.status, ['authorized', 'partially_captured'])
+        )
+      )
+      .orderBy(desc(fleetChecks.createdAt))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async getTotalCapturedAmount(checkNumber: string): Promise<number> {
+    const checks = await db.select().from(fleetChecks)
+      .where(
+        and(
+          eq(fleetChecks.checkNumber, checkNumber),
+          inArray(fleetChecks.status, ['captured', 'partially_captured'])
+        )
+      );
+    
+    return checks.reduce((total, check) => {
+      return total + parseFloat(check.capturedAmount || '0');
+    }, 0);
+  }
+
+  async getFleetChecksByUser(userId: string, limit: number = 10): Promise<FleetCheck[]> {
+    return await db.select().from(fleetChecks)
+      .where(eq(fleetChecks.userId, userId))
+      .orderBy(desc(fleetChecks.createdAt))
+      .limit(limit);
+  }
+
+  async getFleetChecksByFleet(
+    fleetAccountId: string, 
+    filters?: FleetCheckFilterOptions
+  ): Promise<FleetCheck[]> {
+    return await this.findFleetChecks({
+      ...filters,
+      fleetAccountId
+    });
+  }
+
+  async getPendingFleetChecksForCapture(): Promise<FleetCheck[]> {
+    // Get checks that are authorized but not fully captured and haven't expired
+    const now = new Date();
+    
+    return await db.select().from(fleetChecks)
+      .where(
+        and(
+          inArray(fleetChecks.status, ['authorized', 'partially_captured']),
+          or(
+            isNull(fleetChecks.expiresAt),
+            gt(fleetChecks.expiresAt, now)
+          )
+        )
+      )
+      .orderBy(asc(fleetChecks.authorizedAt));
   }
 
   // ==================== BIDDING OPERATIONS ====================

@@ -42,6 +42,8 @@ export const backgroundCheckTypeEnum = pgEnum('background_check_type', ['crimina
 export const bidStatusEnum = pgEnum('bid_status', ['pending', 'accepted', 'rejected', 'expired', 'withdrawn', 'countered']);
 export const biddingStrategyEnum = pgEnum('bidding_strategy', ['lowest_price', 'best_value', 'fastest_completion', 'manual']);
 export const bidAutoAcceptEnum = pgEnum('bid_auto_accept', ['never', 'lowest', 'lowest_with_rating', 'best_value']);
+export const checkProviderEnum = pgEnum('check_provider', ['efs', 'comdata']);
+export const checkStatusEnum = pgEnum('check_status', ['pending', 'authorized', 'captured', 'declined', 'voided', 'expired', 'partially_captured']);
 
 // ====================
 // USERS & AUTH
@@ -985,6 +987,66 @@ export const refunds = pgTable("refunds", {
   statusIdx: index("idx_refunds_status").on(table.status)
 }));
 
+// Fleet check payments table for EFS/Comdata integration
+export const fleetChecks = pgTable("fleet_checks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Check details
+  provider: checkProviderEnum("provider").notNull(),
+  checkNumber: varchar("check_number", { length: 20 }).notNull(),
+  authorizationCode: varchar("authorization_code", { length: 20 }).notNull(),
+  driverCode: varchar("driver_code", { length: 20 }),
+  
+  // Transaction reference
+  jobId: varchar("job_id").references(() => jobs.id),
+  userId: varchar("user_id").references(() => users.id),
+  fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id),
+  
+  // Amounts
+  authorizedAmount: decimal("authorized_amount", { precision: 10, scale: 2 }).notNull(),
+  capturedAmount: decimal("captured_amount", { precision: 10, scale: 2 }).default('0'),
+  availableBalance: decimal("available_balance", { precision: 10, scale: 2 }),
+  
+  // Status tracking
+  status: checkStatusEnum("status").notNull().default('pending'),
+  
+  // Validation timestamps
+  authorizedAt: timestamp("authorized_at"),
+  capturedAt: timestamp("captured_at"),
+  voidedAt: timestamp("voided_at"),
+  expiresAt: timestamp("expires_at"),
+  
+  // Response data from provider
+  authorizationResponse: jsonb("authorization_response"),
+  captureResponse: jsonb("capture_response"),
+  voidResponse: jsonb("void_response"),
+  
+  // Error tracking
+  lastError: text("last_error"),
+  failureReason: text("failure_reason"),
+  retryCount: integer("retry_count").notNull().default(0),
+  
+  // Security and compliance
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: text("user_agent"),
+  maskedCheckNumber: varchar("masked_check_number", { length: 20 }), // Last 4 digits only
+  
+  // Additional metadata
+  metadata: jsonb("metadata"),
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  checkNumberIdx: index("idx_fleet_checks_number").on(table.checkNumber),
+  providerIdx: index("idx_fleet_checks_provider").on(table.provider),
+  statusIdx: index("idx_fleet_checks_status").on(table.status),
+  jobIdx: index("idx_fleet_checks_job").on(table.jobId),
+  userIdx: index("idx_fleet_checks_user").on(table.userId),
+  fleetIdx: index("idx_fleet_checks_fleet").on(table.fleetAccountId),
+  createdIdx: index("idx_fleet_checks_created").on(table.createdAt)
+}));
+
 // ====================
 // ADMIN CONFIGURATION
 // ====================
@@ -1559,6 +1621,21 @@ export const insertRefundSchema = createInsertSchema(refunds).omit({
 });
 export type InsertRefund = z.infer<typeof insertRefundSchema>;
 export type Refund = typeof refunds.$inferSelect;
+
+export const insertFleetCheckSchema = createInsertSchema(fleetChecks).omit({
+  id: true,
+  status: true,
+  capturedAmount: true,
+  authorizedAt: true,
+  capturedAt: true,
+  voidedAt: true,
+  maskedCheckNumber: true,
+  retryCount: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertFleetCheck = z.infer<typeof insertFleetCheckSchema>;
+export type FleetCheck = typeof fleetChecks.$inferSelect;
 
 // Admin Configuration
 export const insertAdminSettingSchema = createInsertSchema(adminSettings).omit({ 
