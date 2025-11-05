@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import SplitPaymentModal from "@/components/split-payment-modal";
 import { 
   CreditCard, 
   DollarSign, 
@@ -24,7 +25,8 @@ import {
   CheckCircle,
   Shield,
   Clock,
-  Receipt
+  Receipt,
+  Users
 } from "lucide-react";
 import { SiVisa, SiMastercard, SiAmericanexpress, SiDiscover } from "react-icons/si";
 
@@ -340,6 +342,8 @@ export default function Checkout({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [savedMethods, setSavedMethods] = useState<any[]>([]);
+  const [showSplitPaymentModal, setShowSplitPaymentModal] = useState(false);
+  const [existingSplitPayment, setExistingSplitPayment] = useState<any>(null);
   const { toast } = useToast();
 
   // Calculate price breakdown
@@ -362,6 +366,12 @@ export default function Checkout({
   // Check for Stripe configuration
   const { data: stripeConfig, isLoading: loadingConfig } = useQuery({
     queryKey: ["/api/payment/config"]
+  });
+
+  // Check for existing split payment
+  const { data: splitPaymentData } = useQuery({
+    queryKey: [`/api/payments/split/${jobId}`],
+    enabled: !!jobId
   });
 
   // Create payment intent mutation
@@ -642,16 +652,80 @@ export default function Checkout({
             Choose how you'd like to pay for this service
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Tabs value={selectedPaymentMethod} onValueChange={setSelectedPaymentMethod}>
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="card" data-testid="tab-card">Card</TabsTrigger>
-              <TabsTrigger value="efs" data-testid="tab-efs">EFS</TabsTrigger>
-              <TabsTrigger value="comdata" data-testid="tab-comdata">Comdata</TabsTrigger>
-              {fleetAccountId && (
-                <TabsTrigger value="fleet" data-testid="tab-fleet">Fleet</TabsTrigger>
-              )}
-            </TabsList>
+        <CardContent className="space-y-4">
+          {/* Split Payment Option */}
+          {jobId && !splitPaymentData?.splitPayment && (
+            <div className="mb-4">
+              <Alert className="bg-blue-50 border-blue-200">
+                <Users className="h-4 w-4 text-blue-600" />
+                <AlertDescription>
+                  Need to split this payment between multiple parties? You can divide the cost between carrier, driver, fleet, or insurance.
+                </AlertDescription>
+              </Alert>
+              <Button
+                onClick={() => setShowSplitPaymentModal(true)}
+                variant="outline"
+                className="w-full mt-3"
+                data-testid="button-split-payment"
+              >
+                <Users className="mr-2 h-4 w-4" />
+                Set Up Split Payment
+              </Button>
+            </div>
+          )}
+
+          {/* Show existing split payment status */}
+          {splitPaymentData?.splitPayment && (
+            <Card className="mb-4 border-primary">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Split Payment Active
+                  </h4>
+                  <Badge variant="secondary">
+                    {splitPaymentData.paymentSplits?.filter((s: any) => s.status === 'paid').length || 0}/
+                    {splitPaymentData.paymentSplits?.length || 0} Paid
+                  </Badge>
+                </div>
+                <div className="space-y-2">
+                  {splitPaymentData.paymentSplits?.map((split: any) => (
+                    <div key={split.id} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="capitalize">{split.payerType}</Badge>
+                        <span>{split.payerName}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span>${(parseFloat(split.amountAssigned) / 100).toFixed(2)}</span>
+                        {split.status === 'paid' ? (
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                        ) : split.status === 'pending' ? (
+                          <Clock className="h-4 w-4 text-yellow-600" />
+                        ) : (
+                          <AlertCircle className="h-4 w-4 text-destructive" />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Separator className="my-3" />
+                <div className="text-sm text-muted-foreground">
+                  Payment links have been sent to all parties. Full payment will be collected once all parties complete their portions.
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {!splitPaymentData?.splitPayment && (
+            <Tabs value={selectedPaymentMethod} onValueChange={setSelectedPaymentMethod}>
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="card" data-testid="tab-card">Card</TabsTrigger>
+                <TabsTrigger value="efs" data-testid="tab-efs">EFS</TabsTrigger>
+                <TabsTrigger value="comdata" data-testid="tab-comdata">Comdata</TabsTrigger>
+                {fleetAccountId && (
+                  <TabsTrigger value="fleet" data-testid="tab-fleet">Fleet</TabsTrigger>
+                )}
+              </TabsList>
 
             {/* Card Payment */}
             <TabsContent value="card" className="space-y-4">
@@ -746,6 +820,7 @@ export default function Checkout({
               </TabsContent>
             )}
           </Tabs>
+          )}
         </CardContent>
       </Card>
 
@@ -760,6 +835,25 @@ export default function Checkout({
         >
           Cancel
         </Button>
+      )}
+
+      {/* Split Payment Modal */}
+      {jobId && (
+        <SplitPaymentModal
+          isOpen={showSplitPaymentModal}
+          onClose={() => setShowSplitPaymentModal(false)}
+          jobId={jobId}
+          totalAmount={amount}
+          onSuccess={(splitPaymentId) => {
+            // Refresh the split payment data
+            queryClient.invalidateQueries({ queryKey: [`/api/payments/split/${jobId}`] });
+            setShowSplitPaymentModal(false);
+            toast({
+              title: "Split Payment Created",
+              description: "Payment links have been sent to all parties"
+            });
+          }}
+        />
       )}
     </div>
   );

@@ -45,6 +45,9 @@ import {
   billingSubscriptions,
   billingHistory,
   billingUsageTracking,
+  splitPayments,
+  paymentSplits,
+  splitPaymentTemplates,
   type User,
   type InsertUser,
   type Session,
@@ -137,6 +140,12 @@ import {
   type InsertBillingHistory,
   type BillingUsageTracking,
   type InsertBillingUsageTracking,
+  type SplitPayment,
+  type InsertSplitPayment,
+  type PaymentSplit,
+  type InsertPaymentSplit,
+  type SplitPaymentTemplate,
+  type InsertSplitPaymentTemplate,
   performanceTierEnum,
   billingCycleEnum,
   subscriptionStatusEnum,
@@ -3681,6 +3690,232 @@ export class PostgreSQLStorage implements IStorage {
       averageSubscriptionValue: activeCount > 0 ? monthlyRevenue / activeCount : 0,
       churnRate: activeCount > 0 ? (cancelledCount / (activeCount + cancelledCount)) * 100 : 0
     };
+  }
+
+  // ==================== SPLIT PAYMENT OPERATIONS ====================
+
+  async createSplitPaymentTemplate(data: InsertSplitPaymentTemplate): Promise<SplitPaymentTemplate> {
+    const result = await db.insert(splitPaymentTemplates).values(data).returning();
+    return result[0];
+  }
+
+  async getSplitPaymentTemplates(activeOnly: boolean = true): Promise<SplitPaymentTemplate[]> {
+    const conditions = activeOnly ? [eq(splitPaymentTemplates.isActive, true)] : [];
+    return await db.select().from(splitPaymentTemplates)
+      .where(and(...conditions))
+      .orderBy(desc(splitPaymentTemplates.priority));
+  }
+
+  async getDefaultSplitPaymentTemplate(): Promise<SplitPaymentTemplate | null> {
+    const result = await db.select().from(splitPaymentTemplates)
+      .where(
+        and(
+          eq(splitPaymentTemplates.isActive, true),
+          eq(splitPaymentTemplates.isDefault, true)
+        )
+      )
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async createSplitPayment(data: InsertSplitPayment): Promise<SplitPayment> {
+    const result = await db.insert(splitPayments).values(data).returning();
+    return result[0];
+  }
+
+  async getSplitPayment(id: string): Promise<SplitPayment | null> {
+    const result = await db.select().from(splitPayments)
+      .where(eq(splitPayments.id, id))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getSplitPaymentByJobId(jobId: string): Promise<SplitPayment | null> {
+    const result = await db.select().from(splitPayments)
+      .where(eq(splitPayments.jobId, jobId))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async updateSplitPayment(id: string, data: Partial<InsertSplitPayment>): Promise<SplitPayment | null> {
+    const result = await db.update(splitPayments)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(splitPayments.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async createPaymentSplit(data: InsertPaymentSplit): Promise<PaymentSplit> {
+    const result = await db.insert(paymentSplits).values(data).returning();
+    return result[0];
+  }
+
+  async createPaymentSplits(data: InsertPaymentSplit[]): Promise<PaymentSplit[]> {
+    const result = await db.insert(paymentSplits).values(data).returning();
+    return result;
+  }
+
+  async getPaymentSplit(id: string): Promise<PaymentSplit | null> {
+    const result = await db.select().from(paymentSplits)
+      .where(eq(paymentSplits.id, id))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getPaymentSplitByToken(token: string): Promise<PaymentSplit | null> {
+    const result = await db.select().from(paymentSplits)
+      .where(eq(paymentSplits.paymentToken, token))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getPaymentSplitsBySplitPaymentId(splitPaymentId: string): Promise<PaymentSplit[]> {
+    return await db.select().from(paymentSplits)
+      .where(eq(paymentSplits.splitPaymentId, splitPaymentId))
+      .orderBy(asc(paymentSplits.createdAt));
+  }
+
+  async getPaymentSplitsByJobId(jobId: string): Promise<PaymentSplit[]> {
+    return await db.select().from(paymentSplits)
+      .where(eq(paymentSplits.jobId, jobId))
+      .orderBy(asc(paymentSplits.createdAt));
+  }
+
+  async updatePaymentSplit(id: string, data: Partial<InsertPaymentSplit>): Promise<PaymentSplit | null> {
+    const result = await db.update(paymentSplits)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(paymentSplits.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async updatePaymentSplitByToken(token: string, data: Partial<InsertPaymentSplit>): Promise<PaymentSplit | null> {
+    const result = await db.update(paymentSplits)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(paymentSplits.paymentToken, token))
+      .returning();
+    return result[0] || null;
+  }
+
+  async markPaymentSplitAsPaid(id: string, transactionId: string, amountPaid: number): Promise<PaymentSplit | null> {
+    const result = await db.update(paymentSplits)
+      .set({ 
+        status: 'paid',
+        amountPaid: amountPaid.toString(),
+        transactionId,
+        paidAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(paymentSplits.id, id))
+      .returning();
+    
+    // Check if all splits for this job are paid
+    if (result[0]) {
+      await this.checkAndUpdateSplitPaymentStatus(result[0].splitPaymentId);
+    }
+    
+    return result[0] || null;
+  }
+
+  async checkAndUpdateSplitPaymentStatus(splitPaymentId: string): Promise<void> {
+    const splits = await this.getPaymentSplitsBySplitPaymentId(splitPaymentId);
+    
+    const allPaid = splits.every(split => split.status === 'paid');
+    const anyPaid = splits.some(split => split.status === 'paid');
+    const anyFailed = splits.some(split => split.status === 'failed');
+    
+    let status: 'pending' | 'partial' | 'completed' | 'failed' | 'cancelled' = 'pending';
+    let completedAt = null;
+    
+    if (allPaid) {
+      status = 'completed';
+      completedAt = new Date();
+    } else if (anyPaid) {
+      status = 'partial';
+    } else if (anyFailed && !anyPaid) {
+      status = 'failed';
+    }
+    
+    await db.update(splitPayments)
+      .set({ 
+        status,
+        completedAt,
+        updatedAt: new Date()
+      })
+      .where(eq(splitPayments.id, splitPaymentId));
+  }
+
+  async getExpiredPaymentSplits(): Promise<PaymentSplit[]> {
+    const now = new Date();
+    return await db.select().from(paymentSplits)
+      .where(
+        and(
+          eq(paymentSplits.status, 'pending'),
+          lte(paymentSplits.tokenExpiresAt, now)
+        )
+      )
+      .orderBy(asc(paymentSplits.tokenExpiresAt));
+  }
+
+  async getPendingPaymentSplits(limit: number = 100): Promise<PaymentSplit[]> {
+    return await db.select().from(paymentSplits)
+      .where(eq(paymentSplits.status, 'pending'))
+      .orderBy(asc(paymentSplits.createdAt))
+      .limit(limit);
+  }
+
+  async getSplitPaymentStatistics(): Promise<{
+    totalSplitPayments: number;
+    completedSplitPayments: number;
+    partialSplitPayments: number;
+    pendingSplitPayments: number;
+    averageCollectionTime: number;
+    successRate: number;
+  }> {
+    const stats = await db.select({
+      total: sql<number>`count(*)`,
+      completed: sql<number>`count(*) filter (where status = 'completed')`,
+      partial: sql<number>`count(*) filter (where status = 'partial')`,
+      pending: sql<number>`count(*) filter (where status = 'pending')`,
+      avgCollectionHours: sql<number>`avg(EXTRACT(EPOCH FROM (completed_at - created_at))/3600) filter (where status = 'completed')`
+    })
+    .from(splitPayments);
+
+    const result = stats[0];
+    const total = Number(result?.total || 0);
+    const completed = Number(result?.completed || 0);
+    
+    return {
+      totalSplitPayments: total,
+      completedSplitPayments: completed,
+      partialSplitPayments: Number(result?.partial || 0),
+      pendingSplitPayments: Number(result?.pending || 0),
+      averageCollectionTime: Number(result?.avgCollectionHours || 0),
+      successRate: total > 0 ? (completed / total) * 100 : 0
+    };
+  }
+
+  async getSplitPaymentRevenueByPayerType(fromDate: Date, toDate: Date): Promise<Record<string, number>> {
+    const result = await db.select({
+      payerType: paymentSplits.payerType,
+      total: sql<number>`sum(amount_paid)`
+    })
+    .from(paymentSplits)
+    .where(
+      and(
+        eq(paymentSplits.status, 'paid'),
+        gte(paymentSplits.paidAt, fromDate),
+        lte(paymentSplits.paidAt, toDate)
+      )
+    )
+    .groupBy(paymentSplits.payerType);
+
+    return result.reduce((acc, row) => {
+      if (row.payerType) {
+        acc[row.payerType] = Number(row.total || 0);
+      }
+      return acc;
+    }, {} as Record<string, number>);
   }
 }
 
