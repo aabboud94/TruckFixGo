@@ -1,0 +1,66 @@
+11-05 07:24:16
+Warning: connect.session() MemoryStore is not
+11-05 07:24:16
+designed for a production environment, as it will leak
+11-05 07:24:16
+memory, and will not scale past a single process.
+11-05 07:30:01
+[2025-11-05T12:30:01.332Z] [PID: 39] [NODE-CRON] [WARN] missed execution at Wed Nov 05 2025 12:30:00 GMT+0000 (Coordinated Universal Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+11-05 07:30:06
+Error checking upcoming services: error: column "allow_bidding" does not exist
+11-05 07:30:06
+at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+11-05 07:30:06
+at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+11-05 07:30:06
+at async NeonPreparedQuery.execute (file:///home/runner/workspace/node_modules/drizzle-orm/neon-serverless/session.js:76:20)
+11-05 07:30:06
+at async PostgreSQLStorage.getJobsScheduledBetween (file:///home/runner/workspace/dist/index.js:4083:16)
+11-05 07:30:06
+at async ReminderScheduler.checkUpcomingServices (file:///home/runner/workspace/dist/index.js:7062:28)
+11-05 07:30:06
+at async file:///home/runner/workspace/dist/index.js:6995:7
+11-05 07:30:06
+at async file:///home/runner/workspace/dist/index.js:7016:9
+11-05 07:30:06
+at async Timeout._onTimeout (/home/runner/workspace/node_modules/node-cron/dist/esm/scheduler/runner.js:70:44) {
+11-05 07:30:06
+length: 114,
+11-05 07:30:06
+severity: 'ERROR',
+11-05 07:30:06
+code: '42703',
+11-05 07:30:06
+detail: undefined,
+11-05 07:30:06
+hint: undefined,
+11-05 07:30:06
+position: '613',
+11-05 07:30:06
+internalPosition: undefined,
+11-05 07:30:06
+internalQuery: undefined,
+11-05 07:30:06
+where: undefined,
+11-05 07:30:06
+schema: undefined,
+11-05 07:30:06
+table: undefined,
+11-05 07:30:06
+column: undefined,
+11-05 07:30:06
+dataType: undefined,
+11-05 07:30:06
+constraint: undefined,
+11-05 07:30:06
+file: 'parse_relation.c',
+11-05 07:30:06
+line: '3722',
+11-05 07:30:06
+routine: 'errorMissingColumn'
+11-05 07:30:06
+}
+11-05 08:00:47
+Warning: connect.session() MemoryStore is not
+11-05 08:00:47
+designed for a production environment, as it will leak

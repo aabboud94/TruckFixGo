@@ -44,7 +44,7 @@ export default function AdminLayout({ children, title, breadcrumbs = [] }: Admin
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
           <p className="text-muted-foreground">Loading admin dashboard...</p>
@@ -64,7 +64,7 @@ export default function AdminLayout({ children, title, breadcrumbs = [] }: Admin
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-screen w-full">
+      <div className="flex min-h-screen w-full">
         <AdminSidebar />
         
         <div className="flex flex-1 flex-col">
