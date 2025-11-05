@@ -14,7 +14,8 @@ import {
   insertJobSchema,
   insertJobPhotoSchema,
   insertJobMessageSchema,
-  insertContractorRatingSchema,
+  insertReviewSchema,
+  insertReviewVoteSchema,
   insertContractorDocumentSchema,
   insertFleetAccountSchema,
   insertFleetVehicleSchema,
@@ -1010,54 +1011,274 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  // Rate contractor after job completion
-  app.post('/api/jobs/:id/rate',
+  // ==================== REVIEW ROUTES ====================
+  
+  // Submit new review for a job
+  app.post('/api/reviews',
     requireAuth,
-    requireRole('driver', 'fleet_manager'),
-    validateRequest(insertContractorRatingSchema.omit({ 
-      contractorId: true, 
-      jobId: true, 
-      ratedBy: true 
+    validateRequest(insertReviewSchema.omit({ 
+      helpfulVotes: true,
+      unhelpfulVotes: true,
+      isEdited: true,
+      editHistory: true,
+      contractorResponse: true,
+      contractorResponseAt: true,
+      isFlagged: true,
+      flagReason: true,
+      flaggedBy: true,
+      flaggedAt: true,
+      moderationStatus: true,
+      moderatedBy: true,
+      moderatedAt: true
     })),
     async (req: Request, res: Response) => {
       try {
-        const job = await storage.getJob(req.params.id);
+        // Check if user has permission to review this job
+        const job = await storage.getJob(req.body.jobId);
         
         if (!job) {
           return res.status(404).json({ message: 'Job not found' });
         }
 
-        if (!job.contractorId) {
-          return res.status(400).json({ message: 'No contractor assigned to this job' });
-        }
-
+        // Check if job is completed
         if (job.status !== 'completed') {
-          return res.status(400).json({ message: 'Job must be completed before rating' });
+          return res.status(400).json({ message: 'Job must be completed before reviewing' });
         }
 
-        const rating = await storage.addContractorRating({
+        // Check if review already exists
+        const existingReview = await storage.getReviewByJob(job.id);
+        if (existingReview) {
+          return res.status(400).json({ message: 'Review already exists for this job' });
+        }
+
+        // Validate user is the customer or fleet manager
+        const isCustomer = job.customerId === req.session.userId;
+        const isFleetManager = job.fleetAccountId && req.session.role === 'fleet_manager';
+        
+        if (!isCustomer && !isFleetManager) {
+          return res.status(403).json({ message: 'Only the customer can review this job' });
+        }
+
+        // Create review
+        const review = await storage.createReview({
           ...req.body,
-          contractorId: job.contractorId,
           jobId: job.id,
-          ratedBy: req.session.userId!
+          contractorId: job.contractorId!,
+          customerId: req.body.isAnonymous ? null : req.session.userId,
+          customerName: req.body.isAnonymous ? 'Anonymous' : req.body.customerName,
+          isVerifiedPurchase: true,
+          moderationStatus: 'approved' // Auto-approve for now, can add moderation later
         });
 
-        // Update contractor average rating
-        const avgRating = await storage.calculateAverageRating(job.contractorId);
-        await storage.updateContractorProfile(job.contractorId, {
-          averageRating: avgRating.toString()
-        });
+        // Send notification to contractor
+        if (job.contractorId) {
+          const contractor = await storage.getUser(job.contractorId);
+          if (contractor) {
+            // Send notification (to be implemented with notification service)
+            console.log(`New review notification for contractor ${contractor.id}`);
+          }
+        }
 
         res.status(201).json({
-          message: 'Rating submitted successfully',
-          rating
+          message: 'Review submitted successfully',
+          review
         });
       } catch (error) {
-        console.error('Rate contractor error:', error);
-        res.status(500).json({ message: 'Failed to submit rating' });
+        console.error('Submit review error:', error);
+        res.status(500).json({ message: 'Failed to submit review' });
       }
     }
   );
+
+  // Get reviews for a contractor
+  app.get('/api/reviews/contractor/:id', async (req: Request, res: Response) => {
+    try {
+      const { limit = '50', offset = '0', sortBy = 'recent' } = req.query;
+      const minRating = req.query.minRating ? parseInt(req.query.minRating as string) : undefined;
+      const maxRating = req.query.maxRating ? parseInt(req.query.maxRating as string) : undefined;
+      const hasText = req.query.hasText === 'true';
+      
+      const reviews = await storage.getContractorReviews(
+        req.params.id,
+        parseInt(limit as string),
+        parseInt(offset as string),
+        {
+          minRating,
+          maxRating,
+          hasText,
+          sortBy: sortBy as 'recent' | 'highest' | 'lowest' | 'helpful'
+        }
+      );
+
+      // Get contractor rating summary
+      const summary = await storage.getContractorRatingSummary(req.params.id);
+
+      res.json({
+        reviews,
+        summary,
+        pagination: {
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string),
+          total: summary.totalReviews
+        }
+      });
+    } catch (error) {
+      console.error('Get contractor reviews error:', error);
+      res.status(500).json({ message: 'Failed to get reviews' });
+    }
+  });
+
+  // Get rating summary for a contractor
+  app.get('/api/contractors/:id/rating', async (req: Request, res: Response) => {
+    try {
+      const summary = await storage.getContractorRatingSummary(req.params.id);
+      res.json(summary);
+    } catch (error) {
+      console.error('Get rating summary error:', error);
+      res.status(500).json({ message: 'Failed to get rating summary' });
+    }
+  });
+
+  // Add contractor response to review
+  app.post('/api/reviews/:id/response',
+    requireAuth,
+    requireRole('contractor'),
+    validateRequest(z.object({
+      response: z.string().min(10).max(1000)
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const review = await storage.getReview(req.params.id);
+        
+        if (!review) {
+          return res.status(404).json({ message: 'Review not found' });
+        }
+
+        // Verify contractor owns this review
+        const contractorProfile = await storage.getContractorProfile(req.session.userId!);
+        if (!contractorProfile || review.contractorId !== req.session.userId) {
+          return res.status(403).json({ message: 'You can only respond to your own reviews' });
+        }
+
+        // Update review with response
+        const updatedReview = await storage.addContractorResponse(
+          review.id,
+          req.body.response
+        );
+
+        res.json({
+          message: 'Response added successfully',
+          review: updatedReview
+        });
+      } catch (error) {
+        console.error('Add contractor response error:', error);
+        res.status(500).json({ message: 'Failed to add response' });
+      }
+    }
+  );
+
+  // Flag a review as inappropriate
+  app.post('/api/reviews/:id/flag',
+    requireAuth,
+    validateRequest(z.object({
+      reason: z.string().min(10).max(500)
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const review = await storage.getReview(req.params.id);
+        
+        if (!review) {
+          return res.status(404).json({ message: 'Review not found' });
+        }
+
+        const flaggedReview = await storage.flagReview(
+          review.id,
+          req.body.reason,
+          req.session.userId!
+        );
+
+        res.json({
+          message: 'Review flagged for moderation',
+          review: flaggedReview
+        });
+      } catch (error) {
+        console.error('Flag review error:', error);
+        res.status(500).json({ message: 'Failed to flag review' });
+      }
+    }
+  );
+
+  // Vote review as helpful/unhelpful
+  app.post('/api/reviews/:id/helpful',
+    requireAuth,
+    validateRequest(z.object({
+      isHelpful: z.boolean()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const success = await storage.voteReviewHelpful(
+          req.params.id,
+          req.session.userId!,
+          req.body.isHelpful
+        );
+
+        if (success) {
+          res.json({ message: 'Vote recorded' });
+        } else {
+          res.status(400).json({ message: 'Failed to record vote' });
+        }
+      } catch (error) {
+        console.error('Vote review helpful error:', error);
+        res.status(500).json({ message: 'Failed to vote' });
+      }
+    }
+  );
+
+  // Moderate a review (admin only)
+  app.patch('/api/reviews/:id/moderate',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      status: z.enum(['pending', 'approved', 'rejected'])
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const updatedReview = await storage.moderateReview(
+          req.params.id,
+          req.body.status,
+          req.session.userId!
+        );
+
+        if (!updatedReview) {
+          return res.status(404).json({ message: 'Review not found' });
+        }
+
+        res.json({
+          message: 'Review moderated successfully',
+          review: updatedReview
+        });
+      } catch (error) {
+        console.error('Moderate review error:', error);
+        res.status(500).json({ message: 'Failed to moderate review' });
+      }
+    }
+  );
+
+  // Get review for a specific job
+  app.get('/api/jobs/:id/review', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const review = await storage.getReviewByJob(req.params.id);
+      
+      if (!review) {
+        return res.status(404).json({ message: 'No review found for this job' });
+      }
+
+      res.json(review);
+    } catch (error) {
+      console.error('Get job review error:', error);
+      res.status(500).json({ message: 'Failed to get review' });
+    }
+  });
 
   // ==================== PAYMENT ROUTES ====================
 

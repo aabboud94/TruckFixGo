@@ -10,8 +10,17 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useTrackingWebSocket } from "@/hooks/use-tracking-websocket";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  RatingDisplay, 
+  RatingBadge, 
+  PerformanceMetrics, 
+  RatingSummaryCard 
+} from "@/components/rating-display";
+import { ReviewItem } from "@/components/review-item";
 import {
   DollarSign,
   TrendingUp,
@@ -29,7 +38,13 @@ import {
   ChevronRight,
   Bell,
   Timer,
-  Award
+  Award,
+  MessageSquare,
+  Users,
+  Target,
+  ArrowUp,
+  ArrowDown,
+  Sparkles
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -45,6 +60,17 @@ interface DashboardData {
     totalJobsCompleted: number;
     averageResponseTime: number;
     currentLocation?: { lat: number; lng: number };
+    totalReviews: number;
+    onTimeRate: number;
+    satisfactionScore: number;
+    responseRate: number;
+    completionRate: number;
+    categoryRatings: {
+      timeliness: number;
+      professionalism: number;
+      quality: number;
+      value: number;
+    };
   };
   metrics: {
     todayEarnings: number;
@@ -58,6 +84,9 @@ interface DashboardData {
   activeJob?: any;
   availableJobs: any[];
   scheduledJobs: any[];
+  recentReviews?: any[];
+  ratingDistribution?: Record<string, number>;
+  ratingTrend?: Array<{ date: string; rating: number }>;
 }
 
 const tierColors = {
@@ -585,6 +614,301 @@ export default function ContractorDashboard() {
             )}
           </CardContent>
         </Card>
+
+        {/* Rating and Reviews Section */}
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="overview">Rating Overview</TabsTrigger>
+            <TabsTrigger value="reviews">Recent Reviews</TabsTrigger>
+            <TabsTrigger value="performance">Performance</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="overview" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <RatingSummaryCard
+                averageRating={contractor?.averageRating || 0}
+                totalReviews={contractor?.totalReviews || 0}
+                distribution={dashboardData?.ratingDistribution || {}}
+                onTimeRate={contractor?.onTimeRate}
+                satisfactionScore={contractor?.satisfactionScore}
+              />
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Performance Metrics</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <PerformanceMetrics
+                    onTimeRate={contractor?.onTimeRate}
+                    satisfactionScore={contractor?.satisfactionScore}
+                    responseRate={contractor?.responseRate}
+                    completionRate={contractor?.completionRate}
+                    tier={contractor?.performanceTier}
+                  />
+                  
+                  {/* Tier Progression */}
+                  {contractor?.performanceTier && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Tier Progression</h4>
+                      {contractor.performanceTier === 'bronze' && (
+                        <div className="text-xs text-muted-foreground">
+                          <p>Maintain 4.0+ rating to reach Silver tier</p>
+                          <Progress value={(contractor.averageRating / 4.0) * 100} className="h-2 mt-1" />
+                        </div>
+                      )}
+                      {contractor.performanceTier === 'silver' && (
+                        <div className="text-xs text-muted-foreground">
+                          <p>Maintain 4.5+ rating to reach Gold tier</p>
+                          <Progress value={(contractor.averageRating / 4.5) * 100} className="h-2 mt-1" />
+                        </div>
+                      )}
+                      {contractor.performanceTier === 'gold' && (
+                        <Badge className="gap-1">
+                          <Sparkles className="h-3 w-3" />
+                          Top Performer
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Benefits */}
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium">Your Benefits</h4>
+                    <div className="space-y-1">
+                      {contractor?.averageRating >= 4.8 && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <CheckCircle className="h-3 w-3 text-green-600" />
+                          <span>Reduced platform fees (15% → 12%)</span>
+                        </div>
+                      )}
+                      {contractor?.averageRating >= 4.5 && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <CheckCircle className="h-3 w-3 text-green-600" />
+                          <span>Priority job assignments</span>
+                        </div>
+                      )}
+                      {contractor?.averageRating >= 4.0 && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <CheckCircle className="h-3 w-3 text-green-600" />
+                          <span>Featured contractor badge</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            
+            {/* Rating Improvement Tips */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  Rating Improvement Tips
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {contractor?.categoryRatings && (
+                    <>
+                      {contractor.categoryRatings.timeliness < 4.5 && (
+                        <div className="flex items-start gap-2">
+                          <Clock className="h-4 w-4 text-muted-foreground mt-1" />
+                          <div>
+                            <p className="text-sm font-medium">Improve Timeliness</p>
+                            <p className="text-xs text-muted-foreground">
+                              Arrive within the promised time window. Update customers if running late.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {contractor.categoryRatings.professionalism < 4.5 && (
+                        <div className="flex items-start gap-2">
+                          <Users className="h-4 w-4 text-muted-foreground mt-1" />
+                          <div>
+                            <p className="text-sm font-medium">Enhance Professionalism</p>
+                            <p className="text-xs text-muted-foreground">
+                              Maintain clean appearance, be courteous, and communicate clearly.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {contractor.responseRate < 90 && (
+                        <div className="flex items-start gap-2">
+                          <MessageSquare className="h-4 w-4 text-muted-foreground mt-1" />
+                          <div>
+                            <p className="text-sm font-medium">Respond to Reviews</p>
+                            <p className="text-xs text-muted-foreground">
+                              Thank customers for positive reviews and address concerns professionally.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="reviews" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Recent Reviews</CardTitle>
+                  <Button variant="outline" size="sm" onClick={() => navigate("/contractor/reviews")}>
+                    View All
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {(!dashboardData?.recentReviews || dashboardData.recentReviews.length === 0) ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Star className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No reviews yet</p>
+                    <p className="text-sm mt-1">Complete jobs to start receiving reviews</p>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[500px] pr-4">
+                    <div className="space-y-4">
+                      {dashboardData.recentReviews.map((review) => (
+                        <ReviewItem
+                          key={review.id}
+                          review={review}
+                          isContractor={true}
+                          currentUserId={contractor?.id}
+                        />
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="performance" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Rating Trend</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {dashboardData?.ratingTrend && dashboardData.ratingTrend.length > 0 ? (
+                    <div className="space-y-3">
+                      {dashboardData.ratingTrend.map((point, index) => (
+                        <div key={index} className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">
+                            {format(new Date(point.date), 'MMM d')}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <RatingDisplay 
+                              rating={point.rating} 
+                              totalReviews={0}
+                              size="xs"
+                              showCount={false}
+                            />
+                            {index > 0 && (
+                              <span className={`text-xs ${
+                                point.rating > dashboardData.ratingTrend[index - 1].rating 
+                                  ? 'text-green-600' 
+                                  : point.rating < dashboardData.ratingTrend[index - 1].rating
+                                  ? 'text-red-600'
+                                  : 'text-muted-foreground'
+                              }`}>
+                                {point.rating > dashboardData.ratingTrend[index - 1].rating ? (
+                                  <ArrowUp className="h-3 w-3" />
+                                ) : point.rating < dashboardData.ratingTrend[index - 1].rating ? (
+                                  <ArrowDown className="h-3 w-3" />
+                                ) : '–'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Not enough data to show trends
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Category Performance</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {contractor?.categoryRatings ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">Timeliness</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <RatingDisplay 
+                            rating={contractor.categoryRatings.timeliness} 
+                            totalReviews={0}
+                            size="xs"
+                            showCount={false}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">Professionalism</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <RatingDisplay 
+                            rating={contractor.categoryRatings.professionalism} 
+                            totalReviews={0}
+                            size="xs"
+                            showCount={false}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">Quality</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <RatingDisplay 
+                            rating={contractor.categoryRatings.quality} 
+                            totalReviews={0}
+                            size="xs"
+                            showCount={false}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">Value</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <RatingDisplay 
+                            rating={contractor.categoryRatings.value} 
+                            totalReviews={0}
+                            size="xs"
+                            showCount={false}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No category ratings available yet
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
 
         {/* Quick Actions */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

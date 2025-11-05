@@ -96,7 +96,35 @@ export const contractorProfiles = pgTable("contractor_profiles", {
   serviceRadius: integer("service_radius").notNull().default(50),
   averageResponseTime: integer("average_response_time"),
   totalJobsCompleted: integer("total_jobs_completed").notNull().default(0),
+  
+  // Rating aggregates
   averageRating: decimal("average_rating", { precision: 3, scale: 2 }),
+  totalReviews: integer("total_reviews").notNull().default(0),
+  fiveStarCount: integer("five_star_count").notNull().default(0),
+  fourStarCount: integer("four_star_count").notNull().default(0),
+  threeStarCount: integer("three_star_count").notNull().default(0),
+  twoStarCount: integer("two_star_count").notNull().default(0),
+  oneStarCount: integer("one_star_count").notNull().default(0),
+  
+  // Category rating averages
+  averageTimelinessRating: decimal("average_timeliness_rating", { precision: 3, scale: 2 }),
+  averageProfessionalismRating: decimal("average_professionalism_rating", { precision: 3, scale: 2 }),
+  averageQualityRating: decimal("average_quality_rating", { precision: 3, scale: 2 }),
+  averageValueRating: decimal("average_value_rating", { precision: 3, scale: 2 }),
+  
+  // Performance metrics
+  onTimeArrivalRate: decimal("on_time_arrival_rate", { precision: 5, scale: 2 }), // Percentage
+  jobCompletionRate: decimal("job_completion_rate", { precision: 5, scale: 2 }), // Percentage
+  responseRate: decimal("response_rate", { precision: 5, scale: 2 }), // Percentage of reviews responded to
+  customerSatisfactionScore: decimal("customer_satisfaction_score", { precision: 5, scale: 2 }), // CSAT
+  netPromoterScore: integer("net_promoter_score"), // NPS (-100 to 100)
+  lastRatingUpdate: timestamp("last_rating_update"),
+  
+  // Badges and status
+  isVerifiedContractor: boolean("is_verified_contractor").notNull().default(false),
+  isFeaturedContractor: boolean("is_featured_contractor").notNull().default(false),
+  profileCompleteness: integer("profile_completeness").notNull().default(0), // 0-100
+  
   isFleetCapable: boolean("is_fleet_capable").notNull().default(false),
   hasMobileWaterSource: boolean("has_mobile_water_source").notNull().default(false),
   hasWastewaterRecovery: boolean("has_wastewater_recovery").notNull().default(false),
@@ -426,20 +454,81 @@ export const contractorEarnings = pgTable("contractor_earnings", {
   paidIdx: index("idx_contractor_earnings_paid").on(table.isPaid)
 }));
 
-export const contractorRatings = pgTable("contractor_ratings", {
+// Enhanced reviews table replacing contractorRatings
+export const reviews = pgTable("reviews", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id).unique(),
+  customerId: varchar("customer_id").references(() => users.id),
   contractorId: varchar("contractor_id").notNull().references(() => users.id),
-  jobId: varchar("job_id").notNull().references(() => jobs.id),
-  customerId: varchar("customer_id").notNull().references(() => users.id),
-  rating: integer("rating").notNull(),
-  review: text("review"),
-  responseTime: integer("response_time"),
-  professionalism: integer("professionalism"),
-  qualityOfWork: integer("quality_of_work"),
+  
+  // Overall rating
+  overallRating: integer("overall_rating").notNull(), // 1-5 stars
+  
+  // Category ratings (1-5 each)
+  timelinessRating: integer("timeliness_rating"), // Arrived on time
+  professionalismRating: integer("professionalism_rating"), // Courteous, clean
+  qualityRating: integer("quality_rating"), // Work performed well
+  valueRating: integer("value_rating"), // Fair pricing
+  
+  // Review content
+  reviewText: text("review_text"),
+  reviewTitle: varchar("review_title", { length: 200 }),
+  
+  // Contractor response
+  contractorResponse: text("contractor_response"),
+  contractorResponseAt: timestamp("contractor_response_at"),
+  
+  // Review metadata
+  isVerifiedPurchase: boolean("is_verified_purchase").notNull().default(true),
+  isAnonymous: boolean("is_anonymous").notNull().default(false),
+  customerName: varchar("customer_name", { length: 100 }), // Display name if not anonymous
+  
+  // Photos
+  photoUrls: jsonb("photo_urls").default('[]'), // Array of photo URLs
+  
+  // Engagement
+  helpfulVotes: integer("helpful_votes").notNull().default(0),
+  unhelpfulVotes: integer("unhelpful_votes").notNull().default(0),
+  
+  // Moderation
+  isFlagged: boolean("is_flagged").notNull().default(false),
+  flagReason: text("flag_reason"),
+  flaggedBy: varchar("flagged_by").references(() => users.id),
+  flaggedAt: timestamp("flagged_at"),
+  moderationStatus: varchar("moderation_status", { length: 20 }).default('approved'), // pending, approved, rejected
+  moderatedBy: varchar("moderated_by").references(() => users.id),
+  moderatedAt: timestamp("moderated_at"),
+  
+  // Edit history
+  isEdited: boolean("is_edited").notNull().default(false),
+  editedAt: timestamp("edited_at"),
+  editHistory: jsonb("edit_history").default('[]'),
+  
+  // Incentives
+  discountCodeOffered: varchar("discount_code_offered", { length: 50 }),
+  incentiveType: varchar("incentive_type", { length: 50 }), // discount, points, etc.
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  contractorIdx: index("idx_reviews_contractor").on(table.contractorId),
+  jobIdx: uniqueIndex("idx_reviews_job").on(table.jobId),
+  customerIdx: index("idx_reviews_customer").on(table.customerId),
+  overallRatingIdx: index("idx_reviews_overall_rating").on(table.overallRating),
+  createdIdx: index("idx_reviews_created").on(table.createdAt),
+  moderationIdx: index("idx_reviews_moderation").on(table.moderationStatus),
+  verifiedIdx: index("idx_reviews_verified").on(table.isVerifiedPurchase)
+}));
+
+// Review helpful votes tracking
+export const reviewVotes = pgTable("review_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reviewId: varchar("review_id").notNull().references(() => reviews.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  isHelpful: boolean("is_helpful").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow()
 }, (table) => ({
-  contractorIdx: index("idx_contractor_ratings_contractor").on(table.contractorId),
-  jobIdx: index("idx_contractor_ratings_job").on(table.jobId)
+  reviewUserIdx: uniqueIndex("idx_review_votes_unique").on(table.reviewId, table.userId)
 }));
 
 export const contractorDocuments = pgTable("contractor_documents", {
@@ -984,12 +1073,25 @@ export const insertContractorEarningsSchema = createInsertSchema(contractorEarni
 export type InsertContractorEarnings = z.infer<typeof insertContractorEarningsSchema>;
 export type ContractorEarnings = typeof contractorEarnings.$inferSelect;
 
-export const insertContractorRatingSchema = createInsertSchema(contractorRatings).omit({ 
+// Reviews schemas
+export const insertReviewSchema = createInsertSchema(reviews).omit({ 
+  id: true,
+  helpfulVotes: true,
+  unhelpfulVotes: true,
+  isEdited: true,
+  editHistory: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertReview = z.infer<typeof insertReviewSchema>;
+export type Review = typeof reviews.$inferSelect;
+
+export const insertReviewVoteSchema = createInsertSchema(reviewVotes).omit({ 
   id: true, 
   createdAt: true 
 });
-export type InsertContractorRating = z.infer<typeof insertContractorRatingSchema>;
-export type ContractorRating = typeof contractorRatings.$inferSelect;
+export type InsertReviewVote = z.infer<typeof insertReviewVoteSchema>;
+export type ReviewVote = typeof reviewVotes.$inferSelect;
 
 export const insertContractorDocumentSchema = createInsertSchema(contractorDocuments).omit({ 
   id: true, 
