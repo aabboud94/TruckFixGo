@@ -6,7 +6,17 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Homepage from "@/pages/Homepage";
 import EmergencyBooking from "@/pages/emergency-booking";
 import TrackingPage from "@/pages/tracking";
+
+// Contractor Pages
+import ContractorAuth from "@/pages/contractor/auth";
+import ContractorDashboard from "@/pages/contractor/dashboard";
+import ContractorJobs from "@/pages/contractor/jobs";
+import ContractorEarnings from "@/pages/contractor/earnings";
+import ContractorPerformance from "@/pages/contractor/performance";
+import ContractorProfile from "@/pages/contractor/profile";
 import ContractorActiveJob from "@/pages/contractor/active-job";
+
+// Fleet Pages
 import FleetLanding from "@/pages/fleet";
 import FleetRegister from "@/pages/fleet/register";
 import FleetLogin from "@/pages/fleet/login";
@@ -15,6 +25,7 @@ import FleetSchedulePM from "@/pages/fleet/schedule-pm";
 import FleetVehicles from "@/pages/fleet/vehicles";
 import FleetAnalytics from "@/pages/fleet/analytics";
 import FleetBatchJobs from "@/pages/fleet/batch-jobs";
+
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -28,6 +39,13 @@ function Router() {
       <Route path="/track/:jobId" component={TrackingPage} />
       
       {/* Contractor Pages */}
+      <Route path="/contractor/auth" component={ContractorAuth} />
+      <Route path="/contractor/dashboard" component={ContractorDashboard} />
+      <Route path="/contractor/jobs" component={ContractorJobs} />
+      <Route path="/contractor/jobs/:jobId" component={ContractorJobs} />
+      <Route path="/contractor/earnings" component={ContractorEarnings} />
+      <Route path="/contractor/performance" component={ContractorPerformance} />
+      <Route path="/contractor/profile" component={ContractorProfile} />
       <Route path="/contractor/active-job" component={ContractorActiveJob} />
       
       {/* Fleet Pages */}
