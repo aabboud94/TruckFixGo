@@ -5,9 +5,11 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 import { 
   Camera, 
   Loader2, 
@@ -18,7 +20,14 @@ import {
   AlertCircle,
   Zap,
   HelpCircle,
-  Truck
+  Truck,
+  Upload,
+  X,
+  CheckCircle,
+  AlertTriangle,
+  Clock,
+  DollarSign,
+  Shield
 } from "lucide-react";
 import { EmergencyBookingData } from "./index";
 import { useMutation } from "@tanstack/react-query";
@@ -54,6 +63,9 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [photoAnalysis, setPhotoAnalysis] = useState<any>(null);
+  const [showAIAnalysis, setShowAIAnalysis] = useState(false);
   const { toast } = useToast();
   
   const form = useForm<z.infer<typeof formSchema>>({
@@ -63,6 +75,48 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
       issueDescription: bookingData.issueDescription || "",
       unitNumber: bookingData.unitNumber || "",
       carrierName: bookingData.carrierName || "",
+    },
+  });
+
+  // Photo analysis mutation
+  const analyzePhotoMutation = useMutation({
+    mutationFn: async (photoBase64: string) => {
+      return apiRequest('/api/ai/analyze-photo', {
+        method: 'POST',
+        body: JSON.stringify({
+          photo: photoBase64,
+          context: "Emergency roadside truck repair request - analyze damage and provide repair recommendations"
+        }),
+      });
+    },
+    onSuccess: (analysis) => {
+      setPhotoAnalysis(analysis);
+      setShowAIAnalysis(true);
+      setIsAnalyzing(false);
+      
+      // Auto-select issue based on AI analysis
+      if (analysis.damageType) {
+        const suggestedIssue = mapAnalysisToIssue(analysis.damageType);
+        if (suggestedIssue) {
+          handleIssueSelect(suggestedIssue);
+        }
+      }
+
+      // Show severity alert if critical
+      if (analysis.safetyRisk === "Critical" || analysis.severity === "Severe") {
+        toast({
+          title: "⚠️ Critical Issue Detected",
+          description: "This appears to be a serious safety concern. Emergency assistance recommended.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: any) => {
+      setIsAnalyzing(false);
+      toast({
+        title: "Analysis Failed",
+        description: "Unable to analyze photo. You can still continue with manual selection.",
+      });
     },
   });
 
@@ -94,6 +148,18 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
     },
   });
 
+  // Helper function to map AI analysis to issue type
+  const mapAnalysisToIssue = (damageType: string): string => {
+    const lowerDamage = damageType.toLowerCase();
+    if (lowerDamage.includes("tire")) return "flat_tire";
+    if (lowerDamage.includes("engine") || lowerDamage.includes("start")) return "engine_wont_start";
+    if (lowerDamage.includes("overheat") || lowerDamage.includes("temperature")) return "overheating";
+    if (lowerDamage.includes("fuel") || lowerDamage.includes("gas")) return "out_of_fuel";
+    if (lowerDamage.includes("brake")) return "brakes_issue";
+    if (lowerDamage.includes("electric") || lowerDamage.includes("battery")) return "electrical";
+    return "other";
+  };
+
   const handleIssueSelect = (issueId: string) => {
     setSelectedIssue(issueId);
     form.setValue("issue", issueId);
@@ -115,13 +181,25 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
       
       setPhotoFile(file);
       
-      // Create preview
+      // Create preview and analyze photo
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPhotoPreview(reader.result as string);
+        const base64 = reader.result as string;
+        setPhotoPreview(base64);
+        
+        // Start AI analysis
+        setIsAnalyzing(true);
+        analyzePhotoMutation.mutate(base64);
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const removePhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview("");
+    setPhotoAnalysis(null);
+    setShowAIAnalysis(false);
   };
 
   const uploadPhoto = async (): Promise<string | undefined> => {
@@ -320,20 +398,38 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
             </CardContent>
           </Card>
 
-          {/* Photo Upload */}
+          {/* Photo Upload & AI Analysis */}
           <Card className="border-2">
             <CardContent className="p-6">
-              <div className="space-y-3">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Camera className="w-5 h-5 text-muted-foreground" />
+                    <h3 className="text-base font-medium">Photo Evidence</h3>
+                  </div>
+                  <Badge variant="outline">Optional - AI Analysis Available</Badge>
+                </div>
+
                 <label htmlFor="photo-upload" className="block">
                   <Button
                     type="button"
                     variant="outline"
                     className="w-full h-14 text-base hover-elevate"
                     onClick={() => document.getElementById('photo-upload')?.click()}
+                    disabled={isAnalyzing}
                     data-testid="button-add-photo"
                   >
-                    <Camera className="w-5 h-5 mr-2" />
-                    {photoPreview ? "Change Photo" : "Add Photo (Optional)"}
+                    {isAnalyzing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Analyzing Photo...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-5 h-5 mr-2" />
+                        {photoPreview ? "Change Photo" : "Upload Photo for AI Analysis"}
+                      </>
+                    )}
                   </Button>
                 </label>
                 <input
@@ -343,6 +439,7 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
                   capture="environment"
                   className="hidden"
                   onChange={handlePhotoSelect}
+                  disabled={isAnalyzing}
                 />
                 
                 {photoPreview && (
@@ -355,18 +452,137 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
                     <Button
                       type="button"
                       variant="destructive"
-                      size="sm"
+                      size="icon"
                       className="absolute top-2 right-2"
-                      onClick={() => {
-                        setPhotoFile(null);
-                        setPhotoPreview("");
-                      }}
+                      onClick={removePhoto}
+                      disabled={isAnalyzing}
                       data-testid="button-remove-photo"
                     >
-                      Remove
+                      <X className="w-4 h-4" />
                     </Button>
+
+                    {isAnalyzing && (
+                      <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
+                        <div className="text-center text-white">
+                          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
+                          <p className="text-sm font-medium">AI Analyzing Damage...</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
+
+                {/* AI Analysis Results */}
+                {photoAnalysis && showAIAnalysis && (
+                  <Alert className={
+                    photoAnalysis.severity === "Severe" ? "border-red-500 bg-red-50 dark:bg-red-950/20" :
+                    photoAnalysis.severity === "Moderate" ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20" :
+                    "border-green-500 bg-green-50 dark:bg-green-950/20"
+                  }>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle className="font-semibold">AI Analysis Complete</AlertTitle>
+                    <AlertDescription>
+                      <div className="mt-3 space-y-3">
+                        {/* Damage Type & Severity */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Issue Detected</p>
+                            <p className="font-medium">{photoAnalysis.damageType}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Severity</p>
+                            <Badge variant={
+                              photoAnalysis.severity === "Severe" ? "destructive" :
+                              photoAnalysis.severity === "Moderate" ? "secondary" :
+                              "default"
+                            }>
+                              {photoAnalysis.severity}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {/* Safety Risk */}
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-background/50">
+                          <Shield className={`w-4 h-4 ${
+                            photoAnalysis.safetyRisk === "Critical" ? "text-red-500" :
+                            photoAnalysis.safetyRisk === "High" ? "text-orange-500" :
+                            photoAnalysis.safetyRisk === "Medium" ? "text-yellow-500" :
+                            "text-green-500"
+                          }`} />
+                          <div className="flex-1">
+                            <p className="text-xs text-muted-foreground">Safety Risk</p>
+                            <p className="text-sm font-medium">{photoAnalysis.safetyRisk}</p>
+                          </div>
+                          {!photoAnalysis.canDriveSafely && (
+                            <Badge variant="destructive" className="text-xs">
+                              DO NOT DRIVE
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Time & Cost Estimates */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-muted-foreground" />
+                            <div>
+                              <p className="text-xs text-muted-foreground">Est. Repair Time</p>
+                              <p className="text-sm font-medium">{photoAnalysis.estimatedRepairTime}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <DollarSign className="w-4 h-4 text-muted-foreground" />
+                            <div>
+                              <p className="text-xs text-muted-foreground">Est. Cost</p>
+                              <p className="text-sm font-medium">{photoAnalysis.costEstimate}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Immediate Actions */}
+                        {photoAnalysis.immediateActions && photoAnalysis.immediateActions.length > 0 && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Immediate Actions</p>
+                            <ul className="text-sm space-y-1">
+                              {photoAnalysis.immediateActions.slice(0, 3).map((action: string, idx: number) => (
+                                <li key={idx} className="flex items-start gap-1">
+                                  <CheckCircle className="w-3 h-3 text-green-500 mt-0.5" />
+                                  <span className="text-xs">{action}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Services Needed */}
+                        {photoAnalysis.servicesNeeded && photoAnalysis.servicesNeeded.length > 0 && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Services Required</p>
+                            <div className="flex flex-wrap gap-1">
+                              {photoAnalysis.servicesNeeded.map((service: string, idx: number) => (
+                                <Badge key={idx} variant="outline" className="text-xs">
+                                  {service}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* DOT Compliance Note */}
+                        {photoAnalysis.dotCompliance && (
+                          <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-950/30">
+                            <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
+                              DOT Compliance: {photoAnalysis.dotCompliance}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  Upload a photo and our AI will instantly analyze the damage, estimate repair time, and suggest services needed.
+                </p>
               </div>
             </CardContent>
           </Card>

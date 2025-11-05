@@ -4,6 +4,7 @@ import session from "express-session";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import { storage } from "./storage";
+import aiService from "./ai-service";
 import { 
   insertUserSchema,
   insertDriverProfileSchema,
@@ -2167,35 +2168,173 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== AI ROUTES ====================
+  
+  // AI Chat endpoint
+  app.post('/api/ai/chat',
+    rateLimiter(30, 60000), // 30 requests per minute
+    validateRequest(z.object({
+      message: z.string().min(1).max(1000),
+      context: z.object({
+        page: z.string().optional(),
+        jobId: z.string().optional(),
+        sessionHistory: z.array(z.object({
+          role: z.enum(['user', 'assistant']),
+          content: z.string()
+        })).optional()
+      }).optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { message, context } = req.body;
+        const userId = req.session.userId || `guest-${req.ip}`;
+
+        // Check for quick response first
+        const quickResponse = await aiService.getQuickResponse(message);
+        if (quickResponse) {
+          return res.json({
+            response: quickResponse,
+            suggestions: await aiService.generateSuggestions(message, quickResponse)
+          });
+        }
+
+        // Get AI response
+        const result = await aiService.chatCompletion(message, {
+          ...context,
+          userId
+        });
+
+        res.json(result);
+      } catch (error: any) {
+        console.error('AI chat error:', error);
+        res.status(error.message?.includes('Rate limit') ? 429 : 500).json({ 
+          message: error.message || 'Failed to process chat request' 
+        });
+      }
+    }
+  );
+
+  // AI Photo Analysis endpoint
+  app.post('/api/ai/analyze-photo',
+    rateLimiter(10, 60000), // 10 requests per minute
+    validateRequest(z.object({
+      photo: z.string(), // Base64 encoded photo
+      context: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { photo, context } = req.body;
+        
+        // Analyze the photo
+        const analysis = await aiService.analyzePhoto(photo, context);
+
+        // If there's a job ID in session, save the analysis
+        if (req.session.userId) {
+          // Here you could save the analysis to the job record
+          // await storage.updateJobAnalysis(jobId, analysis);
+        }
+
+        res.json(analysis);
+      } catch (error: any) {
+        console.error('Photo analysis error:', error);
+        res.status(500).json({ 
+          message: error.message || 'Failed to analyze photo' 
+        });
+      }
+    }
+  );
+
   // Get AI repair suggestions
   app.get('/api/ai/suggestions',
-    requireAuth,
-    rateLimiter(10, 60000),
+    rateLimiter(50, 60000),
     async (req: Request, res: Response) => {
       try {
         const symptoms = req.query.symptoms as string;
-        const vehicleType = req.query.vehicleType as string;
+        const vehicleType = req.query.vehicleType as string || 'semi-truck';
+        const urgency = req.query.urgency as string;
+
+        if (!symptoms) {
+          return res.status(400).json({ message: 'Symptoms parameter required' });
+        }
+
+        // Generate context-aware suggestions
+        const urgencyLevel = urgency ? parseInt(urgency) : aiService.analyzeUrgency(symptoms);
         
-        // Here you would use AI to generate suggestions
-        // For now, return placeholder suggestions
+        // Get repair recommendations
+        const recommendations = await aiService.generateRepairRecommendations(symptoms);
         
         res.json({
-          suggestions: [
-            {
-              service: 'engine_diagnostic',
-              likelihood: 0.8,
-              reasoning: 'Based on symptoms described'
-            },
-            {
-              service: 'oil_change',
-              likelihood: 0.6,
-              reasoning: 'Preventive maintenance recommended'
-            }
-          ]
+          urgencyLevel,
+          recommendations: recommendations.recommendations,
+          estimatedTime: recommendations.estimatedTime,
+          servicesNeeded: recommendations.partsNeeded,
+          safetyNotes: recommendations.safetyNotes,
+          suggestions: await aiService.generateSuggestions(symptoms, JSON.stringify(recommendations))
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error('Get AI suggestions error:', error);
         res.status(500).json({ message: 'Failed to get suggestions' });
+      }
+    }
+  );
+
+  // AI Streaming chat endpoint (for better UX)
+  app.post('/api/ai/chat/stream',
+    rateLimiter(20, 60000),
+    async (req: Request, res: Response) => {
+      try {
+        const { message, context } = req.body;
+        const userId = req.session.userId || `guest-${req.ip}`;
+
+        // Set up SSE
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        // Stream the response
+        const stream = aiService.streamChatResponse(message, {
+          ...context,
+          userId
+        });
+
+        for await (const chunk of stream) {
+          res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+        }
+
+        res.write('data: [DONE]\n\n');
+        res.end();
+      } catch (error: any) {
+        console.error('AI streaming error:', error);
+        res.write(`data: ${JSON.stringify({ error: 'Failed to generate response' })}\n\n`);
+        res.end();
+      }
+    }
+  );
+
+  // Get repair recommendations for contractors
+  app.post('/api/ai/repair-recommendations',
+    requireAuth,
+    requireRole('contractor', 'admin'),
+    rateLimiter(20, 60000),
+    validateRequest(z.object({
+      issueDescription: z.string(),
+      photoAnalysis: z.any().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { issueDescription, photoAnalysis } = req.body;
+        
+        const recommendations = await aiService.generateRepairRecommendations(
+          issueDescription,
+          photoAnalysis
+        );
+
+        res.json(recommendations);
+      } catch (error: any) {
+        console.error('Repair recommendations error:', error);
+        res.status(500).json({ 
+          message: 'Failed to generate repair recommendations' 
+        });
       }
     }
   );

@@ -35,6 +35,7 @@ import AdminContractors from "@/pages/admin/contractors";
 import AdminTemplates from "@/pages/admin/templates";
 
 import NotFound from "@/pages/not-found";
+import AIChatbot from "@/components/ai-chatbot";
 
 function Router() {
   return (
@@ -86,6 +87,7 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <Router />
+        <AIChatbot />
       </TooltipProvider>
     </QueryClientProvider>
   );

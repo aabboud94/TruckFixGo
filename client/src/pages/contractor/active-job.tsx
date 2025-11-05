@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useTrackingWebSocket } from "@/hooks/use-tracking-websocket";
 import {
@@ -28,7 +30,13 @@ import {
   WifiOff,
   Upload,
   X,
-  Send
+  Send,
+  Loader2,
+  Shield,
+  AlertTriangle,
+  Wrench,
+  ClipboardList,
+  HelpCircle
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -46,6 +54,9 @@ export default function ContractorActiveJob() {
   const [selectedPhotos, setSelectedPhotos] = useState<File[]>([]);
   const [completionNotes, setCompletionNotes] = useState("");
   const [messageText, setMessageText] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [photoAnalyses, setPhotoAnalyses] = useState<any[]>([]);
+  const [repairRecommendations, setRepairRecommendations] = useState<any>(null);
   const locationWatchId = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -144,6 +155,65 @@ export default function ContractorActiveJob() {
     }
   });
 
+  // AI Photo analysis mutation
+  const analyzePhotoMutation = useMutation({
+    mutationFn: async (photoBase64: string) => {
+      return apiRequest('/api/ai/analyze-photo', {
+        method: 'POST',
+        body: JSON.stringify({
+          photo: photoBase64,
+          context: `Contractor analyzing damage for Job #${job?.jobNumber}. ${job?.description || ''}`
+        }),
+      });
+    },
+    onSuccess: (analysis) => {
+      setPhotoAnalyses(prev => [...prev, analysis]);
+      setIsAnalyzing(false);
+      
+      // Automatically fetch repair recommendations based on analysis
+      if (analysis.damageType) {
+        getRepairRecommendationsMutation.mutate({
+          issueDescription: `${analysis.damageType} - ${analysis.severity} severity`,
+          photoAnalysis: analysis
+        });
+      }
+
+      // Alert if critical safety issue
+      if (analysis.safetyRisk === "Critical" || !analysis.canDriveSafely) {
+        toast({
+          title: "⚠️ Safety Alert",
+          description: "Critical safety issue detected. Advise customer not to drive.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: any) => {
+      setIsAnalyzing(false);
+      toast({
+        title: "Analysis Failed",
+        description: "Unable to analyze photo. Please try again.",
+        variant: "destructive"
+      });
+    },
+  });
+
+  // Get repair recommendations mutation
+  const getRepairRecommendationsMutation = useMutation({
+    mutationFn: async (data: { issueDescription: string; photoAnalysis?: any }) => {
+      return apiRequest('/api/ai/repair-recommendations', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: (recommendations) => {
+      setRepairRecommendations(recommendations);
+    },
+    onError: (error: any) => {
+      console.error("Repair recommendations error:", error);
+      // Silent failure - recommendations are optional
+    },
+  });
+
   // Handle location sharing
   useEffect(() => {
     if (isSharingLocation && job?.id) {
@@ -187,13 +257,29 @@ export default function ContractorActiveJob() {
     };
   }, [isSharingLocation, job?.id, sendLocationUpdate]);
 
-  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     setSelectedPhotos(prev => [...prev, ...files]);
+    
+    // Analyze the first photo if available
+    if (files.length > 0 && !isAnalyzing) {
+      const file = files[0];
+      setIsAnalyzing(true);
+      
+      // Convert to base64 and analyze
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        analyzePhotoMutation.mutate(base64);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const removePhoto = (index: number) => {
     setSelectedPhotos(prev => prev.filter((_, i) => i !== index));
+    // Also remove corresponding analysis if exists
+    setPhotoAnalyses(prev => prev.filter((_, i) => i !== index));
   };
 
   const openNavigation = () => {
@@ -494,7 +580,7 @@ export default function ContractorActiveJob() {
             <TabsContent value="photos" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Job Photos</CardTitle>
+                  <CardTitle className="text-lg">Job Photos & AI Analysis</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
@@ -505,15 +591,26 @@ export default function ContractorActiveJob() {
                       multiple
                       onChange={handlePhotoSelect}
                       className="hidden"
+                      disabled={isAnalyzing}
                     />
                     <Button
                       variant="outline"
                       className="w-full"
                       onClick={() => fileInputRef.current?.click()}
+                      disabled={isAnalyzing}
                       data-testid="button-add-photos"
                     >
-                      <Camera className="w-4 h-4 mr-2" />
-                      Add Photos
+                      {isAnalyzing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Analyzing Photo...
+                        </>
+                      ) : (
+                        <>
+                          <Camera className="w-4 h-4 mr-2" />
+                          Add Photos for AI Analysis
+                        </>
+                      )}
                     </Button>
                   </div>
 
@@ -529,12 +626,138 @@ export default function ContractorActiveJob() {
                             size="icon"
                             variant="ghost"
                             onClick={() => removePhoto(index)}
+                            disabled={isAnalyzing}
                           >
                             <X className="w-4 h-4" />
                           </Button>
                         </div>
                       ))}
                     </div>
+                  )}
+
+                  {/* AI Analysis Results */}
+                  {photoAnalyses.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-sm text-muted-foreground">AI Damage Analysis</h4>
+                      {photoAnalyses.map((analysis, index) => (
+                        <Alert key={index} className={
+                          analysis.severity === "Severe" ? "border-red-500 bg-red-50 dark:bg-red-950/20" :
+                          analysis.severity === "Moderate" ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20" :
+                          "border-green-500 bg-green-50 dark:bg-green-950/20"
+                        }>
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertTitle>Analysis {index + 1}</AlertTitle>
+                          <AlertDescription>
+                            <div className="mt-2 space-y-2">
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                  <p className="font-medium">Issue:</p>
+                                  <p>{analysis.damageType}</p>
+                                </div>
+                                <div>
+                                  <p className="font-medium">Severity:</p>
+                                  <Badge variant={
+                                    analysis.severity === "Severe" ? "destructive" :
+                                    analysis.severity === "Moderate" ? "secondary" :
+                                    "default"
+                                  } className="text-xs">
+                                    {analysis.severity}
+                                  </Badge>
+                                </div>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  <span>{analysis.estimatedRepairTime}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <DollarSign className="w-3 h-3" />
+                                  <span>{analysis.costEstimate}</span>
+                                </div>
+                              </div>
+
+                              {!analysis.canDriveSafely && (
+                                <div className="p-2 bg-red-100 dark:bg-red-950/30 rounded text-xs font-medium text-red-700 dark:text-red-300">
+                                  ⚠️ Vehicle unsafe to drive
+                                </div>
+                              )}
+                            </div>
+                          </AlertDescription>
+                        </Alert>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Repair Recommendations */}
+                  {repairRecommendations && (
+                    <Card className="border-2 border-primary/20">
+                      <CardHeader>
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Wrench className="w-4 h-4" />
+                          AI Repair Recommendations
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3 text-xs">
+                        {repairRecommendations.recommendations && repairRecommendations.recommendations.length > 0 && (
+                          <div>
+                            <p className="font-medium mb-1">Repair Steps:</p>
+                            <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                              {repairRecommendations.recommendations.map((rec: string, idx: number) => (
+                                <li key={idx}>{rec}</li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+
+                        {repairRecommendations.toolsNeeded && repairRecommendations.toolsNeeded.length > 0 && (
+                          <div>
+                            <p className="font-medium mb-1">Tools Required:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {repairRecommendations.toolsNeeded.map((tool: string, idx: number) => (
+                                <Badge key={idx} variant="outline" className="text-xs">
+                                  {tool}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {repairRecommendations.partsNeeded && repairRecommendations.partsNeeded.length > 0 && (
+                          <div>
+                            <p className="font-medium mb-1">Parts Needed:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {repairRecommendations.partsNeeded.map((part: string, idx: number) => (
+                                <Badge key={idx} variant="secondary" className="text-xs">
+                                  {part}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {repairRecommendations.safetyNotes && repairRecommendations.safetyNotes.length > 0 && (
+                          <Alert className="border-orange-500 bg-orange-50 dark:bg-orange-950/20">
+                            <Shield className="h-3 w-3" />
+                            <AlertDescription>
+                              <p className="font-medium mb-1">Safety Notes:</p>
+                              <ul className="list-disc list-inside space-y-0.5">
+                                {repairRecommendations.safetyNotes.map((note: string, idx: number) => (
+                                  <li key={idx}>{note}</li>
+                                ))}
+                              </ul>
+                            </AlertDescription>
+                          </Alert>
+                        )}
+
+                        <div className="flex items-center gap-2 pt-2 border-t">
+                          <Clock className="w-3 h-3 text-muted-foreground" />
+                          <span className="text-muted-foreground">
+                            Estimated time: {repairRecommendations.estimatedTime}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
                   )}
 
                   <Button
