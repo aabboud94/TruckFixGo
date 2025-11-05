@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { 
   CheckCircle, 
   MapPin, 
@@ -10,11 +13,15 @@ import {
   MessageSquare,
   User,
   Copy,
-  ExternalLink
+  ExternalLink,
+  CreditCard,
+  AlertCircle,
+  DollarSign
 } from "lucide-react";
 import { EmergencyBookingData } from "./index";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import Checkout from "@/components/checkout";
 
 interface ConfirmationProps {
   bookingData: EmergencyBookingData;
@@ -23,6 +30,17 @@ interface ConfirmationProps {
 export default function Confirmation({ bookingData }: ConfirmationProps) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [showPayment, setShowPayment] = useState(false);
+  const [paymentComplete, setPaymentComplete] = useState(false);
+  
+  // Calculate estimated price (this would normally come from backend)
+  const estimatedPrice = {
+    serviceCost: 15000, // $150 base service
+    emergencySurcharge: 5000, // $50 emergency fee
+    distanceFee: 2500, // $25 distance fee
+    tax: 1420, // 8% tax
+    total: 23920 // $239.20 total
+  };
 
   const handleCopyJobId = () => {
     if (bookingData.jobNumber) {
@@ -44,6 +62,22 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
   const handleCreateAccount = () => {
     // Navigate to signup with pre-filled data
     setLocation('/signup?from=emergency');
+  };
+
+  const handlePaymentSuccess = (paymentId: string) => {
+    setPaymentComplete(true);
+    setShowPayment(false);
+    toast({
+      title: "Payment Successful",
+      description: "Your payment has been processed. The mechanic is on the way!",
+    });
+  };
+
+  const handlePayLater = () => {
+    toast({
+      title: "Pay on Completion",
+      description: "You can pay after the service is completed",
+    });
   };
 
   return (
@@ -86,6 +120,83 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Payment Section - Show before mechanic arrives */}
+      {!paymentComplete && (
+        <Card className="border-2 border-orange-500/20 bg-orange-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              Payment Required
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert className="bg-orange-100/50 border-orange-200">
+              <AlertCircle className="h-4 w-4 text-orange-600" />
+              <AlertDescription>
+                <span className="font-medium">Estimated Cost: ${(estimatedPrice.total / 100).toFixed(2)}</span>
+                <br />
+                Pay now to confirm your emergency service request. Final price may vary based on actual work performed.
+              </AlertDescription>
+            </Alert>
+            
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>Service Fee</span>
+                <span>${(estimatedPrice.serviceCost / 100).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Emergency Surcharge</span>
+                <span className="text-orange-600">${(estimatedPrice.emergencySurcharge / 100).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Distance Fee</span>
+                <span>${(estimatedPrice.distanceFee / 100).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Tax</span>
+                <span>${(estimatedPrice.tax / 100).toFixed(2)}</span>
+              </div>
+              <Separator />
+              <div className="flex justify-between font-semibold text-base">
+                <span>Estimated Total</span>
+                <span>${(estimatedPrice.total / 100).toFixed(2)}</span>
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <Button
+                onClick={() => setShowPayment(true)}
+                className="flex-1 bg-orange-600 hover:bg-orange-700"
+                size="lg"
+                data-testid="button-pay-now"
+              >
+                <CreditCard className="mr-2 h-4 w-4" />
+                Pay Now
+              </Button>
+              <Button
+                onClick={handlePayLater}
+                variant="outline"
+                className="flex-1"
+                size="lg"
+                data-testid="button-pay-later"
+              >
+                Pay After Service
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Payment Complete Badge */}
+      {paymentComplete && (
+        <Alert className="bg-green-50 border-green-200">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <AlertDescription>
+            <span className="font-medium">Payment Complete!</span> Your payment has been processed successfully.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Arrival Estimate */}
       <Card className="border-2">
@@ -232,6 +343,31 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
           1-800-FIX-TRUCK
         </a>
       </div>
+
+      {/* Payment Dialog */}
+      <Dialog open={showPayment} onOpenChange={setShowPayment}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Complete Payment</DialogTitle>
+            <DialogDescription>
+              Choose your payment method to confirm the emergency service request
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4">
+            <Checkout
+              jobId={bookingData.jobId}
+              amount={estimatedPrice.total}
+              serviceCost={estimatedPrice.serviceCost}
+              emergencySurcharge={estimatedPrice.emergencySurcharge}
+              distanceFee={estimatedPrice.distanceFee}
+              tax={estimatedPrice.tax}
+              onSuccess={handlePaymentSuccess}
+              onCancel={() => setShowPayment(false)}
+              isEmergency={true}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

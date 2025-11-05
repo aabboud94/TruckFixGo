@@ -1034,6 +1034,506 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== PAYMENT ROUTES ====================
+
+  // Check Stripe configuration
+  app.get('/api/payment/config', async (req: Request, res: Response) => {
+    try {
+      const hasKeys = !!(process.env.STRIPE_SECRET_KEY && process.env.VITE_STRIPE_PUBLIC_KEY);
+      res.json({ 
+        hasKeys,
+        publicKey: hasKeys ? process.env.VITE_STRIPE_PUBLIC_KEY : null
+      });
+    } catch (error) {
+      console.error('Get payment config error:', error);
+      res.status(500).json({ message: 'Failed to get payment configuration' });
+    }
+  });
+
+  // Create Stripe payment intent
+  app.post('/api/payment/create-intent',
+    requireAuth,
+    validateRequest(z.object({
+      amount: z.number().positive(),
+      jobId: z.string().optional(),
+      paymentMethodId: z.string().optional(),
+      savePaymentMethod: z.boolean().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        if (!process.env.STRIPE_SECRET_KEY) {
+          return res.status(400).json({ message: 'Payment processing not configured' });
+        }
+
+        // Import Stripe dynamically
+        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: req.body.amount,
+          currency: 'usd',
+          metadata: {
+            userId: req.session.userId!,
+            jobId: req.body.jobId || '',
+          },
+          automatic_payment_methods: {
+            enabled: true,
+          },
+          ...(req.body.paymentMethodId && {
+            payment_method: req.body.paymentMethodId,
+          }),
+          ...(req.body.savePaymentMethod && {
+            setup_future_usage: 'on_session'
+          })
+        });
+
+        res.json({
+          clientSecret: paymentIntent.client_secret,
+          paymentIntentId: paymentIntent.id
+        });
+      } catch (error: any) {
+        console.error('Create payment intent error:', error);
+        res.status(500).json({ 
+          message: 'Failed to create payment intent',
+          error: error.message 
+        });
+      }
+    }
+  );
+
+  // Process EFS check payment (simulated)
+  app.post('/api/payment/efs',
+    requireAuth,
+    validateRequest(z.object({
+      amount: z.number().positive(),
+      jobId: z.string().optional(),
+      checkNumber: z.string(),
+      authorizationCode: z.string(),
+      driverCode: z.string(),
+      truckNumber: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        // Simulate EFS check validation
+        if (!req.body.checkNumber.match(/^\d{10}$/)) {
+          return res.status(400).json({ message: 'Invalid EFS check number format' });
+        }
+
+        // Create transaction record
+        const transaction = await storage.createTransaction({
+          userId: req.session.userId!,
+          jobId: req.body.jobId,
+          amount: req.body.amount.toString(),
+          paymentMethod: 'efs_check',
+          status: 'completed',
+          externalTransactionId: `EFS-${req.body.checkNumber}-${Date.now()}`,
+          metadata: {
+            checkNumber: req.body.checkNumber,
+            authorizationCode: req.body.authorizationCode,
+            truckNumber: req.body.truckNumber
+          }
+        });
+
+        // Update job payment status if jobId provided
+        if (req.body.jobId) {
+          await storage.updateJob(req.body.jobId, {
+            paymentStatus: 'completed',
+            paidAmount: req.body.amount.toString()
+          });
+        }
+
+        res.json({
+          message: 'EFS check processed successfully',
+          transactionId: transaction.id
+        });
+      } catch (error) {
+        console.error('Process EFS payment error:', error);
+        res.status(500).json({ message: 'Failed to process EFS payment' });
+      }
+    }
+  );
+
+  // Process Comdata check payment (simulated)
+  app.post('/api/payment/comdata',
+    requireAuth,
+    validateRequest(z.object({
+      amount: z.number().positive(),
+      jobId: z.string().optional(),
+      checkNumber: z.string(),
+      authorizationCode: z.string(),
+      driverCode: z.string(),
+      mcNumber: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        // Simulate Comdata check validation
+        if (!req.body.checkNumber.match(/^\d{10}$/)) {
+          return res.status(400).json({ message: 'Invalid Comdata check number format' });
+        }
+
+        // Create transaction record
+        const transaction = await storage.createTransaction({
+          userId: req.session.userId!,
+          jobId: req.body.jobId,
+          amount: req.body.amount.toString(),
+          paymentMethod: 'comdata_check',
+          status: 'completed',
+          externalTransactionId: `CMD-${req.body.checkNumber}-${Date.now()}`,
+          metadata: {
+            checkNumber: req.body.checkNumber,
+            authorizationCode: req.body.authorizationCode,
+            mcNumber: req.body.mcNumber
+          }
+        });
+
+        // Update job payment status if jobId provided
+        if (req.body.jobId) {
+          await storage.updateJob(req.body.jobId, {
+            paymentStatus: 'completed',
+            paidAmount: req.body.amount.toString()
+          });
+        }
+
+        res.json({
+          message: 'Comdata check processed successfully',
+          transactionId: transaction.id
+        });
+      } catch (error) {
+        console.error('Process Comdata payment error:', error);
+        res.status(500).json({ message: 'Failed to process Comdata payment' });
+      }
+    }
+  );
+
+  // Process fleet account payment
+  app.post('/api/payment/fleet-account',
+    requireAuth,
+    validateRequest(z.object({
+      amount: z.number().positive(),
+      jobId: z.string().optional(),
+      fleetAccountId: z.string()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetAccount = await storage.getFleetAccount(req.body.fleetAccountId);
+        if (!fleetAccount) {
+          return res.status(404).json({ message: 'Fleet account not found' });
+        }
+
+        // Create invoice for fleet account
+        const invoiceNumber = `INV-${Date.now().toString().slice(-8)}`;
+        const invoice = await storage.createInvoice({
+          invoiceNumber,
+          userId: req.session.userId!,
+          fleetAccountId: req.body.fleetAccountId,
+          jobId: req.body.jobId,
+          amount: req.body.amount.toString(),
+          tax: (req.body.amount * 0.08).toString(), // 8% tax
+          total: (req.body.amount * 1.08).toString(),
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // NET 30
+          status: 'pending',
+          items: [{
+            description: req.body.jobId ? `Service for Job #${req.body.jobId}` : 'Fleet Service',
+            amount: req.body.amount,
+            quantity: 1
+          }]
+        });
+
+        // Update job payment status
+        if (req.body.jobId) {
+          await storage.updateJob(req.body.jobId, {
+            paymentStatus: 'pending',
+            invoiceId: invoice.id
+          });
+        }
+
+        res.json({
+          message: 'Invoice created for fleet account',
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber
+        });
+      } catch (error) {
+        console.error('Process fleet payment error:', error);
+        res.status(500).json({ message: 'Failed to process fleet payment' });
+      }
+    }
+  );
+
+  // Get payment methods for user
+  app.get('/api/payment-methods', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const methods = await storage.getPaymentMethods(req.session.userId!);
+      res.json(methods);
+    } catch (error) {
+      console.error('Get payment methods error:', error);
+      res.status(500).json({ message: 'Failed to get payment methods' });
+    }
+  });
+
+  // Add payment method
+  app.post('/api/payment-methods',
+    requireAuth,
+    validateRequest(z.object({
+      stripePaymentMethodId: z.string().optional(),
+      type: z.enum(['credit_card', 'efs_check', 'comdata_check', 'fleet_account']).optional(),
+      nickname: z.string().optional(),
+      metadata: z.any().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        let paymentMethodData: any = {
+          userId: req.session.userId!,
+          type: req.body.type || 'credit_card',
+          nickname: req.body.nickname,
+          isDefault: false,
+          metadata: req.body.metadata || {}
+        };
+
+        // If Stripe payment method, get details from Stripe
+        if (req.body.stripePaymentMethodId && process.env.STRIPE_SECRET_KEY) {
+          const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+          const paymentMethod = await stripe.paymentMethods.retrieve(req.body.stripePaymentMethodId);
+          
+          paymentMethodData = {
+            ...paymentMethodData,
+            type: 'credit_card',
+            stripePaymentMethodId: paymentMethod.id,
+            last4: paymentMethod.card?.last4,
+            brand: paymentMethod.card?.brand,
+            expiryMonth: paymentMethod.card?.exp_month,
+            expiryYear: paymentMethod.card?.exp_year
+          };
+
+          // Attach to customer if exists
+          // In production, you'd create/retrieve Stripe customer for the user
+        }
+
+        const method = await storage.createPaymentMethod(paymentMethodData);
+        res.status(201).json(method);
+      } catch (error) {
+        console.error('Add payment method error:', error);
+        res.status(500).json({ message: 'Failed to add payment method' });
+      }
+    }
+  );
+
+  // Add EFS payment method
+  app.post('/api/payment-methods/efs',
+    requireAuth,
+    validateRequest(z.object({
+      companyCode: z.string(),
+      accountNumber: z.string(),
+      nickname: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const method = await storage.createPaymentMethod({
+          userId: req.session.userId!,
+          type: 'efs_check',
+          nickname: req.body.nickname,
+          isDefault: false,
+          metadata: {
+            efsCompanyCode: req.body.companyCode,
+            accountNumber: req.body.accountNumber
+          }
+        });
+        res.status(201).json(method);
+      } catch (error) {
+        console.error('Add EFS method error:', error);
+        res.status(500).json({ message: 'Failed to add EFS account' });
+      }
+    }
+  );
+
+  // Add Comdata payment method
+  app.post('/api/payment-methods/comdata',
+    requireAuth,
+    validateRequest(z.object({
+      customerId: z.string(),
+      accountCode: z.string(),
+      nickname: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const method = await storage.createPaymentMethod({
+          userId: req.session.userId!,
+          type: 'comdata_check',
+          nickname: req.body.nickname,
+          isDefault: false,
+          metadata: {
+            comdataCustomerId: req.body.customerId,
+            accountCode: req.body.accountCode
+          }
+        });
+        res.status(201).json(method);
+      } catch (error) {
+        console.error('Add Comdata method error:', error);
+        res.status(500).json({ message: 'Failed to add Comdata account' });
+      }
+    }
+  );
+
+  // Delete payment method
+  app.delete('/api/payment-methods/:id', requireAuth, async (req: Request, res: Response) => {
+    try {
+      await storage.deletePaymentMethod(req.params.id, req.session.userId!);
+      res.json({ message: 'Payment method removed' });
+    } catch (error) {
+      console.error('Delete payment method error:', error);
+      res.status(500).json({ message: 'Failed to remove payment method' });
+    }
+  });
+
+  // Set default payment method
+  app.put('/api/payment-methods/:id/default', requireAuth, async (req: Request, res: Response) => {
+    try {
+      await storage.setDefaultPaymentMethod(req.params.id, req.session.userId!);
+      res.json({ message: 'Default payment method updated' });
+    } catch (error) {
+      console.error('Set default method error:', error);
+      res.status(500).json({ message: 'Failed to update default payment method' });
+    }
+  });
+
+  // Get invoices
+  app.get('/api/invoices', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const invoices = await storage.getInvoices({
+        userId: req.session.userId,
+        fleetAccountId: req.query.fleetAccountId as string,
+        status: req.query.status as any,
+        ...getPagination(req)
+      });
+      res.json({ invoices });
+    } catch (error) {
+      console.error('Get invoices error:', error);
+      res.status(500).json({ message: 'Failed to get invoices' });
+    }
+  });
+
+  // Process refund
+  app.post('/api/refunds',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      transactionId: z.string(),
+      amount: z.number().positive(),
+      reason: z.string()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const transaction = await storage.getTransaction(req.body.transactionId);
+        if (!transaction) {
+          return res.status(404).json({ message: 'Transaction not found' });
+        }
+
+        // Process refund with Stripe if applicable
+        if (transaction.stripePaymentIntentId && process.env.STRIPE_SECRET_KEY) {
+          const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+          await stripe.refunds.create({
+            payment_intent: transaction.stripePaymentIntentId,
+            amount: req.body.amount
+          });
+        }
+
+        // Create refund record
+        const refund = await storage.createRefund({
+          transactionId: req.body.transactionId,
+          amount: req.body.amount.toString(),
+          reason: req.body.reason,
+          initiatedBy: req.session.userId!,
+          status: 'processed'
+        });
+
+        // Update transaction status
+        await storage.updateTransaction(req.body.transactionId, {
+          status: 'refunded'
+        });
+
+        res.status(201).json({
+          message: 'Refund processed successfully',
+          refund
+        });
+      } catch (error) {
+        console.error('Process refund error:', error);
+        res.status(500).json({ message: 'Failed to process refund' });
+      }
+    }
+  );
+
+  // Stripe webhook handler
+  app.post('/api/webhooks/stripe',
+    express.raw({ type: 'application/json' }),
+    async (req: Request, res: Response) => {
+      try {
+        if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
+          return res.status(400).json({ message: 'Stripe not configured' });
+        }
+
+        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+        const sig = req.headers['stripe-signature'];
+        
+        let event;
+        try {
+          event = stripe.webhooks.constructEvent(
+            req.body,
+            sig,
+            process.env.STRIPE_WEBHOOK_SECRET
+          );
+        } catch (err: any) {
+          console.error('Webhook signature verification failed:', err.message);
+          return res.status(400).send(`Webhook Error: ${err.message}`);
+        }
+
+        // Handle the event
+        switch (event.type) {
+          case 'payment_intent.succeeded':
+            const paymentIntent = event.data.object;
+            
+            // Update transaction status
+            await storage.updateTransactionByExternalId(paymentIntent.id, {
+              status: 'completed'
+            });
+
+            // Update job payment status if applicable
+            if (paymentIntent.metadata?.jobId) {
+              await storage.updateJob(paymentIntent.metadata.jobId, {
+                paymentStatus: 'completed',
+                paidAmount: (paymentIntent.amount / 100).toString()
+              });
+            }
+            break;
+
+          case 'payment_intent.payment_failed':
+            const failedPayment = event.data.object;
+            
+            await storage.updateTransactionByExternalId(failedPayment.id, {
+              status: 'failed'
+            });
+
+            if (failedPayment.metadata?.jobId) {
+              await storage.updateJob(failedPayment.metadata.jobId, {
+                paymentStatus: 'failed'
+              });
+            }
+            break;
+
+          case 'charge.dispute.created':
+            // Handle dispute
+            console.log('Dispute created:', event.data.object);
+            break;
+
+          default:
+            console.log(`Unhandled event type ${event.type}`);
+        }
+
+        res.json({ received: true });
+      } catch (error) {
+        console.error('Webhook error:', error);
+        res.status(500).json({ message: 'Webhook processing failed' });
+      }
+    }
+  );
+
   // ==================== CONTRACTOR ROUTES ====================
 
   // Find available contractors

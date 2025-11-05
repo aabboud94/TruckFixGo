@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Homepage from "@/pages/Homepage";
 import EmergencyBooking from "@/pages/emergency-booking";
 import TrackingPage from "@/pages/tracking";
+import PaymentMethodsPage from "@/pages/payment-methods";
 
 // Contractor Pages
 import ContractorAuth from "@/pages/contractor/auth";
@@ -46,6 +47,9 @@ function Router() {
       
       {/* Tracking Pages */}
       <Route path="/track/:jobId" component={TrackingPage} />
+      
+      {/* Payment Pages */}
+      <Route path="/payment-methods" component={PaymentMethodsPage} />
       
       {/* Contractor Pages */}
       <Route path="/contractor/auth" component={ContractorAuth} />

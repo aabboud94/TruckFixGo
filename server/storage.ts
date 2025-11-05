@@ -291,18 +291,20 @@ export interface IStorage {
   // ==================== PAYMENT OPERATIONS ====================
   createPaymentMethod(method: InsertPaymentMethod): Promise<PaymentMethod>;
   updatePaymentMethod(id: string, updates: Partial<InsertPaymentMethod>): Promise<PaymentMethod | undefined>;
-  deletePaymentMethod(id: string): Promise<boolean>;
-  getUserPaymentMethods(userId: string): Promise<PaymentMethod[]>;
-  setDefaultPaymentMethod(userId: string, paymentMethodId: string): Promise<boolean>;
+  deletePaymentMethod(id: string, userId: string): Promise<boolean>;
+  getPaymentMethods(userId: string): Promise<PaymentMethod[]>;
+  setDefaultPaymentMethod(paymentMethodId: string, userId: string): Promise<boolean>;
   
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   updateTransaction(id: string, updates: Partial<InsertTransaction>): Promise<Transaction | undefined>;
+  updateTransactionByExternalId(externalId: string, updates: Partial<InsertTransaction>): Promise<Transaction | undefined>;
   getTransaction(id: string): Promise<Transaction | undefined>;
   findTransactions(filters: TransactionFilterOptions): Promise<Transaction[]>;
   
   createInvoice(invoice: InsertInvoice): Promise<Invoice>;
   updateInvoice(id: string, updates: Partial<InsertInvoice>): Promise<Invoice | undefined>;
   getInvoice(id: string): Promise<Invoice | undefined>;
+  getInvoices(filters: any): Promise<Invoice[]>;
   getInvoiceByJobId(jobId: string): Promise<Invoice | undefined>;
   getUnpaidInvoices(customerId: string): Promise<Invoice[]>;
   markInvoiceAsPaid(invoiceId: string, paidAt: Date): Promise<boolean>;
@@ -1170,13 +1172,25 @@ export class PostgreSQLStorage implements IStorage {
     return result.length > 0;
   }
 
-  async getUserPaymentMethods(userId: string): Promise<PaymentMethod[]> {
+  async getPaymentMethods(userId: string): Promise<PaymentMethod[]> {
     return await db.select().from(paymentMethods)
       .where(eq(paymentMethods.userId, userId))
       .orderBy(desc(paymentMethods.isDefault), desc(paymentMethods.createdAt));
   }
 
-  async setDefaultPaymentMethod(userId: string, paymentMethodId: string): Promise<boolean> {
+  async deletePaymentMethod(id: string, userId: string): Promise<boolean> {
+    const result = await db.delete(paymentMethods)
+      .where(
+        and(
+          eq(paymentMethods.id, id),
+          eq(paymentMethods.userId, userId)
+        )
+      )
+      .returning();
+    return result.length > 0;
+  }
+
+  async setDefaultPaymentMethod(paymentMethodId: string, userId: string): Promise<boolean> {
     // Unset all defaults for user
     await db.update(paymentMethods)
       .set({ isDefault: false })
@@ -1205,6 +1219,14 @@ export class PostgreSQLStorage implements IStorage {
     const result = await db.update(transactions)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(transactions.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async updateTransactionByExternalId(externalId: string, updates: Partial<InsertTransaction>): Promise<Transaction | undefined> {
+    const result = await db.update(transactions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(transactions.externalTransactionId, externalId))
       .returning();
     return result[0];
   }
@@ -1257,6 +1279,30 @@ export class PostgreSQLStorage implements IStorage {
   async getInvoice(id: string): Promise<Invoice | undefined> {
     const result = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
     return result[0];
+  }
+
+  async getInvoices(filters: any): Promise<Invoice[]> {
+    let query = db.select().from(invoices);
+    const conditions = [];
+
+    if (filters.userId) conditions.push(eq(invoices.userId, filters.userId));
+    if (filters.fleetAccountId) conditions.push(eq(invoices.fleetAccountId, filters.fleetAccountId));
+    if (filters.status) conditions.push(eq(invoices.status, filters.status));
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    // Apply ordering
+    query = (filters.orderDir === 'asc' 
+      ? query.orderBy(asc(invoices.createdAt)) 
+      : query.orderBy(desc(invoices.createdAt))) as any;
+
+    // Apply pagination
+    if (filters.limit) query = query.limit(filters.limit) as any;
+    if (filters.offset) query = query.offset(filters.offset) as any;
+
+    return await query;
   }
 
   async getInvoiceByJobId(jobId: string): Promise<Invoice | undefined> {
