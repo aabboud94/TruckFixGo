@@ -24,9 +24,9 @@ import {
   transactions,
   invoices,
   refunds,
-  settings,
+  adminSettings,
   emailTemplates,
-  integrations,
+  integrationsConfig,
   type User,
   type InsertUser,
   type Session,
@@ -77,12 +77,12 @@ import {
   type InsertInvoice,
   type Refund,
   type InsertRefund,
-  type Setting,
-  type InsertSetting,
+  type AdminSetting,
+  type InsertAdminSetting,
   type EmailTemplate,
   type InsertEmailTemplate,
-  type Integration,
-  type InsertIntegration,
+  type IntegrationsConfig,
+  type InsertIntegrationsConfig,
   performanceTierEnum,
   fleetPricingTierEnum,
   jobTypeEnum,
@@ -312,16 +312,16 @@ export interface IStorage {
   getRefundsByTransaction(transactionId: string): Promise<Refund[]>;
   
   // ==================== ADMIN OPERATIONS ====================
-  getSetting(key: string): Promise<Setting | undefined>;
-  updateSetting(key: string, value: any): Promise<Setting>;
-  getAllSettings(): Promise<Setting[]>;
+  getSetting(key: string): Promise<AdminSetting | undefined>;
+  updateSetting(key: string, value: any): Promise<AdminSetting>;
+  getAllSettings(): Promise<AdminSetting[]>;
   
   createEmailTemplate(template: InsertEmailTemplate): Promise<EmailTemplate>;
   updateEmailTemplate(id: string, updates: Partial<InsertEmailTemplate>): Promise<EmailTemplate | undefined>;
   getEmailTemplate(templateKey: string): Promise<EmailTemplate | undefined>;
   
-  getIntegration(provider: string): Promise<Integration | undefined>;
-  updateIntegration(provider: string, config: any): Promise<Integration>;
+  getIntegration(provider: string): Promise<IntegrationsConfig | undefined>;
+  updateIntegration(provider: string, config: any): Promise<IntegrationsConfig>;
   
   // ==================== ANALYTICS OPERATIONS ====================
   getPlatformMetrics(fromDate?: Date, toDate?: Date): Promise<PlatformMetrics>;
@@ -336,7 +336,7 @@ export class PostgreSQLStorage implements IStorage {
   // Cache for frequently accessed settings
   private settingsCache = memoize(
     async (key: string) => {
-      const setting = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+      const setting = await db.select().from(adminSettings).where(eq(adminSettings.key, key)).limit(1);
       return setting[0];
     },
     { maxAge: 60000, preFetch: true } // Cache for 1 minute
@@ -1316,22 +1316,22 @@ export class PostgreSQLStorage implements IStorage {
 
   // ==================== ADMIN OPERATIONS ====================
   
-  async getSetting(key: string): Promise<Setting | undefined> {
+  async getSetting(key: string): Promise<AdminSetting | undefined> {
     return await this.settingsCache(key);
   }
 
-  async updateSetting(key: string, value: any): Promise<Setting> {
+  async updateSetting(key: string, value: any): Promise<AdminSetting> {
     const existing = await this.getSetting(key);
     
     if (existing) {
-      const result = await db.update(settings)
+      const result = await db.update(adminSettings)
         .set({ value, updatedAt: new Date() })
-        .where(eq(settings.key, key))
+        .where(eq(adminSettings.key, key))
         .returning();
       this.settingsCache.delete(key);
       return result[0];
     } else {
-      const result = await db.insert(settings)
+      const result = await db.insert(adminSettings)
         .values({ key, value })
         .returning();
       this.settingsCache.delete(key);
@@ -1339,8 +1339,8 @@ export class PostgreSQLStorage implements IStorage {
     }
   }
 
-  async getAllSettings(): Promise<Setting[]> {
-    return await db.select().from(settings).orderBy(asc(settings.key));
+  async getAllSettings(): Promise<AdminSetting[]> {
+    return await db.select().from(adminSettings).orderBy(asc(adminSettings.key));
   }
 
   async createEmailTemplate(template: InsertEmailTemplate): Promise<EmailTemplate> {
@@ -1363,24 +1363,24 @@ export class PostgreSQLStorage implements IStorage {
     return result[0];
   }
 
-  async getIntegration(provider: string): Promise<Integration | undefined> {
-    const result = await db.select().from(integrations)
-      .where(eq(integrations.provider, provider))
+  async getIntegration(provider: string): Promise<IntegrationsConfig | undefined> {
+    const result = await db.select().from(integrationsConfig)
+      .where(eq(integrationsConfig.provider, provider))
       .limit(1);
     return result[0];
   }
 
-  async updateIntegration(provider: string, config: any): Promise<Integration> {
+  async updateIntegration(provider: string, config: any): Promise<IntegrationsConfig> {
     const existing = await this.getIntegration(provider);
     
     if (existing) {
-      const result = await db.update(integrations)
+      const result = await db.update(integrationsConfig)
         .set({ config, updatedAt: new Date() })
-        .where(eq(integrations.provider, provider))
+        .where(eq(integrationsConfig.provider, provider))
         .returning();
       return result[0];
     } else {
-      const result = await db.insert(integrations)
+      const result = await db.insert(integrationsConfig)
         .values({ provider, config })
         .returning();
       return result[0];
