@@ -5,14 +5,33 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Homepage from "@/pages/Homepage";
 import EmergencyBooking from "@/pages/emergency-booking";
+import FleetLanding from "@/pages/fleet";
+import FleetRegister from "@/pages/fleet/register";
+import FleetLogin from "@/pages/fleet/login";
+import FleetDashboard from "@/pages/fleet/dashboard";
+import FleetSchedulePM from "@/pages/fleet/schedule-pm";
+import FleetVehicles from "@/pages/fleet/vehicles";
+import FleetAnalytics from "@/pages/fleet/analytics";
+import FleetBatchJobs from "@/pages/fleet/batch-jobs";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
-      {/* Add pages below */}
+      {/* Main Pages */}
       <Route path="/" component={Homepage} />
       <Route path="/emergency" component={EmergencyBooking} />
+      
+      {/* Fleet Pages */}
+      <Route path="/fleet" component={FleetLanding} />
+      <Route path="/fleet/register" component={FleetRegister} />
+      <Route path="/fleet/login" component={FleetLogin} />
+      <Route path="/fleet/dashboard" component={FleetDashboard} />
+      <Route path="/fleet/schedule-pm" component={FleetSchedulePM} />
+      <Route path="/fleet/vehicles" component={FleetVehicles} />
+      <Route path="/fleet/analytics" component={FleetAnalytics} />
+      <Route path="/fleet/batch-jobs" component={FleetBatchJobs} />
+      
       {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>

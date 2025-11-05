@@ -61,7 +61,7 @@ export default function Homepage() {
 
             {/* Desktop CTAs */}
             <div className="hidden md:flex items-center space-x-4">
-              <Button variant="default" className="bg-primary hover-elevate" data-testid="button-fleet-services-header">
+              <Button variant="default" className="bg-primary hover-elevate" onClick={() => navigate("/fleet")} data-testid="button-fleet-services-header">
                 <Phone className="w-4 h-4 mr-2" />
                 Fleet Services
               </Button>
@@ -97,7 +97,7 @@ export default function Homepage() {
                 About
               </a>
               <div className="flex flex-col space-y-2 pt-4">
-                <Button variant="default" className="w-full bg-primary hover-elevate" data-testid="mobile-button-fleet-services">
+                <Button variant="default" className="w-full bg-primary hover-elevate" onClick={() => navigate("/fleet")} data-testid="mobile-button-fleet-services">
                   <Phone className="w-4 h-4 mr-2" />
                   Fleet Services
                 </Button>
@@ -144,6 +144,7 @@ export default function Homepage() {
               size="lg"
               variant="default"
               className="px-8 py-6 text-lg font-semibold bg-primary hover-elevate w-full sm:w-auto"
+              onClick={() => navigate("/fleet")}
               data-testid="button-hero-fleet"
             >
               <Calendar className="w-5 h-5 mr-2" />
@@ -376,6 +377,7 @@ export default function Homepage() {
               size="lg"
               variant="outline"
               className="px-8 py-6 text-lg font-semibold bg-white/10 backdrop-blur-sm text-white border-white hover:bg-white/20 w-full sm:w-auto"
+              onClick={() => navigate("/fleet")}
               data-testid="button-cta-fleet"
             >
               <Calendar className="w-5 h-5 mr-2" />
