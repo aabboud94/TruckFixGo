@@ -447,6 +447,7 @@ export interface IStorage {
   updatePerformanceTier(userId: string, tier: typeof performanceTierEnum.enumValues[number]): Promise<boolean>;
   
   checkUserRole(userId: string, requiredRole: string): Promise<boolean>;
+  hasAdminUsers(): Promise<boolean>;
   
   // ==================== JOB OPERATIONS ====================
   createJob(job: InsertJob): Promise<Job>;
@@ -891,6 +892,11 @@ export class PostgreSQLStorage implements IStorage {
     const user = await this.getUser(userId);
     if (!user) return false;
     return user.role === requiredRole;
+  }
+
+  async hasAdminUsers(): Promise<boolean> {
+    const result = await db.select().from(users).where(eq(users.role, 'admin')).limit(1);
+    return result.length > 0;
   }
 
   // ==================== JOB OPERATIONS ====================

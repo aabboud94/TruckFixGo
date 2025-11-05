@@ -494,6 +494,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== ADMIN SETUP ROUTES ====================
+  
+  // Admin setup - create first admin user
+  app.post('/api/admin/setup',
+    rateLimiter(3, 60000), // Only 3 attempts per minute
+    validateRequest(z.object({
+      email: z.string().email(),
+      password: z.string().min(8).max(100)
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        // Check if any admin users already exist
+        const hasAdmins = await storage.hasAdminUsers();
+        
+        if (hasAdmins) {
+          return res.status(403).json({ 
+            message: 'Admin setup already completed. An admin user already exists.' 
+          });
+        }
+        
+        const { email, password } = req.body;
+        
+        // Check if email is already in use
+        const existingUser = await storage.getUserByEmail(email);
+        if (existingUser) {
+          return res.status(400).json({ 
+            message: 'Email already registered' 
+          });
+        }
+        
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        // Create admin user
+        const adminUser = await storage.createUser({
+          email,
+          password: hashedPassword,
+          role: 'admin',
+          isActive: true,
+          isGuest: false
+        });
+        
+        // Create session
+        req.session.userId = adminUser.id;
+        req.session.role = adminUser.role;
+        
+        res.status(201).json({
+          message: 'Admin user created successfully',
+          user: {
+            id: adminUser.id,
+            email: adminUser.email,
+            role: adminUser.role
+          }
+        });
+      } catch (error) {
+        console.error('Admin setup error:', error);
+        res.status(500).json({ message: 'Admin setup failed' });
+      }
+    }
+  );
+  
+  // Quick admin setup for testing - creates default admin user
+  app.post('/api/admin/quick-setup',
+    rateLimiter(3, 60000), // Only 3 attempts per minute
+    async (req: Request, res: Response) => {
+      try {
+        // Check if any admin users already exist
+        const hasAdmins = await storage.hasAdminUsers();
+        
+        if (hasAdmins) {
+          return res.status(403).json({ 
+            message: 'Admin setup already completed. An admin user already exists.' 
+          });
+        }
+        
+        // Default admin credentials
+        const email = 'admin@truckfixgo.com';
+        const password = 'Admin123!';
+        
+        // Check if email is already in use
+        const existingUser = await storage.getUserByEmail(email);
+        if (existingUser) {
+          // If the user exists but is not an admin, we cannot continue
+          if (existingUser.role !== 'admin') {
+            return res.status(400).json({ 
+              message: 'Email already registered with a different role' 
+            });
+          }
+          // If it's already an admin, return success
+          return res.status(200).json({
+            message: 'Admin user already exists',
+            user: {
+              id: existingUser.id,
+              email: existingUser.email,
+              role: existingUser.role
+            }
+          });
+        }
+        
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        // Create admin user with default credentials
+        const adminUser = await storage.createUser({
+          email,
+          password: hashedPassword,
+          role: 'admin',
+          firstName: 'Admin',
+          lastName: 'User',
+          isActive: true,
+          isGuest: false
+        });
+        
+        // Create session
+        req.session.userId = adminUser.id;
+        req.session.role = adminUser.role;
+        
+        res.status(201).json({
+          message: 'Quick admin setup completed successfully',
+          user: {
+            id: adminUser.id,
+            email: adminUser.email,
+            role: adminUser.role
+          },
+          credentials: {
+            email: email,
+            password: password
+          },
+          note: 'Please change the password immediately after logging in'
+        });
+      } catch (error) {
+        console.error('Quick admin setup error:', error);
+        res.status(500).json({ message: 'Quick admin setup failed' });
+      }
+    }
+  );
+
   // ==================== JOB ROUTES ====================
 
   // Create new job
