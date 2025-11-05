@@ -17,7 +17,8 @@ import {
   contractorServices,
   contractorAvailability,
   contractorEarnings,
-  contractorRatings,
+  reviews,
+  reviewVotes,
   contractorDocuments,
   pricingRules,
   paymentMethods,
@@ -69,8 +70,10 @@ import {
   type InsertContractorAvailability,
   type ContractorEarning,
   type InsertContractorEarning,
-  type ContractorRating,
-  type InsertContractorRating,
+  type Review,
+  type InsertReview,
+  type ReviewVote,
+  type InsertReviewVote,
   type ContractorDocument,
   type InsertContractorDocument,
   type PricingRule,
@@ -413,9 +416,33 @@ export interface IStorage {
   calculateContractorEarnings(contractorId: string, fromDate: Date, toDate: Date): Promise<number>;
   markEarningsAsPaid(contractorId: string, earningIds: string[]): Promise<boolean>;
   
-  addContractorRating(rating: InsertContractorRating): Promise<ContractorRating>;
-  getContractorRatings(contractorId: string): Promise<ContractorRating[]>;
-  calculateAverageRating(contractorId: string): Promise<number>;
+  // Review Operations
+  createReview(review: InsertReview): Promise<Review>;
+  getReview(id: string): Promise<Review | undefined>;
+  getReviewByJob(jobId: string): Promise<Review | undefined>;
+  updateReview(id: string, updates: Partial<InsertReview>): Promise<Review | undefined>;
+  getContractorReviews(contractorId: string, limit?: number, offset?: number, filters?: {
+    minRating?: number;
+    maxRating?: number;
+    hasText?: boolean;
+    sortBy?: 'recent' | 'highest' | 'lowest' | 'helpful';
+  }): Promise<Review[]>;
+  addContractorResponse(reviewId: string, response: string): Promise<Review | undefined>;
+  flagReview(reviewId: string, reason: string, flaggedBy: string): Promise<Review | undefined>;
+  moderateReview(reviewId: string, status: string, moderatedBy: string): Promise<Review | undefined>;
+  voteReviewHelpful(reviewId: string, userId: string, isHelpful: boolean): Promise<boolean>;
+  updateContractorRatingStats(contractorId: string): Promise<boolean>;
+  getContractorRatingSummary(contractorId: string): Promise<{
+    averageRating: number;
+    totalReviews: number;
+    ratingDistribution: Record<string, number>;
+    categoryAverages: {
+      timeliness: number;
+      professionalism: number;
+      quality: number;
+      value: number;
+    };
+  }>;
   
   addContractorDocument(document: InsertContractorDocument): Promise<ContractorDocument>;
   updateContractorDocument(id: string, updates: Partial<InsertContractorDocument>): Promise<ContractorDocument | undefined>;
@@ -1159,36 +1186,282 @@ export class PostgreSQLStorage implements IStorage {
     return result.length > 0;
   }
 
-  async addContractorRating(rating: InsertContractorRating): Promise<ContractorRating> {
-    const result = await db.insert(contractorRatings).values(rating).returning();
+  // Review Operations Implementation
+  async createReview(review: InsertReview): Promise<Review> {
+    const result = await db.insert(reviews).values(review).returning();
     
-    // Update average rating in contractor profile
-    await this.calculateAverageRating(rating.contractorId);
+    // Update contractor rating statistics
+    await this.updateContractorRatingStats(review.contractorId);
     
     return result[0];
   }
 
-  async getContractorRatings(contractorId: string): Promise<ContractorRating[]> {
-    return await db.select().from(contractorRatings)
-      .where(eq(contractorRatings.contractorId, contractorId))
-      .orderBy(desc(contractorRatings.createdAt));
+  async getReview(id: string): Promise<Review | undefined> {
+    const result = await db.select().from(reviews)
+      .where(eq(reviews.id, id))
+      .limit(1);
+    return result[0];
   }
 
-  async calculateAverageRating(contractorId: string): Promise<number> {
-    const result = await db.select({
-      avg: sql<number>`AVG(${contractorRatings.rating})`
-    })
-    .from(contractorRatings)
-    .where(eq(contractorRatings.contractorId, contractorId));
+  async getReviewByJob(jobId: string): Promise<Review | undefined> {
+    const result = await db.select().from(reviews)
+      .where(eq(reviews.jobId, jobId))
+      .limit(1);
+    return result[0];
+  }
+
+  async updateReview(id: string, updates: Partial<InsertReview>): Promise<Review | undefined> {
+    const result = await db.update(reviews)
+      .set({ 
+        ...updates, 
+        isEdited: true,
+        editedAt: new Date(),
+        updatedAt: new Date() 
+      })
+      .where(eq(reviews.id, id))
+      .returning();
     
-    const avgRating = result[0]?.avg || 0;
+    if (result[0]) {
+      // Update contractor rating statistics
+      await this.updateContractorRatingStats(result[0].contractorId);
+    }
+    
+    return result[0];
+  }
+
+  async getContractorReviews(
+    contractorId: string, 
+    limit = 50, 
+    offset = 0,
+    filters?: {
+      minRating?: number;
+      maxRating?: number;
+      hasText?: boolean;
+      sortBy?: 'recent' | 'highest' | 'lowest' | 'helpful';
+    }
+  ): Promise<Review[]> {
+    let query = db.select().from(reviews)
+      .where(eq(reviews.contractorId, contractorId));
+    
+    // Apply filters
+    const conditions = [eq(reviews.contractorId, contractorId)];
+    
+    if (filters?.minRating) {
+      conditions.push(gte(reviews.overallRating, filters.minRating));
+    }
+    if (filters?.maxRating) {
+      conditions.push(lte(reviews.overallRating, filters.maxRating));
+    }
+    if (filters?.hasText) {
+      conditions.push(sql`${reviews.reviewText} IS NOT NULL AND ${reviews.reviewText} != ''`);
+    }
+    
+    query = db.select().from(reviews).where(and(...conditions));
+    
+    // Apply sorting
+    switch (filters?.sortBy) {
+      case 'highest':
+        query = query.orderBy(desc(reviews.overallRating), desc(reviews.createdAt));
+        break;
+      case 'lowest':
+        query = query.orderBy(asc(reviews.overallRating), desc(reviews.createdAt));
+        break;
+      case 'helpful':
+        query = query.orderBy(desc(reviews.helpfulVotes), desc(reviews.createdAt));
+        break;
+      case 'recent':
+      default:
+        query = query.orderBy(desc(reviews.createdAt));
+        break;
+    }
+    
+    return await query.limit(limit).offset(offset);
+  }
+
+  async addContractorResponse(reviewId: string, response: string): Promise<Review | undefined> {
+    const result = await db.update(reviews)
+      .set({
+        contractorResponse: response,
+        contractorResponseAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(reviews.id, reviewId))
+      .returning();
+    return result[0];
+  }
+
+  async flagReview(reviewId: string, reason: string, flaggedBy: string): Promise<Review | undefined> {
+    const result = await db.update(reviews)
+      .set({
+        isFlagged: true,
+        flagReason: reason,
+        flaggedBy,
+        flaggedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(reviews.id, reviewId))
+      .returning();
+    return result[0];
+  }
+
+  async moderateReview(reviewId: string, status: string, moderatedBy: string): Promise<Review | undefined> {
+    const result = await db.update(reviews)
+      .set({
+        moderationStatus: status,
+        moderatedBy,
+        moderatedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(reviews.id, reviewId))
+      .returning();
+    return result[0];
+  }
+
+  async voteReviewHelpful(reviewId: string, userId: string, isHelpful: boolean): Promise<boolean> {
+    // Check if user has already voted
+    const existingVote = await db.select().from(reviewVotes)
+      .where(and(
+        eq(reviewVotes.reviewId, reviewId),
+        eq(reviewVotes.userId, userId)
+      ))
+      .limit(1);
+    
+    if (existingVote[0]) {
+      // Update existing vote
+      await db.update(reviewVotes)
+        .set({ isHelpful })
+        .where(and(
+          eq(reviewVotes.reviewId, reviewId),
+          eq(reviewVotes.userId, userId)
+        ));
+    } else {
+      // Insert new vote
+      await db.insert(reviewVotes).values({
+        reviewId,
+        userId,
+        isHelpful
+      });
+    }
+    
+    // Update review vote counts
+    const votes = await db.select({
+      helpful: sql<number>`COUNT(CASE WHEN ${reviewVotes.isHelpful} = true THEN 1 END)`,
+      unhelpful: sql<number>`COUNT(CASE WHEN ${reviewVotes.isHelpful} = false THEN 1 END)`
+    })
+    .from(reviewVotes)
+    .where(eq(reviewVotes.reviewId, reviewId));
+    
+    await db.update(reviews)
+      .set({
+        helpfulVotes: votes[0]?.helpful || 0,
+        unhelpfulVotes: votes[0]?.unhelpful || 0
+      })
+      .where(eq(reviews.id, reviewId));
+    
+    return true;
+  }
+
+  async updateContractorRatingStats(contractorId: string): Promise<boolean> {
+    // Calculate all rating statistics
+    const stats = await db.select({
+      avgOverall: sql<number>`AVG(${reviews.overallRating})`,
+      avgTimeliness: sql<number>`AVG(${reviews.timelinessRating})`,
+      avgProfessionalism: sql<number>`AVG(${reviews.professionalismRating})`,
+      avgQuality: sql<number>`AVG(${reviews.qualityRating})`,
+      avgValue: sql<number>`AVG(${reviews.valueRating})`,
+      totalReviews: sql<number>`COUNT(*)`,
+      fiveStar: sql<number>`COUNT(CASE WHEN ${reviews.overallRating} = 5 THEN 1 END)`,
+      fourStar: sql<number>`COUNT(CASE WHEN ${reviews.overallRating} = 4 THEN 1 END)`,
+      threeStar: sql<number>`COUNT(CASE WHEN ${reviews.overallRating} = 3 THEN 1 END)`,
+      twoStar: sql<number>`COUNT(CASE WHEN ${reviews.overallRating} = 2 THEN 1 END)`,
+      oneStar: sql<number>`COUNT(CASE WHEN ${reviews.overallRating} = 1 THEN 1 END)`,
+      withResponse: sql<number>`COUNT(CASE WHEN ${reviews.contractorResponse} IS NOT NULL THEN 1 END)`
+    })
+    .from(reviews)
+    .where(and(
+      eq(reviews.contractorId, contractorId),
+      eq(reviews.moderationStatus, 'approved')
+    ));
+    
+    const stat = stats[0];
+    if (!stat) return false;
+    
+    // Calculate NPS (promoters - detractors)
+    const nps = ((stat.fiveStar + stat.fourStar) - (stat.oneStar + stat.twoStar)) / 
+                (stat.totalReviews || 1) * 100;
     
     // Update contractor profile
     await db.update(contractorProfiles)
-      .set({ averageRating: avgRating.toString() })
+      .set({ 
+        averageRating: stat.avgOverall?.toString(),
+        totalReviews: stat.totalReviews,
+        fiveStarCount: stat.fiveStar,
+        fourStarCount: stat.fourStar,
+        threeStarCount: stat.threeStar,
+        twoStarCount: stat.twoStar,
+        oneStarCount: stat.oneStar,
+        averageTimelinessRating: stat.avgTimeliness?.toString(),
+        averageProfessionalismRating: stat.avgProfessionalism?.toString(),
+        averageQualityRating: stat.avgQuality?.toString(),
+        averageValueRating: stat.avgValue?.toString(),
+        responseRate: stat.totalReviews > 0 ? 
+          (stat.withResponse / stat.totalReviews * 100).toString() : '0',
+        netPromoterScore: Math.round(nps),
+        lastRatingUpdate: new Date(),
+        updatedAt: new Date()
+      })
       .where(eq(contractorProfiles.userId, contractorId));
     
-    return avgRating;
+    return true;
+  }
+
+  async getContractorRatingSummary(contractorId: string): Promise<{
+    averageRating: number;
+    totalReviews: number;
+    ratingDistribution: Record<string, number>;
+    categoryAverages: {
+      timeliness: number;
+      professionalism: number;
+      quality: number;
+      value: number;
+    };
+  }> {
+    const profile = await db.select().from(contractorProfiles)
+      .where(eq(contractorProfiles.userId, contractorId))
+      .limit(1);
+    
+    if (!profile[0]) {
+      return {
+        averageRating: 0,
+        totalReviews: 0,
+        ratingDistribution: { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 },
+        categoryAverages: {
+          timeliness: 0,
+          professionalism: 0,
+          quality: 0,
+          value: 0
+        }
+      };
+    }
+    
+    const p = profile[0];
+    return {
+      averageRating: parseFloat(p.averageRating || '0'),
+      totalReviews: p.totalReviews,
+      ratingDistribution: {
+        '5': p.fiveStarCount,
+        '4': p.fourStarCount,
+        '3': p.threeStarCount,
+        '2': p.twoStarCount,
+        '1': p.oneStarCount
+      },
+      categoryAverages: {
+        timeliness: parseFloat(p.averageTimelinessRating || '0'),
+        professionalism: parseFloat(p.averageProfessionalismRating || '0'),
+        quality: parseFloat(p.averageQualityRating || '0'),
+        value: parseFloat(p.averageValueRating || '0')
+      }
+    };
   }
 
   async addContractorDocument(document: InsertContractorDocument): Promise<ContractorDocument> {
