@@ -30,6 +30,7 @@ import FleetVehicles from "@/pages/fleet/vehicles";
 import FleetAnalytics from "@/pages/fleet/analytics";
 import FleetBatchJobs from "@/pages/fleet/batch-jobs";
 import FleetInvoices from "@/pages/fleet/invoices";
+import FleetBillingPortal from "@/pages/fleet/billing-portal";
 
 // Admin Pages
 import AdminLogin from "@/pages/admin/login";
@@ -42,6 +43,7 @@ import AdminTemplates from "@/pages/admin/templates";
 import AdminPricingRules from "@/pages/admin/pricing-rules";
 import AdminBidding from "@/pages/admin/bidding";
 import AdminFleetChecks from "@/pages/admin-fleet-checks";
+import AdminBilling from "@/pages/admin/billing";
 
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
@@ -85,6 +87,7 @@ function Router() {
       <Route path="/fleet/analytics" component={FleetAnalytics} />
       <Route path="/fleet/batch-jobs" component={FleetBatchJobs} />
       <Route path="/fleet/invoices" component={FleetInvoices} />
+      <Route path="/fleet/billing" component={FleetBillingPortal} />
       
       {/* Admin Pages - Protected Routes */}
       <Route path="/admin/login" component={AdminLogin} />
@@ -97,6 +100,7 @@ function Router() {
       <Route path="/admin/pricing-rules" component={AdminPricingRules} />
       <Route path="/admin/bidding" component={AdminBidding} />
       <Route path="/admin/fleet-checks" component={AdminFleetChecks} />
+      <Route path="/admin/billing" component={AdminBilling} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />

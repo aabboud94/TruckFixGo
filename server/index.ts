@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { trackingWSServer } from "./websocket";
 import { reminderScheduler } from "./reminder-scheduler";
+import billingScheduler from "./billing-scheduler";
 
 const app = express();
 
@@ -78,6 +79,10 @@ app.use((req, res, next) => {
   // Start the reminder scheduler
   reminderScheduler.start();
   log(`Reminder scheduler started`);
+
+  // Start the billing scheduler
+  billingScheduler.initialize();
+  log(`Billing scheduler initialized`);
 
   const port = parseInt(process.env.PORT || '5000', 10);
   server.listen({
