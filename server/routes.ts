@@ -205,8 +205,18 @@ function getPagination(req: Request) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
-  // Setup session middleware
+  // Setup session middleware with PostgreSQL store for production
+  const sessionStore = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL
+    ? new (require('connect-pg-simple')(session))({
+        conString: process.env.DATABASE_URL,
+        tableName: 'user_sessions',
+        createTableIfMissing: true,
+        ttl: 24 * 60 * 60 // 24 hours in seconds
+      })
+    : undefined; // Use default MemoryStore in development
+
   app.use(session({
+    store: sessionStore,
     secret: process.env.SESSION_SECRET || 'truckfixgo-secret-key-change-in-production',
     resave: false,
     saveUninitialized: false,
