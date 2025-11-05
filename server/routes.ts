@@ -1534,7 +1534,391 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== FLEET ROUTES ====================
+
+  // Get fleet invoices
+  app.get('/api/fleet/invoices',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { startDate, endDate, status, search } = req.query;
+        
+        // Mock fleet invoice data
+        const mockInvoices = [
+          {
+            id: '1',
+            invoiceNumber: 'INV-2024-001',
+            billingPeriod: {
+              start: new Date(2024, 0, 1).toISOString(),
+              end: new Date(2024, 0, 31).toISOString(),
+            },
+            fleetAccount: {
+              id: '1',
+              companyName: 'ABC Trucking Co',
+              accountNumber: 'FL-001',
+              netTerms: 30,
+            },
+            summary: {
+              totalVehicles: 5,
+              totalJobs: 12,
+              subtotal: 4500.00,
+              fleetDiscount: 450.00,
+              tax: 364.05,
+              total: 4414.05,
+            },
+            status: 'sent' as const,
+            dueDate: new Date(2024, 1, 15).toISOString(),
+            sentAt: new Date(2024, 0, 31).toISOString(),
+            vehicles: [
+              {
+                id: '1',
+                identifier: 'TRK-001',
+                make: 'Peterbilt',
+                model: '579',
+                jobCount: 3,
+                totalCost: 1200.00,
+              },
+              {
+                id: '2',
+                identifier: 'TRK-002',
+                make: 'Kenworth',
+                model: 'T680',
+                jobCount: 2,
+                totalCost: 800.00,
+              },
+            ],
+            jobs: [
+              {
+                id: '1',
+                jobNumber: 'JOB-00001',
+                vehicleIdentifier: 'TRK-001',
+                serviceDate: new Date(2024, 0, 5).toISOString(),
+                serviceType: 'Emergency Repair',
+                amount: 500.00,
+              },
+            ],
+          },
+        ];
+
+        const mockStats = {
+          totalOutstanding: 8828.10,
+          totalPaid: 25000.00,
+          overdueAmount: 2500.00,
+          averagePaymentDays: 28,
+          upcomingInvoices: 3,
+          lastInvoiceDate: new Date(2024, 0, 31).toISOString(),
+        };
+
+        res.json({ invoices: mockInvoices, stats: mockStats });
+      } catch (error) {
+        console.error('Get fleet invoices error:', error);
+        res.status(500).json({ message: 'Failed to get fleet invoices' });
+      }
+    }
+  );
+
+  // Generate fleet invoice
+  app.post('/api/fleet/invoices/generate',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { fleetAccountId, startDate, endDate } = req.body;
+        
+        // Mock invoice generation
+        const invoice = {
+          id: Date.now().toString(),
+          invoiceNumber: `INV-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`,
+          fleetAccountId,
+          startDate,
+          endDate,
+          status: 'draft',
+          createdAt: new Date().toISOString(),
+        };
+
+        res.json({ invoice });
+      } catch (error) {
+        console.error('Generate fleet invoice error:', error);
+        res.status(500).json({ message: 'Failed to generate fleet invoice' });
+      }
+    }
+  );
+
+  // Bulk generate fleet invoices
+  app.post('/api/fleet/invoices/bulk-generate',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { startDate, endDate } = req.body;
+        
+        // Mock bulk generation
+        const count = Math.floor(Math.random() * 10) + 1;
+        
+        res.json({ count, message: `Generated ${count} fleet invoices` });
+      } catch (error) {
+        console.error('Bulk generate fleet invoices error:', error);
+        res.status(500).json({ message: 'Failed to bulk generate invoices' });
+      }
+    }
+  );
+
+  // Download fleet invoice PDF
+  app.get('/api/fleet/invoices/:id/download',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        // Mock invoice data
+        const invoice = {
+          id: req.params.id,
+          invoiceNumber: `INV-2024-${req.params.id.slice(-3)}`,
+          fleetAccount: {
+            companyName: 'ABC Trucking Co',
+            accountNumber: 'FL-001',
+            address: '123 Fleet Street\nTruck City, TX 75001',
+            billingEmail: 'billing@abctrucking.com',
+            netTerms: 30,
+          },
+          billingPeriod: {
+            start: new Date(2024, 0, 1),
+            end: new Date(2024, 0, 31),
+          },
+          summary: {
+            totalVehicles: 5,
+            totalJobs: 12,
+            subtotal: 4500.00,
+            fleetDiscount: 450.00,
+            tax: 364.05,
+            total: 4414.05,
+          },
+          dueDate: new Date(2024, 1, 15),
+          vehicles: [
+            {
+              identifier: 'TRK-001',
+              make: 'Peterbilt',
+              model: '579',
+              jobCount: 3,
+              totalCost: 1200.00,
+            },
+            {
+              identifier: 'TRK-002',
+              make: 'Kenworth',
+              model: 'T680',
+              jobCount: 2,
+              totalCost: 800.00,
+            },
+          ],
+          jobs: [
+            {
+              jobNumber: 'JOB-00001',
+              vehicleIdentifier: 'TRK-001',
+              serviceDate: new Date(2024, 0, 5),
+              serviceType: 'Emergency Repair',
+              description: 'Engine diagnostics and repair',
+              amount: 500.00,
+            },
+            {
+              jobNumber: 'JOB-00002',
+              vehicleIdentifier: 'TRK-001',
+              serviceDate: new Date(2024, 0, 12),
+              serviceType: 'Brake Service',
+              description: 'Complete brake system overhaul',
+              amount: 400.00,
+            },
+            {
+              jobNumber: 'JOB-00003',
+              vehicleIdentifier: 'TRK-002',
+              serviceDate: new Date(2024, 0, 20),
+              serviceType: 'Tire Service',
+              description: 'Replace 4 tires',
+              amount: 800.00,
+            },
+          ],
+        };
+
+        // Generate PDF using the PDF service
+        const pdfBuffer = await PDFService.generateInvoice({
+          invoice: {
+            id: invoice.id,
+            number: invoice.invoiceNumber,
+            date: new Date(),
+            dueDate: invoice.dueDate,
+            status: 'sent',
+          },
+          customer: {
+            name: invoice.fleetAccount.companyName,
+            email: invoice.fleetAccount.billingEmail,
+            phone: '(555) 123-4567',
+            address: invoice.fleetAccount.address,
+          },
+          items: invoice.jobs.map(job => ({
+            description: `${job.serviceType} - ${job.description}`,
+            quantity: 1,
+            rate: job.amount,
+            amount: job.amount,
+          })),
+          subtotal: invoice.summary.subtotal,
+          tax: invoice.summary.tax,
+          discount: invoice.summary.fleetDiscount,
+          total: invoice.summary.total,
+          notes: `Fleet Account: ${invoice.fleetAccount.accountNumber}\nPayment Terms: NET ${invoice.fleetAccount.netTerms}\nTotal Vehicles Serviced: ${invoice.summary.totalVehicles}`,
+        });
+
+        res.set({
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="fleet-invoice-${invoice.invoiceNumber}.pdf"`,
+        });
+        res.send(pdfBuffer);
+      } catch (error) {
+        console.error('Download fleet invoice error:', error);
+        res.status(500).json({ message: 'Failed to download invoice' });
+      }
+    }
+  );
+
+  // Send fleet invoice email
+  app.post('/api/fleet/invoices/:id/send-email',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        // Mock email sending
+        // In production, this would integrate with an email service
+        
+        res.json({ message: 'Invoice sent successfully' });
+      } catch (error) {
+        console.error('Send fleet invoice email error:', error);
+        res.status(500).json({ message: 'Failed to send invoice email' });
+      }
+    }
+  );
+
   // ==================== CONTRACTOR ROUTES ====================
+
+  // Get contractor earnings statement
+  app.get('/api/contractor/earnings-statement', 
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const { fromDate, toDate } = req.query;
+        
+        if (!fromDate || !toDate) {
+          return res.status(400).json({ message: 'Date range required' });
+        }
+
+        const contractorId = req.user.id;
+        
+        // Fetch contractor earnings data
+        const earnings = await storage.getContractorEarnings(
+          contractorId,
+          new Date(fromDate as string),
+          new Date(toDate as string)
+        );
+
+        const contractor = await storage.getContractorProfile(contractorId);
+        
+        if (!contractor) {
+          return res.status(404).json({ message: 'Contractor profile not found' });
+        }
+
+        // Generate PDF
+        const pdfBuffer = await PDFService.generateEarningsStatement({
+          contractor: {
+            name: contractor.businessName || `${contractor.firstName} ${contractor.lastName}`,
+            email: contractor.email,
+            phone: contractor.phone,
+            address: contractor.address || 'Not provided',
+          },
+          period: {
+            startDate: new Date(fromDate as string),
+            endDate: new Date(toDate as string),
+          },
+          earnings: earnings.jobs.map((job: any) => ({
+            date: job.completedAt,
+            jobNumber: job.id.slice(0, 8).toUpperCase(),
+            description: job.serviceType,
+            basePay: job.basePay || 0,
+            tips: job.tips || 0,
+            bonuses: job.bonuses || 0,
+            total: (job.basePay || 0) + (job.tips || 0) + (job.bonuses || 0),
+          })),
+          summary: {
+            totalEarnings: earnings.totalEarnings || 0,
+            totalJobs: earnings.jobs.length,
+            totalHours: earnings.totalHours || 0,
+            averagePerJob: earnings.jobs.length > 0 
+              ? (earnings.totalEarnings || 0) / earnings.jobs.length 
+              : 0,
+          },
+        });
+
+        res.set({
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="earnings-statement-${fromDate}-to-${toDate}.pdf"`,
+        });
+        res.send(pdfBuffer);
+      } catch (error) {
+        console.error('Generate earnings statement error:', error);
+        res.status(500).json({ message: 'Failed to generate earnings statement' });
+      }
+    }
+  );
+
+  // Get contractor tax document (1099-NEC)
+  app.get('/api/contractor/tax-document/:year',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const year = parseInt(req.params.year);
+        const contractorId = req.user.id;
+
+        // Fetch contractor and tax data
+        const contractor = await storage.getContractorProfile(contractorId);
+        
+        if (!contractor) {
+          return res.status(404).json({ message: 'Contractor profile not found' });
+        }
+
+        const startDate = new Date(year, 0, 1);
+        const endDate = new Date(year, 11, 31);
+        
+        const taxData = await storage.getContractorEarnings(
+          contractorId,
+          startDate,
+          endDate
+        );
+
+        // Generate 1099-NEC PDF
+        const pdfBuffer = await PDFService.generateTaxDocument({
+          year,
+          contractor: {
+            name: contractor.businessName || `${contractor.firstName} ${contractor.lastName}`,
+            tin: contractor.ssn || contractor.ein || 'XXX-XX-XXXX',
+            address: contractor.address || 'Not provided',
+          },
+          payer: {
+            name: 'TruckFixGo LLC',
+            tin: '98-7654321',
+            address: '1234 Main Street, Suite 100\nSan Francisco, CA 94105',
+            phone: '(555) 123-4567',
+          },
+          amounts: {
+            nonemployeeCompensation: taxData.totalEarnings || 0,
+            federalTaxWithheld: 0,
+            stateTaxWithheld: 0,
+          },
+        });
+
+        res.set({
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="1099-NEC-${year}.pdf"`,
+        });
+        res.send(pdfBuffer);
+      } catch (error) {
+        console.error('Generate tax document error:', error);
+        res.status(500).json({ message: 'Failed to generate tax document' });
+      }
+    }
+  );
 
   // Find available contractors
   app.get('/api/contractors', requireAuth, async (req: Request, res: Response) => {
@@ -2208,6 +2592,373 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Get invoice error:', error);
         res.status(500).json({ message: 'Failed to get invoice' });
+      }
+    }
+  );
+
+  // ==================== INVOICE ROUTES ====================
+
+  // Generate invoice for job
+  app.get('/api/jobs/:id/invoice',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const job = await storage.getJob(req.params.id);
+        
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        // Check if invoice already exists
+        let invoice = await storage.getInvoiceByJobId(job.id);
+        
+        if (!invoice) {
+          // Generate new invoice
+          const pdfService = (await import('./pdf-service')).default;
+          const invoiceNumber = pdfService.generateInvoiceNumber();
+          
+          invoice = await storage.createInvoice({
+            jobId: job.id,
+            customerId: job.customerId,
+            contractorId: job.contractorId,
+            invoiceNumber,
+            issueDate: new Date(),
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            subtotal: job.actualPrice || job.quotedPrice || '0',
+            tax: ((parseFloat(job.actualPrice || job.quotedPrice || '0') * 0.0825).toFixed(2)),
+            totalAmount: ((parseFloat(job.actualPrice || job.quotedPrice || '0') * 1.0825).toFixed(2)),
+            amountPaid: '0',
+            amountDue: ((parseFloat(job.actualPrice || job.quotedPrice || '0') * 1.0825).toFixed(2)),
+            status: 'pending',
+            metadata: {
+              serviceType: job.jobType,
+              vehicleInfo: job.vehicleInfo,
+              location: job.serviceLocation
+            }
+          });
+        }
+
+        // Fetch related data
+        const customer = await storage.getUser(job.customerId);
+        const contractor = job.contractorId ? 
+          await storage.getContractorProfile(job.contractorId) : undefined;
+        let fleetAccount = undefined;
+        
+        if (customer) {
+          const driverProfile = await storage.getDriverProfile(customer.id);
+          if (driverProfile?.fleetAccountId) {
+            fleetAccount = await storage.getFleetAccount(driverProfile.fleetAccountId);
+          }
+        }
+
+        res.json({
+          invoice,
+          job,
+          customer,
+          contractor,
+          fleetAccount
+        });
+      } catch (error) {
+        console.error('Generate invoice error:', error);
+        res.status(500).json({ message: 'Failed to generate invoice' });
+      }
+    }
+  );
+
+  // Download invoice as PDF
+  app.get('/api/invoices/:id/download',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const invoice = await storage.getInvoice(req.params.id);
+        
+        if (!invoice) {
+          return res.status(404).json({ message: 'Invoice not found' });
+        }
+
+        // Get related data
+        const job = await storage.getJob(invoice.jobId);
+        const customer = await storage.getUser(invoice.customerId);
+        const contractor = invoice.contractorId ? 
+          await storage.getContractorProfile(invoice.contractorId) : undefined;
+        const transactions = await storage.getInvoiceTransactions(invoice.id);
+        
+        let fleetAccount = undefined;
+        if (customer) {
+          const driverProfile = await storage.getDriverProfile(customer.id);
+          if (driverProfile?.fleetAccountId) {
+            fleetAccount = await storage.getFleetAccount(driverProfile.fleetAccountId);
+          }
+        }
+
+        // Generate PDF
+        const pdfService = (await import('./pdf-service')).default;
+        const pdfBuffer = await pdfService.generateInvoice({
+          invoice,
+          job: job!,
+          customer: customer!,
+          contractor,
+          fleetAccount,
+          transactions
+        });
+
+        // Set headers for PDF download
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 
+          `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`);
+        res.send(pdfBuffer);
+      } catch (error) {
+        console.error('Download invoice error:', error);
+        res.status(500).json({ message: 'Failed to download invoice' });
+      }
+    }
+  );
+
+  // Preview invoice
+  app.get('/api/invoices/preview/:id',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const invoice = await storage.getInvoice(req.params.id);
+        
+        if (!invoice) {
+          return res.status(404).json({ message: 'Invoice not found' });
+        }
+
+        // Get all related data for preview
+        const job = await storage.getJob(invoice.jobId);
+        const customer = await storage.getUser(invoice.customerId);
+        const contractor = invoice.contractorId ? 
+          await storage.getContractorProfile(invoice.contractorId) : undefined;
+        const transactions = await storage.getInvoiceTransactions(invoice.id);
+        
+        let fleetAccount = undefined;
+        if (customer) {
+          const driverProfile = await storage.getDriverProfile(customer.id);
+          if (driverProfile?.fleetAccountId) {
+            fleetAccount = await storage.getFleetAccount(driverProfile.fleetAccountId);
+          }
+        }
+
+        res.json({
+          invoice,
+          job,
+          customer,
+          contractor,
+          fleetAccount,
+          transactions
+        });
+      } catch (error) {
+        console.error('Preview invoice error:', error);
+        res.status(500).json({ message: 'Failed to preview invoice' });
+      }
+    }
+  );
+
+  // Generate bulk invoices for fleet
+  app.post('/api/invoices/bulk',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    validateRequest(z.object({
+      fleetAccountId: z.string(),
+      fromDate: z.string().datetime(),
+      toDate: z.string().datetime(),
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { fleetAccountId, fromDate, toDate } = req.body;
+        
+        // Get all jobs for fleet in date range
+        const jobs = await storage.findJobs({
+          fleetAccountId,
+          fromDate: new Date(fromDate),
+          toDate: new Date(toDate),
+          status: 'completed'
+        });
+
+        const pdfService = (await import('./pdf-service')).default;
+        const invoices = [];
+
+        // Generate invoice for each job
+        for (const job of jobs) {
+          let invoice = await storage.getInvoiceByJobId(job.id);
+          
+          if (!invoice) {
+            const invoiceNumber = pdfService.generateInvoiceNumber('FLEET');
+            
+            invoice = await storage.createInvoice({
+              jobId: job.id,
+              customerId: job.customerId,
+              contractorId: job.contractorId,
+              invoiceNumber,
+              issueDate: new Date(),
+              dueDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // NET 60 for fleet
+              subtotal: job.actualPrice || job.quotedPrice || '0',
+              tax: ((parseFloat(job.actualPrice || job.quotedPrice || '0') * 0.0825).toFixed(2)),
+              totalAmount: ((parseFloat(job.actualPrice || job.quotedPrice || '0') * 1.0825).toFixed(2)),
+              amountPaid: '0',
+              amountDue: ((parseFloat(job.actualPrice || job.quotedPrice || '0') * 1.0825).toFixed(2)),
+              status: 'pending',
+              metadata: {
+                fleetAccountId,
+                billingPeriod: { fromDate, toDate }
+              }
+            });
+          }
+          
+          invoices.push(invoice);
+        }
+
+        res.json({
+          message: `Generated ${invoices.length} invoices for fleet account`,
+          invoices
+        });
+      } catch (error) {
+        console.error('Generate bulk invoices error:', error);
+        res.status(500).json({ message: 'Failed to generate bulk invoices' });
+      }
+    }
+  );
+
+  // List all invoices (admin)
+  app.get('/api/admin/invoices',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const filters = {
+          ...getPagination(req),
+          status: req.query.status as string,
+          customerId: req.query.customerId as string,
+          fromDate: req.query.fromDate ? new Date(req.query.fromDate as string) : undefined,
+          toDate: req.query.toDate ? new Date(req.query.toDate as string) : undefined
+        };
+
+        const invoices = await storage.findInvoices(filters);
+        
+        res.json({ invoices });
+      } catch (error) {
+        console.error('List invoices error:', error);
+        res.status(500).json({ message: 'Failed to list invoices' });
+      }
+    }
+  );
+
+  // Update invoice status
+  app.patch('/api/invoices/:id/status',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      status: z.enum(['draft', 'pending', 'paid', 'overdue', 'cancelled'])
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const updates: any = { status: req.body.status };
+        
+        if (req.body.status === 'paid') {
+          updates.paidDate = new Date();
+          updates.amountPaid = updates.totalAmount;
+          updates.amountDue = '0';
+        }
+
+        const invoice = await storage.updateInvoice(req.params.id, updates);
+        
+        if (!invoice) {
+          return res.status(404).json({ message: 'Invoice not found' });
+        }
+
+        res.json({
+          message: 'Invoice status updated successfully',
+          invoice
+        });
+      } catch (error) {
+        console.error('Update invoice status error:', error);
+        res.status(500).json({ message: 'Failed to update invoice status' });
+      }
+    }
+  );
+
+  // Get contractor earnings statement
+  app.get('/api/contractor/earnings-statement',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const fromDate = new Date(req.query.fromDate as string || 
+          Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const toDate = new Date(req.query.toDate as string || Date.now());
+        
+        const contractorProfile = await storage.getContractorProfile(req.session.userId!);
+        
+        if (!contractorProfile) {
+          return res.status(404).json({ message: 'Contractor profile not found' });
+        }
+
+        const earnings = await storage.getContractorEarnings(
+          contractorProfile.id,
+          fromDate,
+          toDate
+        );
+
+        // Generate earnings statement PDF
+        const pdfService = (await import('./pdf-service')).default;
+        const pdfBuffer = await pdfService.generateContractorEarningsStatement(
+          contractorProfile.id,
+          fromDate,
+          toDate,
+          earnings
+        );
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 
+          `attachment; filename="earnings-statement-${format(fromDate, 'yyyy-MM')}.pdf"`);
+        res.send(pdfBuffer);
+      } catch (error) {
+        console.error('Get earnings statement error:', error);
+        res.status(500).json({ message: 'Failed to get earnings statement' });
+      }
+    }
+  );
+
+  // Get fleet consolidated invoice
+  app.get('/api/fleet/consolidated-invoice/:fleetId',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const month = new Date(req.query.month as string || Date.now());
+        const startOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
+        const endOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+        
+        const jobs = await storage.findJobs({
+          fleetAccountId: req.params.fleetId,
+          fromDate: startOfMonth,
+          toDate: endOfMonth,
+          status: 'completed'
+        });
+
+        // Calculate totals
+        let totalAmount = 0;
+        jobs.forEach(job => {
+          totalAmount += parseFloat(job.actualPrice || job.quotedPrice || '0');
+        });
+
+        // Generate consolidated invoice PDF
+        const pdfService = (await import('./pdf-service')).default;
+        const pdfBuffer = await pdfService.generateFleetConsolidatedInvoice(
+          req.params.fleetId,
+          month,
+          jobs,
+          totalAmount
+        );
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 
+          `attachment; filename="fleet-invoice-${format(month, 'yyyy-MM')}.pdf"`);
+        res.send(pdfBuffer);
+      } catch (error) {
+        console.error('Get fleet consolidated invoice error:', error);
+        res.status(500).json({ message: 'Failed to get fleet consolidated invoice' });
       }
     }
   );

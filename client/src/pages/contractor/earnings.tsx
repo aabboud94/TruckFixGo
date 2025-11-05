@@ -32,9 +32,17 @@ import {
   Info,
   Banknote,
   Award
+  FileText,
+  Receipt,
+  FileSpreadsheet,
+  Printer,
+  FileTax2,
+  FileUp
 } from "lucide-react";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface EarningsData {
   summary: {
@@ -99,6 +107,11 @@ export default function ContractorEarnings() {
   const [payoutDialogOpen, setPayoutDialogOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState("");
   const [payoutMethod, setPayoutMethod] = useState("instant");
+  const [documentsDialogOpen, setDocumentsDialogOpen] = useState(false);
+  const [selectedDateRange, setSelectedDateRange] = useState<{ from: Date; to: Date }>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date()),
+  });
 
   // Fetch earnings data
   const { data: earningsData, isLoading, refetch } = useQuery<EarningsData>({
@@ -174,6 +187,86 @@ export default function ContractorEarnings() {
     });
   };
 
+  // Download earnings statement mutation
+  const downloadEarningsStatement = useMutation({
+    mutationFn: async ({ fromDate, toDate }: { fromDate: Date; toDate: Date }) => {
+      const response = await fetch(
+        `/api/contractor/earnings-statement?fromDate=${fromDate.toISOString()}&toDate=${toDate.toISOString()}`,
+        {
+          method: "GET",
+          credentials: "include",
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error("Failed to download earnings statement");
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `earnings-statement-${format(fromDate, "yyyy-MM")}-to-${format(toDate, "yyyy-MM")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Download Complete",
+        description: "Your earnings statement has been downloaded.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Download Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Download tax document mutation
+  const downloadTaxDocument = useMutation({
+    mutationFn: async (year: number) => {
+      const response = await fetch(
+        `/api/contractor/tax-document/${year}`,
+        {
+          method: "GET",
+          credentials: "include",
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error("Failed to download tax document");
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `1099-NEC-${year}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Download Complete",
+        description: "Your tax document has been downloaded.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Download Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background p-4">
@@ -221,9 +314,126 @@ export default function ContractorEarnings() {
                 onClick={exportEarnings}
                 data-testid="button-export"
               >
-                <Download className="w-4 h-4 mr-2" />
-                Export
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Export CSV
               </Button>
+              <Dialog open={documentsDialogOpen} onOpenChange={setDocumentsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" data-testid="button-documents">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Documents
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Download Documents</DialogTitle>
+                    <DialogDescription>
+                      Download earnings statements and tax documents for your records.
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <div className="space-y-4">
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-sm">Earnings Statements</h3>
+                      <div className="space-y-2">
+                        <Button
+                          className="w-full justify-start"
+                          variant="outline"
+                          onClick={() => {
+                            downloadEarningsStatement.mutate({
+                              fromDate: startOfMonth(new Date()),
+                              toDate: endOfMonth(new Date()),
+                            });
+                            setDocumentsDialogOpen(false);
+                          }}
+                          disabled={downloadEarningsStatement.isPending}
+                          data-testid="button-download-current-month"
+                        >
+                          <Receipt className="h-4 w-4 mr-2" />
+                          Current Month Statement
+                        </Button>
+                        <Button
+                          className="w-full justify-start"
+                          variant="outline"
+                          onClick={() => {
+                            const lastMonth = new Date();
+                            lastMonth.setMonth(lastMonth.getMonth() - 1);
+                            downloadEarningsStatement.mutate({
+                              fromDate: startOfMonth(lastMonth),
+                              toDate: endOfMonth(lastMonth),
+                            });
+                            setDocumentsDialogOpen(false);
+                          }}
+                          disabled={downloadEarningsStatement.isPending}
+                          data-testid="button-download-last-month"
+                        >
+                          <Receipt className="h-4 w-4 mr-2" />
+                          Last Month Statement
+                        </Button>
+                        <Button
+                          className="w-full justify-start"
+                          variant="outline"
+                          onClick={() => {
+                            downloadEarningsStatement.mutate({
+                              fromDate: startOfYear(new Date()),
+                              toDate: new Date(),
+                            });
+                            setDocumentsDialogOpen(false);
+                          }}
+                          disabled={downloadEarningsStatement.isPending}
+                          data-testid="button-download-ytd"
+                        >
+                          <Receipt className="h-4 w-4 mr-2" />
+                          Year-to-Date Statement
+                        </Button>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-sm">Tax Documents</h3>
+                      <div className="space-y-2">
+                        <Button
+                          className="w-full justify-start"
+                          variant="outline"
+                          onClick={() => {
+                            downloadTaxDocument.mutate(new Date().getFullYear() - 1);
+                            setDocumentsDialogOpen(false);
+                          }}
+                          disabled={downloadTaxDocument.isPending}
+                          data-testid="button-download-tax-last-year"
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          {new Date().getFullYear() - 1} Tax Form (1099-NEC)
+                        </Button>
+                        {new Date().getMonth() >= 1 && ( // Show current year tax form after January
+                          <Button
+                            className="w-full justify-start"
+                            variant="outline"
+                            onClick={() => {
+                              downloadTaxDocument.mutate(new Date().getFullYear());
+                              setDocumentsDialogOpen(false);
+                            }}
+                            disabled={downloadTaxDocument.isPending}
+                            data-testid="button-download-tax-current-year"
+                          >
+                            <FileText className="h-4 w-4 mr-2" />
+                            {new Date().getFullYear()} Tax Form (Draft)
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <p className="text-sm text-blue-900">
+                        <Info className="h-4 w-4 inline mr-1" />
+                        All documents are generated in PDF format and include all necessary details for tax and accounting purposes.
+                      </p>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
               <Dialog open={payoutDialogOpen} onOpenChange={setPayoutDialogOpen}>
                 <DialogTrigger asChild>
                   <Button data-testid="button-request-payout">
