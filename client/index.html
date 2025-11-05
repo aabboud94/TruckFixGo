@@ -62,44 +62,10 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Registration - Temporarily fully disabled -->
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/service-worker.js')
-            .then(registration => {
-              console.log('[PWA] Service Worker registered successfully:', registration.scope);
-              
-              // Check for updates periodically (every 5 minutes)
-              setInterval(() => {
-                registration.update();
-              }, 300000);
-              
-              // Handle updates
-              registration.addEventListener('updatefound', () => {
-                const newWorker = registration.installing;
-                console.log('[PWA] New Service Worker found, installing...');
-                
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    // New service worker installed, show update prompt
-                    console.log('[PWA] New Service Worker installed, update available');
-                    
-                    // Show a non-intrusive update notification instead of auto-reload
-                    if (window.showUpdatePrompt) {
-                      window.showUpdatePrompt();
-                    }
-                  }
-                });
-              });
-            })
-            .catch(error => {
-              console.error('[PWA] Service Worker registration failed:', error);
-            });
-        });
-      } else {
-        console.log('[PWA] Service Workers are not supported in this browser');
-      }
+      // Service worker completely disabled temporarily to fix reload loop
+      console.log('[PWA] Service Worker temporarily disabled');
       
       // Prevent iOS bounce effect
       document.addEventListener('touchmove', function(e) {
