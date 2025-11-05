@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -40,7 +40,7 @@ const pmSchedulingSchema = z.object({
 type PMSchedulingForm = z.infer<typeof pmSchedulingSchema>;
 
 export default function SchedulePM() {
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [costEstimate, setCostEstimate] = useState<string | null>(null);
@@ -106,7 +106,7 @@ export default function SchedulePM() {
         description: `Successfully scheduled ${data.selectedVehicles.length} vehicle(s) for ${format(data.preferredDate, "PPP")} at ${data.preferredTime}`
       });
       
-      navigate("/fleet/dashboard");
+      setLocation("/fleet/dashboard");
     } catch (error) {
       toast({
         title: "Scheduling Failed",
@@ -145,7 +145,7 @@ export default function SchedulePM() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => navigate("/fleet/dashboard")}
+                onClick={() => setLocation("/fleet/dashboard")}
                 data-testid="button-back-to-dashboard"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -499,7 +499,7 @@ export default function SchedulePM() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={step === 1 ? () => navigate("/fleet/dashboard") : prevStep}
+                    onClick={step === 1 ? () => setLocation("/fleet/dashboard") : prevStep}
                     data-testid="button-prev"
                   >
                     <ArrowLeft className="w-4 h-4 mr-2" />

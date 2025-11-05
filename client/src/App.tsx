@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Homepage from "@/pages/Homepage";
 import EmergencyBooking from "@/pages/emergency-booking";
+import TrackingPage from "@/pages/tracking";
+import ContractorActiveJob from "@/pages/contractor/active-job";
 import FleetLanding from "@/pages/fleet";
 import FleetRegister from "@/pages/fleet/register";
 import FleetLogin from "@/pages/fleet/login";
@@ -21,6 +23,12 @@ function Router() {
       {/* Main Pages */}
       <Route path="/" component={Homepage} />
       <Route path="/emergency" component={EmergencyBooking} />
+      
+      {/* Tracking Pages */}
+      <Route path="/track/:jobId" component={TrackingPage} />
+      
+      {/* Contractor Pages */}
+      <Route path="/contractor/active-job" component={ContractorActiveJob} />
       
       {/* Fleet Pages */}
       <Route path="/fleet" component={FleetLanding} />

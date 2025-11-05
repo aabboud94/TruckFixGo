@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -48,7 +48,7 @@ const fleetRegistrationSchema = z.object({
 type FleetRegistrationForm = z.infer<typeof fleetRegistrationSchema>;
 
 export default function FleetRegister() {
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
 
@@ -86,7 +86,7 @@ export default function FleetRegister() {
       });
       
       // Redirect to dashboard or confirmation page
-      navigate("/fleet/dashboard");
+      setLocation("/fleet/dashboard");
     } catch (error) {
       toast({
         title: "Registration Failed",
@@ -122,7 +122,7 @@ export default function FleetRegister() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => navigate("/fleet")}
+                onClick={() => setLocation("/fleet")}
                 data-testid="button-back-to-fleet"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -533,7 +533,7 @@ export default function FleetRegister() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={step === 1 ? () => navigate("/fleet") : prevStep}
+                    onClick={step === 1 ? () => setLocation("/fleet") : prevStep}
                     data-testid="button-prev"
                   >
                     <ArrowLeft className="w-4 h-4 mr-2" />

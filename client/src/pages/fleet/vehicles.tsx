@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -42,7 +42,7 @@ const vehicleSchema = z.object({
 type VehicleForm = z.infer<typeof vehicleSchema>;
 
 export default function VehicleManagement() {
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -181,7 +181,7 @@ export default function VehicleManagement() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => navigate("/fleet/dashboard")}
+                onClick={() => setLocation("/fleet/dashboard")}
                 data-testid="button-back-to-dashboard"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -493,7 +493,7 @@ export default function VehicleManagement() {
                             <Button 
                               variant="ghost" 
                               size="icon"
-                              onClick={() => navigate(`/fleet/vehicles/${vehicle.id}`)}
+                              onClick={() => setLocation(`/fleet/vehicles/${vehicle.id}`)}
                               data-testid={`button-history-${vehicle.id}`}
                             >
                               <FileText className="h-4 w-4" />

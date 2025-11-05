@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -35,7 +35,7 @@ import {
 } from "recharts";
 
 export default function FleetAnalytics() {
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const [dateRange, setDateRange] = useState("30days");
   const [vehicleFilter, setVehicleFilter] = useState("all");
 
@@ -89,7 +89,7 @@ export default function FleetAnalytics() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => navigate("/fleet/dashboard")}
+                onClick={() => setLocation("/fleet/dashboard")}
                 data-testid="button-back-to-dashboard"
               >
                 <ArrowLeft className="h-5 w-5" />

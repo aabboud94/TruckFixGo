@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -19,7 +19,7 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>;
 
 export default function FleetLogin() {
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -46,7 +46,7 @@ export default function FleetLogin() {
       });
       
       // Navigate to fleet dashboard
-      navigate("/fleet/dashboard");
+      setLocation("/fleet/dashboard");
     } catch (error) {
       toast({
         title: "Login Failed",
@@ -68,7 +68,7 @@ export default function FleetLogin() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => navigate("/fleet")}
+                onClick={() => setLocation("/fleet")}
                 data-testid="button-back-to-fleet"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -169,7 +169,7 @@ export default function FleetLogin() {
               <Button 
                 variant="outline" 
                 className="w-full"
-                onClick={() => navigate("/fleet/register")}
+                onClick={() => setLocation("/fleet/register")}
                 data-testid="button-create-account"
               >
                 Create Fleet Account

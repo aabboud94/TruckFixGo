@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 
 export default function FleetDashboard() {
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const [date, setDate] = useState<Date | undefined>(new Date());
 
   // Mock data - would come from API
@@ -121,7 +121,7 @@ export default function FleetDashboard() {
               <Button variant="ghost" size="icon" data-testid="button-settings">
                 <Settings className="h-5 w-5" />
               </Button>
-              <Button variant="ghost" size="icon" onClick={() => navigate("/")} data-testid="button-logout">
+              <Button variant="ghost" size="icon" onClick={() => setLocation("/")} data-testid="button-logout">
                 <LogOut className="h-5 w-5" />
               </Button>
             </div>
@@ -187,7 +187,7 @@ export default function FleetDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <Button 
             className="h-auto py-4 flex flex-col items-center gap-2"
-            onClick={() => navigate("/fleet/schedule-pm")}
+            onClick={() => setLocation("/fleet/schedule-pm")}
             data-testid="button-schedule-pm"
           >
             <CalendarIcon className="h-5 w-5" />
@@ -196,7 +196,7 @@ export default function FleetDashboard() {
 
           <Button 
             className="h-auto py-4 flex flex-col items-center gap-2"
-            onClick={() => navigate("/fleet/batch-jobs")}
+            onClick={() => setLocation("/fleet/batch-jobs")}
             variant="outline"
             data-testid="button-batch-service"
           >
@@ -215,7 +215,7 @@ export default function FleetDashboard() {
 
           <Button 
             className="h-auto py-4 flex flex-col items-center gap-2"
-            onClick={() => navigate("/fleet/analytics")}
+            onClick={() => setLocation("/fleet/analytics")}
             variant="outline"
             data-testid="button-analytics"
           >
@@ -240,7 +240,7 @@ export default function FleetDashboard() {
                   <CardTitle>Fleet Vehicles</CardTitle>
                   <CardDescription>Manage your fleet vehicles and maintenance schedules</CardDescription>
                 </div>
-                <Button onClick={() => navigate("/fleet/vehicles")} data-testid="button-manage-vehicles">
+                <Button onClick={() => setLocation("/fleet/vehicles")} data-testid="button-manage-vehicles">
                   <Plus className="h-4 w-4 mr-2" />
                   Add Vehicle
                 </Button>
@@ -278,7 +278,7 @@ export default function FleetDashboard() {
                           <Button 
                             variant="ghost" 
                             size="icon"
-                            onClick={() => navigate(`/fleet/vehicles/${vehicle.id}`)}
+                            onClick={() => setLocation(`/fleet/vehicles/${vehicle.id}`)}
                             data-testid={`button-view-vehicle-${vehicle.id}`}
                           >
                             <ChevronRight className="h-4 w-4" />
@@ -325,7 +325,7 @@ export default function FleetDashboard() {
                       </div>
                     ))}
                   </div>
-                  <Button className="w-full mt-4" onClick={() => navigate("/fleet/schedule-pm")} data-testid="button-schedule-more">
+                  <Button className="w-full mt-4" onClick={() => setLocation("/fleet/schedule-pm")} data-testid="button-schedule-more">
                     Schedule More Services
                   </Button>
                 </CardContent>

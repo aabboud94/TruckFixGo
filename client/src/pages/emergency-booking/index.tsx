@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft } from "lucide-react";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import Step1 from "./step-1";
 import Step2 from "./step-2";
 import Confirmation from "./confirmation";
@@ -32,7 +32,7 @@ export default function EmergencyBooking() {
   const [bookingData, setBookingData] = useState<EmergencyBookingData>({
     phone: "",
   });
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
 
   const handleStepComplete = (stepData: Partial<EmergencyBookingData>) => {
     setBookingData(prev => ({ ...prev, ...stepData }));
@@ -49,7 +49,7 @@ export default function EmergencyBooking() {
     if (currentStep > 1 && currentStep < 3) {
       setCurrentStep(currentStep - 1);
     } else {
-      navigate("/");
+      setLocation("/");
     }
   };
 

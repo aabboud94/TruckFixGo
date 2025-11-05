@@ -13,7 +13,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import { EmergencyBookingData } from "./index";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
 interface ConfirmationProps {
@@ -21,7 +21,7 @@ interface ConfirmationProps {
 }
 
 export default function Confirmation({ bookingData }: ConfirmationProps) {
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
 
   const handleCopyJobId = () => {
@@ -37,13 +37,13 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
   const handleTrack = () => {
     // Navigate to tracking page with job ID
     if (bookingData.jobId) {
-      navigate(`/track/${bookingData.jobId}`);
+      setLocation(`/track/${bookingData.jobId}`);
     }
   };
 
   const handleCreateAccount = () => {
     // Navigate to signup with pre-filled data
-    navigate('/signup?from=emergency');
+    setLocation('/signup?from=emergency');
   };
 
   return (
@@ -213,7 +213,7 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
         <Button
           size="lg"
           variant="ghost"
-          onClick={() => navigate("/")}
+          onClick={() => setLocation("/")}
           className="w-full h-12"
           data-testid="button-back-home"
         >

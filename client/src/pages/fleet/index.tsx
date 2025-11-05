@@ -1,4 +1,4 @@
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 
 export default function FleetLanding() {
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
 
   const pricingTiers = [
     {
@@ -60,17 +60,17 @@ export default function FleetLanding() {
             <div className="flex items-center">
               <span 
                 className="text-2xl font-bold text-primary cursor-pointer"
-                onClick={() => navigate("/")}
+                onClick={() => setLocation("/")}
                 data-testid="logo-fleet"
               >
                 TruckFixGo Fleet
               </span>
             </div>
             <div className="flex items-center space-x-4">
-              <Button variant="outline" onClick={() => navigate("/fleet/login")} data-testid="button-fleet-login">
+              <Button variant="outline" onClick={() => setLocation("/fleet/login")} data-testid="button-fleet-login">
                 Login
               </Button>
-              <Button onClick={() => navigate("/fleet/register")} data-testid="button-fleet-register">
+              <Button onClick={() => setLocation("/fleet/register")} data-testid="button-fleet-register">
                 Create Account
               </Button>
             </div>
@@ -96,7 +96,7 @@ export default function FleetLanding() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button 
                 size="lg"
-                onClick={() => navigate("/fleet/register")}
+                onClick={() => setLocation("/fleet/register")}
                 className="px-8"
                 data-testid="button-hero-get-started"
               >
@@ -106,7 +106,7 @@ export default function FleetLanding() {
               <Button 
                 size="lg"
                 variant="outline"
-                onClick={() => navigate("/fleet/dashboard")}
+                onClick={() => setLocation("/fleet/dashboard")}
                 className="px-8"
                 data-testid="button-hero-view-demo"
               >
@@ -307,7 +307,7 @@ export default function FleetLanding() {
                   <Button 
                     className="w-full mt-6"
                     variant={tier.popular ? "default" : "outline"}
-                    onClick={() => navigate("/fleet/register")}
+                    onClick={() => setLocation("/fleet/register")}
                     data-testid={`button-select-${tier.name.toLowerCase()}`}
                   >
                     Select {tier.name}
@@ -332,7 +332,7 @@ export default function FleetLanding() {
             <Button 
               size="lg"
               variant="secondary"
-              onClick={() => navigate("/fleet/register")}
+              onClick={() => setLocation("/fleet/register")}
               className="px-8"
               data-testid="button-cta-create-account"
             >

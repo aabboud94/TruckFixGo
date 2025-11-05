@@ -521,6 +521,247 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get job tracking info (public endpoint)
+  app.get('/api/jobs/:id/tracking', async (req: Request, res: Response) => {
+    try {
+      const job = await storage.getJob(req.params.id);
+      
+      if (!job) {
+        return res.status(404).json({ message: 'Job not found' });
+      }
+
+      // Get contractor info if assigned
+      let contractor = null;
+      if (job.contractorId) {
+        const contractorUser = await storage.getUser(job.contractorId);
+        const contractorProfile = await storage.getContractorProfile(job.contractorId);
+        
+        if (contractorUser && contractorProfile) {
+          contractor = {
+            id: contractorUser.id,
+            firstName: contractorUser.firstName,
+            lastName: contractorUser.lastName,
+            phone: contractorUser.phone,
+            photo: null, // Would come from a profile photo system
+            rating: contractorProfile.averageRating,
+            totalJobs: contractorProfile.totalJobsCompleted
+          };
+        }
+      }
+
+      // Get status history
+      const statusHistory = await storage.getJobStatusHistory(job.id);
+
+      res.json({
+        job: {
+          id: job.id,
+          jobNumber: job.jobNumber,
+          status: job.status,
+          location: job.location,
+          locationAddress: job.locationAddress,
+          locationNotes: job.locationNotes,
+          contractorLocation: job.contractorLocation,
+          estimatedArrival: job.estimatedArrival,
+          description: job.description,
+          serviceType: job.serviceTypeId,
+          vin: job.vin,
+          unitNumber: job.unitNumber,
+          vehicleMake: job.vehicleMake,
+          vehicleModel: job.vehicleModel,
+          vehicleYear: job.vehicleYear
+        },
+        contractor,
+        statusHistory: statusHistory.map(h => ({
+          id: h.id,
+          toStatus: h.toStatus,
+          fromStatus: h.fromStatus,
+          reason: h.reason,
+          createdAt: h.createdAt
+        }))
+      });
+    } catch (error) {
+      console.error('Get tracking info error:', error);
+      res.status(500).json({ message: 'Failed to get tracking information' });
+    }
+  });
+
+  // Get contractor's active job
+  app.get('/api/contractor/active-job', 
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        // Find active job for contractor
+        const jobs = await storage.findJobs({
+          contractorId: req.session.userId!,
+          status: ['assigned', 'en_route', 'on_site'] as any,
+          limit: 1,
+          offset: 0,
+          orderBy: 'createdAt',
+          orderDir: 'desc'
+        });
+
+        if (jobs.length === 0) {
+          return res.json({ job: null });
+        }
+
+        const job = jobs[0];
+
+        // Get customer info
+        let customer = null;
+        if (job.customerId) {
+          const customerUser = await storage.getUser(job.customerId);
+          if (customerUser) {
+            customer = {
+              id: customerUser.id,
+              firstName: customerUser.firstName,
+              lastName: customerUser.lastName,
+              phone: customerUser.phone,
+              email: customerUser.email
+            };
+          }
+        }
+
+        // Get messages
+        const messages = await storage.getJobMessages(job.id);
+
+        res.json({
+          job,
+          customer,
+          messages
+        });
+      } catch (error) {
+        console.error('Get active job error:', error);
+        res.status(500).json({ message: 'Failed to get active job' });
+      }
+    }
+  );
+
+  // Update job status
+  app.patch('/api/jobs/:id/status',
+    requireAuth,
+    validateRequest(z.object({
+      status: z.enum(jobStatusEnum.enumValues)
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { status } = req.body;
+        const job = await storage.getJob(req.params.id);
+
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        // Check permissions
+        if (req.session.role === 'contractor' && job.contractorId !== req.session.userId) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+
+        // Update job status
+        await storage.updateJob(req.params.id, {
+          status,
+          [`${status.toLowerCase().replace('_', '')}At`]: new Date()
+        });
+
+        // Record status change
+        await storage.recordJobStatusChange({
+          jobId: req.params.id,
+          fromStatus: job.status,
+          toStatus: status,
+          changedBy: req.session.userId
+        });
+
+        res.json({ message: 'Status updated successfully' });
+      } catch (error) {
+        console.error('Update job status error:', error);
+        res.status(500).json({ message: 'Failed to update status' });
+      }
+    }
+  );
+
+  // Send job message
+  app.post('/api/jobs/:id/messages',
+    requireAuth,
+    validateRequest(z.object({
+      message: z.string().min(1).max(1000)
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const job = await storage.getJob(req.params.id);
+
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        // Check permissions
+        const isCustomer = job.customerId === req.session.userId;
+        const isContractor = job.contractorId === req.session.userId;
+
+        if (!isCustomer && !isContractor) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+
+        // Create message
+        const message = await storage.createJobMessage({
+          jobId: req.params.id,
+          senderId: req.session.userId!,
+          message: req.body.message,
+          isSystemMessage: false
+        });
+
+        res.status(201).json({ message });
+      } catch (error) {
+        console.error('Send message error:', error);
+        res.status(500).json({ message: 'Failed to send message' });
+      }
+    }
+  );
+
+  // Complete job
+  app.post('/api/jobs/:id/complete',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const job = await storage.getJob(req.params.id);
+
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        if (job.contractorId !== req.session.userId) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+
+        if (job.status !== 'on_site') {
+          return res.status(400).json({ message: 'Job must be on site to complete' });
+        }
+
+        // Update job
+        await storage.updateJob(req.params.id, {
+          status: 'completed',
+          completedAt: new Date(),
+          completionNotes: req.body.completionNotes,
+          finalPrice: req.body.finalPrice || job.estimatedPrice
+        });
+
+        // Record status change
+        await storage.recordJobStatusChange({
+          jobId: req.params.id,
+          fromStatus: job.status,
+          toStatus: 'completed',
+          changedBy: req.session.userId,
+          reason: 'Job completed by contractor'
+        });
+
+        res.json({ message: 'Job completed successfully' });
+      } catch (error) {
+        console.error('Complete job error:', error);
+        res.status(500).json({ message: 'Failed to complete job' });
+      }
+    }
+  );
+
   // Update job details
   app.put('/api/jobs/:id',
     requireAuth,
