@@ -26,6 +26,7 @@ import FleetSchedulePM from "@/pages/fleet/schedule-pm";
 import FleetVehicles from "@/pages/fleet/vehicles";
 import FleetAnalytics from "@/pages/fleet/analytics";
 import FleetBatchJobs from "@/pages/fleet/batch-jobs";
+import FleetInvoices from "@/pages/fleet/invoices";
 
 // Admin Pages
 import AdminLogin from "@/pages/admin/login";
@@ -71,6 +72,7 @@ function Router() {
       <Route path="/fleet/vehicles" component={FleetVehicles} />
       <Route path="/fleet/analytics" component={FleetAnalytics} />
       <Route path="/fleet/batch-jobs" component={FleetBatchJobs} />
+      <Route path="/fleet/invoices" component={FleetInvoices} />
       
       {/* Admin Pages - Protected Routes */}
       <Route path="/admin/login" component={AdminLogin} />
