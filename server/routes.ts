@@ -1,6 +1,7 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import { db } from "./db";
@@ -206,8 +207,9 @@ function getPagination(req: Request) {
 export async function registerRoutes(app: Express): Promise<Server> {
   
   // Setup session middleware with PostgreSQL store for production
+  const PgStore = connectPgSimple(session);
   const sessionStore = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL
-    ? new (require('connect-pg-simple')(session))({
+    ? new PgStore({
         conString: process.env.DATABASE_URL,
         tableName: 'user_sessions',
         createTableIfMissing: true,
