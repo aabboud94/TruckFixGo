@@ -26,6 +26,14 @@ import FleetVehicles from "@/pages/fleet/vehicles";
 import FleetAnalytics from "@/pages/fleet/analytics";
 import FleetBatchJobs from "@/pages/fleet/batch-jobs";
 
+// Admin Pages
+import AdminLogin from "@/pages/admin/login";
+import AdminDashboard from "@/pages/admin";
+import AdminSettings from "@/pages/admin/settings";
+import AdminJobs from "@/pages/admin/jobs";
+import AdminContractors from "@/pages/admin/contractors";
+import AdminTemplates from "@/pages/admin/templates";
+
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -57,6 +65,14 @@ function Router() {
       <Route path="/fleet/vehicles" component={FleetVehicles} />
       <Route path="/fleet/analytics" component={FleetAnalytics} />
       <Route path="/fleet/batch-jobs" component={FleetBatchJobs} />
+      
+      {/* Admin Pages - Protected Routes */}
+      <Route path="/admin/login" component={AdminLogin} />
+      <Route path="/admin" component={AdminDashboard} />
+      <Route path="/admin/settings" component={AdminSettings} />
+      <Route path="/admin/jobs" component={AdminJobs} />
+      <Route path="/admin/contractors" component={AdminContractors} />
+      <Route path="/admin/templates" component={AdminTemplates} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />
