@@ -1939,6 +1939,154 @@ export const insertReminderMetricsSchema = createInsertSchema(reminderMetrics).o
 export type InsertReminderMetrics = z.infer<typeof insertReminderMetricsSchema>;
 export type ReminderMetrics = typeof reminderMetrics.$inferSelect;
 
+// ====================
+// SPLIT PAYMENTS
+// ====================
+
+export const payerTypeEnum = pgEnum('payer_type', ['carrier', 'driver', 'fleet', 'insurance', 'other']);
+export const splitPaymentStatusEnum = pgEnum('split_payment_status', ['pending', 'partial', 'completed', 'failed', 'cancelled']);
+export const paymentSplitStatusEnum = pgEnum('payment_split_status', ['pending', 'paid', 'failed', 'refunded', 'cancelled']);
+
+// Split payments master table
+export const splitPayments = pgTable("split_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Job reference
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  
+  // Payment details
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default('USD'),
+  
+  // Split configuration (JSON)
+  splitConfiguration: jsonb("split_configuration").notNull(), // Template or custom split rules
+  
+  // Status tracking
+  status: splitPaymentStatusEnum("status").notNull().default('pending'),
+  completedAt: timestamp("completed_at"),
+  
+  // Template reference (if using a template)
+  templateId: varchar("template_id").references(() => splitPaymentTemplates.id),
+  
+  // Metadata
+  notes: text("notes"),
+  metadata: jsonb("metadata"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  jobIdx: index("idx_split_payments_job").on(table.jobId),
+  statusIdx: index("idx_split_payments_status").on(table.status),
+  createdIdx: index("idx_split_payments_created").on(table.createdAt)
+}));
+
+// Individual payment splits
+export const paymentSplits = pgTable("payment_splits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Split payment reference
+  splitPaymentId: varchar("split_payment_id").notNull().references(() => splitPayments.id),
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  
+  // Payer information
+  payerId: varchar("payer_id"), // User ID if registered
+  payerType: payerTypeEnum("payer_type").notNull(),
+  payerName: text("payer_name").notNull(),
+  payerEmail: text("payer_email"),
+  payerPhone: varchar("payer_phone", { length: 20 }),
+  
+  // Amount details
+  amountAssigned: decimal("amount_assigned", { precision: 10, scale: 2 }).notNull(),
+  amountPaid: decimal("amount_paid", { precision: 10, scale: 2 }).notNull().default('0'),
+  currency: varchar("currency", { length: 3 }).notNull().default('USD'),
+  
+  // Payment method
+  paymentMethod: paymentMethodTypeEnum("payment_method"),
+  paymentMethodId: varchar("payment_method_id").references(() => paymentMethods.id),
+  
+  // Transaction reference
+  transactionId: varchar("transaction_id").references(() => transactions.id),
+  
+  // Payment link details
+  paymentToken: varchar("payment_token", { length: 64 }).unique(),
+  paymentLinkUrl: text("payment_link_url"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  
+  // Status tracking
+  status: paymentSplitStatusEnum("status").notNull().default('pending'),
+  paidAt: timestamp("paid_at"),
+  failedAt: timestamp("failed_at"),
+  failureReason: text("failure_reason"),
+  
+  // Reminders
+  remindersSent: integer("reminders_sent").notNull().default(0),
+  lastReminderAt: timestamp("last_reminder_at"),
+  nextReminderAt: timestamp("next_reminder_at"),
+  
+  // Metadata
+  description: text("description"), // What this payment covers (e.g., "Callout Fee", "Labor + Parts")
+  metadata: jsonb("metadata"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  splitPaymentIdx: index("idx_payment_splits_split_payment").on(table.splitPaymentId),
+  jobIdx: index("idx_payment_splits_job").on(table.jobId),
+  payerIdx: index("idx_payment_splits_payer").on(table.payerId),
+  statusIdx: index("idx_payment_splits_status").on(table.status),
+  tokenIdx: uniqueIndex("idx_payment_splits_token").on(table.paymentToken),
+  createdIdx: index("idx_payment_splits_created").on(table.createdAt)
+}));
+
+// Split payment templates
+export const splitPaymentTemplates = pgTable("split_payment_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Template details
+  name: text("name").notNull(),
+  description: text("description"),
+  
+  // Split configuration
+  splitRules: jsonb("split_rules").notNull(), // Array of split rules
+  /* Example split_rules structure:
+  [
+    {
+      payerType: "carrier",
+      description: "Callout Fee",
+      amount: 150, // Fixed amount
+      percentage: null
+    },
+    {
+      payerType: "driver",
+      description: "Labor + Parts",
+      amount: null,
+      percentage: null, // Remaining balance
+      isRemainder: true
+    }
+  ]
+  */
+  
+  // Applicable service types
+  serviceTypeIds: text("service_type_ids").array(), // Array of service type IDs this template applies to
+  
+  // Conditions
+  conditions: jsonb("conditions"), // When this template should be suggested
+  
+  // Priority for auto-selection
+  priority: integer("priority").notNull().default(0),
+  
+  // Status
+  isActive: boolean("is_active").notNull().default(true),
+  isDefault: boolean("is_default").notNull().default(false),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  activeIdx: index("idx_split_payment_templates_active").on(table.isActive),
+  defaultIdx: index("idx_split_payment_templates_default").on(table.isDefault),
+  priorityIdx: index("idx_split_payment_templates_priority").on(table.priority)
+}));
+
 // Billing subscription schemas and types
 export const insertBillingSubscriptionSchema = createInsertSchema(billingSubscriptions).omit({
   id: true,
@@ -1963,3 +2111,28 @@ export const insertBillingUsageTrackingSchema = createInsertSchema(billingUsageT
 });
 export type InsertBillingUsageTracking = z.infer<typeof insertBillingUsageTrackingSchema>;
 export type BillingUsageTracking = typeof billingUsageTracking.$inferSelect;
+
+// Split payment schemas and types
+export const insertSplitPaymentSchema = createInsertSchema(splitPayments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertSplitPayment = z.infer<typeof insertSplitPaymentSchema>;
+export type SplitPayment = typeof splitPayments.$inferSelect;
+
+export const insertPaymentSplitSchema = createInsertSchema(paymentSplits).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertPaymentSplit = z.infer<typeof insertPaymentSplitSchema>;
+export type PaymentSplit = typeof paymentSplits.$inferSelect;
+
+export const insertSplitPaymentTemplateSchema = createInsertSchema(splitPaymentTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertSplitPaymentTemplate = z.infer<typeof insertSplitPaymentTemplateSchema>;
+export type SplitPaymentTemplate = typeof splitPaymentTemplates.$inferSelect;
