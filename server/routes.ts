@@ -5,6 +5,8 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { storage } from "./storage";
 import aiService from "./ai-service";
+import { reminderService } from "./reminder-service";
+import { reminderScheduler } from "./reminder-scheduler";
 import { 
   insertUserSchema,
   insertDriverProfileSchema,
@@ -23,8 +25,12 @@ import {
   insertRefundSchema,
   insertAdminSettingSchema,
   insertEmailTemplateSchema,
+  insertSmsTemplateSchema,
   insertIntegrationsConfigSchema,
   insertPricingRuleSchema,
+  insertCustomerPreferencesSchema,
+  insertReminderSchema,
+  insertReminderBlacklistSchema,
   insertServiceTypeSchema,
   insertServicePricingSchema,
   insertServiceAreaSchema,
@@ -448,6 +454,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const job = await storage.createJob(jobData);
         
+        // Schedule reminders for scheduled jobs
+        if (job.jobType === 'scheduled' && job.scheduledAt) {
+          try {
+            await reminderService.scheduleJobReminders(job);
+          } catch (error) {
+            console.error('Failed to schedule reminders:', error);
+            // Don't fail the job creation if reminder scheduling fails
+          }
+        }
+        
         res.status(201).json({
           message: 'Job created successfully',
           job
@@ -671,6 +687,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           toStatus: status,
           changedBy: req.session.userId
         });
+
+        // Handle reminder updates based on status
+        if (status === 'cancelled') {
+          // Cancel all pending reminders for this job
+          await reminderScheduler.cancelJobReminders(req.params.id);
+        } else if (status === 'completed') {
+          // Send completion confirmation
+          await reminderScheduler.sendCompletionConfirmation(req.params.id);
+        }
 
         res.json({ message: 'Status updated successfully' });
       } catch (error) {
@@ -3778,6 +3803,306 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(500).json({ 
           message: 'Failed to generate repair recommendations' 
         });
+      }
+    }
+  );
+
+  // ==================== REMINDER SYSTEM ROUTES ====================
+
+  // Get customer communication preferences
+  app.get('/api/customer/preferences',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        let preferences = await storage.getCustomerPreferences(req.session.userId!);
+        
+        // Create default preferences if none exist
+        if (!preferences) {
+          preferences = await storage.createCustomerPreferences({
+            userId: req.session.userId!,
+            communicationChannel: 'both',
+            reminderOptIn: true,
+            marketingOptIn: false,
+            language: 'en',
+            timezone: 'America/New_York',
+            maxDailyMessages: 10
+          });
+        }
+        
+        res.json(preferences);
+      } catch (error: any) {
+        console.error('Get preferences error:', error);
+        res.status(500).json({ message: 'Failed to get preferences' });
+      }
+    }
+  );
+
+  // Update customer communication preferences
+  app.put('/api/customer/preferences',
+    requireAuth,
+    validateRequest(insertCustomerPreferencesSchema.partial()),
+    async (req: Request, res: Response) => {
+      try {
+        const preferences = await storage.updateCustomerPreferences(
+          req.session.userId!,
+          req.body
+        );
+        
+        res.json(preferences);
+      } catch (error: any) {
+        console.error('Update preferences error:', error);
+        res.status(500).json({ message: 'Failed to update preferences' });
+      }
+    }
+  );
+
+  // Unsubscribe from all reminders
+  app.post('/api/customer/unsubscribe/:userId',
+    async (req: Request, res: Response) => {
+      try {
+        const { userId } = req.params;
+        
+        await storage.updateCustomerPreferences(userId, {
+          reminderOptIn: false,
+          marketingOptIn: false
+        });
+        
+        res.json({ message: 'Successfully unsubscribed from all communications' });
+      } catch (error: any) {
+        console.error('Unsubscribe error:', error);
+        res.status(500).json({ message: 'Failed to unsubscribe' });
+      }
+    }
+  );
+
+  // Get all reminder templates (admin)
+  app.get('/api/admin/reminders/templates',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const [emailTemplates, smsTemplates] = await Promise.all([
+          storage.getAllEmailTemplates(),
+          storage.getAllSmsTemplates()
+        ]);
+        
+        res.json({
+          emailTemplates,
+          smsTemplates
+        });
+      } catch (error: any) {
+        console.error('Get templates error:', error);
+        res.status(500).json({ message: 'Failed to get templates' });
+      }
+    }
+  );
+
+  // Create or update email template (admin)
+  app.post('/api/admin/reminders/templates/email',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(insertEmailTemplateSchema),
+    async (req: Request, res: Response) => {
+      try {
+        const existing = await storage.getEmailTemplate(req.body.code);
+        
+        let template;
+        if (existing) {
+          template = await storage.updateEmailTemplate(existing.id, req.body);
+        } else {
+          template = await storage.createEmailTemplate(req.body);
+        }
+        
+        res.json(template);
+      } catch (error: any) {
+        console.error('Save email template error:', error);
+        res.status(500).json({ message: 'Failed to save email template' });
+      }
+    }
+  );
+
+  // Create or update SMS template (admin)
+  app.post('/api/admin/reminders/templates/sms',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(insertSmsTemplateSchema),
+    async (req: Request, res: Response) => {
+      try {
+        const existing = await storage.getSmsTemplate(req.body.code);
+        
+        let template;
+        if (existing) {
+          template = await storage.updateSmsTemplate(existing.id, req.body);
+        } else {
+          template = await storage.createSmsTemplate(req.body);
+        }
+        
+        res.json(template);
+      } catch (error: any) {
+        console.error('Save SMS template error:', error);
+        res.status(500).json({ message: 'Failed to save SMS template' });
+      }
+    }
+  );
+
+  // Get job reminders (admin)
+  app.get('/api/admin/reminders/job/:jobId',
+    requireAuth,
+    requireRole('admin', 'contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const { jobId } = req.params;
+        const reminders = await storage.getUpcomingReminders(jobId);
+        
+        res.json(reminders);
+      } catch (error: any) {
+        console.error('Get job reminders error:', error);
+        res.status(500).json({ message: 'Failed to get job reminders' });
+      }
+    }
+  );
+
+  // Send test reminder (admin)
+  app.post('/api/admin/reminders/test',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      type: z.enum(['email', 'sms', 'both']),
+      recipient: z.string(),
+      template: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { type, recipient, template } = req.body;
+        
+        const result = await reminderService.sendTestReminder(type, recipient, template);
+        
+        if (result.success) {
+          res.json({ message: 'Test reminder sent successfully' });
+        } else {
+          res.status(400).json({ 
+            message: 'Failed to send test reminder', 
+            error: result.error 
+          });
+        }
+      } catch (error: any) {
+        console.error('Send test reminder error:', error);
+        res.status(500).json({ message: 'Failed to send test reminder' });
+      }
+    }
+  );
+
+  // Get blacklist (admin)
+  app.get('/api/admin/reminders/blacklist',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const type = req.query.type as 'email' | 'phone' | undefined;
+        const blacklist = await storage.getBlacklist(type);
+        
+        res.json(blacklist);
+      } catch (error: any) {
+        console.error('Get blacklist error:', error);
+        res.status(500).json({ message: 'Failed to get blacklist' });
+      }
+    }
+  );
+
+  // Add to blacklist (admin)
+  app.post('/api/admin/reminders/blacklist',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(insertReminderBlacklistSchema),
+    async (req: Request, res: Response) => {
+      try {
+        const entry = await storage.addToBlacklist(req.body);
+        res.json(entry);
+      } catch (error: any) {
+        console.error('Add to blacklist error:', error);
+        res.status(500).json({ message: 'Failed to add to blacklist' });
+      }
+    }
+  );
+
+  // Remove from blacklist (admin)
+  app.delete('/api/admin/reminders/blacklist/:value',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { value } = req.params;
+        await storage.removeFromBlacklist(value);
+        
+        res.json({ message: 'Removed from blacklist' });
+      } catch (error: any) {
+        console.error('Remove from blacklist error:', error);
+        res.status(500).json({ message: 'Failed to remove from blacklist' });
+      }
+    }
+  );
+
+  // Get reminder metrics (admin)
+  app.get('/api/admin/reminders/metrics',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const fromDate = req.query.fromDate 
+          ? new Date(req.query.fromDate as string)
+          : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        
+        const toDate = req.query.toDate
+          ? new Date(req.query.toDate as string)
+          : new Date();
+        
+        const channel = req.query.channel as 'email' | 'sms' | 'both' | undefined;
+        
+        const metrics = await storage.getReminderMetrics(fromDate, toDate, channel);
+        
+        res.json(metrics);
+      } catch (error: any) {
+        console.error('Get reminder metrics error:', error);
+        res.status(500).json({ message: 'Failed to get reminder metrics' });
+      }
+    }
+  );
+
+  // Get scheduler status (admin)
+  app.get('/api/admin/reminders/scheduler/status',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const status = reminderScheduler.getStatus();
+        res.json(status);
+      } catch (error: any) {
+        console.error('Get scheduler status error:', error);
+        res.status(500).json({ message: 'Failed to get scheduler status' });
+      }
+    }
+  );
+
+  // Start/stop scheduler (admin)
+  app.post('/api/admin/reminders/scheduler/:action',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { action } = req.params;
+        
+        if (action === 'start') {
+          reminderScheduler.start();
+          res.json({ message: 'Reminder scheduler started' });
+        } else if (action === 'stop') {
+          reminderScheduler.stop();
+          res.json({ message: 'Reminder scheduler stopped' });
+        } else {
+          res.status(400).json({ message: 'Invalid action' });
+        }
+      } catch (error: any) {
+        console.error('Scheduler control error:', error);
+        res.status(500).json({ message: 'Failed to control scheduler' });
       }
     }
   );

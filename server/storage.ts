@@ -26,7 +26,13 @@ import {
   refunds,
   adminSettings,
   emailTemplates,
+  smsTemplates,
   integrationsConfig,
+  customerPreferences,
+  reminders,
+  reminderLog,
+  reminderBlacklist,
+  reminderMetrics,
   type User,
   type InsertUser,
   type Session,
@@ -81,9 +87,24 @@ import {
   type InsertAdminSetting,
   type EmailTemplate,
   type InsertEmailTemplate,
+  type SmsTemplate,
+  type InsertSmsTemplate,
   type IntegrationsConfig,
   type InsertIntegrationsConfig,
+  type CustomerPreferences,
+  type InsertCustomerPreferences,
+  type Reminder,
+  type InsertReminder,
+  type ReminderLog,
+  type InsertReminderLog,
+  type ReminderBlacklist,
+  type InsertReminderBlacklist,
+  type ReminderMetrics,
+  type InsertReminderMetrics,
   performanceTierEnum,
+  reminderStatusEnum,
+  reminderTypeEnum,
+  reminderTimingEnum,
   fleetPricingTierEnum,
   jobTypeEnum,
   jobStatusEnum,
@@ -1833,6 +1854,341 @@ export class PostgreSQLStorage implements IStorage {
       median: result[0]?.median || 0,
       percentile95: result[0]?.percentile95 || 0
     };
+  }
+
+  // ==================== REMINDER SYSTEM ====================
+
+  async getIntegrationsConfig(type: 'email' | 'sms'): Promise<any | null> {
+    // This method returns integration configurations for email/SMS services
+    // In production, this would fetch from a secure configuration store
+    
+    if (type === 'email') {
+      // Check for Office 365/Outlook configuration in environment variables
+      const emailUser = process.env.OUTLOOK_EMAIL;
+      const emailPass = process.env.OUTLOOK_PASSWORD;
+      
+      if (emailUser && emailPass) {
+        return {
+          provider: 'outlook',
+          host: 'smtp-mail.outlook.com',
+          port: 587,
+          secure: false,
+          auth: {
+            user: emailUser,
+            pass: emailPass
+          },
+          from: emailUser
+        };
+      }
+    } else if (type === 'sms') {
+      // Check for Twilio configuration in environment variables
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      const phoneNumber = process.env.TWILIO_PHONE_NUMBER;
+      
+      if (accountSid && authToken && phoneNumber) {
+        return {
+          provider: 'twilio',
+          accountSid,
+          authToken,
+          phoneNumber
+        };
+      }
+    }
+    
+    return null;
+  }
+
+  async getCustomerPreferences(userId: string): Promise<CustomerPreferences | null> {
+    const result = await db.select().from(customerPreferences)
+      .where(eq(customerPreferences.userId, userId));
+    return result[0] || null;
+  }
+
+  async createCustomerPreferences(data: InsertCustomerPreferences): Promise<CustomerPreferences> {
+    const unsubscribeToken = randomUUID();
+    const result = await db.insert(customerPreferences)
+      .values({ ...data, unsubscribeToken })
+      .returning();
+    return result[0];
+  }
+
+  async updateCustomerPreferences(userId: string, data: Partial<InsertCustomerPreferences>): Promise<CustomerPreferences | null> {
+    const result = await db.update(customerPreferences)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(customerPreferences.userId, userId))
+      .returning();
+    return result[0] || null;
+  }
+
+  async createReminder(data: InsertReminder): Promise<Reminder> {
+    const result = await db.insert(reminders).values(data).returning();
+    return result[0];
+  }
+
+  async getReminder(id: string): Promise<Reminder | null> {
+    const result = await db.select().from(reminders)
+      .where(eq(reminders.id, id));
+    return result[0] || null;
+  }
+
+  async updateReminderStatus(id: string, status: typeof reminderStatusEnum.enumValues[number], error?: string): Promise<Reminder | null> {
+    const updateData: any = {
+      status,
+      updatedAt: new Date()
+    };
+    
+    if (status === 'sent') {
+      updateData.actualSendTime = new Date();
+    }
+    
+    if (error) {
+      updateData.lastError = error;
+      updateData.retryCount = sql`${reminders.retryCount} + 1`;
+    }
+    
+    const result = await db.update(reminders)
+      .set(updateData)
+      .where(eq(reminders.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async getPendingReminders(limit: number = 100): Promise<Reminder[]> {
+    const now = new Date();
+    return await db.select().from(reminders)
+      .where(
+        and(
+          inArray(reminders.status, ['pending', 'queued']),
+          lte(reminders.scheduledSendTime, now),
+          lt(reminders.retryCount, reminders.maxRetries)
+        )
+      )
+      .orderBy(asc(reminders.scheduledSendTime))
+      .limit(limit);
+  }
+
+  async getUpcomingReminders(jobId: string): Promise<Reminder[]> {
+    return await db.select().from(reminders)
+      .where(
+        and(
+          eq(reminders.jobId, jobId),
+          inArray(reminders.status, ['pending', 'queued'])
+        )
+      )
+      .orderBy(asc(reminders.scheduledSendTime));
+  }
+
+  async cancelJobReminders(jobId: string): Promise<void> {
+    await db.update(reminders)
+      .set({ 
+        status: 'cancelled',
+        updatedAt: new Date()
+      })
+      .where(
+        and(
+          eq(reminders.jobId, jobId),
+          inArray(reminders.status, ['pending', 'queued'])
+        )
+      );
+  }
+
+  async createReminderLog(data: InsertReminderLog): Promise<ReminderLog> {
+    const result = await db.insert(reminderLog).values(data).returning();
+    return result[0];
+  }
+
+  async updateReminderLogTracking(id: string, event: 'opened' | 'clicked' | 'unsubscribed' | 'bounced'): Promise<void> {
+    const updateData: any = {};
+    
+    switch (event) {
+      case 'opened':
+        updateData.opened = true;
+        updateData.openedAt = new Date();
+        break;
+      case 'clicked':
+        updateData.clicked = true;
+        updateData.clickedAt = new Date();
+        break;
+      case 'unsubscribed':
+        updateData.unsubscribed = true;
+        updateData.unsubscribedAt = new Date();
+        break;
+      case 'bounced':
+        updateData.bounced = true;
+        updateData.bouncedAt = new Date();
+        break;
+    }
+    
+    await db.update(reminderLog)
+      .set(updateData)
+      .where(eq(reminderLog.id, id));
+  }
+
+  async isBlacklisted(value: string, type: 'email' | 'phone'): Promise<boolean> {
+    const result = await db.select().from(reminderBlacklist)
+      .where(
+        and(
+          eq(reminderBlacklist.value, value),
+          eq(reminderBlacklist.type, type),
+          eq(reminderBlacklist.isActive, true),
+          or(
+            isNull(reminderBlacklist.expiresAt),
+            gt(reminderBlacklist.expiresAt, new Date())
+          )
+        )
+      )
+      .limit(1);
+    return result.length > 0;
+  }
+
+  async addToBlacklist(data: InsertReminderBlacklist): Promise<ReminderBlacklist> {
+    const result = await db.insert(reminderBlacklist).values(data).returning();
+    return result[0];
+  }
+
+  async removeFromBlacklist(value: string): Promise<void> {
+    await db.update(reminderBlacklist)
+      .set({ 
+        isActive: false,
+        updatedAt: new Date()
+      })
+      .where(eq(reminderBlacklist.value, value));
+  }
+
+  async getBlacklist(type?: 'email' | 'phone'): Promise<ReminderBlacklist[]> {
+    const conditions = [eq(reminderBlacklist.isActive, true)];
+    if (type) {
+      conditions.push(eq(reminderBlacklist.type, type));
+    }
+    
+    return await db.select().from(reminderBlacklist)
+      .where(and(...conditions))
+      .orderBy(desc(reminderBlacklist.createdAt));
+  }
+
+  async recordReminderMetrics(date: Date, metrics: Partial<InsertReminderMetrics>): Promise<void> {
+    const dateOnly = new Date(date);
+    dateOnly.setHours(0, 0, 0, 0);
+    
+    const existing = await db.select().from(reminderMetrics)
+      .where(
+        and(
+          eq(reminderMetrics.date, dateOnly),
+          eq(reminderMetrics.channel, metrics.channel!),
+          eq(reminderMetrics.messageType, metrics.messageType!)
+        )
+      )
+      .limit(1);
+    
+    if (existing.length > 0) {
+      // Update existing metrics
+      const current = existing[0];
+      await db.update(reminderMetrics)
+        .set({
+          totalSent: (current.totalSent || 0) + (metrics.totalSent || 0),
+          totalDelivered: (current.totalDelivered || 0) + (metrics.totalDelivered || 0),
+          totalFailed: (current.totalFailed || 0) + (metrics.totalFailed || 0),
+          totalOpened: (current.totalOpened || 0) + (metrics.totalOpened || 0),
+          totalClicked: (current.totalClicked || 0) + (metrics.totalClicked || 0),
+          totalUnsubscribed: (current.totalUnsubscribed || 0) + (metrics.totalUnsubscribed || 0),
+          totalBounced: (current.totalBounced || 0) + (metrics.totalBounced || 0),
+          totalCost: sql`${reminderMetrics.totalCost} + ${metrics.totalCost || 0}`
+        })
+        .where(eq(reminderMetrics.id, current.id));
+    } else {
+      // Create new metrics entry
+      await db.insert(reminderMetrics).values({
+        ...metrics,
+        date: dateOnly
+      } as InsertReminderMetrics);
+    }
+  }
+
+  async getReminderMetrics(fromDate: Date, toDate: Date, channel?: typeof reminderTypeEnum.enumValues[number]): Promise<ReminderMetrics[]> {
+    const conditions = [
+      gte(reminderMetrics.date, fromDate),
+      lte(reminderMetrics.date, toDate)
+    ];
+    
+    if (channel) {
+      conditions.push(eq(reminderMetrics.channel, channel as any));
+    }
+    
+    return await db.select().from(reminderMetrics)
+      .where(and(...conditions))
+      .orderBy(desc(reminderMetrics.date));
+  }
+
+  async getSmsTemplate(code: string): Promise<SmsTemplate | null> {
+    const result = await db.select().from(smsTemplates)
+      .where(
+        and(
+          eq(smsTemplates.code, code),
+          eq(smsTemplates.isActive, true)
+        )
+      );
+    return result[0] || null;
+  }
+
+  async getAllSmsTemplates(): Promise<SmsTemplate[]> {
+    return await db.select().from(smsTemplates)
+      .where(eq(smsTemplates.isActive, true))
+      .orderBy(asc(smsTemplates.name));
+  }
+
+  async createSmsTemplate(data: InsertSmsTemplate): Promise<SmsTemplate> {
+    const result = await db.insert(smsTemplates).values(data).returning();
+    return result[0];
+  }
+
+  async updateSmsTemplate(id: string, data: Partial<InsertSmsTemplate>): Promise<SmsTemplate | null> {
+    const result = await db.update(smsTemplates)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(smsTemplates.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async getJobsScheduledBetween(startTime: Date, endTime: Date): Promise<Job[]> {
+    return await db.select().from(jobs)
+      .where(
+        and(
+          gte(jobs.scheduledAt, startTime),
+          lte(jobs.scheduledAt, endTime),
+          eq(jobs.status, 'assigned')
+        )
+      )
+      .orderBy(asc(jobs.scheduledAt));
+  }
+
+  async getFailedReminders(limit: number = 20): Promise<Reminder[]> {
+    return await db.select().from(reminders)
+      .where(
+        and(
+          eq(reminders.status, 'failed'),
+          lt(reminders.retryCount, reminders.maxRetries)
+        )
+      )
+      .orderBy(asc(reminders.scheduledSendTime))
+      .limit(limit);
+  }
+
+  async deleteOldReminderLogs(beforeDate: Date): Promise<number> {
+    const result = await db.delete(reminderLog)
+      .where(lt(reminderLog.createdAt, beforeDate));
+    return result.count || 0;
+  }
+
+  async getReminderLogsByDate(startDate: Date, endDate: Date): Promise<ReminderLog[]> {
+    return await db.select().from(reminderLog)
+      .where(
+        and(
+          gte(reminderLog.createdAt, startDate),
+          lt(reminderLog.createdAt, endDate)
+        )
+      )
+      .orderBy(asc(reminderLog.createdAt));
   }
 }
 

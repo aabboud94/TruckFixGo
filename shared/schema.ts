@@ -30,6 +30,10 @@ export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'processin
 export const refundStatusEnum = pgEnum('refund_status', ['requested', 'approved', 'rejected', 'processed']);
 export const documentTypeEnum = pgEnum('document_type', ['insurance', 'certification', 'license', 'tax_id', 'compliance']);
 export const serviceAreaSurchargeTypeEnum = pgEnum('service_area_surcharge_type', ['distance', 'zone', 'time_based']);
+export const reminderTypeEnum = pgEnum('reminder_type', ['sms', 'email', 'both']);
+export const reminderStatusEnum = pgEnum('reminder_status', ['pending', 'queued', 'sent', 'delivered', 'failed', 'cancelled']);
+export const reminderTimingEnum = pgEnum('reminder_timing', ['24hr_before', '12hr_before', '1hr_before', 'on_completion', 'invoice_delivery', 'payment_reminder']);
+export const communicationChannelEnum = pgEnum('communication_channel', ['sms', 'email', 'both', 'none']);
 
 // ====================
 // USERS & AUTH
@@ -704,6 +708,130 @@ export const revenueReports = pgTable("revenue_reports", {
 }));
 
 // ====================
+// REMINDER SYSTEM
+// ====================
+
+export const customerPreferences = pgTable("customer_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  communicationChannel: communicationChannelEnum("communication_channel").notNull().default('both'),
+  reminderOptIn: boolean("reminder_opt_in").notNull().default(true),
+  marketingOptIn: boolean("marketing_opt_in").notNull().default(true),
+  doNotDisturbStart: varchar("do_not_disturb_start", { length: 5 }),
+  doNotDisturbEnd: varchar("do_not_disturb_end", { length: 5 }),
+  language: varchar("language", { length: 5 }).notNull().default('en'),
+  timezone: varchar("timezone", { length: 50 }).notNull().default('America/New_York'),
+  maxDailyMessages: integer("max_daily_messages").notNull().default(10),
+  unsubscribeToken: varchar("unsubscribe_token").unique(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  userIdx: uniqueIndex("idx_customer_preferences_user").on(table.userId),
+  unsubscribeTokenIdx: index("idx_customer_preferences_unsubscribe").on(table.unsubscribeToken)
+}));
+
+export const reminders = pgTable("reminders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  recipientId: varchar("recipient_id").notNull().references(() => users.id),
+  reminderType: reminderTypeEnum("reminder_type").notNull(),
+  reminderTiming: reminderTimingEnum("reminder_timing").notNull(),
+  scheduledSendTime: timestamp("scheduled_send_time").notNull(),
+  actualSendTime: timestamp("actual_send_time"),
+  status: reminderStatusEnum("status").notNull().default('pending'),
+  recipientEmail: text("recipient_email"),
+  recipientPhone: varchar("recipient_phone", { length: 20 }),
+  messageSubject: text("message_subject"),
+  messageContent: text("message_content"),
+  messageHtml: text("message_html"),
+  templateCode: varchar("template_code", { length: 50 }),
+  retryCount: integer("retry_count").notNull().default(0),
+  maxRetries: integer("max_retries").notNull().default(3),
+  lastError: text("last_error"),
+  deliveryInfo: jsonb("delivery_info"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  jobIdx: index("idx_reminders_job").on(table.jobId),
+  recipientIdx: index("idx_reminders_recipient").on(table.recipientId),
+  statusIdx: index("idx_reminders_status").on(table.status),
+  scheduledTimeIdx: index("idx_reminders_scheduled_time").on(table.scheduledSendTime),
+  typeTimingIdx: index("idx_reminders_type_timing").on(table.reminderType, table.reminderTiming)
+}));
+
+export const reminderLog = pgTable("reminder_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reminderId: varchar("reminder_id").references(() => reminders.id),
+  jobId: varchar("job_id").references(() => jobs.id),
+  recipientId: varchar("recipient_id").references(() => users.id),
+  channel: communicationChannelEnum("channel").notNull(),
+  recipient: text("recipient").notNull(),
+  messageType: varchar("message_type", { length: 50 }).notNull(),
+  subject: text("subject"),
+  content: text("content"),
+  status: varchar("status", { length: 20 }).notNull(),
+  providerId: varchar("provider_id"),
+  providerResponse: jsonb("provider_response"),
+  cost: decimal("cost", { precision: 8, scale: 4 }),
+  opened: boolean("opened").notNull().default(false),
+  openedAt: timestamp("opened_at"),
+  clicked: boolean("clicked").notNull().default(false),
+  clickedAt: timestamp("clicked_at"),
+  unsubscribed: boolean("unsubscribed").notNull().default(false),
+  unsubscribedAt: timestamp("unsubscribed_at"),
+  bounced: boolean("bounced").notNull().default(false),
+  bouncedAt: timestamp("bounced_at"),
+  errorCode: varchar("error_code", { length: 50 }),
+  errorMessage: text("error_message"),
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  reminderIdx: index("idx_reminder_log_reminder").on(table.reminderId),
+  jobIdx: index("idx_reminder_log_job").on(table.jobId),
+  recipientIdx: index("idx_reminder_log_recipient").on(table.recipientId),
+  statusIdx: index("idx_reminder_log_status").on(table.status),
+  sentAtIdx: index("idx_reminder_log_sent_at").on(table.sentAt)
+}));
+
+export const reminderBlacklist = pgTable("reminder_blacklist", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  value: text("value").notNull().unique(),
+  type: varchar("type", { length: 20 }).notNull(),
+  reason: text("reason"),
+  addedBy: varchar("added_by").references(() => users.id),
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  valueIdx: uniqueIndex("idx_reminder_blacklist_value").on(table.value),
+  typeIdx: index("idx_reminder_blacklist_type").on(table.type),
+  activeIdx: index("idx_reminder_blacklist_active").on(table.isActive)
+}));
+
+export const reminderMetrics = pgTable("reminder_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: timestamp("date").notNull(),
+  channel: communicationChannelEnum("channel").notNull(),
+  messageType: varchar("message_type", { length: 50 }).notNull(),
+  totalSent: integer("total_sent").notNull().default(0),
+  totalDelivered: integer("total_delivered").notNull().default(0),
+  totalFailed: integer("total_failed").notNull().default(0),
+  totalOpened: integer("total_opened").notNull().default(0),
+  totalClicked: integer("total_clicked").notNull().default(0),
+  totalUnsubscribed: integer("total_unsubscribed").notNull().default(0),
+  totalBounced: integer("total_bounced").notNull().default(0),
+  totalCost: decimal("total_cost", { precision: 10, scale: 2 }).notNull().default('0'),
+  averageDeliveryTime: integer("average_delivery_time"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  dateChannelIdx: index("idx_reminder_metrics_date_channel").on(table.date, table.channel),
+  messageTypeIdx: index("idx_reminder_metrics_type").on(table.messageType)
+}));
+
+// ====================
 // INSERT SCHEMAS & TYPES
 // ====================
 
@@ -989,3 +1117,54 @@ export const insertRevenueReportSchema = createInsertSchema(revenueReports).omit
 });
 export type InsertRevenueReport = z.infer<typeof insertRevenueReportSchema>;
 export type RevenueReport = typeof revenueReports.$inferSelect;
+
+// Reminder System
+export const insertCustomerPreferencesSchema = createInsertSchema(customerPreferences).omit({
+  id: true,
+  unsubscribeToken: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertCustomerPreferences = z.infer<typeof insertCustomerPreferencesSchema>;
+export type CustomerPreferences = typeof customerPreferences.$inferSelect;
+
+export const insertReminderSchema = createInsertSchema(reminders).omit({
+  id: true,
+  status: true,
+  actualSendTime: true,
+  retryCount: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertReminder = z.infer<typeof insertReminderSchema>;
+export type Reminder = typeof reminders.$inferSelect;
+
+export const insertReminderLogSchema = createInsertSchema(reminderLog).omit({
+  id: true,
+  opened: true,
+  openedAt: true,
+  clicked: true,
+  clickedAt: true,
+  unsubscribed: true,
+  unsubscribedAt: true,
+  bounced: true,
+  bouncedAt: true,
+  createdAt: true
+});
+export type InsertReminderLog = z.infer<typeof insertReminderLogSchema>;
+export type ReminderLog = typeof reminderLog.$inferSelect;
+
+export const insertReminderBlacklistSchema = createInsertSchema(reminderBlacklist).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertReminderBlacklist = z.infer<typeof insertReminderBlacklistSchema>;
+export type ReminderBlacklist = typeof reminderBlacklist.$inferSelect;
+
+export const insertReminderMetricsSchema = createInsertSchema(reminderMetrics).omit({
+  id: true,
+  createdAt: true
+});
+export type InsertReminderMetrics = z.infer<typeof insertReminderMetricsSchema>;
+export type ReminderMetrics = typeof reminderMetrics.$inferSelect;

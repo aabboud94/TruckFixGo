@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { trackingWSServer } from "./websocket";
+import { reminderScheduler } from "./reminder-scheduler";
 
 const app = express();
 
@@ -73,6 +74,10 @@ app.use((req, res, next) => {
   // It is the only port that is not firewalled.
   // Initialize WebSocket server for real-time tracking
   await trackingWSServer.initialize(server);
+
+  // Start the reminder scheduler
+  reminderScheduler.start();
+  log(`Reminder scheduler started`);
 
   const port = parseInt(process.env.PORT || '5000', 10);
   server.listen({
