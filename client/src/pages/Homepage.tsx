@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,7 @@ import {
 
 export default function Homepage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-background">
@@ -63,7 +65,7 @@ export default function Homepage() {
                 <Phone className="w-4 h-4 mr-2" />
                 Fleet Services
               </Button>
-              <Button variant="destructive" className="hover-elevate" data-testid="button-emergency-repair-header">
+              <Button variant="destructive" className="hover-elevate" onClick={() => navigate("/emergency")} data-testid="button-emergency-repair-header">
                 <AlertCircle className="w-4 h-4 mr-2" />
                 Emergency Repair
               </Button>
@@ -99,7 +101,7 @@ export default function Homepage() {
                   <Phone className="w-4 h-4 mr-2" />
                   Fleet Services
                 </Button>
-                <Button variant="destructive" className="w-full hover-elevate" data-testid="mobile-button-emergency-repair">
+                <Button variant="destructive" className="w-full hover-elevate" onClick={() => navigate("/emergency")} data-testid="mobile-button-emergency-repair">
                   <AlertCircle className="w-4 h-4 mr-2" />
                   Emergency Repair
                 </Button>
@@ -132,6 +134,7 @@ export default function Homepage() {
               size="lg" 
               variant="destructive"
               className="px-8 py-6 text-lg font-semibold hover-elevate w-full sm:w-auto"
+              onClick={() => navigate("/emergency")}
               data-testid="button-hero-emergency"
             >
               <AlertCircle className="w-5 h-5 mr-2" />
@@ -363,6 +366,7 @@ export default function Homepage() {
               size="lg"
               variant="destructive"
               className="px-8 py-6 text-lg font-semibold hover-elevate w-full sm:w-auto"
+              onClick={() => navigate("/emergency")}
               data-testid="button-cta-emergency"
             >
               <AlertCircle className="w-5 h-5 mr-2" />
