@@ -37,6 +37,7 @@ import AdminTemplates from "@/pages/admin/templates";
 
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
+import InstallPrompt from "@/components/install-prompt";
 
 function Router() {
   return (
@@ -92,6 +93,7 @@ function App() {
         <Toaster />
         <Router />
         <AIChatbot />
+        <InstallPrompt />
       </TooltipProvider>
     </QueryClientProvider>
   );

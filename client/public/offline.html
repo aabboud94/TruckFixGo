@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1E3A8A">
+  <title>TruckFixGo - Offline</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+      padding: 48px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      animation: slideUp 0.5s ease-out;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .logo {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      background: #1E3A8A;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .logo::before {
+      content: '🚛';
+      font-size: 40px;
+      position: absolute;
+    }
+
+    .logo::after {
+      content: '🔧';
+      font-size: 20px;
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      background: #F97316;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    h1 {
+      color: #1E3A8A;
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #FEF3C7;
+      color: #92400E;
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 24px;
+    }
+
+    .status-badge::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: #F59E0B;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.5;
+      }
+    }
+
+    .message {
+      color: #64748B;
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+
+    .retry-button {
+      background: #1E3A8A;
+      color: white;
+      border: none;
+      padding: 14px 32px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: inline-block;
+      text-decoration: none;
+      margin-bottom: 24px;
+    }
+
+    .retry-button:hover {
+      background: #1E3A8A;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(30, 58, 138, 0.3);
+    }
+
+    .retry-button:active {
+      transform: translateY(0);
+    }
+
+    .emergency-info {
+      background: #F0F9FF;
+      border: 2px solid #BFDBFE;
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 32px;
+    }
+
+    .emergency-title {
+      color: #1E3A8A;
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    .emergency-contacts {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .contact-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      background: white;
+      border-radius: 8px;
+    }
+
+    .contact-label {
+      color: #64748B;
+      font-size: 14px;
+    }
+
+    .contact-number {
+      color: #1E3A8A;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .features {
+      margin-top: 32px;
+      padding-top: 32px;
+      border-top: 1px solid #E5E7EB;
+    }
+
+    .features-title {
+      color: #94A3B8;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    .feature-list {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      color: #CBD5E1;
+      font-size: 14px;
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .feature-item::before {
+      content: '✓';
+      color: #10B981;
+      font-weight: bold;
+    }
+
+    @media (max-width: 480px) {
+      .container {
+        padding: 32px 20px;
+      }
+
+      h1 {
+        font-size: 28px;
+      }
+
+      .feature-list {
+        flex-direction: column;
+        gap: 12px;
+        align-items: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo"></div>
+    
+    <h1>TruckFixGo</h1>
+    
+    <div class="status-badge">
+      Currently Offline
+    </div>
+    
+    <p class="message">
+      It looks like you're not connected to the internet. Don't worry - we've saved your progress and will sync everything once you're back online.
+    </p>
+    
+    <button class="retry-button" onclick="location.reload()">
+      Try Again
+    </button>
+    
+    <div class="emergency-info">
+      <div class="emergency-title">Emergency Contacts (Available Offline)</div>
+      <div class="emergency-contacts">
+        <div class="contact-item">
+          <span class="contact-label">24/7 Emergency</span>
+          <a href="tel:1-800-FIX-TRUCK" class="contact-number">1-800-FIX-TRUCK</a>
+        </div>
+        <div class="contact-item">
+          <span class="contact-label">Fleet Support</span>
+          <a href="tel:1-888-FLEET-GO" class="contact-number">1-888-FLEET-GO</a>
+        </div>
+        <div class="contact-item">
+          <span class="contact-label">SMS Updates</span>
+          <a href="sms:55555" class="contact-number">Text: 55555</a>
+        </div>
+      </div>
+    </div>
+    
+    <div class="features">
+      <div class="features-title">What you can do offline</div>
+      <div class="feature-list">
+        <div class="feature-item">View cached jobs</div>
+        <div class="feature-item">Access contacts</div>
+        <div class="feature-item">Review history</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Check connection status periodically
+    window.addEventListener('online', function() {
+      console.log('Connection restored!');
+      // Small delay to ensure connection is stable
+      setTimeout(() => {
+        location.reload();
+      }, 1000);
+    });
+
+    // Add retry functionality with connection check
+    document.querySelector('.retry-button').addEventListener('click', function(e) {
+      e.preventDefault();
+      if (navigator.onLine) {
+        location.reload();
+      } else {
+        // Visual feedback that we're still offline
+        const button = e.target;
+        const originalText = button.textContent;
+        button.textContent = 'Still Offline...';
+        button.style.background = '#EF4444';
+        
+        setTimeout(() => {
+          button.textContent = originalText;
+          button.style.background = '#1E3A8A';
+        }, 2000);
+      }
+    });
+  </script>
+</body>
+</html>
