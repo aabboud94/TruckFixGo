@@ -7,6 +7,7 @@ import { storage } from "./storage";
 import aiService from "./ai-service";
 import { reminderService } from "./reminder-service";
 import { reminderScheduler } from "./reminder-scheduler";
+import efsComdataService from "./efs-comdata-service";
 import { 
   insertUserSchema,
   insertDriverProfileSchema,
@@ -24,6 +25,7 @@ import {
   insertPaymentMethodSchema,
   insertTransactionSchema,
   insertRefundSchema,
+  insertFleetCheckSchema,
   insertAdminSettingSchema,
   insertEmailTemplateSchema,
   insertSmsTemplateSchema,
@@ -44,6 +46,7 @@ import {
   type Job,
   type ContractorProfile,
   type FleetAccount,
+  type FleetCheck,
   type JobBid,
   type BidTemplate,
   type BiddingConfig,
@@ -54,7 +57,9 @@ import {
   refundStatusEnum,
   bidStatusEnum,
   biddingStrategyEnum,
-  bidAutoAcceptEnum
+  bidAutoAcceptEnum,
+  checkProviderEnum,
+  checkStatusEnum
 } from "@shared/schema";
 
 // Extend Express Request to include user
@@ -1644,106 +1649,506 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  // Process EFS check payment (simulated)
-  app.post('/api/payment/efs',
-    requireAuth,
+  // ==================== EFS/COMDATA CHECK PAYMENT ENDPOINTS ====================
+  
+  // Authorize EFS check
+  app.post('/api/payments/efs/authorize',
+    rateLimiter(10, 60000), // 10 requests per minute
     validateRequest(z.object({
-      amount: z.number().positive(),
+      checkNumber: z.string().length(10).regex(/^\d+$/),
+      authorizationCode: z.string().length(6).regex(/^\d+$/),
+      amount: z.number().min(50).max(5000),
       jobId: z.string().optional(),
-      checkNumber: z.string(),
-      authorizationCode: z.string(),
-      driverCode: z.string(),
-      truckNumber: z.string().optional()
+      fleetAccountId: z.string().optional()
     })),
     async (req: Request, res: Response) => {
       try {
-        // Simulate EFS check validation
-        if (!req.body.checkNumber.match(/^\d{10}$/)) {
-          return res.status(400).json({ message: 'Invalid EFS check number format' });
-        }
-
-        // Create transaction record
-        const transaction = await storage.createTransaction({
-          userId: req.session.userId!,
-          jobId: req.body.jobId,
-          amount: req.body.amount.toString(),
-          paymentMethod: 'efs_check',
-          status: 'completed',
-          externalTransactionId: `EFS-${req.body.checkNumber}-${Date.now()}`,
-          metadata: {
-            checkNumber: req.body.checkNumber,
-            authorizationCode: req.body.authorizationCode,
-            truckNumber: req.body.truckNumber
-          }
-        });
-
-        // Update job payment status if jobId provided
-        if (req.body.jobId) {
-          await storage.updateJob(req.body.jobId, {
-            paymentStatus: 'completed',
-            paidAmount: req.body.amount.toString()
+        const { checkNumber, authorizationCode, amount, jobId, fleetAccountId } = req.body;
+        const userId = req.session?.userId;
+        
+        // Check if check already has active authorization
+        const existingCheck = await storage.getFleetCheckByCheckNumber(checkNumber);
+        if (existingCheck && ['authorized', 'partially_captured'].includes(existingCheck.status)) {
+          return res.status(400).json({
+            message: 'Check already has an active authorization',
+            checkId: existingCheck.id
           });
         }
-
-        res.json({
-          message: 'EFS check processed successfully',
-          transactionId: transaction.id
+        
+        // Authorize with EFS service
+        const authResult = await efsComdataService.authorizeEFSCheck(
+          checkNumber,
+          authorizationCode,
+          amount,
+          jobId,
+          userId
+        );
+        
+        if (!authResult.success) {
+          // Log failed attempt
+          await storage.createFleetCheck({
+            provider: 'efs',
+            checkNumber,
+            authorizationCode,
+            authorizedAmount: amount.toString(),
+            status: 'declined',
+            jobId,
+            userId,
+            fleetAccountId,
+            failureReason: authResult.message,
+            lastError: authResult.errorDetails,
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent'),
+            authorizationResponse: authResult
+          });
+          
+          return res.status(400).json({
+            error: authResult.errorCode,
+            message: authResult.message,
+            details: authResult.errorDetails
+          });
+        }
+        
+        // Create fleet check record
+        const fleetCheck = await storage.createFleetCheck({
+          provider: 'efs',
+          checkNumber,
+          authorizationCode,
+          authorizedAmount: amount.toString(),
+          availableBalance: authResult.availableBalance?.toString(),
+          jobId,
+          userId,
+          fleetAccountId,
+          expiresAt: authResult.expiresAt,
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+          authorizationResponse: authResult
         });
-      } catch (error) {
-        console.error('Process EFS payment error:', error);
-        res.status(500).json({ message: 'Failed to process EFS payment' });
+        
+        // Update check status to authorized
+        await storage.updateFleetCheckStatus(fleetCheck.id, 'authorized', authResult);
+        
+        res.json({
+          success: true,
+          checkId: fleetCheck.id,
+          authorizationId: authResult.authorizationId,
+          authorizedAmount: amount,
+          availableBalance: authResult.availableBalance,
+          expiresAt: authResult.expiresAt,
+          message: 'EFS check authorized successfully'
+        });
+        
+      } catch (error: any) {
+        console.error('EFS authorization error:', error);
+        res.status(500).json({ 
+          error: 'INTERNAL_ERROR',
+          message: 'Failed to authorize EFS check'
+        });
       }
     }
   );
-
-  // Process Comdata check payment (simulated)
-  app.post('/api/payment/comdata',
-    requireAuth,
+  
+  // Authorize Comdata check
+  app.post('/api/payments/comdata/authorize',
+    rateLimiter(10, 60000),
     validateRequest(z.object({
-      amount: z.number().positive(),
+      checkNumber: z.string().length(12).regex(/^\d+$/),
+      controlCode: z.string().length(4).regex(/^\d+$/),
+      driverCode: z.string().min(1),
+      amount: z.number().min(100).max(10000),
       jobId: z.string().optional(),
-      checkNumber: z.string(),
-      authorizationCode: z.string(),
-      driverCode: z.string(),
-      mcNumber: z.string().optional()
+      fleetAccountId: z.string().optional()
     })),
     async (req: Request, res: Response) => {
       try {
-        // Simulate Comdata check validation
-        if (!req.body.checkNumber.match(/^\d{10}$/)) {
-          return res.status(400).json({ message: 'Invalid Comdata check number format' });
-        }
-
-        // Create transaction record
-        const transaction = await storage.createTransaction({
-          userId: req.session.userId!,
-          jobId: req.body.jobId,
-          amount: req.body.amount.toString(),
-          paymentMethod: 'comdata_check',
-          status: 'completed',
-          externalTransactionId: `CMD-${req.body.checkNumber}-${Date.now()}`,
-          metadata: {
-            checkNumber: req.body.checkNumber,
-            authorizationCode: req.body.authorizationCode,
-            mcNumber: req.body.mcNumber
-          }
-        });
-
-        // Update job payment status if jobId provided
-        if (req.body.jobId) {
-          await storage.updateJob(req.body.jobId, {
-            paymentStatus: 'completed',
-            paidAmount: req.body.amount.toString()
+        const { checkNumber, controlCode, driverCode, amount, jobId, fleetAccountId } = req.body;
+        const userId = req.session?.userId;
+        
+        // Check if check already has active authorization
+        const existingCheck = await storage.getFleetCheckByCheckNumber(checkNumber);
+        if (existingCheck && ['authorized', 'partially_captured'].includes(existingCheck.status)) {
+          return res.status(400).json({
+            message: 'Check already has an active authorization',
+            checkId: existingCheck.id
           });
         }
-
-        res.json({
-          message: 'Comdata check processed successfully',
-          transactionId: transaction.id
+        
+        // Authorize with Comdata service
+        const authResult = await efsComdataService.authorizeComdataCheck(
+          checkNumber,
+          controlCode,
+          driverCode,
+          amount,
+          jobId,
+          userId
+        );
+        
+        if (!authResult.success) {
+          // Log failed attempt
+          await storage.createFleetCheck({
+            provider: 'comdata',
+            checkNumber,
+            authorizationCode: controlCode,
+            driverCode,
+            authorizedAmount: amount.toString(),
+            status: 'declined',
+            jobId,
+            userId,
+            fleetAccountId,
+            failureReason: authResult.message,
+            lastError: authResult.errorDetails,
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent'),
+            authorizationResponse: authResult
+          });
+          
+          return res.status(400).json({
+            error: authResult.errorCode,
+            message: authResult.message,
+            details: authResult.errorDetails
+          });
+        }
+        
+        // Create fleet check record
+        const fleetCheck = await storage.createFleetCheck({
+          provider: 'comdata',
+          checkNumber,
+          authorizationCode: controlCode,
+          driverCode,
+          authorizedAmount: amount.toString(),
+          availableBalance: authResult.availableBalance?.toString(),
+          jobId,
+          userId,
+          fleetAccountId,
+          expiresAt: authResult.expiresAt,
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+          authorizationResponse: authResult
         });
-      } catch (error) {
-        console.error('Process Comdata payment error:', error);
-        res.status(500).json({ message: 'Failed to process Comdata payment' });
+        
+        // Update check status to authorized
+        await storage.updateFleetCheckStatus(fleetCheck.id, 'authorized', authResult);
+        
+        res.json({
+          success: true,
+          checkId: fleetCheck.id,
+          authorizationId: authResult.authorizationId,
+          authorizedAmount: amount,
+          availableBalance: authResult.availableBalance,
+          expiresAt: authResult.expiresAt,
+          message: 'Comdata check authorized successfully'
+        });
+        
+      } catch (error: any) {
+        console.error('Comdata authorization error:', error);
+        res.status(500).json({ 
+          error: 'INTERNAL_ERROR',
+          message: 'Failed to authorize Comdata check'
+        });
+      }
+    }
+  );
+  
+  // Capture EFS check payment
+  app.post('/api/payments/efs/capture',
+    requireAuth,
+    validateRequest(z.object({
+      checkId: z.string(),
+      amount: z.number().positive(),
+      jobId: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { checkId, amount, jobId } = req.body;
+        
+        // Get check details
+        const check = await storage.getFleetCheck(checkId);
+        if (!check) {
+          return res.status(404).json({
+            error: 'CHECK_NOT_FOUND',
+            message: 'Check authorization not found'
+          });
+        }
+        
+        if (check.provider !== 'efs') {
+          return res.status(400).json({
+            error: 'PROVIDER_MISMATCH',
+            message: 'Check is not an EFS check'
+          });
+        }
+        
+        // Capture with service
+        const captureResult = await efsComdataService.captureCheckPayment(
+          check.checkNumber,
+          amount,
+          'efs'
+        );
+        
+        if (!captureResult.success) {
+          return res.status(400).json({
+            error: captureResult.errorCode,
+            message: captureResult.message,
+            details: captureResult.errorDetails
+          });
+        }
+        
+        // Update fleet check record
+        await storage.captureFleetCheck(checkId, amount, captureResult);
+        
+        // Create transaction record
+        const transaction = await storage.createTransaction({
+          jobId: jobId || check.jobId,
+          userId: check.userId || req.session.userId!,
+          amount: amount.toString(),
+          currency: 'USD',
+          status: 'completed',
+          metadata: {
+            checkId,
+            checkNumber: check.maskedCheckNumber,
+            provider: 'efs',
+            captureId: captureResult.captureId
+          }
+        });
+        
+        // Update job payment status if applicable
+        if (jobId || check.jobId) {
+          const job = await storage.getJob(jobId || check.jobId!);
+          if (job) {
+            const totalPaid = parseFloat(job.paidAmount || '0') + amount;
+            await storage.updateJob(job.id, {
+              paymentStatus: totalPaid >= parseFloat(job.totalCost) ? 'completed' : 'partial',
+              paidAmount: totalPaid.toString()
+            });
+          }
+        }
+        
+        res.json({
+          success: true,
+          transactionId: transaction.id,
+          captureId: captureResult.captureId,
+          capturedAmount: amount,
+          remainingBalance: captureResult.remainingBalance,
+          settlementDate: captureResult.settlementDate,
+          message: 'EFS check payment captured successfully'
+        });
+        
+      } catch (error: any) {
+        console.error('EFS capture error:', error);
+        res.status(500).json({ 
+          error: 'INTERNAL_ERROR',
+          message: 'Failed to capture EFS payment'
+        });
+      }
+    }
+  );
+  
+  // Capture Comdata check payment
+  app.post('/api/payments/comdata/capture',
+    requireAuth,
+    validateRequest(z.object({
+      checkId: z.string(),
+      amount: z.number().positive(),
+      jobId: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { checkId, amount, jobId } = req.body;
+        
+        // Get check details
+        const check = await storage.getFleetCheck(checkId);
+        if (!check) {
+          return res.status(404).json({
+            error: 'CHECK_NOT_FOUND',
+            message: 'Check authorization not found'
+          });
+        }
+        
+        if (check.provider !== 'comdata') {
+          return res.status(400).json({
+            error: 'PROVIDER_MISMATCH',
+            message: 'Check is not a Comdata check'
+          });
+        }
+        
+        // Capture with service
+        const captureResult = await efsComdataService.captureCheckPayment(
+          check.checkNumber,
+          amount,
+          'comdata'
+        );
+        
+        if (!captureResult.success) {
+          return res.status(400).json({
+            error: captureResult.errorCode,
+            message: captureResult.message,
+            details: captureResult.errorDetails
+          });
+        }
+        
+        // Update fleet check record
+        await storage.captureFleetCheck(checkId, amount, captureResult);
+        
+        // Create transaction record
+        const transaction = await storage.createTransaction({
+          jobId: jobId || check.jobId,
+          userId: check.userId || req.session.userId!,
+          amount: amount.toString(),
+          currency: 'USD',
+          status: 'completed',
+          metadata: {
+            checkId,
+            checkNumber: check.maskedCheckNumber,
+            provider: 'comdata',
+            captureId: captureResult.captureId
+          }
+        });
+        
+        // Update job payment status if applicable
+        if (jobId || check.jobId) {
+          const job = await storage.getJob(jobId || check.jobId!);
+          if (job) {
+            const totalPaid = parseFloat(job.paidAmount || '0') + amount;
+            await storage.updateJob(job.id, {
+              paymentStatus: totalPaid >= parseFloat(job.totalCost) ? 'completed' : 'partial',
+              paidAmount: totalPaid.toString()
+            });
+          }
+        }
+        
+        res.json({
+          success: true,
+          transactionId: transaction.id,
+          captureId: captureResult.captureId,
+          capturedAmount: amount,
+          remainingBalance: captureResult.remainingBalance,
+          settlementDate: captureResult.settlementDate,
+          message: 'Comdata check payment captured successfully'
+        });
+        
+      } catch (error: any) {
+        console.error('Comdata capture error:', error);
+        res.status(500).json({ 
+          error: 'INTERNAL_ERROR',
+          message: 'Failed to capture Comdata payment'
+        });
+      }
+    }
+  );
+  
+  // Get check details
+  app.get('/api/payments/checks/:id',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const check = await storage.getFleetCheck(req.params.id);
+        if (!check) {
+          return res.status(404).json({ message: 'Check not found' });
+        }
+        
+        // Verify access
+        const isAdmin = req.session.role === 'admin';
+        const isOwner = check.userId === req.session.userId;
+        
+        if (!isAdmin && !isOwner) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+        
+        res.json(check);
+        
+      } catch (error: any) {
+        console.error('Get check error:', error);
+        res.status(500).json({ message: 'Failed to retrieve check details' });
+      }
+    }
+  );
+  
+  // Void check authorization
+  app.post('/api/payments/checks/:id/void',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const check = await storage.getFleetCheck(req.params.id);
+        if (!check) {
+          return res.status(404).json({ message: 'Check not found' });
+        }
+        
+        // Verify permission
+        const isAdmin = req.session.role === 'admin';
+        const isOwner = check.userId === req.session.userId;
+        
+        if (!isAdmin && !isOwner) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+        
+        // Void with service
+        const voidResult = await efsComdataService.voidAuthorization(
+          check.checkNumber,
+          check.provider as 'efs' | 'comdata'
+        );
+        
+        if (!voidResult.success) {
+          return res.status(400).json({
+            error: voidResult.errorCode,
+            message: voidResult.message
+          });
+        }
+        
+        // Update fleet check record
+        await storage.voidFleetCheck(req.params.id, voidResult);
+        
+        res.json({
+          success: true,
+          voidId: voidResult.voidId,
+          releasedAmount: voidResult.releasedAmount,
+          message: 'Check authorization voided successfully'
+        });
+        
+      } catch (error: any) {
+        console.error('Void check error:', error);
+        res.status(500).json({ message: 'Failed to void check' });
+      }
+    }
+  );
+  
+  // Get fleet checks (admin)
+  app.get('/api/admin/fleet-checks',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const filters = {
+          provider: req.query.provider as any,
+          status: req.query.status as any,
+          checkNumber: req.query.checkNumber as string,
+          jobId: req.query.jobId as string,
+          fleetAccountId: req.query.fleetAccountId as string,
+          fromDate: req.query.fromDate ? new Date(req.query.fromDate as string) : undefined,
+          toDate: req.query.toDate ? new Date(req.query.toDate as string) : undefined,
+          ...getPagination(req)
+        };
+        
+        const checks = await storage.findFleetChecks(filters);
+        res.json({ checks });
+        
+      } catch (error: any) {
+        console.error('Get fleet checks error:', error);
+        res.status(500).json({ message: 'Failed to retrieve fleet checks' });
+      }
+    }
+  );
+  
+  // Get user's fleet checks
+  app.get('/api/payments/my-checks',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+        const checks = await storage.getFleetChecksByUser(req.session.userId!, limit);
+        res.json({ checks });
+        
+      } catch (error: any) {
+        console.error('Get user checks error:', error);
+        res.status(500).json({ message: 'Failed to retrieve your checks' });
       }
     }
   );

@@ -41,6 +41,7 @@ import AdminApplications from "@/pages/admin/applications";
 import AdminTemplates from "@/pages/admin/templates";
 import AdminPricingRules from "@/pages/admin/pricing-rules";
 import AdminBidding from "@/pages/admin/bidding";
+import AdminFleetChecks from "@/pages/admin-fleet-checks";
 
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
@@ -95,6 +96,7 @@ function Router() {
       <Route path="/admin/templates" component={AdminTemplates} />
       <Route path="/admin/pricing-rules" component={AdminPricingRules} />
       <Route path="/admin/bidding" component={AdminBidding} />
+      <Route path="/admin/fleet-checks" component={AdminFleetChecks} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />

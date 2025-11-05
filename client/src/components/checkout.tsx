@@ -384,58 +384,107 @@ export default function Checkout({
     }
   });
 
-  // Process EFS check mutation
-  const processEFSCheck = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/payment/efs", {
+  // EFS check authorization mutation
+  const authorizeEFSCheck = useMutation({
+    mutationFn: (data: any) => apiRequest("/api/payments/efs/authorize", {
       method: "POST",
       body: JSON.stringify({
-        ...data,
-        amount,
-        jobId
+        checkNumber: data.checkNumber,
+        authorizationCode: data.authorizationCode,
+        amount: amount / 100, // Convert cents to dollars
+        jobId,
+        fleetAccountId
       })
     }),
-    onSuccess: (data) => {
-      toast({
-        title: "Payment Successful",
-        description: "EFS check processed successfully"
-      });
-      if (onSuccess) {
-        onSuccess(data.transactionId);
+    onSuccess: async (authData) => {
+      // After successful authorization, capture the payment
+      try {
+        const captureResponse = await apiRequest("/api/payments/efs/capture", {
+          method: "POST",
+          body: JSON.stringify({
+            checkId: authData.checkId,
+            amount: amount / 100,
+            jobId
+          })
+        });
+        
+        toast({
+          title: "Payment Successful",
+          description: `EFS check authorized and captured. Transaction ID: ${captureResponse.transactionId}`,
+          className: "bg-green-50 border-green-200"
+        });
+        
+        if (onSuccess) {
+          onSuccess(captureResponse.transactionId);
+        }
+        setIsProcessing(false);
+      } catch (captureError: any) {
+        toast({
+          title: "Capture Failed",
+          description: captureError.message || "Payment authorized but failed to capture",
+          variant: "destructive"
+        });
+        setIsProcessing(false);
       }
     },
     onError: (error: any) => {
       toast({
-        title: "Payment Failed",
-        description: error.message || "Failed to process EFS check",
+        title: "Authorization Failed",
+        description: error.message || "Failed to authorize EFS check",
         variant: "destructive"
       });
       setIsProcessing(false);
     }
   });
 
-  // Process Comdata check mutation
-  const processComdataCheck = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/payment/comdata", {
+  // Comdata check authorization mutation
+  const authorizeComdataCheck = useMutation({
+    mutationFn: (data: any) => apiRequest("/api/payments/comdata/authorize", {
       method: "POST",
       body: JSON.stringify({
-        ...data,
-        amount,
-        jobId
+        checkNumber: data.checkNumber,
+        controlCode: data.authorizationCode,
+        driverCode: data.driverCode,
+        amount: amount / 100, // Convert cents to dollars
+        jobId,
+        fleetAccountId
       })
     }),
-    onSuccess: (data) => {
-      toast({
-        title: "Payment Successful",
-        description: "Comdata check processed successfully"
-      });
-      if (onSuccess) {
-        onSuccess(data.transactionId);
+    onSuccess: async (authData) => {
+      // After successful authorization, capture the payment
+      try {
+        const captureResponse = await apiRequest("/api/payments/comdata/capture", {
+          method: "POST",
+          body: JSON.stringify({
+            checkId: authData.checkId,
+            amount: amount / 100,
+            jobId
+          })
+        });
+        
+        toast({
+          title: "Payment Successful",
+          description: `Comdata check authorized and captured. Transaction ID: ${captureResponse.transactionId}`,
+          className: "bg-green-50 border-green-200"
+        });
+        
+        if (onSuccess) {
+          onSuccess(captureResponse.transactionId);
+        }
+        setIsProcessing(false);
+      } catch (captureError: any) {
+        toast({
+          title: "Capture Failed",
+          description: captureError.message || "Payment authorized but failed to capture",
+          variant: "destructive"
+        });
+        setIsProcessing(false);
       }
     },
     onError: (error: any) => {
       toast({
-        title: "Payment Failed",
-        description: error.message || "Failed to process Comdata check",
+        title: "Authorization Failed",
+        description: error.message || "Failed to authorize Comdata check",
         variant: "destructive"
       });
       setIsProcessing(false);
@@ -520,12 +569,12 @@ export default function Checkout({
 
   const handleEFSSubmit = (data: any) => {
     setIsProcessing(true);
-    processEFSCheck.mutate(data);
+    authorizeEFSCheck.mutate(data);
   };
 
   const handleComdataSubmit = (data: any) => {
     setIsProcessing(true);
-    processComdataCheck.mutate(data);
+    authorizeComdataCheck.mutate(data);
   };
 
   const handleFleetAccountSubmit = () => {
