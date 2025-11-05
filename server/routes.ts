@@ -37,15 +37,24 @@ import {
   insertServiceAreaSchema,
   insertContractorServiceSchema,
   insertContractorAvailabilitySchema,
+  insertJobBidSchema,
+  insertBidTemplateSchema,
+  insertBiddingConfigSchema,
   type User,
   type Job,
   type ContractorProfile,
   type FleetAccount,
+  type JobBid,
+  type BidTemplate,
+  type BiddingConfig,
   userRoleEnum,
   jobStatusEnum,
   jobTypeEnum,
   paymentStatusEnum,
-  refundStatusEnum
+  refundStatusEnum,
+  bidStatusEnum,
+  biddingStrategyEnum,
+  bidAutoAcceptEnum
 } from "@shared/schema";
 
 // Extend Express Request to include user
@@ -1279,6 +1288,295 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: 'Failed to get review' });
     }
   });
+
+  // ==================== BIDDING ROUTES ====================
+
+  // Create bidding job (job with bidding enabled)
+  app.post('/api/jobs/bidding',
+    requireAuth,
+    validateRequest(insertJobSchema.extend({
+      allowBidding: z.boolean().default(true),
+      biddingDuration: z.number().min(30).max(480).optional(),
+      minimumBidCount: z.number().min(1).max(20).optional(),
+      maximumBidAmount: z.number().positive().optional(),
+      reservePrice: z.number().positive().optional(),
+      biddingStrategy: z.enum(['lowest_price', 'best_value', 'fastest_completion', 'manual']).optional(),
+      autoAcceptBids: z.enum(['never', 'lowest', 'lowest_with_rating', 'best_value']).optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        if (req.body.jobType === 'emergency') {
+          return res.status(400).json({ 
+            message: 'Bidding is not available for emergency jobs' 
+          });
+        }
+
+        const biddingDuration = req.body.biddingDuration || 120;
+        const biddingDeadline = new Date();
+        biddingDeadline.setMinutes(biddingDeadline.getMinutes() + biddingDuration);
+
+        const jobData = {
+          ...req.body,
+          customerId: req.body.customerId || req.session.userId,
+          status: 'new' as const,
+          allowBidding: true,
+          biddingDeadline,
+          biddingDuration,
+          jobType: 'scheduled' as const
+        };
+
+        const job = await storage.createJob(jobData);
+        
+        res.status(201).json({
+          message: 'Bidding job created successfully',
+          job,
+          biddingDeadline
+        });
+      } catch (error) {
+        console.error('Create bidding job error:', error);
+        res.status(500).json({ message: 'Failed to create bidding job' });
+      }
+    }
+  );
+
+  // Get available jobs for bidding (contractor view)
+  app.get('/api/jobs/bidding/available',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const filters = {
+          serviceTypeId: req.query.serviceTypeId as string,
+          maxDistance: req.query.maxDistance ? Number(req.query.maxDistance) : undefined,
+          minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined
+        };
+
+        const jobs = await storage.getAvailableBiddingJobs(req.session.userId!, filters);
+
+        const enhancedJobs = await Promise.all(jobs.map(async job => {
+          const bids = await storage.getJobBids(job.id);
+          const timeRemaining = job.biddingDeadline ? 
+            Math.max(0, new Date(job.biddingDeadline).getTime() - Date.now()) : 0;
+          
+          return {
+            ...job,
+            currentBidCount: bids.length,
+            lowestBid: job.lowestBidAmount,
+            averageBid: job.averageBidAmount,
+            timeRemaining: Math.floor(timeRemaining / 60000)
+          };
+        }));
+
+        res.json({ 
+          jobs: enhancedJobs,
+          total: enhancedJobs.length
+        });
+      } catch (error) {
+        console.error('Get available bidding jobs error:', error);
+        res.status(500).json({ message: 'Failed to get available jobs' });
+      }
+    }
+  );
+
+  // Submit a bid
+  app.post('/api/bids',
+    requireAuth,
+    requireRole('contractor'),
+    validateRequest(insertJobBidSchema),
+    async (req: Request, res: Response) => {
+      try {
+        const { jobId } = req.body;
+        
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        if (!job.allowBidding) {
+          return res.status(400).json({ message: 'Job does not allow bidding' });
+        }
+
+        const deadlinePassed = !(await storage.checkBidDeadline(jobId));
+        if (deadlinePassed) {
+          return res.status(400).json({ message: 'Bidding deadline has passed' });
+        }
+
+        const existingBids = await storage.getContractorBids(req.session.userId!, 'pending');
+        const existingBidForJob = existingBids.find(b => b.jobId === jobId);
+        
+        if (existingBidForJob) {
+          return res.status(400).json({ 
+            message: 'You already have a pending bid for this job' 
+          });
+        }
+
+        const expiresAt = job.biddingDeadline || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+        const bidData = {
+          ...req.body,
+          contractorId: req.session.userId!,
+          expiresAt
+        };
+
+        const bid = await storage.createJobBid(bidData);
+
+        res.status(201).json({
+          message: 'Bid submitted successfully',
+          bid
+        });
+      } catch (error) {
+        console.error('Submit bid error:', error);
+        res.status(500).json({ message: 'Failed to submit bid' });
+      }
+    }
+  );
+
+  // Get bids for a job
+  app.get('/api/bids/job/:jobId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const job = await storage.getJob(req.params.jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        if (req.session.role === 'driver' && job.customerId !== req.session.userId) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+
+        const bids = await storage.getJobBids(req.params.jobId);
+        
+        const isActive = await storage.checkBidDeadline(req.params.jobId);
+        const sanitizedBids = bids.map(bid => {
+          if (isActive && req.session.role !== 'admin') {
+            return {
+              ...bid,
+              contractorId: undefined,
+              contractorName: 'Anonymous Contractor'
+            };
+          }
+          return bid;
+        });
+
+        res.json({ 
+          bids: sanitizedBids,
+          total: bids.length,
+          isActive
+        });
+      } catch (error) {
+        console.error('Get job bids error:', error);
+        res.status(500).json({ message: 'Failed to get bids' });
+      }
+    }
+  );
+
+  // Accept a bid
+  app.put('/api/bids/:id/accept',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const bid = await storage.getJobBid(req.params.id);
+        if (!bid) {
+          return res.status(404).json({ message: 'Bid not found' });
+        }
+
+        const job = await storage.getJob(bid.jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        if (req.session.role !== 'admin' && job.customerId !== req.session.userId) {
+          return res.status(403).json({ message: 'Only job owner can accept bids' });
+        }
+
+        if (bid.status !== 'pending') {
+          return res.status(400).json({ 
+            message: `Cannot accept bid with status: ${bid.status}` 
+          });
+        }
+
+        const acceptedBid = await storage.acceptBid(req.params.id, bid.jobId);
+
+        res.json({
+          message: 'Bid accepted successfully',
+          bid: acceptedBid,
+          job
+        });
+      } catch (error) {
+        console.error('Accept bid error:', error);
+        res.status(500).json({ message: 'Failed to accept bid' });
+      }
+    }
+  );
+
+  // Reject a bid  
+  app.put('/api/bids/:id/reject',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const bid = await storage.getJobBid(req.params.id);
+        if (!bid) {
+          return res.status(404).json({ message: 'Bid not found' });
+        }
+
+        const job = await storage.getJob(bid.jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        if (req.session.role !== 'admin' && job.customerId !== req.session.userId) {
+          return res.status(403).json({ message: 'Only job owner can reject bids' });
+        }
+
+        const rejectedBid = await storage.rejectBid(req.params.id, req.body.reason);
+
+        res.json({
+          message: 'Bid rejected',
+          bid: rejectedBid
+        });
+      } catch (error) {
+        console.error('Reject bid error:', error);
+        res.status(500).json({ message: 'Failed to reject bid' });
+      }
+    }
+  );
+
+  // Get contractor's bids
+  app.get('/api/bids/my-bids',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const status = req.query.status as typeof bidStatusEnum.enumValues[number];
+        const bids = await storage.getContractorBids(req.session.userId!, status);
+
+        const enhancedBids = await Promise.all(bids.map(async bid => {
+          const job = await storage.getJob(bid.jobId);
+          return {
+            ...bid,
+            job: job ? {
+              id: job.id,
+              jobNumber: job.jobNumber,
+              description: job.description,
+              location: job.location,
+              locationAddress: job.locationAddress,
+              scheduledAt: job.scheduledAt,
+              status: job.status
+            } : null
+          };
+        }));
+
+        res.json({ 
+          bids: enhancedBids,
+          total: bids.length
+        });
+      } catch (error) {
+        console.error('Get contractor bids error:', error);
+        res.status(500).json({ message: 'Failed to get your bids' });
+      }
+    }
+  );
 
   // ==================== PAYMENT ROUTES ====================
 

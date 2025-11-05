@@ -39,6 +39,9 @@ export const documentVerificationStatusEnum = pgEnum('document_verification_stat
 export const applicationDocumentTypeEnum = pgEnum('application_document_type', ['cdl', 'insurance', 'w9', 'vehicle_registration', 'dot_medical', 'ase_certification', 'other_certification', 'reference_letter', 'portfolio_photo']);
 export const backgroundCheckStatusEnum = pgEnum('background_check_status', ['pending', 'in_progress', 'passed', 'failed', 'expired']);
 export const backgroundCheckTypeEnum = pgEnum('background_check_type', ['criminal', 'driving_record', 'business_verification', 'insurance_validation']);
+export const bidStatusEnum = pgEnum('bid_status', ['pending', 'accepted', 'rejected', 'expired', 'withdrawn', 'countered']);
+export const biddingStrategyEnum = pgEnum('bidding_strategy', ['lowest_price', 'best_value', 'fastest_completion', 'manual']);
+export const bidAutoAcceptEnum = pgEnum('bid_auto_accept', ['never', 'lowest', 'lowest_with_rating', 'best_value']);
 
 // ====================
 // USERS & AUTH
@@ -347,6 +350,20 @@ export const jobs = pgTable("jobs", {
   taxTotal: decimal("tax_total", { precision: 10, scale: 2 }),
   tipAmount: decimal("tip_amount", { precision: 8, scale: 2 }),
   
+  // Bidding fields
+  allowBidding: boolean("allow_bidding").notNull().default(false),
+  biddingDeadline: timestamp("bidding_deadline"),
+  minimumBidCount: integer("minimum_bid_count").notNull().default(3),
+  maximumBidAmount: decimal("maximum_bid_amount", { precision: 10, scale: 2 }),
+  reservePrice: decimal("reserve_price", { precision: 10, scale: 2 }),
+  winningBidId: varchar("winning_bid_id"),
+  biddingStrategy: biddingStrategyEnum("bidding_strategy").default('manual'),
+  autoAcceptBids: bidAutoAcceptEnum("auto_accept_bids").default('never'),
+  biddingDuration: integer("bidding_duration").notNull().default(120), // Minutes
+  bidCount: integer("bid_count").notNull().default(0),
+  lowestBidAmount: decimal("lowest_bid_amount", { precision: 10, scale: 2 }),
+  averageBidAmount: decimal("average_bid_amount", { precision: 10, scale: 2 }),
+  
   // AI Analysis
   aiDamageAnalysis: jsonb("ai_damage_analysis"),
   aiChatHistory: jsonb("ai_chat_history"),
@@ -409,6 +426,152 @@ export const jobStatusHistory = pgTable("job_status_history", {
 }, (table) => ({
   jobIdx: index("idx_job_status_history_job").on(table.jobId),
   createdIdx: index("idx_job_status_history_created").on(table.createdAt)
+}));
+
+// ====================
+// JOB BIDDING
+// ====================
+
+export const jobBids = pgTable("job_bids", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  
+  // Bid details
+  bidAmount: decimal("bid_amount", { precision: 10, scale: 2 }).notNull(),
+  estimatedCompletionTime: integer("estimated_completion_time").notNull(), // in minutes
+  messageToCustomer: text("message_to_customer"),
+  
+  // Material breakdown
+  laborCost: decimal("labor_cost", { precision: 10, scale: 2 }),
+  materialsCost: decimal("materials_cost", { precision: 10, scale: 2 }),
+  materialsDescription: text("materials_description"),
+  
+  // Status and timestamps
+  status: bidStatusEnum("status").notNull().default('pending'),
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  rejectedAt: timestamp("rejected_at"),
+  withdrawnAt: timestamp("withdrawn_at"),
+  
+  // Counter offers
+  isCounterOffer: boolean("is_counter_offer").notNull().default(false),
+  originalBidId: varchar("original_bid_id").references(() => jobBids.id),
+  counterOfferAmount: decimal("counter_offer_amount", { precision: 10, scale: 2 }),
+  counterOfferMessage: text("counter_offer_message"),
+  
+  // Contractor info snapshot (for display)
+  contractorName: text("contractor_name"),
+  contractorRating: decimal("contractor_rating", { precision: 3, scale: 2 }),
+  contractorCompletedJobs: integer("contractor_completed_jobs"),
+  contractorResponseTime: integer("contractor_response_time"), // Average in minutes
+  
+  // Auto-bid settings
+  isAutoBid: boolean("is_auto_bid").notNull().default(false),
+  autoBidTemplateId: varchar("auto_bid_template_id"),
+  
+  // Ranking/scoring
+  bidScore: decimal("bid_score", { precision: 5, scale: 2 }), // Calculated score for "best value"
+  priceRank: integer("price_rank"), // 1 = lowest price
+  timeRank: integer("time_rank"), // 1 = fastest completion
+  qualityRank: integer("quality_rank"), // Based on contractor rating
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  jobIdx: index("idx_job_bids_job").on(table.jobId),
+  contractorIdx: index("idx_job_bids_contractor").on(table.contractorId),
+  statusIdx: index("idx_job_bids_status").on(table.status),
+  expiryIdx: index("idx_job_bids_expiry").on(table.expiresAt),
+  jobContractorIdx: uniqueIndex("idx_job_bids_unique").on(table.jobId, table.contractorId),
+  createdIdx: index("idx_job_bids_created").on(table.createdAt)
+}));
+
+// Bid templates for contractors
+export const bidTemplates = pgTable("bid_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  serviceTypeId: varchar("service_type_id").references(() => serviceTypes.id),
+  
+  name: text("name").notNull(),
+  description: text("description"),
+  
+  // Default values
+  defaultMessage: text("default_message"),
+  baseAmount: decimal("base_amount", { precision: 10, scale: 2 }),
+  perMileRate: decimal("per_mile_rate", { precision: 6, scale: 2 }),
+  estimatedTimeFormula: text("estimated_time_formula"), // e.g., "distance * 2 + 30"
+  
+  // Auto-bid settings
+  enableAutoBid: boolean("enable_auto_bid").notNull().default(false),
+  maxAutoBidAmount: decimal("max_auto_bid_amount", { precision: 10, scale: 2 }),
+  minAutoBidAmount: decimal("min_auto_bid_amount", { precision: 10, scale: 2 }),
+  autoBidRadius: integer("auto_bid_radius"), // Miles
+  
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  contractorIdx: index("idx_bid_templates_contractor").on(table.contractorId),
+  serviceIdx: index("idx_bid_templates_service").on(table.serviceTypeId)
+}));
+
+// Bidding configuration
+export const biddingConfig = pgTable("bidding_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Global settings
+  defaultBiddingDuration: integer("default_bidding_duration").notNull().default(120), // Minutes
+  minimumBiddingDuration: integer("minimum_bidding_duration").notNull().default(30),
+  maximumBiddingDuration: integer("maximum_bidding_duration").notNull().default(480),
+  
+  // Bid limits
+  minimumBidIncrement: decimal("minimum_bid_increment", { precision: 6, scale: 2 }).notNull().default('5.00'),
+  maximumBidsPerContractor: integer("maximum_bids_per_contractor").notNull().default(1),
+  minimumContractorsToNotify: integer("minimum_contractors_to_notify").notNull().default(10),
+  
+  // Anti-sniping
+  antiSnipingExtension: integer("anti_sniping_extension").notNull().default(5), // Minutes
+  antiSnipingThreshold: integer("anti_sniping_threshold").notNull().default(5), // Minutes before deadline
+  
+  // Platform fees
+  platformFeePercentage: decimal("platform_fee_percentage", { precision: 5, scale: 2 }).notNull().default('10.00'),
+  minimumPlatformFee: decimal("minimum_platform_fee", { precision: 6, scale: 2 }).notNull().default('5.00'),
+  
+  // Penalties
+  noShowPenaltyAmount: decimal("no_show_penalty_amount", { precision: 8, scale: 2 }).notNull().default('50.00'),
+  bidRetractionPenaltyAmount: decimal("bid_retraction_penalty_amount", { precision: 8, scale: 2 }).notNull().default('25.00'),
+  cooldownPeriodDays: integer("cooldown_period_days").notNull().default(7),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+});
+
+// Bid analytics tracking
+export const bidAnalytics = pgTable("bid_analytics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Aggregated stats (updated periodically)
+  serviceTypeId: varchar("service_type_id").references(() => serviceTypes.id),
+  period: varchar("period", { length: 20 }).notNull(), // daily, weekly, monthly
+  periodDate: timestamp("period_date").notNull(),
+  
+  totalBids: integer("total_bids").notNull().default(0),
+  averageBidAmount: decimal("average_bid_amount", { precision: 10, scale: 2 }),
+  lowestBidAmount: decimal("lowest_bid_amount", { precision: 10, scale: 2 }),
+  highestBidAmount: decimal("highest_bid_amount", { precision: 10, scale: 2 }),
+  
+  winningBidsCount: integer("winning_bids_count").notNull().default(0),
+  averageWinningBidAmount: decimal("average_winning_bid_amount", { precision: 10, scale: 2 }),
+  
+  averageTimeToFirstBid: integer("average_time_to_first_bid"), // Minutes
+  averageBidsPerJob: decimal("average_bids_per_job", { precision: 5, scale: 2 }),
+  bidAcceptanceRate: decimal("bid_acceptance_rate", { precision: 5, scale: 2 }), // Percentage
+  
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  serviceIdx: index("idx_bid_analytics_service").on(table.serviceTypeId),
+  periodIdx: index("idx_bid_analytics_period").on(table.period, table.periodDate)
 }));
 
 // ====================
@@ -1242,6 +1405,47 @@ export const insertContractorEarningsSchema = createInsertSchema(contractorEarni
 });
 export type InsertContractorEarnings = z.infer<typeof insertContractorEarningsSchema>;
 export type ContractorEarnings = typeof contractorEarnings.$inferSelect;
+
+// Bidding schemas
+export const insertJobBidSchema = createInsertSchema(jobBids).omit({ 
+  id: true,
+  status: true,
+  priceRank: true,
+  timeRank: true,
+  qualityRank: true,
+  bidScore: true,
+  contractorName: true,
+  contractorRating: true,
+  contractorCompletedJobs: true,
+  contractorResponseTime: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertJobBid = z.infer<typeof insertJobBidSchema>;
+export type JobBid = typeof jobBids.$inferSelect;
+
+export const insertBidTemplateSchema = createInsertSchema(bidTemplates).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+export type InsertBidTemplate = z.infer<typeof insertBidTemplateSchema>;
+export type BidTemplate = typeof bidTemplates.$inferSelect;
+
+export const insertBiddingConfigSchema = createInsertSchema(biddingConfig).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+export type InsertBiddingConfig = z.infer<typeof insertBiddingConfigSchema>;
+export type BiddingConfig = typeof biddingConfig.$inferSelect;
+
+export const insertBidAnalyticsSchema = createInsertSchema(bidAnalytics).omit({ 
+  id: true, 
+  createdAt: true
+});
+export type InsertBidAnalytics = z.infer<typeof insertBidAnalyticsSchema>;
+export type BidAnalytics = typeof bidAnalytics.$inferSelect;
 
 // Reviews schemas
 export const insertReviewSchema = createInsertSchema(reviews).omit({ 

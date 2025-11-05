@@ -1150,9 +1150,10 @@ export default function ContractorApply() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              {FORM_STEPS[currentStep - 1].icon && (
-                <FORM_STEPS[currentStep - 1].icon className="h-6 w-6" />
-              )}
+              {(() => {
+                const StepIcon = FORM_STEPS[currentStep - 1].icon;
+                return StepIcon ? <StepIcon className="h-6 w-6" /> : null;
+              })()}
               {FORM_STEPS[currentStep - 1].title}
             </CardTitle>
             <CardDescription>
