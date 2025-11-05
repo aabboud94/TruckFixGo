@@ -1,0 +1,755 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import AdminLayout from "@/layouts/AdminLayout";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { format } from "date-fns";
+import {
+  Search, Filter, Building2, DollarSign, TrendingUp, Award,
+  FileText, Clock, Users, Truck, AlertCircle, CheckCircle,
+  Download, RefreshCw, CreditCard, Loader2, Edit, Eye,
+  Receipt, Calendar, Shield
+} from "lucide-react";
+
+export default function AdminFleets() {
+  const { toast } = useToast();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tierFilter, setTierFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedFleet, setSelectedFleet] = useState<any>(null);
+  const [showFleetDetails, setShowFleetDetails] = useState(false);
+  const [showApprovalQueue, setShowApprovalQueue] = useState(false);
+  const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
+  const [selectedFleets, setSelectedFleets] = useState<string[]>([]);
+
+  // Query for fleets
+  const { data: fleets, isLoading, refetch } = useQuery({
+    queryKey: ['/api/admin/fleets', { tier: tierFilter, status: statusFilter, search: searchQuery }],
+  });
+
+  // Query for pending approvals
+  const { data: pendingApprovals } = useQuery({
+    queryKey: ['/api/admin/fleets/pending'],
+  });
+
+  // Mutation for updating fleet tier
+  const updateTierMutation = useMutation({
+    mutationFn: async ({ fleetId, tier }: { fleetId: string; tier: string }) => {
+      return apiRequest(`/api/admin/fleets/${fleetId}/tier`, {
+        method: 'PUT',
+        body: JSON.stringify({ tier }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/fleets'] });
+      toast({
+        title: "Tier updated",
+        description: "Fleet tier has been updated successfully",
+      });
+    },
+  });
+
+  // Mutation for updating credit limit
+  const updateCreditMutation = useMutation({
+    mutationFn: async ({ fleetId, creditLimit, paymentTerms }: any) => {
+      return apiRequest(`/api/admin/fleets/${fleetId}/credit`, {
+        method: 'PUT',
+        body: JSON.stringify({ creditLimit, paymentTerms }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/fleets'] });
+      toast({
+        title: "Credit updated",
+        description: "Fleet credit limit and terms have been updated",
+      });
+    },
+  });
+
+  // Mutation for generating invoices
+  const generateInvoiceMutation = useMutation({
+    mutationFn: async ({ fleetIds, period }: { fleetIds: string[]; period: string }) => {
+      return apiRequest('/api/admin/fleets/invoices', {
+        method: 'POST',
+        body: JSON.stringify({ fleetIds, period }),
+      });
+    },
+    onSuccess: () => {
+      setShowInvoiceDialog(false);
+      setSelectedFleets([]);
+      toast({
+        title: "Invoices generated",
+        description: "Fleet invoices have been generated successfully",
+      });
+    },
+  });
+
+  const fleetsData = fleets?.data || [
+    {
+      id: "FLT-001",
+      name: "ABC Transport",
+      contactName: "John Smith",
+      email: "john@abctransport.com",
+      phone: "(555) 123-4567",
+      status: "active",
+      tier: "gold",
+      creditLimit: 50000,
+      currentBalance: 12500,
+      paymentTerms: "NET30",
+      totalSpent: 245600,
+      totalJobs: 892,
+      avgMonthlySpend: 20467,
+      lastJobDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+      joinedDate: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
+      vehicles: 45,
+      customPricing: true,
+    },
+    {
+      id: "FLT-002",
+      name: "XYZ Logistics",
+      contactName: "Sarah Johnson",
+      email: "sarah@xyzlogistics.com",
+      phone: "(555) 987-6543",
+      status: "active",
+      tier: "silver",
+      creditLimit: 25000,
+      currentBalance: 5800,
+      paymentTerms: "NET15",
+      totalSpent: 128400,
+      totalJobs: 456,
+      avgMonthlySpend: 10700,
+      lastJobDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      joinedDate: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
+      vehicles: 22,
+      customPricing: false,
+    },
+  ];
+
+  const pendingData = pendingApprovals?.data || [
+    {
+      id: "FLT-003",
+      name: "Quick Fleet Solutions",
+      contactName: "Mike Davis",
+      email: "mike@quickfleet.com",
+      phone: "(555) 555-1234",
+      requestedTier: "silver",
+      estimatedMonthlyVolume: 15000,
+      numberOfVehicles: 30,
+      submittedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+    },
+  ];
+
+  const getTierBadge = (tier: string) => {
+    const colors: any = {
+      standard: 'secondary',
+      silver: 'default',
+      gold: 'warning',
+      platinum: 'destructive',
+    };
+    return <Badge variant={colors[tier] || 'secondary'}>{tier.toUpperCase()}</Badge>;
+  };
+
+  const handleExport = async () => {
+    try {
+      const response = await apiRequest('/api/admin/fleets/export', {
+        method: 'POST',
+        body: JSON.stringify({ format: 'csv' }),
+      });
+      
+      const blob = new Blob([response.data], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `fleets-export-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      a.click();
+      
+      toast({
+        title: "Export successful",
+        description: "Fleet data has been exported",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Export failed",
+        description: "Failed to export fleet data",
+      });
+    }
+  };
+
+  return (
+    <AdminLayout 
+      title="Fleet Management"
+      breadcrumbs={[{ label: "Fleets" }]}
+    >
+      {/* Pending Approvals Alert */}
+      {pendingData.length > 0 && (
+        <Card className="mb-6 border-orange-200 bg-orange-50/50 dark:bg-orange-950/20">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-orange-600" />
+                <CardTitle className="text-lg">Pending Fleet Applications</CardTitle>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowApprovalQueue(true)}
+                data-testid="button-view-pending"
+              >
+                Review ({pendingData.length})
+              </Button>
+            </div>
+          </CardHeader>
+        </Card>
+      )}
+
+      {/* Main Fleets Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Fleet Accounts</CardTitle>
+              <CardDescription>Manage fleet accounts, tiers, and credit limits</CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => refetch()}
+                data-testid="button-refresh-fleets"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Refresh
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleExport}
+                data-testid="button-export-fleets"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Export
+              </Button>
+              {selectedFleets.length > 0 && (
+                <Button
+                  onClick={() => setShowInvoiceDialog(true)}
+                  data-testid="button-generate-invoices"
+                >
+                  <Receipt className="mr-2 h-4 w-4" />
+                  Generate Invoices ({selectedFleets.length})
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Filters */}
+          <div className="flex gap-4 mb-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, contact, email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+                data-testid="input-search-fleets"
+              />
+            </div>
+            <Select value={tierFilter} onValueChange={setTierFilter}>
+              <SelectTrigger className="w-[180px]" data-testid="select-tier-filter">
+                <SelectValue placeholder="Filter by tier" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Tiers</SelectItem>
+                <SelectItem value="standard">Standard</SelectItem>
+                <SelectItem value="silver">Silver</SelectItem>
+                <SelectItem value="gold">Gold</SelectItem>
+                <SelectItem value="platinum">Platinum</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="suspended">Suspended</SelectItem>
+                <SelectItem value="overdue">Overdue</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Fleets Table */}
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedFleets.length === fleetsData.length}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedFleets(fleetsData.map((f: any) => f.id));
+                        } else {
+                          setSelectedFleets([]);
+                        }
+                      }}
+                    />
+                  </TableHead>
+                  <TableHead>Fleet Account</TableHead>
+                  <TableHead>Tier</TableHead>
+                  <TableHead>Credit Status</TableHead>
+                  <TableHead>Vehicles</TableHead>
+                  <TableHead>Total Spent</TableHead>
+                  <TableHead>Monthly Avg</TableHead>
+                  <TableHead>Total Jobs</TableHead>
+                  <TableHead>Last Active</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                    </TableCell>
+                  </TableRow>
+                ) : fleetsData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                      No fleet accounts found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  fleetsData.map((fleet: any) => (
+                    <TableRow key={fleet.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedFleets.includes(fleet.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedFleets([...selectedFleets, fleet.id]);
+                            } else {
+                              setSelectedFleets(selectedFleets.filter(id => id !== fleet.id));
+                            }
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{fleet.name}</p>
+                          <p className="text-sm text-muted-foreground">{fleet.contactName}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>{getTierBadge(fleet.tier)}</TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">
+                              ${fleet.currentBalance.toLocaleString()} / ${fleet.creditLimit.toLocaleString()}
+                            </span>
+                          </div>
+                          <Progress 
+                            value={(fleet.currentBalance / fleet.creditLimit) * 100}
+                            className="mt-1 h-1.5"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {fleet.paymentTerms}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Truck className="h-4 w-4 text-muted-foreground" />
+                          {fleet.vehicles}
+                        </div>
+                      </TableCell>
+                      <TableCell>${fleet.totalSpent.toLocaleString()}</TableCell>
+                      <TableCell>${fleet.avgMonthlySpend.toLocaleString()}</TableCell>
+                      <TableCell>{fleet.totalJobs}</TableCell>
+                      <TableCell>{format(fleet.lastJobDate, 'MMM d, yyyy')}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedFleet(fleet);
+                              setShowFleetDetails(true);
+                            }}
+                            data-testid={`button-view-${fleet.id}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedFleet(fleet);
+                            }}
+                            data-testid={`button-edit-${fleet.id}`}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Fleet Details Dialog */}
+      <Dialog open={showFleetDetails} onOpenChange={setShowFleetDetails}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Fleet Details - {selectedFleet?.name}</DialogTitle>
+            <DialogDescription>
+              Complete fleet account information and configuration
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedFleet && (
+            <Tabs defaultValue="info" className="mt-4">
+              <TabsList className="grid w-full grid-cols-5">
+                <TabsTrigger value="info">Information</TabsTrigger>
+                <TabsTrigger value="pricing">Pricing</TabsTrigger>
+                <TabsTrigger value="credit">Credit</TabsTrigger>
+                <TabsTrigger value="vehicles">Vehicles</TabsTrigger>
+                <TabsTrigger value="invoices">Invoices</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="info" className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Fleet Name</Label>
+                    <Input value={selectedFleet.name} readOnly />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Contact Name</Label>
+                    <Input value={selectedFleet.contactName} readOnly />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input value={selectedFleet.email} readOnly />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Phone</Label>
+                    <Input value={selectedFleet.phone} readOnly />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Tier</Label>
+                    <Select
+                      value={selectedFleet.tier}
+                      onValueChange={(value) => {
+                        updateTierMutation.mutate({
+                          fleetId: selectedFleet.id,
+                          tier: value,
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="standard">Standard</SelectItem>
+                        <SelectItem value="silver">Silver</SelectItem>
+                        <SelectItem value="gold">Gold</SelectItem>
+                        <SelectItem value="platinum">Platinum</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Joined Date</Label>
+                    <Input value={format(selectedFleet.joinedDate, 'PPP')} readOnly />
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="pricing">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div>
+                      <p className="font-medium">Custom Pricing</p>
+                      <p className="text-sm text-muted-foreground">
+                        Override standard tier pricing
+                      </p>
+                    </div>
+                    <Checkbox checked={selectedFleet.customPricing} />
+                  </div>
+                  
+                  {selectedFleet.customPricing && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm">Custom Price Configuration</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label className="text-sm">Emergency Repair</Label>
+                            <Input type="number" placeholder="% discount" />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-sm">Truck Wash</Label>
+                            <Input type="number" placeholder="% discount" />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-sm">PM Service</Label>
+                            <Input type="number" placeholder="% discount" />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-sm">Tire Service</Label>
+                            <Input type="number" placeholder="% discount" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="credit">
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Credit Limit</Label>
+                      <Input
+                        type="number"
+                        defaultValue={selectedFleet.creditLimit}
+                        onChange={(e) => {
+                          // Update credit limit
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Payment Terms</Label>
+                      <Select defaultValue={selectedFleet.paymentTerms}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="COD">Cash on Delivery</SelectItem>
+                          <SelectItem value="NET15">NET 15</SelectItem>
+                          <SelectItem value="NET30">NET 30</SelectItem>
+                          <SelectItem value="NET45">NET 45</SelectItem>
+                          <SelectItem value="NET60">NET 60</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Current Balance</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span>Outstanding Balance</span>
+                          <span className="font-semibold">
+                            ${selectedFleet.currentBalance.toLocaleString()}
+                          </span>
+                        </div>
+                        <Progress
+                          value={(selectedFleet.currentBalance / selectedFleet.creditLimit) * 100}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {((selectedFleet.currentBalance / selectedFleet.creditLimit) * 100).toFixed(1)}% of credit limit used
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="vehicles">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium">Fleet Vehicles ({selectedFleet.vehicles})</h3>
+                    <Button size="sm">
+                      Add Vehicle
+                    </Button>
+                  </div>
+                  <div className="text-center py-8 text-muted-foreground">
+                    Vehicle list will be displayed here
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="invoices">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium">Recent Invoices</h3>
+                    <Button size="sm">
+                      Generate Invoice
+                    </Button>
+                  </div>
+                  <div className="text-center py-8 text-muted-foreground">
+                    Invoice history will be displayed here
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Approval Queue Dialog */}
+      <Dialog open={showApprovalQueue} onOpenChange={setShowApprovalQueue}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Fleet Application Queue</DialogTitle>
+            <DialogDescription>
+              Review and approve pending fleet applications
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="h-[400px]">
+            <div className="space-y-4">
+              {pendingData.map((fleet: any) => (
+                <Card key={fleet.id}>
+                  <CardContent className="pt-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-semibold">{fleet.name}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Contact: {fleet.contactName}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {fleet.email} • {fleet.phone}
+                          </p>
+                        </div>
+                        <Badge>{fleet.requestedTier}</Badge>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Est. Monthly Volume</p>
+                          <p className="font-semibold">
+                            ${fleet.estimatedMonthlyVolume.toLocaleString()}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Number of Vehicles</p>
+                          <p className="font-semibold">{fleet.numberOfVehicles}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Submitted</p>
+                          <p className="font-semibold">
+                            {format(fleet.submittedAt, 'MMM d, yyyy')}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <Button
+                          className="flex-1"
+                          onClick={() => {
+                            // Approve fleet
+                            setShowApprovalQueue(false);
+                            toast({
+                              title: "Fleet approved",
+                              description: "Fleet account has been approved",
+                            });
+                          }}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => {
+                            // Reject fleet
+                          }}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generate Invoices Dialog */}
+      <Dialog open={showInvoiceDialog} onOpenChange={setShowInvoiceDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate Fleet Invoices</DialogTitle>
+            <DialogDescription>
+              Generate invoices for {selectedFleets.length} selected fleet(s)
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Invoice Period</Label>
+              <Select>
+                <SelectTrigger data-testid="select-invoice-period">
+                  <SelectValue placeholder="Select period" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="current_month">Current Month</SelectItem>
+                  <SelectItem value="last_month">Last Month</SelectItem>
+                  <SelectItem value="last_quarter">Last Quarter</SelectItem>
+                  <SelectItem value="custom">Custom Range</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Invoice Date</Label>
+              <Input type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Due Date</Label>
+              <Input type="date" />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowInvoiceDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                generateInvoiceMutation.mutate({
+                  fleetIds: selectedFleets,
+                  period: 'current_month',
+                });
+              }}
+              disabled={generateInvoiceMutation.isPending}
+              data-testid="button-generate"
+            >
+              {generateInvoiceMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Receipt className="mr-2 h-4 w-4" />
+              )}
+              Generate Invoices
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </AdminLayout>
+  );
+}
