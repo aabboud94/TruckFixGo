@@ -7,6 +7,7 @@ import Homepage from "@/pages/Homepage";
 import EmergencyBooking from "@/pages/emergency-booking";
 import TrackingPage from "@/pages/tracking";
 import PaymentMethodsPage from "@/pages/payment-methods";
+import BiddingJobsPage from "@/pages/bidding-jobs";
 
 // Contractor Pages
 import ContractorAuth from "@/pages/contractor/auth";
@@ -17,6 +18,7 @@ import ContractorEarnings from "@/pages/contractor/earnings";
 import ContractorPerformance from "@/pages/contractor/performance";
 import ContractorProfile from "@/pages/contractor/profile";
 import ContractorActiveJob from "@/pages/contractor/active-job";
+import ContractorBidding from "@/pages/contractor/bidding";
 
 // Fleet Pages
 import FleetLanding from "@/pages/fleet";
@@ -38,6 +40,7 @@ import AdminContractors from "@/pages/admin/contractors";
 import AdminApplications from "@/pages/admin/applications";
 import AdminTemplates from "@/pages/admin/templates";
 import AdminPricingRules from "@/pages/admin/pricing-rules";
+import AdminBidding from "@/pages/admin/bidding";
 
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
@@ -56,10 +59,14 @@ function Router() {
       {/* Payment Pages */}
       <Route path="/payment-methods" component={PaymentMethodsPage} />
       
+      {/* Bidding Pages */}
+      <Route path="/bidding" component={BiddingJobsPage} />
+      
       {/* Contractor Pages */}
       <Route path="/contractor/auth" component={ContractorAuth} />
       <Route path="/contractor/apply" component={ContractorApply} />
       <Route path="/contractor/dashboard" component={ContractorDashboard} />
+      <Route path="/contractor/bidding" component={ContractorBidding} />
       <Route path="/contractor/jobs" component={ContractorJobs} />
       <Route path="/contractor/jobs/:jobId" component={ContractorJobs} />
       <Route path="/contractor/earnings" component={ContractorEarnings} />
@@ -87,6 +94,7 @@ function Router() {
       <Route path="/admin/applications" component={AdminApplications} />
       <Route path="/admin/templates" component={AdminTemplates} />
       <Route path="/admin/pricing-rules" component={AdminPricingRules} />
+      <Route path="/admin/bidding" component={AdminBidding} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />

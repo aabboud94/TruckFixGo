@@ -12,7 +12,17 @@ const MessageTypeEnum = z.enum([
   'ETA_UPDATE',
   'CONTRACTOR_JOINED',
   'CONTRACTOR_LEFT',
-  'ERROR'
+  'ERROR',
+  // Bidding message types
+  'JOIN_BIDDING',
+  'LEAVE_BIDDING',
+  'NEW_BID',
+  'BID_ACCEPTED',
+  'BID_REJECTED',
+  'BID_COUNTERED',
+  'BID_WITHDRAWN',
+  'BIDDING_CLOSED',
+  'BIDDING_UPDATE'
 ]);
 
 const LocationSchema = z.object({
@@ -30,8 +40,9 @@ const WebSocketMessageSchema = z.object({
 interface ExtendedWebSocket extends WebSocket {
   isAlive: boolean;
   userId?: string;
-  role?: 'customer' | 'contractor' | 'guest';
+  role?: 'customer' | 'contractor' | 'guest' | 'admin';
   jobId?: string;
+  biddingJobId?: string;
 }
 
 interface TrackingRoom {
@@ -47,9 +58,24 @@ interface TrackingRoom {
   status?: string;
 }
 
+interface BiddingRoom {
+  jobId: string;
+  customer?: ExtendedWebSocket;
+  contractors: Set<ExtendedWebSocket>;
+  admins: Set<ExtendedWebSocket>;
+  currentBids: Map<string, {
+    contractorId: string;
+    bidAmount: number;
+    timestamp: string;
+  }>;
+  biddingDeadline?: Date;
+  status: 'active' | 'closed' | 'cancelled';
+}
+
 class TrackingWebSocketServer {
   private wss: WebSocketServer | null = null;
   private rooms: Map<string, TrackingRoom> = new Map();
+  private biddingRooms: Map<string, BiddingRoom> = new Map();
   private clients: Map<string, ExtendedWebSocket> = new Map();
   private pingInterval: NodeJS.Timeout | null = null;
 
@@ -124,6 +150,13 @@ class TrackingWebSocketServer {
         break;
       case 'STATUS_UPDATE':
         await this.handleStatusUpdate(ws, message.payload);
+        break;
+      // Bidding message handlers
+      case 'JOIN_BIDDING':
+        await this.handleJoinBidding(ws, message.payload);
+        break;
+      case 'LEAVE_BIDDING':
+        this.handleLeaveBidding(ws);
         break;
       default:
         this.sendError(ws, `Unknown message type: ${message.type}`);
@@ -373,6 +406,267 @@ class TrackingWebSocketServer {
 
   private handleDisconnect(ws: ExtendedWebSocket) {
     this.handleLeaveTracking(ws);
+    this.handleLeaveBidding(ws);
+  }
+
+  // ==================== BIDDING HANDLERS ====================
+  
+  private async handleJoinBidding(ws: ExtendedWebSocket, payload: any) {
+    const { jobId, userId, role } = payload;
+
+    if (!jobId) {
+      this.sendError(ws, 'Job ID is required');
+      return;
+    }
+
+    // Verify job exists and allows bidding
+    const job = await storage.getJob(jobId);
+    if (!job) {
+      this.sendError(ws, 'Job not found');
+      return;
+    }
+
+    if (!job.allowBidding) {
+      this.sendError(ws, 'Job does not allow bidding');
+      return;
+    }
+
+    // Set client properties
+    ws.biddingJobId = jobId;
+    ws.userId = userId;
+    ws.role = role;
+
+    // Get or create bidding room
+    let room = this.biddingRooms.get(jobId);
+    if (!room) {
+      const biddingDeadline = job.biddingDeadline ? new Date(job.biddingDeadline) : undefined;
+      room = {
+        jobId,
+        contractors: new Set(),
+        admins: new Set(),
+        currentBids: new Map(),
+        biddingDeadline,
+        status: biddingDeadline && biddingDeadline < new Date() ? 'closed' : 'active'
+      };
+      this.biddingRooms.set(jobId, room);
+    }
+
+    // Add client to room based on role
+    if (role === 'customer' && job.customerId === userId) {
+      room.customer = ws;
+    } else if (role === 'contractor') {
+      room.contractors.add(ws);
+    } else if (role === 'admin') {
+      room.admins.add(ws);
+    }
+
+    // Get current bids for the job
+    const bids = await storage.getJobBids(jobId);
+    
+    // Send initial state to the new client
+    this.sendMessage(ws, {
+      type: 'JOIN_BIDDING',
+      payload: {
+        success: true,
+        jobId,
+        status: room.status,
+        biddingDeadline: room.biddingDeadline,
+        currentBids: bids.map(b => ({
+          id: b.id,
+          contractorId: b.contractorId,
+          bidAmount: b.bidAmount,
+          estimatedHours: b.estimatedHours,
+          status: b.status,
+          createdAt: b.createdAt
+        })),
+        totalBids: bids.length
+      }
+    });
+
+    console.log(`Client joined bidding for job ${jobId}, role: ${role}`);
+  }
+
+  private handleLeaveBidding(ws: ExtendedWebSocket) {
+    if (!ws.biddingJobId) return;
+
+    const room = this.biddingRooms.get(ws.biddingJobId);
+    if (room) {
+      if (ws.role === 'customer') {
+        room.customer = undefined;
+      } else if (ws.role === 'contractor') {
+        room.contractors.delete(ws);
+      } else if (ws.role === 'admin') {
+        room.admins.delete(ws);
+      }
+
+      // Clean up empty rooms
+      if (!room.customer && room.contractors.size === 0 && room.admins.size === 0) {
+        this.biddingRooms.delete(ws.biddingJobId);
+      }
+    }
+
+    console.log(`Client left bidding for job ${ws.biddingJobId}`);
+  }
+
+  // Broadcast bid updates to all participants
+  public async broadcastNewBid(jobId: string, bid: any) {
+    const room = this.biddingRooms.get(jobId);
+    if (!room) return;
+
+    const message = {
+      type: 'NEW_BID',
+      payload: {
+        bidId: bid.id,
+        jobId: bid.jobId,
+        contractorId: bid.contractorId,
+        bidAmount: bid.bidAmount,
+        estimatedHours: bid.estimatedHours,
+        message: bid.message,
+        timestamp: bid.createdAt
+      }
+    };
+
+    // Send to customer
+    if (room.customer) {
+      this.sendMessage(room.customer, message);
+    }
+
+    // Send to all contractors (anonymized if bidding is active)
+    room.contractors.forEach(contractor => {
+      const anonymizedMessage = room.status === 'active' ? {
+        ...message,
+        payload: {
+          ...message.payload,
+          contractorId: undefined // Hide contractor identity during active bidding
+        }
+      } : message;
+      this.sendMessage(contractor, anonymizedMessage);
+    });
+
+    // Send to admins
+    room.admins.forEach(admin => {
+      this.sendMessage(admin, message);
+    });
+  }
+
+  // Broadcast bid acceptance
+  public async broadcastBidAccepted(jobId: string, bidId: string, contractorId: string) {
+    const room = this.biddingRooms.get(jobId);
+    if (!room) return;
+
+    const message = {
+      type: 'BID_ACCEPTED',
+      payload: {
+        bidId,
+        jobId,
+        contractorId,
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    // Update room status
+    room.status = 'closed';
+
+    // Broadcast to all participants
+    this.broadcastToBiddingRoom(jobId, message);
+
+    // Send specific notifications
+    const winnerClient = this.clients.get(contractorId);
+    if (winnerClient) {
+      this.sendMessage(winnerClient, {
+        type: 'BIDDING_UPDATE',
+        payload: {
+          message: 'Congratulations! Your bid has been accepted.',
+          type: 'success'
+        }
+      });
+    }
+
+    // Notify other contractors they didn't win
+    room.contractors.forEach(contractor => {
+      if (contractor.userId !== contractorId) {
+        this.sendMessage(contractor, {
+          type: 'BIDDING_UPDATE',
+          payload: {
+            message: 'This job has been awarded to another contractor.',
+            type: 'info'
+          }
+        });
+      }
+    });
+  }
+
+  // Broadcast bid rejection
+  public async broadcastBidRejected(jobId: string, bidId: string, contractorId: string) {
+    const room = this.biddingRooms.get(jobId);
+    if (!room) return;
+
+    const message = {
+      type: 'BID_REJECTED',
+      payload: {
+        bidId,
+        jobId,
+        contractorId,
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    // Send to the affected contractor
+    const contractorClient = this.clients.get(contractorId);
+    if (contractorClient) {
+      this.sendMessage(contractorClient, message);
+    }
+
+    // Also update customer and admins
+    if (room.customer) {
+      this.sendMessage(room.customer, message);
+    }
+    room.admins.forEach(admin => {
+      this.sendMessage(admin, message);
+    });
+  }
+
+  // Broadcast bidding deadline approaching
+  public async broadcastBiddingDeadlineWarning(jobId: string, minutesRemaining: number) {
+    const room = this.biddingRooms.get(jobId);
+    if (!room) return;
+
+    const message = {
+      type: 'BIDDING_UPDATE',
+      payload: {
+        type: 'deadline_warning',
+        message: `Bidding closes in ${minutesRemaining} minutes`,
+        minutesRemaining,
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    this.broadcastToBiddingRoom(jobId, message);
+  }
+
+  // Broadcast to all participants in a bidding room
+  private broadcastToBiddingRoom(jobId: string, message: any, exclude?: ExtendedWebSocket) {
+    const room = this.biddingRooms.get(jobId);
+    if (!room) return;
+
+    // Send to customer
+    if (room.customer && room.customer !== exclude) {
+      this.sendMessage(room.customer, message);
+    }
+
+    // Send to contractors
+    room.contractors.forEach(contractor => {
+      if (contractor !== exclude) {
+        this.sendMessage(contractor, message);
+      }
+    });
+
+    // Send to admins
+    room.admins.forEach(admin => {
+      if (admin !== exclude) {
+        this.sendMessage(admin, message);
+      }
+    });
   }
 
   public shutdown() {

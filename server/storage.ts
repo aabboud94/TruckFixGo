@@ -37,6 +37,10 @@ import {
   contractorApplications,
   applicationDocuments,
   backgroundChecks,
+  jobBids,
+  bidTemplates,
+  biddingConfig,
+  bidAnalytics,
   type User,
   type InsertUser,
   type Session,
@@ -113,7 +117,18 @@ import {
   type InsertApplicationDocument,
   type BackgroundCheck,
   type InsertBackgroundCheck,
+  type JobBid,
+  type InsertJobBid,
+  type BidTemplate,
+  type InsertBidTemplate,
+  type BiddingConfig,
+  type InsertBiddingConfig,
+  type BidAnalytics,
+  type InsertBidAnalytics,
   performanceTierEnum,
+  bidStatusEnum,
+  biddingStrategyEnum,
+  bidAutoAcceptEnum,
   reminderStatusEnum,
   reminderTypeEnum,
   reminderTimingEnum,
@@ -486,6 +501,41 @@ export interface IStorage {
   updateRefundStatus(id: string, status: typeof refundStatusEnum.enumValues[number]): Promise<Refund | undefined>;
   getRefundsByTransaction(transactionId: string): Promise<Refund[]>;
   
+  // ==================== BIDDING OPERATIONS ====================
+  createJobBid(bid: InsertJobBid): Promise<JobBid>;
+  getJobBid(id: string): Promise<JobBid | undefined>;
+  updateJobBid(id: string, updates: Partial<InsertJobBid>): Promise<JobBid | undefined>;
+  getJobBids(jobId: string): Promise<JobBid[]>;
+  getContractorBids(contractorId: string, status?: typeof bidStatusEnum.enumValues[number]): Promise<JobBid[]>;
+  acceptBid(bidId: string, jobId: string): Promise<JobBid | undefined>;
+  rejectBid(bidId: string, reason?: string): Promise<JobBid | undefined>;
+  counterBid(bidId: string, counterAmount: number, message: string): Promise<JobBid | undefined>;
+  withdrawBid(bidId: string, contractorId: string): Promise<JobBid | undefined>;
+  getAvailableBiddingJobs(contractorId: string, filters?: {
+    serviceTypeId?: string;
+    maxDistance?: number;
+    minPrice?: number;
+  }): Promise<Job[]>;
+  updateBidRanks(jobId: string): Promise<void>;
+  checkBidDeadline(jobId: string): Promise<boolean>;
+  autoAcceptLowestBid(jobId: string): Promise<JobBid | undefined>;
+  
+  createBidTemplate(template: InsertBidTemplate): Promise<BidTemplate>;
+  updateBidTemplate(id: string, updates: Partial<InsertBidTemplate>): Promise<BidTemplate | undefined>;
+  deleteBidTemplate(id: string): Promise<boolean>;
+  getContractorBidTemplates(contractorId: string): Promise<BidTemplate[]>;
+  
+  getBiddingConfig(): Promise<BiddingConfig | undefined>;
+  updateBiddingConfig(updates: Partial<InsertBiddingConfig>): Promise<BiddingConfig>;
+  
+  createBidAnalytics(analytics: InsertBidAnalytics): Promise<BidAnalytics>;
+  getBidAnalytics(filters: {
+    serviceTypeId?: string;
+    period?: string;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<BidAnalytics[]>;
+
   // ==================== ADMIN OPERATIONS ====================
   getSetting(key: string): Promise<AdminSetting | undefined>;
   updateSetting(key: string, value: any): Promise<AdminSetting>;
@@ -1828,6 +1878,416 @@ export class PostgreSQLStorage implements IStorage {
     return await db.select().from(refunds)
       .where(eq(refunds.transactionId, transactionId))
       .orderBy(desc(refunds.createdAt));
+  }
+
+  // ==================== BIDDING OPERATIONS ====================
+
+  async createJobBid(bid: InsertJobBid): Promise<JobBid> {
+    // Get contractor info for snapshot
+    const contractor = await this.getContractorProfile(bid.contractorId);
+    const user = await this.getUser(bid.contractorId);
+    
+    // Populate contractor info snapshot
+    const bidWithContractorInfo = {
+      ...bid,
+      contractorName: user?.firstName ? `${user.firstName} ${user.lastName || ''}` : contractor?.companyName || 'Unknown',
+      contractorRating: contractor?.averageRating ? Number(contractor.averageRating) : undefined,
+      contractorCompletedJobs: contractor?.totalJobsCompleted || 0,
+      contractorResponseTime: contractor?.averageResponseTime || undefined
+    };
+    
+    const result = await db.insert(jobBids).values(bidWithContractorInfo).returning();
+    
+    // Update bid count on job
+    await db.update(jobs)
+      .set({ 
+        bidCount: sql`bid_count + 1`,
+        updatedAt: new Date()
+      })
+      .where(eq(jobs.id, bid.jobId));
+    
+    // Update bid ranks
+    await this.updateBidRanks(bid.jobId);
+    
+    return result[0];
+  }
+
+  async getJobBid(id: string): Promise<JobBid | undefined> {
+    const result = await db.select().from(jobBids).where(eq(jobBids.id, id)).limit(1);
+    return result[0];
+  }
+
+  async updateJobBid(id: string, updates: Partial<InsertJobBid>): Promise<JobBid | undefined> {
+    const result = await db.update(jobBids)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(jobBids.id, id))
+      .returning();
+    
+    if (result[0]) {
+      // Update bid ranks if amount changed
+      if (updates.bidAmount) {
+        const bid = result[0];
+        await this.updateBidRanks(bid.jobId);
+      }
+    }
+    
+    return result[0];
+  }
+
+  async getJobBids(jobId: string): Promise<JobBid[]> {
+    return await db.select().from(jobBids)
+      .where(eq(jobBids.jobId, jobId))
+      .orderBy(asc(jobBids.bidAmount), desc(jobBids.createdAt));
+  }
+
+  async getContractorBids(contractorId: string, status?: typeof bidStatusEnum.enumValues[number]): Promise<JobBid[]> {
+    const conditions = [eq(jobBids.contractorId, contractorId)];
+    if (status) {
+      conditions.push(eq(jobBids.status, status));
+    }
+    
+    return await db.select().from(jobBids)
+      .where(and(...conditions))
+      .orderBy(desc(jobBids.createdAt));
+  }
+
+  async acceptBid(bidId: string, jobId: string): Promise<JobBid | undefined> {
+    // Start transaction
+    const acceptedBid = await db.transaction(async (tx) => {
+      // Accept the winning bid
+      const [accepted] = await tx.update(jobBids)
+        .set({ 
+          status: 'accepted',
+          acceptedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(jobBids.id, bidId))
+        .returning();
+      
+      if (!accepted) return undefined;
+      
+      // Reject all other bids for this job
+      await tx.update(jobBids)
+        .set({ 
+          status: 'rejected',
+          rejectedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(and(
+          eq(jobBids.jobId, jobId),
+          ne(jobBids.id, bidId),
+          eq(jobBids.status, 'pending')
+        ));
+      
+      // Update the job with winning bid and assign contractor
+      await tx.update(jobs)
+        .set({
+          winningBidId: bidId,
+          contractorId: accepted.contractorId,
+          finalPrice: accepted.bidAmount ? Number(accepted.bidAmount) : undefined,
+          status: 'assigned',
+          assignedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(jobs.id, jobId));
+      
+      return accepted;
+    });
+    
+    return acceptedBid;
+  }
+
+  async rejectBid(bidId: string, reason?: string): Promise<JobBid | undefined> {
+    const result = await db.update(jobBids)
+      .set({ 
+        status: 'rejected',
+        rejectedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(jobBids.id, bidId))
+      .returning();
+    
+    return result[0];
+  }
+
+  async counterBid(bidId: string, counterAmount: number, message: string): Promise<JobBid | undefined> {
+    // Get original bid
+    const originalBid = await this.getJobBid(bidId);
+    if (!originalBid) return undefined;
+    
+    // Update original bid status
+    await db.update(jobBids)
+      .set({ 
+        status: 'countered',
+        updatedAt: new Date()
+      })
+      .where(eq(jobBids.id, bidId));
+    
+    // Create counter bid
+    const counterBid = await this.createJobBid({
+      jobId: originalBid.jobId,
+      contractorId: originalBid.contractorId,
+      bidAmount: counterAmount.toString(),
+      estimatedCompletionTime: originalBid.estimatedCompletionTime,
+      messageToCustomer: message,
+      isCounterOffer: true,
+      originalBidId: bidId,
+      counterOfferAmount: counterAmount.toString(),
+      counterOfferMessage: message,
+      expiresAt: originalBid.expiresAt,
+      laborCost: originalBid.laborCost,
+      materialsCost: originalBid.materialsCost,
+      materialsDescription: originalBid.materialsDescription
+    });
+    
+    return counterBid;
+  }
+
+  async withdrawBid(bidId: string, contractorId: string): Promise<JobBid | undefined> {
+    const result = await db.update(jobBids)
+      .set({ 
+        status: 'withdrawn',
+        withdrawnAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(jobBids.id, bidId),
+        eq(jobBids.contractorId, contractorId)
+      ))
+      .returning();
+    
+    if (result[0]) {
+      // Update bid count on job
+      await db.update(jobs)
+        .set({ 
+          bidCount: sql`GREATEST(bid_count - 1, 0)`,
+          updatedAt: new Date()
+        })
+        .where(eq(jobs.id, result[0].jobId));
+    }
+    
+    return result[0];
+  }
+
+  async getAvailableBiddingJobs(contractorId: string, filters?: {
+    serviceTypeId?: string;
+    maxDistance?: number;
+    minPrice?: number;
+  }): Promise<Job[]> {
+    const conditions = [
+      eq(jobs.allowBidding, true),
+      eq(jobs.status, 'new'),
+      gt(jobs.biddingDeadline, new Date()),
+      or(
+        isNull(jobs.contractorId),
+        ne(jobs.contractorId, contractorId)
+      )
+    ];
+    
+    if (filters?.serviceTypeId) {
+      conditions.push(eq(jobs.serviceTypeId, filters.serviceTypeId));
+    }
+    
+    if (filters?.minPrice) {
+      conditions.push(gte(jobs.estimatedPrice, filters.minPrice.toString()));
+    }
+    
+    // Get contractor's existing bids to exclude jobs they've already bid on
+    const existingBids = await db.select({ jobId: jobBids.jobId })
+      .from(jobBids)
+      .where(eq(jobBids.contractorId, contractorId));
+    
+    const bidJobIds = existingBids.map(b => b.jobId);
+    
+    if (bidJobIds.length > 0) {
+      conditions.push(sql`${jobs.id} NOT IN (${sql.raw(bidJobIds.map(() => '?').join(','))})`, ...bidJobIds);
+    }
+    
+    return await db.select().from(jobs)
+      .where(and(...conditions))
+      .orderBy(desc(jobs.createdAt))
+      .limit(100);
+  }
+
+  async updateBidRanks(jobId: string): Promise<void> {
+    // Get all pending bids for the job
+    const bids = await db.select().from(jobBids)
+      .where(and(
+        eq(jobBids.jobId, jobId),
+        eq(jobBids.status, 'pending')
+      ))
+      .orderBy(asc(jobBids.bidAmount));
+    
+    // Update price ranks
+    for (let i = 0; i < bids.length; i++) {
+      const bid = bids[i];
+      await db.update(jobBids)
+        .set({ priceRank: i + 1 })
+        .where(eq(jobBids.id, bid.id));
+    }
+    
+    // Update time ranks
+    const bidsByTime = [...bids].sort((a, b) => 
+      (a.estimatedCompletionTime || 999999) - (b.estimatedCompletionTime || 999999)
+    );
+    
+    for (let i = 0; i < bidsByTime.length; i++) {
+      const bid = bidsByTime[i];
+      await db.update(jobBids)
+        .set({ timeRank: i + 1 })
+        .where(eq(jobBids.id, bid.id));
+    }
+    
+    // Update quality ranks based on contractor rating
+    const bidsByQuality = [...bids].sort((a, b) => 
+      (Number(b.contractorRating) || 0) - (Number(a.contractorRating) || 0)
+    );
+    
+    for (let i = 0; i < bidsByQuality.length; i++) {
+      const bid = bidsByQuality[i];
+      await db.update(jobBids)
+        .set({ qualityRank: i + 1 })
+        .where(eq(jobBids.id, bid.id));
+    }
+    
+    // Calculate and update bid scores (weighted average)
+    for (const bid of bids) {
+      const priceScore = (bids.length - (bid.priceRank || bids.length) + 1) / bids.length * 40;
+      const timeScore = (bidsByTime.length - (bid.timeRank || bidsByTime.length) + 1) / bidsByTime.length * 30;
+      const qualityScore = (bidsByQuality.length - (bid.qualityRank || bidsByQuality.length) + 1) / bidsByQuality.length * 30;
+      const totalScore = priceScore + timeScore + qualityScore;
+      
+      await db.update(jobBids)
+        .set({ bidScore: totalScore.toString() })
+        .where(eq(jobBids.id, bid.id));
+    }
+    
+    // Update job's lowest and average bid amounts
+    if (bids.length > 0) {
+      const amounts = bids.map(b => Number(b.bidAmount) || 0).filter(a => a > 0);
+      const lowestBid = Math.min(...amounts);
+      const averageBid = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+      
+      await db.update(jobs)
+        .set({
+          lowestBidAmount: lowestBid.toString(),
+          averageBidAmount: averageBid.toString()
+        })
+        .where(eq(jobs.id, jobId));
+    }
+  }
+
+  async checkBidDeadline(jobId: string): Promise<boolean> {
+    const job = await this.getJob(jobId);
+    if (!job || !job.biddingDeadline) return false;
+    
+    return new Date() < new Date(job.biddingDeadline);
+  }
+
+  async autoAcceptLowestBid(jobId: string): Promise<JobBid | undefined> {
+    const job = await this.getJob(jobId);
+    if (!job || job.autoAcceptBids !== 'lowest') return undefined;
+    
+    // Get the lowest bid
+    const bids = await this.getJobBids(jobId);
+    const pendingBids = bids.filter(b => b.status === 'pending');
+    
+    if (pendingBids.length === 0) return undefined;
+    
+    const lowestBid = pendingBids[0]; // Already sorted by amount
+    
+    // Check if reserve price is met
+    if (job.reservePrice && Number(lowestBid.bidAmount) > Number(job.reservePrice)) {
+      return undefined;
+    }
+    
+    // Accept the lowest bid
+    return await this.acceptBid(lowestBid.id, jobId);
+  }
+
+  async createBidTemplate(template: InsertBidTemplate): Promise<BidTemplate> {
+    const result = await db.insert(bidTemplates).values(template).returning();
+    return result[0];
+  }
+
+  async updateBidTemplate(id: string, updates: Partial<InsertBidTemplate>): Promise<BidTemplate | undefined> {
+    const result = await db.update(bidTemplates)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(bidTemplates.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteBidTemplate(id: string): Promise<boolean> {
+    const result = await db.delete(bidTemplates)
+      .where(eq(bidTemplates.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  async getContractorBidTemplates(contractorId: string): Promise<BidTemplate[]> {
+    return await db.select().from(bidTemplates)
+      .where(and(
+        eq(bidTemplates.contractorId, contractorId),
+        eq(bidTemplates.isActive, true)
+      ))
+      .orderBy(desc(bidTemplates.createdAt));
+  }
+
+  async getBiddingConfig(): Promise<BiddingConfig | undefined> {
+    const result = await db.select().from(biddingConfig).limit(1);
+    return result[0];
+  }
+
+  async updateBiddingConfig(updates: Partial<InsertBiddingConfig>): Promise<BiddingConfig> {
+    const existing = await this.getBiddingConfig();
+    
+    if (existing) {
+      const result = await db.update(biddingConfig)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(biddingConfig.id, existing.id))
+        .returning();
+      return result[0];
+    } else {
+      const result = await db.insert(biddingConfig)
+        .values({ ...updates })
+        .returning();
+      return result[0];
+    }
+  }
+
+  async createBidAnalytics(analytics: InsertBidAnalytics): Promise<BidAnalytics> {
+    const result = await db.insert(bidAnalytics).values(analytics).returning();
+    return result[0];
+  }
+
+  async getBidAnalytics(filters: {
+    serviceTypeId?: string;
+    period?: string;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<BidAnalytics[]> {
+    const conditions = [];
+    
+    if (filters.serviceTypeId) {
+      conditions.push(eq(bidAnalytics.serviceTypeId, filters.serviceTypeId));
+    }
+    
+    if (filters.period) {
+      conditions.push(eq(bidAnalytics.period, filters.period));
+    }
+    
+    if (filters.fromDate) {
+      conditions.push(gte(bidAnalytics.periodDate, filters.fromDate));
+    }
+    
+    if (filters.toDate) {
+      conditions.push(lte(bidAnalytics.periodDate, filters.toDate));
+    }
+    
+    return await db.select().from(bidAnalytics)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(bidAnalytics.periodDate));
   }
 
   // ==================== ADMIN OPERATIONS ====================
