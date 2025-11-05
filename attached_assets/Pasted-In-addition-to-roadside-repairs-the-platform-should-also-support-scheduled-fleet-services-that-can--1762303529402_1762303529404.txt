@@ -1,0 +1,101 @@
+In addition to roadside repairs, the platform should also support scheduled fleet services that can be booked at a carrier’s yard, distribution center, or driver home base — not just on highways or emergency breakdown locations.
+
+📦 Types of Fleet Services to Support:
+
+Mobile Preventative Maintenance (PM)
+
+Oil changes, filters, belts, coolant checks, DOT pre-trip inspections, etc.
+
+Tire Services
+
+Rotations, replacements, balancing, recap swaps
+
+Trailer and Reefer Maintenance
+
+Reefer checks, dry van seals, light repairs, brake adjustments
+
+In-Yard Diagnostics & Safety Checks
+
+ELD scanners, sensor resets, brake chamber inspections, washer fluid top-off
+
+In-Yard Engine Fault Clears
+
+Quick resets or DPF forced regens via scan tool
+
+Mobile Truck Washing / Detailing
+
+On-site truck and trailer washing at carrier's yard or rest stop
+
+Extra charge if water source isn’t available — configurable in pricing tier
+
+Detailing add-ons: frame degreasing, tire shine, interior detail, tractor polish
+
+🔁 Fleet Service Booking Flow:
+
+Carrier logs in → selects yard or saved address → chooses “Fleet Service” instead of emergency repair
+
+Fleet jobs can be scheduled in advance for specific dates/times
+
+Supports multi-vehicle batch booking (ex: “Wash all 5 trucks Friday 8 AM”)
+
+Mechanic(s) assigned same as roadside, but status uses scheduled start time
+
+Supports recurring services (e.g., “Oil change every 15k miles” or “Wash fleet every 2 weeks”)
+
+💸 Pricing & Water Source Rules
+
+Use dynamic pricing logic:
+
+If carrier provides water hookup: base price applies
+
+If service provider must haul water: surcharge automatically added
+
+Pricing can be set at admin or fleet tier level
+
+🧾 UI & Features for Fleet Services
+
+Separate Fleet Dashboard tab for carriers to:
+
+Bulk-manage vehicles (VIN/unit #)
+
+Book fleet jobs
+
+See previous fleet service history
+
+Track scheduled vs. completed work
+
+Option for carriers to upload CSV of units
+
+Add “Service Logbook” for each vehicle – logs both roadside and fleet services
+
+CTA buttons on landing page:
+
+🚨 “Request Roadside Repair”
+
+🧰 “Schedule Fleet Service”
+
+🚿 “Book On-Site Truck Wash”
+
+Quote generator and templates for full-fleet servicing proposals
+
+Contractor profiles show freight yard capabilities (e.g., “Has mobile water source,” “Fleet PM certified”)
+
+🛠 Contractor Enhancements for Fleet Work
+
+Fleet service providers can:
+
+Mark themselves as "Fleet Capable" or “Truck Wash Service” in their settings
+
+Upload proof of wastewater recovery compliance (for certain states)
+
+Set availability for scheduled appointments vs. emergency callouts
+
+🗂 Admin Management for Fleet Features
+
+New admin section to:
+
+Set default fleet service pricing per truck, per service, per fleet tier
+
+Manage surcharge rules (water source, after-hours)
+
+View recurring service jobs and provider assignments

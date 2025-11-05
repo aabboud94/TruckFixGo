@@ -1,0 +1,45 @@
+Goals
+
+Let drivers or dispatchers create a repair request in under 60 seconds, even on mobile.
+
+Auto-detect current GPS location and show it on a map, with a manual address fallback (for mile markers, exit numbers, etc.).
+
+Show live ETA using the mechanic’s real-time phone location.
+
+Support multiple service types (tire blowouts, fuel delivery, lockouts, coolant, DEF, alternator, brakes, HVAC, etc.).
+
+Enable photo uploads (e.g., damaged tire, roadside position) to help the mechanic prepare.
+
+Let techs share live status (EN_ROUTE, ONSITE, DONE) and message the requester in a chat thread.
+
+Track service history per vehicle (VIN or unit #), so fleets can view previous roadside breakdowns.
+
+Support fleet logins to view active and past requests for multiple trucks.
+
+Dispatcher dashboard shows map of all active jobs + nearby techs for fast assignment.
+
+Seed database for testing: add 1 sample fleet, 1 sample tech, 2 sample service requests, and a dispatcher user.
+
+Add PWA support so the website can be installed on iPhones and Android phones as an app.
+
+Use responsive layouts so truck drivers in the field can use the app on a phone.
+
+Prepare for future features like Stripe payments, SMS alerts, provider bidding, and printable invoices.
+
+Follow scalable backend structure so later features like analytics, SLA tracking, and parts/labor billing are easy to add.
+
+Store all timestamps in UTC; show them based on the user's browser timezone.
+
+Use modern trucking UX: big tap targets, real-time maps, status colors (green, yellow, red), and safety-forward UI.
+
+Keep code modular: easy to extract and wrap into a fully native mobile app (React Native or Capacitor) later for background GPS.
+
+Document all current and future status states in README (e.g., NEW, ASSIGNED, EN_ROUTE, ONSITE, COMPLETED, CANCELLED).
+
+Include error and offline states—e.g., if tech doesn’t move or goes offline, show “Last seen 12m ago.”
+
+Add placeholder for ratings & reviews (ex: 5-star + comments after completion).
+
+Show parts & labor subtotal inputs for tech to capture costs at the end of the job.
+
+Simple company branding: use a primary color (e.g., fleet blue or safety orange) and logo placeholder area.
