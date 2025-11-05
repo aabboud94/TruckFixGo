@@ -34,6 +34,9 @@ import {
   reminderLog,
   reminderBlacklist,
   reminderMetrics,
+  contractorApplications,
+  applicationDocuments,
+  backgroundChecks,
   type User,
   type InsertUser,
   type Session,
@@ -104,6 +107,12 @@ import {
   type InsertReminderBlacklist,
   type ReminderMetrics,
   type InsertReminderMetrics,
+  type ContractorApplication,
+  type InsertContractorApplication,
+  type ApplicationDocument,
+  type InsertApplicationDocument,
+  type BackgroundCheck,
+  type InsertBackgroundCheck,
   performanceTierEnum,
   reminderStatusEnum,
   reminderTypeEnum,
@@ -116,7 +125,7 @@ import {
 } from "@shared/schema";
 
 import { db } from "./db";
-import { eq, and, or, gte, lte, isNull, desc, asc, sql, inArray, ne, gt, lt } from "drizzle-orm";
+import { eq, and, or, gte, lte, isNull, desc, asc, sql, inArray, ne, gt, lt, ilike } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import memoize from "memoizee";
 
@@ -506,6 +515,34 @@ export interface IStorage {
   getOperationalEfficiency(): Promise<OperationalEfficiency>;
   getPredictiveAnalytics(fromDate?: Date, toDate?: Date): Promise<PredictiveAnalytics>;
   getAllFleetAnalytics(fromDate?: Date, toDate?: Date): Promise<FleetUsageStats[]>;
+  
+  // ==================== CONTRACTOR APPLICATION OPERATIONS ====================
+  createContractorApplication(data: InsertContractorApplication): Promise<ContractorApplication>;
+  getContractorApplication(id: string): Promise<ContractorApplication | undefined>;
+  updateContractorApplication(id: string, updates: Partial<InsertContractorApplication>): Promise<ContractorApplication | undefined>;
+  findContractorApplications(filters: {
+    status?: string;
+    email?: string;
+    search?: string;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<ContractorApplication[]>;
+  
+  createApplicationDocument(data: InsertApplicationDocument): Promise<ApplicationDocument>;
+  updateApplicationDocument(id: string, updates: Partial<InsertApplicationDocument>): Promise<ApplicationDocument | undefined>;
+  findApplicationDocuments(filters: {
+    applicationId?: string;
+    documentType?: string;
+    verificationStatus?: string;
+  }): Promise<ApplicationDocument[]>;
+  
+  createBackgroundCheck(data: InsertBackgroundCheck): Promise<BackgroundCheck>;
+  updateBackgroundCheck(id: string, updates: Partial<InsertBackgroundCheck>): Promise<BackgroundCheck | undefined>;
+  findBackgroundChecks(filters: {
+    applicationId?: string;
+    checkType?: string;
+    status?: string;
+  }): Promise<BackgroundCheck[]>;
 }
 
 // PostgreSQL implementation using Drizzle ORM
@@ -2462,6 +2499,144 @@ export class PostgreSQLStorage implements IStorage {
         )
       )
       .orderBy(asc(reminderLog.createdAt));
+  }
+  
+  // ==================== CONTRACTOR APPLICATION OPERATIONS ====================
+  
+  async createContractorApplication(data: InsertContractorApplication): Promise<ContractorApplication> {
+    const result = await db.insert(contractorApplications).values(data).returning();
+    return result[0];
+  }
+
+  async getContractorApplication(id: string): Promise<ContractorApplication | undefined> {
+    const result = await db.select().from(contractorApplications)
+      .where(eq(contractorApplications.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async updateContractorApplication(id: string, updates: Partial<InsertContractorApplication>): Promise<ContractorApplication | undefined> {
+    const result = await db.update(contractorApplications)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(contractorApplications.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async findContractorApplications(filters: {
+    status?: string;
+    email?: string;
+    search?: string;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<ContractorApplication[]> {
+    const conditions = [];
+    
+    if (filters.status) {
+      conditions.push(eq(contractorApplications.status, filters.status as any));
+    }
+    
+    if (filters.email) {
+      conditions.push(eq(contractorApplications.email, filters.email));
+    }
+    
+    if (filters.search) {
+      conditions.push(
+        or(
+          ilike(contractorApplications.firstName, `%${filters.search}%`),
+          ilike(contractorApplications.lastName, `%${filters.search}%`),
+          ilike(contractorApplications.email, `%${filters.search}%`),
+          ilike(contractorApplications.phone, `%${filters.search}%`),
+          ilike(contractorApplications.companyName, `%${filters.search}%`)
+        )
+      );
+    }
+    
+    if (filters.fromDate) {
+      conditions.push(gte(contractorApplications.createdAt, filters.fromDate));
+    }
+    
+    if (filters.toDate) {
+      conditions.push(lte(contractorApplications.createdAt, filters.toDate));
+    }
+    
+    return await db.select().from(contractorApplications)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(contractorApplications.createdAt));
+  }
+  
+  async createApplicationDocument(data: InsertApplicationDocument): Promise<ApplicationDocument> {
+    const result = await db.insert(applicationDocuments).values(data).returning();
+    return result[0];
+  }
+
+  async updateApplicationDocument(id: string, updates: Partial<InsertApplicationDocument>): Promise<ApplicationDocument | undefined> {
+    const result = await db.update(applicationDocuments)
+      .set(updates)
+      .where(eq(applicationDocuments.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async findApplicationDocuments(filters: {
+    applicationId?: string;
+    documentType?: string;
+    verificationStatus?: string;
+  }): Promise<ApplicationDocument[]> {
+    const conditions = [];
+    
+    if (filters.applicationId) {
+      conditions.push(eq(applicationDocuments.applicationId, filters.applicationId));
+    }
+    
+    if (filters.documentType) {
+      conditions.push(eq(applicationDocuments.documentType, filters.documentType));
+    }
+    
+    if (filters.verificationStatus) {
+      conditions.push(eq(applicationDocuments.verificationStatus, filters.verificationStatus as any));
+    }
+    
+    return await db.select().from(applicationDocuments)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(applicationDocuments.uploadedAt));
+  }
+  
+  async createBackgroundCheck(data: InsertBackgroundCheck): Promise<BackgroundCheck> {
+    const result = await db.insert(backgroundChecks).values(data).returning();
+    return result[0];
+  }
+
+  async updateBackgroundCheck(id: string, updates: Partial<InsertBackgroundCheck>): Promise<BackgroundCheck | undefined> {
+    const result = await db.update(backgroundChecks)
+      .set(updates)
+      .where(eq(backgroundChecks.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async findBackgroundChecks(filters: {
+    applicationId?: string;
+    checkType?: string;
+    status?: string;
+  }): Promise<BackgroundCheck[]> {
+    const conditions = [];
+    
+    if (filters.applicationId) {
+      conditions.push(eq(backgroundChecks.applicationId, filters.applicationId));
+    }
+    
+    if (filters.checkType) {
+      conditions.push(eq(backgroundChecks.checkType, filters.checkType));
+    }
+    
+    if (filters.status) {
+      conditions.push(eq(backgroundChecks.status, filters.status as any));
+    }
+    
+    return await db.select().from(backgroundChecks)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(backgroundChecks.requestedAt));
   }
 }
 

@@ -4328,6 +4328,522 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== CONTRACTOR APPLICATION ROUTES ====================
+
+  // Submit contractor application
+  app.post('/api/contractor/apply',
+    rateLimiter(5, 300000), // 5 applications per 5 minutes
+    async (req: Request, res: Response) => {
+      try {
+        // Validate required fields
+        const requiredFields = ['firstName', 'lastName', 'email', 'phone'];
+        for (const field of requiredFields) {
+          if (!req.body[field]) {
+            return res.status(400).json({
+              message: `Missing required field: ${field}`
+            });
+          }
+        }
+
+        // Check if email already has an application
+        const existingApplications = await storage.findContractorApplications({
+          email: req.body.email
+        });
+
+        if (existingApplications.length > 0) {
+          const latestApp = existingApplications[0];
+          if (latestApp.status === 'approved') {
+            return res.status(400).json({
+              message: 'This email is already associated with an approved contractor account'
+            });
+          }
+          if (latestApp.status === 'pending' || latestApp.status === 'under_review') {
+            return res.status(400).json({
+              message: 'An application is already in progress for this email'
+            });
+          }
+        }
+
+        // Create application
+        const applicationData = {
+          ...req.body,
+          status: 'draft',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        const application = await storage.createContractorApplication(applicationData);
+
+        res.status(201).json({
+          message: 'Application created successfully',
+          applicationId: application.id
+        });
+      } catch (error) {
+        console.error('Create application error:', error);
+        res.status(500).json({ message: 'Failed to create application' });
+      }
+    }
+  );
+
+  // Update contractor application
+  app.put('/api/contractor/apply/:id',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const application = await storage.getContractorApplication(req.params.id);
+        
+        if (!application) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+
+        // Check ownership if not admin
+        if (req.session.role !== 'admin' && application.email !== req.body.email) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+
+        // Don't allow updates to approved/rejected applications
+        if (['approved', 'rejected'].includes(application.status)) {
+          return res.status(400).json({
+            message: 'Cannot update finalized application'
+          });
+        }
+
+        const updatedApplication = await storage.updateContractorApplication(
+          req.params.id,
+          {
+            ...req.body,
+            updatedAt: new Date()
+          }
+        );
+
+        res.json({
+          message: 'Application updated successfully',
+          application: updatedApplication
+        });
+      } catch (error) {
+        console.error('Update application error:', error);
+        res.status(500).json({ message: 'Failed to update application' });
+      }
+    }
+  );
+
+  // Submit application for review
+  app.post('/api/contractor/apply/:id/submit',
+    async (req: Request, res: Response) => {
+      try {
+        const application = await storage.getContractorApplication(req.params.id);
+        
+        if (!application) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+
+        if (application.status !== 'draft') {
+          return res.status(400).json({
+            message: 'Only draft applications can be submitted'
+          });
+        }
+
+        // Check required fields are complete
+        const requiredFields = [
+          'firstName', 'lastName', 'email', 'phone', 'address',
+          'city', 'state', 'zip', 'experienceLevel'
+        ];
+
+        for (const field of requiredFields) {
+          if (!application[field as keyof typeof application]) {
+            return res.status(400).json({
+              message: `Incomplete application: missing ${field}`
+            });
+          }
+        }
+
+        // Update status to pending
+        const updatedApplication = await storage.updateContractorApplication(
+          req.params.id,
+          {
+            status: 'pending',
+            submittedAt: new Date(),
+            updatedAt: new Date()
+          }
+        );
+
+        // Send confirmation email
+        // await sendEmail(application.email, 'Application Received', ...);
+
+        res.json({
+          message: 'Application submitted successfully',
+          application: updatedApplication
+        });
+      } catch (error) {
+        console.error('Submit application error:', error);
+        res.status(500).json({ message: 'Failed to submit application' });
+      }
+    }
+  );
+
+  // Upload application documents
+  app.post('/api/contractor/apply/:id/documents',
+    async (req: Request, res: Response) => {
+      try {
+        const { documentType, documentName, fileUrl, expirationDate } = req.body;
+
+        if (!documentType || !documentName || !fileUrl) {
+          return res.status(400).json({
+            message: 'Missing required document information'
+          });
+        }
+
+        const document = await storage.createApplicationDocument({
+          applicationId: req.params.id,
+          documentType,
+          documentName,
+          fileUrl,
+          verificationStatus: 'pending',
+          expirationDate: expirationDate ? new Date(expirationDate) : undefined,
+          uploadedAt: new Date()
+        });
+
+        res.status(201).json({
+          message: 'Document uploaded successfully',
+          document
+        });
+      } catch (error) {
+        console.error('Upload document error:', error);
+        res.status(500).json({ message: 'Failed to upload document' });
+      }
+    }
+  );
+
+  // Get application status (for applicants)
+  app.get('/api/contractor/application-status',
+    async (req: Request, res: Response) => {
+      try {
+        const { email, applicationId } = req.query;
+
+        if (!email && !applicationId) {
+          return res.status(400).json({
+            message: 'Email or application ID required'
+          });
+        }
+
+        let application;
+        if (applicationId) {
+          application = await storage.getContractorApplication(applicationId as string);
+        } else {
+          const applications = await storage.findContractorApplications({
+            email: email as string
+          });
+          application = applications[0];
+        }
+
+        if (!application) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+
+        // Return limited info for privacy
+        res.json({
+          applicationId: application.id,
+          status: application.status,
+          submittedAt: application.submittedAt,
+          reviewNotes: application.status === 'rejected' ? application.rejectionReason : undefined
+        });
+      } catch (error) {
+        console.error('Get application status error:', error);
+        res.status(500).json({ message: 'Failed to get application status' });
+      }
+    }
+  );
+
+  // Admin: Get all applications
+  app.get('/api/admin/applications',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { status, search, fromDate, toDate } = req.query;
+        
+        const filters: any = {};
+        if (status && status !== 'all') {
+          filters.status = status;
+        }
+        if (search) {
+          filters.search = search;
+        }
+        if (fromDate) {
+          filters.fromDate = new Date(fromDate as string);
+        }
+        if (toDate) {
+          filters.toDate = new Date(toDate as string);
+        }
+
+        const applications = await storage.findContractorApplications(filters);
+        
+        res.json(applications);
+      } catch (error) {
+        console.error('Get applications error:', error);
+        res.status(500).json({ message: 'Failed to get applications' });
+      }
+    }
+  );
+
+  // Admin: Get application details
+  app.get('/api/admin/applications/:id',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const application = await storage.getContractorApplication(req.params.id);
+        
+        if (!application) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+
+        res.json(application);
+      } catch (error) {
+        console.error('Get application details error:', error);
+        res.status(500).json({ message: 'Failed to get application details' });
+      }
+    }
+  );
+
+  // Admin: Get application documents
+  app.get('/api/admin/applications/:id/documents',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const documents = await storage.findApplicationDocuments({
+          applicationId: req.params.id
+        });
+        
+        res.json(documents);
+      } catch (error) {
+        console.error('Get application documents error:', error);
+        res.status(500).json({ message: 'Failed to get documents' });
+      }
+    }
+  );
+
+  // Admin: Get background checks
+  app.get('/api/admin/applications/:id/background-checks',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const checks = await storage.findBackgroundChecks({
+          applicationId: req.params.id
+        });
+        
+        res.json(checks);
+      } catch (error) {
+        console.error('Get background checks error:', error);
+        res.status(500).json({ message: 'Failed to get background checks' });
+      }
+    }
+  );
+
+  // Admin: Update application status
+  app.put('/api/admin/applications/:id/status',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { status, notes, rejectionReason } = req.body;
+        
+        if (!status) {
+          return res.status(400).json({ message: 'Status is required' });
+        }
+
+        const application = await storage.getContractorApplication(req.params.id);
+        
+        if (!application) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+
+        const updateData: any = {
+          status,
+          reviewNotes: notes,
+          updatedAt: new Date()
+        };
+
+        if (status === 'rejected' && rejectionReason) {
+          updateData.rejectionReason = rejectionReason;
+        }
+
+        if (status === 'approved') {
+          updateData.approvedAt = new Date();
+          updateData.approvedBy = req.session.userId;
+          
+          // Create contractor profile from approved application
+          try {
+            const contractorProfile = await storage.createContractorProfile({
+              userId: '', // This would be created after user registration
+              firstName: application.firstName,
+              lastName: application.lastName,
+              phone: application.phone,
+              vehicleInfo: application.vehicleInfo,
+              serviceRadius: application.serviceRadius,
+              availability: 'available',
+              rating: 0,
+              completedJobs: 0,
+              responseTime: 0,
+              verificationStatus: 'verified',
+              backgroundCheckStatus: 'passed',
+              insuranceStatus: 'active',
+              specializations: application.specializations,
+              certifications: application.certifications
+            });
+          } catch (profileError) {
+            console.error('Create contractor profile error:', profileError);
+          }
+        }
+
+        const updatedApplication = await storage.updateContractorApplication(
+          req.params.id,
+          updateData
+        );
+
+        // Send notification email
+        // await sendStatusUpdateEmail(application.email, status);
+
+        res.json({
+          message: 'Application status updated successfully',
+          application: updatedApplication
+        });
+      } catch (error) {
+        console.error('Update application status error:', error);
+        res.status(500).json({ message: 'Failed to update status' });
+      }
+    }
+  );
+
+  // Admin: Verify document
+  app.post('/api/admin/applications/documents/:id/verify',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { status, notes } = req.body;
+        
+        if (!status) {
+          return res.status(400).json({ message: 'Verification status is required' });
+        }
+
+        const document = await storage.updateApplicationDocument(
+          req.params.id,
+          {
+            verificationStatus: status,
+            verificationNotes: notes,
+            verifiedAt: new Date(),
+            verifiedBy: req.session.userId
+          }
+        );
+
+        res.json({
+          message: 'Document verified successfully',
+          document
+        });
+      } catch (error) {
+        console.error('Verify document error:', error);
+        res.status(500).json({ message: 'Failed to verify document' });
+      }
+    }
+  );
+
+  // Admin: Run background check
+  app.post('/api/admin/applications/:id/background-check',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { checkType } = req.body;
+        
+        if (!checkType) {
+          return res.status(400).json({ message: 'Check type is required' });
+        }
+
+        const backgroundCheck = await storage.createBackgroundCheck({
+          applicationId: req.params.id,
+          checkType,
+          status: 'pending',
+          requestedAt: new Date(),
+          requestedBy: req.session.userId
+        });
+
+        // In production, initiate actual background check here
+        // await initiateBackgroundCheck(backgroundCheck.id, checkType);
+        
+        // Simulate completion for demo
+        setTimeout(async () => {
+          await storage.updateBackgroundCheck(backgroundCheck.id, {
+            status: 'completed',
+            completedAt: new Date(),
+            passed: true,
+            results: {
+              summary: 'Background check passed',
+              details: 'No issues found'
+            }
+          });
+        }, 5000);
+
+        res.json({
+          message: 'Background check initiated',
+          backgroundCheck
+        });
+      } catch (error) {
+        console.error('Run background check error:', error);
+        res.status(500).json({ message: 'Failed to run background check' });
+      }
+    }
+  );
+
+  // Admin: Send communication
+  app.post('/api/admin/applications/:id/communicate',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { type, subject, message } = req.body;
+        
+        if (!type || !message) {
+          return res.status(400).json({
+            message: 'Communication type and message are required'
+          });
+        }
+
+        const application = await storage.getContractorApplication(req.params.id);
+        
+        if (!application) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+
+        // Send communication based on type
+        if (type === 'email') {
+          // await sendEmail(application.email, subject, message);
+        } else if (type === 'sms') {
+          // await sendSMS(application.phone, message);
+        }
+
+        // Log communication
+        // await storage.logCommunication({
+        //   applicationId: req.params.id,
+        //   type,
+        //   subject,
+        //   message,
+        //   sentAt: new Date(),
+        //   sentBy: req.session.userId
+        // });
+
+        res.json({
+          message: 'Communication sent successfully'
+        });
+      } catch (error) {
+        console.error('Send communication error:', error);
+        res.status(500).json({ message: 'Failed to send communication' });
+      }
+    }
+  );
+
   // ==================== WEBHOOK ROUTES ====================
 
   // Stripe payment webhook

@@ -48,6 +48,7 @@ const menuItems = [
     group: "Operations",
     items: [
       { title: "Jobs", url: "/admin/jobs", icon: Briefcase, badge: "live" },
+      { title: "Applications", url: "/admin/applications", icon: FileText, badge: "new" },
       { title: "Contractors", url: "/admin/contractors", icon: Users, badge: null },
       { title: "Fleet Accounts", url: "/admin/fleets", icon: Building2, badge: null },
       { title: "Users", url: "/admin/users", icon: UserCog, badge: null },
