@@ -37,24 +37,29 @@ export default function AdminLogin() {
 
   const loginMutation = useMutation({
     mutationFn: async (data: LoginForm) => {
-      return apiRequest('/api/admin/login', {
-        method: 'POST',
-        body: JSON.stringify(data)
+      // Use the general auth login endpoint - it handles all user types including admins
+      const response = await apiRequest('POST', '/api/auth/login', {
+        email: data.email,
+        password: data.password
       });
+      return response.json();
     },
     onSuccess: (data) => {
-      if (data.requiresTwoFactor) {
-        setShowTwoFactor(true);
-        toast({
-          title: "2FA Required",
-          description: "Please enter your two-factor authentication code"
-        });
-      } else {
+      // Check if user is actually an admin
+      if (data.user && data.user.role === 'admin') {
         toast({
           title: "Login successful",
           description: "Welcome to the admin dashboard"
         });
         setLocation("/admin");
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Access denied",
+          description: "You don't have admin privileges"
+        });
+        // Log them out if not admin
+        apiRequest('POST', '/api/auth/logout');
       }
     },
     onError: (error: any) => {
