@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, LogIn, Truck } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -34,23 +35,61 @@ export default function FleetLogin() {
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true);
     try {
-      // TODO: Implement actual login logic
-      console.log("Login data:", data);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast({
-        title: "Login Successful",
-        description: "Welcome back to TruckFixGo Fleet"
+      // Make actual API call to login endpoint
+      const response = await apiRequest("POST", "/api/auth/login", {
+        email: data.email,
+        password: data.password
       });
       
-      // Navigate to fleet dashboard
-      setLocation("/fleet/dashboard");
+      const result = await response.json();
+      
+      // Check user role and redirect accordingly
+      if (result.user && result.user.role) {
+        const userRole = result.user.role;
+        
+        toast({
+          title: "Login Successful",
+          description: `Welcome back, ${result.user.firstName || result.user.email}!`
+        });
+        
+        // Redirect based on role
+        switch (userRole) {
+          case "admin":
+            // Admins should go to admin dashboard
+            setLocation("/admin");
+            break;
+          case "fleet_manager":
+            // Fleet managers go to fleet dashboard
+            setLocation("/fleet/dashboard");
+            break;
+          case "contractor":
+            // Contractors go to contractor dashboard
+            setLocation("/contractor/dashboard");
+            break;
+          case "driver":
+            // Drivers go to homepage or driver dashboard
+            setLocation("/");
+            break;
+          default:
+            // Default to fleet dashboard for fleet login page
+            setLocation("/fleet/dashboard");
+        }
+      } else {
+        // If no role returned, default to fleet dashboard
+        toast({
+          title: "Login Successful",
+          description: "Welcome back to TruckFixGo"
+        });
+        setLocation("/fleet/dashboard");
+      }
     } catch (error) {
+      console.error("Login error:", error);
+      
+      const errorMessage = error instanceof Error ? error.message : "Invalid email or password. Please try again.";
+      
       toast({
         title: "Login Failed",
-        description: "Invalid email or password. Please try again.",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
