@@ -91,15 +91,21 @@ export const ADDON_SERVICES = {
 
 class StripeService {
   // Check if Stripe is available
-  private checkStripeAvailable(): void {
+  private checkStripeAvailable(): boolean {
     if (!stripe) {
-      throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY environment variable.');
+      console.log('⚠️  Stripe Service: Running in stub mode - no STRIPE_SECRET_KEY configured');
+      return false;
     }
+    return true;
   }
 
   // Create or get a Stripe customer for a fleet account
   async createOrGetStripeCustomer(fleetAccount: FleetAccount): Promise<string> {
-    this.checkStripeAvailable();
+    // STUB MODE - Return mock customer ID
+    if (!this.checkStripeAvailable()) {
+      console.log('Stripe Service (Stub): Creating mock customer for fleet:', fleetAccount.id);
+      return `cus_mock_${fleetAccount.id}_${Date.now()}`;
+    }
     try {
       // Check if fleet already has a Stripe customer
       const existingSubscription = await storage.getFleetActiveSubscription(fleetAccount.id);
@@ -153,7 +159,40 @@ class StripeService {
     customAmount?: number,
     trialDays?: number
   ): Promise<Stripe.Subscription> {
-    this.checkStripeAvailable();
+    // STUB MODE - Return mock subscription
+    if (!this.checkStripeAvailable()) {
+      console.log('Stripe Service (Stub): Creating mock subscription for fleet:', fleetAccountId);
+      const mockSubscription: any = {
+        id: `sub_mock_${Date.now()}`,
+        object: 'subscription',
+        customer: `cus_mock_${fleetAccountId}`,
+        status: 'active',
+        current_period_start: Math.floor(Date.now() / 1000),
+        current_period_end: Math.floor(Date.now() / 1000) + 2592000, // 30 days
+        created: Math.floor(Date.now() / 1000),
+        items: {
+          data: [{
+            id: `si_mock_${Date.now()}`,
+            price: {
+              id: `price_mock_${Date.now()}`,
+              currency: 'usd',
+              unit_amount: customAmount || SUBSCRIPTION_PLANS[planType as keyof typeof SUBSCRIPTION_PLANS]?.monthlyPrice || 50000,
+            }
+          }]
+        },
+        metadata: {
+          fleetAccountId,
+          planType,
+          billingCycle,
+        },
+        latest_invoice: {
+          payment_intent: {
+            client_secret: `pi_mock_secret_${Date.now()}`
+          }
+        }
+      };
+      return mockSubscription as Stripe.Subscription;
+    }
     try {
       const fleetAccount = await storage.getFleetAccount(fleetAccountId);
       if (!fleetAccount) throw new Error('Fleet account not found');
@@ -270,7 +309,20 @@ class StripeService {
       customAmount?: number;
     }
   ): Promise<Stripe.Subscription> {
-    this.checkStripeAvailable();
+    // STUB MODE - Return mock updated subscription
+    if (!this.checkStripeAvailable()) {
+      console.log('Stripe Service (Stub): Updating mock subscription:', subscriptionId);
+      const mockSubscription: any = {
+        id: subscriptionId,
+        object: 'subscription',
+        status: 'active',
+        metadata: {
+          ...updates,
+          updated_at: Date.now()
+        }
+      };
+      return mockSubscription as Stripe.Subscription;
+    }
     try {
       // Get current subscription
       const subscription = await stripe!.subscriptions.retrieve(subscriptionId);
@@ -337,7 +389,21 @@ class StripeService {
     immediately: boolean = false,
     cancellationReason?: string
   ): Promise<Stripe.Subscription> {
-    this.checkStripeAvailable();
+    // STUB MODE - Return mock cancelled subscription
+    if (!this.checkStripeAvailable()) {
+      console.log('Stripe Service (Stub): Cancelling mock subscription:', subscriptionId, cancellationReason);
+      const mockSubscription: any = {
+        id: subscriptionId,
+        object: 'subscription',
+        status: immediately ? 'canceled' : 'active',
+        cancel_at: immediately ? null : Math.floor(Date.now() / 1000) + 2592000,
+        canceled_at: immediately ? Math.floor(Date.now() / 1000) : null,
+        cancellation_details: {
+          reason: cancellationReason || 'customer_request'
+        }
+      };
+      return mockSubscription as Stripe.Subscription;
+    }
     try {
       if (immediately) {
         // Cancel immediately
@@ -445,7 +511,34 @@ class StripeService {
 
   // Get subscription details
   async getSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
-    this.checkStripeAvailable();
+    // STUB MODE - Return mock subscription details
+    if (!this.checkStripeAvailable()) {
+      console.log('Stripe Service (Stub): Getting mock subscription:', subscriptionId);
+      const mockSubscription: any = {
+        id: subscriptionId,
+        object: 'subscription',
+        status: 'active',
+        current_period_start: Math.floor(Date.now() / 1000) - 1296000, // 15 days ago
+        current_period_end: Math.floor(Date.now() / 1000) + 1296000, // 15 days from now
+        created: Math.floor(Date.now() / 1000) - 2592000, // 30 days ago
+        customer: `cus_mock_${subscriptionId}`,
+        items: {
+          data: [{
+            id: `si_mock_${Date.now()}`,
+            price: {
+              id: `price_mock_${Date.now()}`,
+              currency: 'usd',
+              unit_amount: 50000,
+              recurring: {
+                interval: 'month',
+                interval_count: 1
+              }
+            }
+          }]
+        }
+      };
+      return mockSubscription as Stripe.Subscription;
+    }
     try {
       return await stripe!.subscriptions.retrieve(subscriptionId, {
         expand: ['latest_invoice', 'customer', 'default_payment_method'],

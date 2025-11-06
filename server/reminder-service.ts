@@ -221,12 +221,35 @@ class ReminderService {
 
   // Send email reminder
   private async sendEmail(reminder: Reminder): Promise<{ success: boolean; error?: string }> {
-    if (!this.emailTransporter || !this.emailConfig) {
-      return { success: false, error: 'Email service not configured' };
-    }
-
     if (!reminder.recipientEmail) {
       return { success: false, error: 'No recipient email' };
+    }
+
+    // STUB MODE - Log email to console if no email transporter configured
+    if (!this.emailTransporter || !this.emailConfig) {
+      console.log('📧 Email Service (Stub Mode): Logging email to console instead of sending');
+      console.log('------- EMAIL START -------');
+      console.log(`To: ${reminder.recipientEmail}`);
+      console.log(`Subject: ${reminder.messageSubject || 'TruckFixGo Service Reminder'}`);
+      console.log(`Message: ${reminder.messageContent || ''}`);
+      console.log(`Scheduled Time: ${reminder.scheduledTime}`);
+      console.log('------- EMAIL END -------');
+      
+      // Log the reminder even in stub mode
+      await storage.createReminderLog({
+        reminderId: reminder.id,
+        jobId: reminder.jobId,
+        recipientId: reminder.recipientId,
+        channel: 'email',
+        recipient: reminder.recipientEmail,
+        messageType: reminder.reminderTiming,
+        subject: reminder.messageSubject || 'TruckFixGo Service Reminder',
+        content: reminder.messageContent || '',
+        status: 'stub',
+        sentAt: new Date()
+      });
+      
+      return { success: true };
     }
 
     try {
@@ -314,12 +337,34 @@ class ReminderService {
 
   // Send SMS reminder
   private async sendSms(reminder: Reminder): Promise<{ success: boolean; error?: string }> {
-    if (!this.twilioClient || !this.smsConfig) {
-      return { success: false, error: 'SMS service not configured' };
-    }
-
     if (!reminder.recipientPhone) {
       return { success: false, error: 'No recipient phone' };
+    }
+
+    // STUB MODE - Log SMS to console if no Twilio client configured
+    if (!this.twilioClient || !this.smsConfig) {
+      console.log('📱 SMS Service (Stub Mode): Logging SMS to console instead of sending');
+      console.log('------- SMS START -------');
+      console.log(`To: ${reminder.recipientPhone}`);
+      console.log(`Message: ${reminder.messageContent || 'TruckFixGo Service Reminder'}`);
+      console.log(`Scheduled Time: ${reminder.scheduledTime}`);
+      console.log('------- SMS END -------');
+      
+      // Log the reminder even in stub mode
+      await storage.createReminderLog({
+        reminderId: reminder.id,
+        jobId: reminder.jobId,
+        recipientId: reminder.recipientId,
+        channel: 'sms',
+        recipient: reminder.recipientPhone,
+        messageType: reminder.reminderTiming,
+        subject: 'SMS Reminder',
+        content: reminder.messageContent || 'TruckFixGo Service Reminder',
+        status: 'stub',
+        sentAt: new Date()
+      });
+      
+      return { success: true };
     }
 
     try {

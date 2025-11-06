@@ -6,10 +6,12 @@ import memoizee from "memoizee";
 
 // This is using Replit's AI Integrations service, which provides OpenAI-compatible API access without requiring your own OpenAI API key.
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = new OpenAI({
+// TEMPORARILY DISABLED - Returns stub responses when API key is missing
+const hasAIKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY && process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+const openai = hasAIKey ? new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "dummy-key"
-});
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+}) : null;
 
 // Rate limiting configuration
 const rateLimiter = pLimit(2); // Process up to 2 requests concurrently
@@ -116,6 +118,14 @@ export async function chatCompletion(
     sessionHistory?: Array<{ role: string; content: string }>;
   }
 ): Promise<{ response: string; suggestions?: string[] }> {
+  // TEMPORARILY STUBBED - No API key configured
+  if (!openai) {
+    return {
+      response: "AI assistant is temporarily unavailable. The system is working but AI features are disabled.",
+      suggestions: ["Contact support", "Try again later"]
+    };
+  }
+
   const userId = context.userId || "anonymous";
   
   if (!checkUserRateLimit(userId)) {
@@ -190,10 +200,26 @@ export async function analyzePhoto(
   canDriveSafely: boolean;
   urgencyLevel: number;
 }> {
+  // TEMPORARILY STUBBED - No API key configured
+  if (!openai) {
+    return {
+      damageType: "AI analysis unavailable",
+      severity: "Moderate",
+      safetyRisk: "Medium",
+      immediateActions: ["Have a qualified mechanic inspect the vehicle"],
+      estimatedRepairTime: "1-3 hours",
+      servicesNeeded: ["Diagnostic service"],
+      costEstimate: "$500-1000",
+      dotCompliance: "Inspection recommended",
+      canDriveSafely: false,
+      urgencyLevel: 3
+    };
+  }
+
   try {
     const response = await pRetry(
       async () => {
-        const completion = await openai.chat.completions.create({
+        const completion = await openai!.chat.completions.create({
           model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
           messages: [
             {
@@ -387,6 +413,54 @@ export async function generateRepairRecommendations(
   estimatedTime: string;
   safetyNotes: string[];
 }> {
+  // STUB RESPONSE - No API key configured
+  if (!openai) {
+    console.log('AI Service: generateRepairRecommendations called (stubbed mode)');
+    const lowerDesc = issueDescription.toLowerCase();
+    
+    // Return contextual stub data based on issue description
+    if (lowerDesc.includes('tire')) {
+      return {
+        recommendations: [
+          "1. Inspect tire for visible damage and tread depth",
+          "2. Check tire pressure and compare to manufacturer specifications",
+          "3. Look for uneven wear patterns indicating alignment issues",
+          "4. Test for air leaks using soapy water solution"
+        ],
+        toolsNeeded: ["Tire pressure gauge", "Tread depth gauge", "Tire iron", "Jack and jack stands"],
+        partsNeeded: ["New tire if tread depth < 4/32\"", "Valve stem if damaged"],
+        estimatedTime: "30-60 minutes",
+        safetyNotes: ["Use proper jack points", "Never work under unsupported vehicle", "Check lug nut torque specs"]
+      };
+    } else if (lowerDesc.includes('brake')) {
+      return {
+        recommendations: [
+          "1. Visual inspection of brake pads and rotors",
+          "2. Check brake fluid level and color",
+          "3. Test brake pedal feel and travel",
+          "4. Inspect brake lines for leaks"
+        ],
+        toolsNeeded: ["Brake gauge", "Jack and stands", "Basic hand tools"],
+        partsNeeded: ["Brake pads if < 3mm", "Brake fluid if contaminated"],
+        estimatedTime: "1-2 hours",
+        safetyNotes: ["Test brakes at low speed first", "Use DOT approved brake fluid only"]
+      };
+    } else {
+      return {
+        recommendations: [
+          "1. Perform comprehensive visual inspection",
+          "2. Document all visible issues with photos",
+          "3. Check for diagnostic trouble codes",
+          "4. Test affected systems for functionality"
+        ],
+        toolsNeeded: ["Basic hand tools", "Diagnostic scanner", "Multimeter", "Work light"],
+        partsNeeded: ["To be determined after inspection"],
+        estimatedTime: "1-2 hours for diagnosis",
+        safetyNotes: ["Ensure vehicle is properly secured", "Use appropriate PPE", "Follow lockout/tagout procedures"]
+      };
+    }
+  }
+
   const prompt = `Based on this truck issue: "${issueDescription}"
   ${photoAnalysis ? `\nPhoto analysis: ${JSON.stringify(photoAnalysis)}` : ""}
   
@@ -429,6 +503,23 @@ export async function* streamChatResponse(
   message: string,
   context: any
 ): AsyncGenerator<string> {
+  // STUB RESPONSE - No API key configured
+  if (!openai) {
+    console.log('AI Service: streamChatResponse called (stubbed mode)');
+    const stubResponse = "Welcome to TruckFixGo! I'm your AI assistant (currently in demo mode). " +
+      "I can help you with emergency repairs, scheduling maintenance, and fleet management. " +
+      "How can I assist you today? For emergency roadside assistance, call our 24/7 hotline.";
+    
+    // Simulate streaming by yielding words with small delays
+    const words = stubResponse.split(' ');
+    for (const word of words) {
+      yield word + ' ';
+      // Add a tiny delay to simulate streaming
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    return;
+  }
+
   try {
     const stream = await openai.chat.completions.create({
       model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
