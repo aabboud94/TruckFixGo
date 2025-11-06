@@ -1,0 +1,46 @@
+tart...
+VM6528 injected.js:27 [PWA] Service Worker temporarily disabled
+VM6531 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=W2TfOSnGDciG' failed: Invalid frame header
+setupWebSocket @ VM6531 client:536
+(anonymous) @ VM6531 client:531
+VM6528 injected.js:27 [vite] server connection lost. Polling for restart...
+VM6691 injected.js:27 [PWA] Service Worker temporarily disabled
+VM6694 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=W2TfOSnGDciG' failed: Invalid frame header
+setupWebSocket @ VM6694 client:536
+(anonymous) @ VM6694 client:531
+VM6691 injected.js:27 [vite] server connection lost. Polling for restart...
+VM6854 injected.js:27 [PWA] Service Worker temporarily disabled
+VM6857 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=W2TfOSnGDciG' failed: Invalid frame header
+setupWebSocket @ VM6857 client:536
+(anonymous) @ VM6857 client:531
+VM6854 injected.js:27 [vite] server connection lost. Polling for restart...
+VM7018 injected.js:27 [PWA] Service Worker temporarily disabled
+VM7023 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=W2TfOSnGDciG' failed: Invalid frame header
+setupWebSocket @ VM7023 client:536
+(anonymous) @ VM7023 client:531
+VM7018 injected.js:27 [vite] server connection lost. Polling for restart...
+VM7181 injected.js:27 [PWA] Service Worker temporarily disabled
+VM7193 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=W2TfOSnGDciG' failed: Invalid frame header
+setupWebSocket @ VM7193 client:536
+(anonymous) @ VM7193 client:531
+VM7181 injected.js:27 [vite] server connection lost. Polling for restart...
+VM7341 injected.js:27 [PWA] Service Worker temporarily disabled
+VM7347 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=W2TfOSnGDciG' failed: Invalid frame header
+setupWebSocket @ VM7347 client:536
+(anonymous) @ VM7347 client:531
+VM7341 injected.js:27 [vite] server connection lost. Polling for restart...
+VM7501 injected.js:27 [PWA] Service Worker temporarily disabled
+VM7505 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=W2TfOSnGDciG' failed: Invalid frame header
+setupWebSocket @ VM7505 client:536
+(anonymous) @ VM7505 client:531
+VM7501 injected.js:27 [vite] server connection lost. Polling for restart...
+VM7661 injected.js:27 [PWA] Service Worker temporarily disabled
+VM7673 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=W2TfOSnGDciG' failed: Invalid frame header
+setupWebSocket @ VM7673 client:536
+(anonymous) @ VM7673 client:531
+VM7661 injected.js:27 [vite] server connection lost. Polling for restart...
+injected.js:27 [PWA] Service Worker temporarily disabled
+client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=W2TfOSnGDciG' failed: Invalid frame header
+setupWebSocket @ client:536
+(anonymous) @ client:531
+injected.js:27 [vite] server connection lost. Polling for restart...
