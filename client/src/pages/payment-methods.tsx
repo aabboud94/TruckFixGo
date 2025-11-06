@@ -46,12 +46,21 @@ interface PaymentMethod {
   createdAt: string;
 }
 
-// Initialize Stripe
+// Initialize Stripe (Optional - works without keys)
 let stripePromise: Promise<any> | null = null;
 const getStripe = () => {
   const publicKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
   if (!stripePromise && publicKey) {
-    stripePromise = loadStripe(publicKey);
+    try {
+      stripePromise = loadStripe(publicKey);
+    } catch (error) {
+      console.warn('Stripe not configured - payment functionality limited');
+      stripePromise = Promise.resolve(null);
+    }
+  }
+  if (!publicKey) {
+    console.warn('Stripe public key not found - payment functionality limited');
+    return Promise.resolve(null);
   }
   return stripePromise;
 };
