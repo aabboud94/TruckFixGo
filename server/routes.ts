@@ -183,9 +183,27 @@ function validateRequest(schema: z.ZodSchema) {
 
 // CORS middleware for mobile app access
 function corsMiddleware(req: Request, res: Response, next: NextFunction) {
-  res.header('Access-Control-Allow-Origin', '*');
+  // In production, restrict to specific origins
+  const allowedOrigins = process.env.NODE_ENV === 'production' 
+    ? [
+        'https://truck-fix-go-aabboud94.replit.app',
+        'https://truckfixgo.com', // Future custom domain
+        'https://www.truckfixgo.com'
+      ]
+    : ['http://localhost:5000', 'http://localhost:5001', 'http://localhost:3000'];
+  
+  const origin = req.headers.origin;
+  
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  } else if (process.env.NODE_ENV !== 'production') {
+    // In development, be more permissive
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-CSRF-Token');
   
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
