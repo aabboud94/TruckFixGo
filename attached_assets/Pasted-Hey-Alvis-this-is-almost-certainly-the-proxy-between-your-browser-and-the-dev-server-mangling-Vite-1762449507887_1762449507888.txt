@@ -1,0 +1,150 @@
+Hey Alvis — this is almost certainly the proxy between your browser and the dev server mangling Vite’s HMR WebSocket. “Invalid frame header” = the browser spoke WebSocket to something that wasn’t actually a WS endpoint (or a proxy touched it). Replit’s reverse proxy is a usual suspect.
+
+Below are three practical paths that work on Replit, starting with the least invasive.
+
+Option A — Keep the dev server, disable HMR (stop the reload loop)
+
+Even if the template “protects” its vite config, you can add your own config file and point Vite at it without touching the protected files.
+
+Create a new file vite.nohmr.config.ts at the project root:
+
+import { defineConfig } from 'vite'
+export default defineConfig({
+  server: {
+    hmr: false,               // turn off websocket/HMR
+    // optional: quiet the red overlay if your template still injects it:
+    // hmr: { overlay: false }  // (older docs) 
+  },
+})
+
+
+Change (or add) an npm script to use your config:
+
+{
+  "scripts": {
+    "dev:nohmr": "vite --config vite.nohmr.config.ts"
+  }
+}
+
+
+Run npm run dev:nohmr.
+
+This keeps the fast dev server (no 25s rebuilds) but skips the WS connection that triggers the infinite reload. (Vite’s server.hmr: false is the official switch. 
+vitejs
++2
+Stack Overflow
++2
+)
+
+Note: Older Vite clients would still ping once per second even with HMR off; current versions behave, but if you still see pings they’re harmless. 
+GitHub
+
+Option B — Make HMR work through Replit (fix the WS settings)
+
+If you’d rather keep hot updates, tell Vite’s client exactly where/how to reach WS through Replit’s proxy:
+
+Create vite.replit.hmr.config.ts:
+
+import { defineConfig } from 'vite'
+
+const host = process.env.REPL_SLUG && process.env.REPL_OWNER
+  ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` // or use your full *.replit.dev subdomain
+  : '<your-subdomain>.riker.replit.dev'                          // hardcode if env vars aren’t exposed
+
+export default defineConfig({
+  server: {
+    host: true,               // bind 0.0.0.0 in containers
+    port: 5173,               // any internal port
+    hmr: {
+      protocol: 'wss',        // Replit serves HTTPS -> use wss
+      host,                   // your public Replit host
+      clientPort: 443,        // proxy terminates TLS on 443
+      // Optional if your proxy eats root “/”: path: 'ws'
+    }
+  }
+})
+
+
+Use it:
+
+{
+  "scripts": {
+    "dev:hmr": "vite --config vite.replit.hmr.config.ts --host"
+  }
+}
+
+
+This is the standard fix for HMR behind tunnels/proxies (ngrok/Caddy/etc.): force wss and clientPort: 443 and set the public host. There’s a Replit-specific write-up and many Vite discussions showing the same solution. 
+v3.vitejs.dev
++3
+My Portfolio
++3
+GitHub
++3
+
+Caveat: In older Vite versions, clientPort only applied in middleware mode; Vite 5 respects it normally. If your template runs Vite as “middleware”, this config still works. 
+GitHub
++1
+
+Option C — Flip who’s “in front”: run Vite as the front and proxy API
+
+If Replit’s template autoinjects “Vite middleware” into your Express dev server (and you can’t change that), invert the setup:
+
+Run Express on an internal port (e.g., 3001).
+
+Run Vite dev as the only exposed server (port from PORT).
+
+In vite.config.ts, add an API proxy:
+
+server: {
+  host: true,
+  proxy: {
+    '/api': 'http://localhost:3001'
+  },
+  hmr: { protocol: 'wss', clientPort: 443 }
+}
+
+
+This way the only thing Replit exposes is Vite, and Vite talks to your API internally. (Same HMR settings as Option B.) 
+vitejs
+
+Quick sanity checks (do these regardless)
+
+Clear/unregister any service worker (your console logs show PWA worker toggling):
+
+navigator.serviceWorker?.getRegistrations?.().then(rs => rs.forEach(r => r.unregister()))
+caches?.keys?.().then(keys => keys.forEach(k => caches.delete(k)))
+
+
+Then hard-refresh. SWs can force reload loops on dev. (This doesn’t fix the WS header itself, but removes an extra reload source.)
+
+Make sure you’re not mixing ws:// with https:// pages. On HTTPS you must use wss://. Many “invalid frame header” reports are exactly that mismatch (or a proxy returning HTML to a WS request). 
+Stack Overflow
+
+About your specific questions
+
+“Is this a known issue with Vite + Replit proxy?”
+Yes — HMR over reverse proxies often needs explicit protocol/host/clientPort adjustments; several folks documented Replit-specific tweaks. 
+My Portfolio
+
+“Can I disable Vite HMR but keep the dev server?”
+Yes: server.hmr: false in a separate config (vite --config ...) works and avoids the loop. 
+Stack Overflow
+
+“Should I replace Vite with another bundler?”
+Probably not. Webpack, Parcel, Rspack all use WebSockets for HMR too. You’d hit the same proxy problem unless you also tune their WS settings. (If you truly want zero-WS dev, use Option A or a plain livereload tool.)
+
+“Is there a way to configure Vite to work with the proxy?”
+Yes: Option B (set wss, host, clientPort: 443, maybe path). That’s the documented way for tunnels/proxies. 
+vitejs
++1
+
+If your template truly blocks edits
+
+Even if “protected,” you can still:
+
+Add your own config and run vite --config yourfile.ts.
+
+Or run a separate dev server that you control (Option C) and keep your existing Express code as-is.
+
+If none of that’s possible, fall back to vite build --watch + vite preview for dev (it’s faster than full prod relaunch) and keep Express on its own port. Not as nice as HMR, but it eliminates the 25s rebuilds.
