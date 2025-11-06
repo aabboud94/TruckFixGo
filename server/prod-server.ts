@@ -32,13 +32,14 @@ app.use(
       pool,
       tableName: "sessions"
     }),
-    secret: process.env.SESSION_SECRET || "dev-secret-key-change-in-production",
+    secret: process.env.SESSION_SECRET || "truckfixgo-secret-key-change-in-production",
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false, // Don't save uninitialized sessions
     cookie: {
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      secure: false,
-      httpOnly: true
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours (aligned with routes.ts)
+      secure: isProduction, // Use HTTPS in production
+      httpOnly: true,
+      sameSite: isProduction ? 'strict' : 'lax' // Add CSRF protection
     }
   })
 );
