@@ -103,9 +103,7 @@ export default function AdminSettings() {
   const testApiConnection = async (service: string) => {
     setTestingApi(service);
     try {
-      const response = await apiRequest(`/api/admin/test-integration/${service}`, {
-        method: 'POST',
-      });
+      const response = await apiRequest('POST', `/api/admin/test-integration/${service}`, {});
       toast({
         title: "Connection successful",
         description: `${service} API is configured correctly`,

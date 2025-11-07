@@ -44,6 +44,13 @@ export default function AdminUsers() {
   // Query for users
   const { data: users, isLoading, refetch } = useQuery({
     queryKey: ['/api/admin/users', { role: roleFilter, status: statusFilter, search: searchQuery }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (roleFilter !== 'all') params.append('role', roleFilter);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (searchQuery) params.append('search', searchQuery);
+      return apiRequest('GET', `/api/admin/users?${params}`);
+    }
   });
 
   // Query for activity logs
