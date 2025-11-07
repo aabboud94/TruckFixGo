@@ -52,6 +52,7 @@ import {
   insertSplitPaymentTemplateSchema,
   splitPayments,
   transactions,
+  contractorProfiles,
   insertFleetContractSchema,
   insertContractSlaMetricSchema,
   insertContractPenaltySchema,
