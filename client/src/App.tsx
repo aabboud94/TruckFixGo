@@ -63,6 +63,7 @@ import AdminHealth from "@/pages/admin/health";
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
 import InstallPrompt from "@/components/install-prompt";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 function Router() {
   return (
@@ -143,8 +144,12 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router />
-        <AIChatbot />
+        <ErrorBoundary componentName="Main Router">
+          <Router />
+        </ErrorBoundary>
+        <ErrorBoundary componentName="AI Chatbot">
+          <AIChatbot />
+        </ErrorBoundary>
         <InstallPrompt />
       </TooltipProvider>
     </QueryClientProvider>
