@@ -34,11 +34,19 @@ export default function AdminJobs() {
   // Query for jobs
   const { data: jobs, isLoading, refetch } = useQuery({
     queryKey: ['/api/admin/jobs', { status: statusFilter, type: typeFilter, search: searchQuery }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (typeFilter !== 'all') params.append('type', typeFilter);
+      if (searchQuery) params.append('search', searchQuery);
+      return apiRequest('GET', `/api/admin/jobs?${params}`);
+    }
   });
 
   // Query for available contractors
   const { data: contractors } = useQuery({
     queryKey: ['/api/admin/contractors/available'],
+    queryFn: async () => apiRequest('GET', '/api/admin/contractors/available'),
     enabled: showAssignDialog,
   });
 
