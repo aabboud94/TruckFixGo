@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     
     <!-- PWA Primary Meta Tags -->
     <title>TruckFixGo - Mobile Mechanics for Trucks</title>
@@ -67,13 +67,8 @@
       // Service worker completely disabled temporarily to fix reload loop
       console.log('[PWA] Service Worker temporarily disabled');
       
-      // Prevent iOS bounce effect
-      document.addEventListener('touchmove', function(e) {
-        if (e.target.closest('.scroll-container')) {
-          return;
-        }
-        e.preventDefault();
-      }, { passive: false });
+      // Allow natural scrolling on all touch devices
+      // Removed touchmove preventDefault to fix mobile scrolling
       
       // Handle standalone display mode
       if (window.matchMedia('(display-mode: standalone)').matches) {
