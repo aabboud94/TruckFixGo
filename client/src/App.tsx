@@ -53,6 +53,12 @@ import AdminAnalytics from "@/pages/admin/analytics";
 import AdminFleets from "@/pages/admin/fleets";
 import AdminInvoices from "@/pages/admin/invoices";
 import AdminReviewModeration from "@/pages/admin/review-moderation";
+import AdminAreas from "@/pages/admin/areas";
+import AdminContent from "@/pages/admin/content";
+import AdminReferrals from "@/pages/admin/referrals";
+import AdminSurge from "@/pages/admin/surge";
+import AdminSupport from "@/pages/admin/support";
+import AdminHealth from "@/pages/admin/health";
 
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
@@ -119,6 +125,12 @@ function Router() {
       <Route path="/admin/fleets" component={AdminFleets} />
       <Route path="/admin/invoices" component={AdminInvoices} />
       <Route path="/admin/review-moderation" component={AdminReviewModeration} />
+      <Route path="/admin/areas" component={AdminAreas} />
+      <Route path="/admin/content" component={AdminContent} />
+      <Route path="/admin/referrals" component={AdminReferrals} />
+      <Route path="/admin/surge" component={AdminSurge} />
+      <Route path="/admin/support" component={AdminSupport} />
+      <Route path="/admin/health" component={AdminHealth} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />
