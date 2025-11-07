@@ -86,7 +86,11 @@ export default function AdminJobs() {
     },
   });
 
-  const jobsData = Array.isArray(jobs) ? jobs : [
+  // Use real data from API response (which returns { jobs: [...] })
+  const jobsData = jobs?.jobs ?? [];
+
+  // Removed mock data - now using real API data
+  /*
     {
       id: "JOB-001",
       type: "emergency",
@@ -134,6 +138,7 @@ export default function AdminJobs() {
       completedAt: new Date(Date.now() - 20 * 60 * 60 * 1000),
     },
   ];
+  */
 
   const getStatusColor = (status: string) => {
     switch (status) {
