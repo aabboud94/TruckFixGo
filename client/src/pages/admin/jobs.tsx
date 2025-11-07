@@ -94,8 +94,8 @@ export default function AdminJobs() {
     },
   });
 
-  // Use real data from API response (which returns { jobs: [...] })
-  const jobsData = jobs?.jobs ?? [];
+  // Use real data from API response
+  const jobsData = Array.isArray(jobs) ? jobs : (jobs?.jobs ?? []);
 
   // Removed mock data - now using real API data
   /*
@@ -149,14 +149,15 @@ export default function AdminJobs() {
   */
 
   const getStatusColor = (status: string) => {
+    // Returns valid Badge variant with optional class for custom colors
     switch (status) {
-      case 'new': return 'secondary';
-      case 'assigned': return 'default';
-      case 'en_route': return 'warning';
-      case 'on_site': return 'warning';
-      case 'completed': return 'success';
-      case 'cancelled': return 'destructive';
-      default: return 'secondary';
+      case 'new': return { variant: 'secondary' as const };
+      case 'assigned': return { variant: 'default' as const };
+      case 'en_route': return { variant: 'default' as const, className: 'bg-yellow-500 hover:bg-yellow-600' };
+      case 'on_site': return { variant: 'default' as const, className: 'bg-yellow-500 hover:bg-yellow-600' };
+      case 'completed': return { variant: 'default' as const, className: 'bg-green-500 hover:bg-green-600' };
+      case 'cancelled': return { variant: 'destructive' as const };
+      default: return { variant: 'secondary' as const };
     }
   };
 
@@ -174,13 +175,10 @@ export default function AdminJobs() {
 
   const handleExport = async () => {
     try {
-      const response = await apiRequest('POST', '/api/admin/jobs/export', {
+      const data = await apiRequest<string>('POST', '/api/admin/jobs/export', {
         format: 'csv',
         filters: { status: statusFilter, type: typeFilter }
       });
-      
-      // Get the response data
-      const data = await response.text();
       
       // Create download link
       const blob = new Blob([data], { type: 'text/csv' });
@@ -316,10 +314,19 @@ export default function AdminJobs() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={getStatusColor(job.status) as any} className="flex items-center gap-1 w-fit">
-                            <StatusIcon className="h-3 w-3" />
-                            {job.status.replace('_', ' ')}
-                          </Badge>
+                          {(() => {
+                            const StatusIcon = getStatusIcon(job.status);
+                            const statusStyle = getStatusColor(job.status);
+                            return (
+                              <Badge 
+                                variant={statusStyle.variant} 
+                                className={`flex items-center gap-1 w-fit ${statusStyle.className || ''}`}
+                              >
+                                <StatusIcon className="h-3 w-3" />
+                                {job.status.replace('_', ' ')}
+                              </Badge>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>{job.service}</TableCell>
                         <TableCell>

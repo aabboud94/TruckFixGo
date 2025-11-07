@@ -246,6 +246,36 @@ export default function AdminApplications() {
     return Math.round((completed / fields.length) * 100);
   };
 
+  const handleExport = async () => {
+    try {
+      const data = await apiRequest<string>('POST', '/api/admin/applications/export', { 
+        format: 'csv',
+        filters: { 
+          status: filterStatus,
+          experience: experienceFilter
+        }
+      });
+      
+      const blob = new Blob([data], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `applications-export-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      a.click();
+      
+      toast({
+        title: "Export successful",
+        description: "Applications have been exported to CSV",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Export failed",
+        description: "Failed to export applications data",
+      });
+    }
+  };
+
   const getVerificationStatus = (app: ContractorApplication) => {
     const verifications = [
       app.emailVerified,
@@ -724,11 +754,11 @@ export default function AdminApplications() {
                         {selectedApplication.totalYearsExperience} years
                       </p>
                     </div>
-                    {selectedApplication.certifications && selectedApplication.certifications.length > 0 && (
+                    {selectedApplication.certifications && Array.isArray(selectedApplication.certifications) && selectedApplication.certifications.length > 0 && (
                       <div>
                         <Label className="text-muted-foreground">Certifications</Label>
                         <div className="flex flex-wrap gap-2 mt-1">
-                          {(selectedApplication.certifications as string[]).map((cert) => (
+                          {selectedApplication.certifications.map((cert: string) => (
                             <Badge key={cert} variant="secondary">
                               <Award className="h-3 w-3 mr-1" />
                               {cert}
@@ -737,11 +767,11 @@ export default function AdminApplications() {
                         </div>
                       </div>
                     )}
-                    {selectedApplication.specializations && selectedApplication.specializations.length > 0 && (
+                    {selectedApplication.specializations && Array.isArray(selectedApplication.specializations) && selectedApplication.specializations.length > 0 && (
                       <div>
                         <Label className="text-muted-foreground">Specializations</Label>
                         <div className="flex flex-wrap gap-2 mt-1">
-                          {(selectedApplication.specializations as string[]).map((spec) => (
+                          {selectedApplication.specializations.map((spec: string) => (
                             <Badge key={spec} variant="outline">
                               {spec}
                             </Badge>
@@ -785,7 +815,9 @@ export default function AdminApplications() {
                       <div>
                         <Label className="text-muted-foreground">Vehicle Information</Label>
                         <p className="font-medium">
-                          {JSON.stringify(selectedApplication.vehicleInfo)}
+                          {typeof selectedApplication.vehicleInfo === 'object' 
+                            ? Object.entries(selectedApplication.vehicleInfo).map(([key, value]) => `${key}: ${value}`).join(', ')
+                            : selectedApplication.vehicleInfo}
                         </p>
                       </div>
                     )}
@@ -853,7 +885,10 @@ export default function AdminApplications() {
                               Requested {format(new Date(check.requestedAt), 'MMM d, yyyy')}
                             </p>
                           </div>
-                          <Badge variant={check.passed ? "success" : "destructive"}>
+                          <Badge 
+                            variant={check.passed ? "default" : "destructive"}
+                            className={check.passed ? "bg-green-500 hover:bg-green-600" : ""}
+                          >
                             {check.status}
                           </Badge>
                         </div>

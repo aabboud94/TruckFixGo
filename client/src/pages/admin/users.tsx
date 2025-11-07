@@ -215,12 +215,12 @@ export default function AdminUsers() {
 
   const handleExport = async () => {
     try {
-      const response = await apiRequest('/api/admin/users/export', {
-        method: 'POST',
-        body: JSON.stringify({ format: 'csv' }),
+      const data = await apiRequest<string>('POST', '/api/admin/users/export', { 
+        format: 'csv',
+        filters: { role: roleFilter, status: statusFilter }
       });
       
-      const blob = new Blob([response.data], { type: 'text/csv' });
+      const blob = new Blob([data], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

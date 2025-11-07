@@ -19,6 +19,19 @@ import { Loader2, Save, TestTube, Plus, Trash2, Edit, MapPin, DollarSign, Settin
 export default function AdminSettings() {
   const { toast } = useToast();
   const [testingApi, setTestingApi] = useState<string | null>(null);
+  const [showAddServiceType, setShowAddServiceType] = useState(false);
+  const [editingServiceType, setEditingServiceType] = useState<any>(null);
+  const [newServiceType, setNewServiceType] = useState({
+    name: '',
+    description: '',
+    baseRate: 0,
+    perUnit: 0,
+    unitType: 'hour' as 'hour' | 'mile' | 'truck' | 'tire' | 'service',
+    isActive: true,
+    emergencyAvailable: true,
+    scheduledAvailable: true,
+    categories: [] as string[]
+  });
 
   // Query for current settings
   const { data: settings, isLoading } = useQuery({
@@ -28,10 +41,7 @@ export default function AdminSettings() {
   // Mutation for saving settings
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('/api/admin/settings', {
-        method: 'PUT',
-        body: JSON.stringify(data),
-      });
+      return apiRequest('PUT', '/api/admin/settings', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/settings'] });
@@ -44,6 +54,46 @@ export default function AdminSettings() {
       toast({
         variant: "destructive",
         title: "Failed to save settings",
+        description: error.message,
+      });
+    },
+  });
+
+  // Mutation for managing service types
+  const serviceTypeMutation = useMutation({
+    mutationFn: async ({ action, serviceType }: { action: 'add' | 'update' | 'delete', serviceType: any }) => {
+      if (action === 'delete') {
+        return apiRequest('DELETE', `/api/admin/service-types/${serviceType.id}`);
+      } else if (action === 'update') {
+        return apiRequest('PUT', `/api/admin/service-types/${serviceType.id}`, serviceType);
+      } else {
+        return apiRequest('POST', '/api/admin/service-types', serviceType);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/settings'] });
+      setShowAddServiceType(false);
+      setEditingServiceType(null);
+      toast({
+        title: "Service type updated",
+        description: "Service type has been saved successfully",
+      });
+      setNewServiceType({
+        name: '',
+        description: '',
+        baseRate: 0,
+        perUnit: 0,
+        unitType: 'hour',
+        isActive: true,
+        emergencyAvailable: true,
+        scheduledAvailable: true,
+        categories: []
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to save service type",
         description: error.message,
       });
     },
@@ -315,57 +365,317 @@ export default function AdminSettings() {
             </CardContent>
           </Card>
 
-          {/* Base Rates */}
+          {/* Service Type Management */}
           <Card>
             <CardHeader>
-              <CardTitle>Base Service Rates</CardTitle>
-              <CardDescription>Configure base rates for each service type</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Service Type Management</CardTitle>
+                  <CardDescription>Configure all service types and their pricing</CardDescription>
+                </div>
+                <Button 
+                  onClick={() => setShowAddServiceType(true)}
+                  data-testid="button-add-service-type"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Service Type
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Service Type</TableHead>
+                    <TableHead>Service Name</TableHead>
+                    <TableHead>Description</TableHead>
                     <TableHead>Base Rate</TableHead>
-                    <TableHead>Per Hour/Unit</TableHead>
+                    <TableHead>Per Unit</TableHead>
+                    <TableHead>Unit Type</TableHead>
+                    <TableHead>Availability</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {currentSettings.pricing.baseRates.map((rate, index) => (
                     <TableRow key={index}>
-                      <TableCell>{rate.service}</TableCell>
+                      <TableCell className="font-medium">{rate.service}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {rate.description || 'No description'}
+                      </TableCell>
+                      <TableCell>${rate.base}</TableCell>
                       <TableCell>
-                        <Input
-                          type="number"
-                          defaultValue={rate.base}
-                          className="w-24"
-                          data-testid={`input-base-${index}`}
-                        />
+                        ${rate.perHour || rate.perTruck || rate.perTire || rate.perUnit || 0}
                       </TableCell>
                       <TableCell>
-                        <Input
-                          type="number"
-                          defaultValue={rate.perHour || rate.perTruck || rate.perTire}
-                          className="w-24"
-                          data-testid={`input-per-${index}`}
-                        />
+                        {rate.unitType || (rate.perHour ? 'hour' : rate.perTruck ? 'truck' : rate.perTire ? 'tire' : 'service')}
                       </TableCell>
                       <TableCell>
-                        <Button size="icon" variant="ghost">
-                          <Edit className="h-4 w-4" />
-                        </Button>
+                        <div className="flex gap-1">
+                          {rate.emergencyAvailable !== false && <Badge variant="outline" className="text-xs">Emergency</Badge>}
+                          {rate.scheduledAvailable !== false && <Badge variant="outline" className="text-xs">Scheduled</Badge>}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={rate.isActive !== false ? "default" : "secondary"}>
+                          {rate.isActive !== false ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button 
+                            size="icon" 
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingServiceType({...rate, index});
+                              setShowAddServiceType(true);
+                            }}
+                            data-testid={`button-edit-service-${index}`}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            size="icon" 
+                            variant="ghost"
+                            onClick={() => {
+                              if (confirm('Are you sure you want to delete this service type?')) {
+                                serviceTypeMutation.mutate({ 
+                                  action: 'delete', 
+                                  serviceType: { id: rate.id || index }
+                                });
+                              }
+                            }}
+                            data-testid={`button-delete-service-${index}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-              <Button className="mt-4" variant="outline">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Service Type
-              </Button>
             </CardContent>
           </Card>
+
+          {/* Add/Edit Service Type Dialog */}
+          {showAddServiceType && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>{editingServiceType ? 'Edit' : 'Add New'} Service Type</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="service-name">Service Name *</Label>
+                    <Input
+                      id="service-name"
+                      placeholder="e.g., Emergency Repair"
+                      value={editingServiceType?.service || newServiceType.name}
+                      onChange={(e) => {
+                        if (editingServiceType) {
+                          setEditingServiceType({...editingServiceType, service: e.target.value});
+                        } else {
+                          setNewServiceType({...newServiceType, name: e.target.value});
+                        }
+                      }}
+                      data-testid="input-service-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="unit-type">Unit Type *</Label>
+                    <Select 
+                      value={editingServiceType?.unitType || newServiceType.unitType}
+                      onValueChange={(value) => {
+                        if (editingServiceType) {
+                          setEditingServiceType({...editingServiceType, unitType: value});
+                        } else {
+                          setNewServiceType({...newServiceType, unitType: value as any});
+                        }
+                      }}
+                    >
+                      <SelectTrigger data-testid="select-unit-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hour">Per Hour</SelectItem>
+                        <SelectItem value="truck">Per Truck</SelectItem>
+                        <SelectItem value="tire">Per Tire</SelectItem>
+                        <SelectItem value="mile">Per Mile</SelectItem>
+                        <SelectItem value="service">Per Service</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="base-rate">Base Rate ($) *</Label>
+                    <Input
+                      id="base-rate"
+                      type="number"
+                      placeholder="150"
+                      value={editingServiceType?.base || newServiceType.baseRate}
+                      onChange={(e) => {
+                        if (editingServiceType) {
+                          setEditingServiceType({...editingServiceType, base: parseFloat(e.target.value)});
+                        } else {
+                          setNewServiceType({...newServiceType, baseRate: parseFloat(e.target.value)});
+                        }
+                      }}
+                      data-testid="input-base-rate"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="per-unit">Per Unit Rate ($) *</Label>
+                    <Input
+                      id="per-unit"
+                      type="number"
+                      placeholder="125"
+                      value={editingServiceType?.perHour || editingServiceType?.perTruck || editingServiceType?.perTire || editingServiceType?.perUnit || newServiceType.perUnit}
+                      onChange={(e) => {
+                        if (editingServiceType) {
+                          const unitType = editingServiceType.unitType || 'hour';
+                          if (unitType === 'hour') {
+                            setEditingServiceType({...editingServiceType, perHour: parseFloat(e.target.value)});
+                          } else if (unitType === 'truck') {
+                            setEditingServiceType({...editingServiceType, perTruck: parseFloat(e.target.value)});
+                          } else if (unitType === 'tire') {
+                            setEditingServiceType({...editingServiceType, perTire: parseFloat(e.target.value)});
+                          } else {
+                            setEditingServiceType({...editingServiceType, perUnit: parseFloat(e.target.value)});
+                          }
+                        } else {
+                          setNewServiceType({...newServiceType, perUnit: parseFloat(e.target.value)});
+                        }
+                      }}
+                      data-testid="input-per-unit"
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Brief description of this service type..."
+                    value={editingServiceType?.description || newServiceType.description}
+                    onChange={(e) => {
+                      if (editingServiceType) {
+                        setEditingServiceType({...editingServiceType, description: e.target.value});
+                      } else {
+                        setNewServiceType({...newServiceType, description: e.target.value});
+                      }
+                    }}
+                    data-testid="textarea-service-description"
+                  />
+                </div>
+                
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="is-active"
+                      checked={editingServiceType?.isActive !== false && newServiceType.isActive}
+                      onCheckedChange={(checked) => {
+                        if (editingServiceType) {
+                          setEditingServiceType({...editingServiceType, isActive: checked});
+                        } else {
+                          setNewServiceType({...newServiceType, isActive: checked});
+                        }
+                      }}
+                      data-testid="switch-is-active"
+                    />
+                    <Label htmlFor="is-active">Active</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="emergency-available"
+                      checked={editingServiceType?.emergencyAvailable !== false && newServiceType.emergencyAvailable}
+                      onCheckedChange={(checked) => {
+                        if (editingServiceType) {
+                          setEditingServiceType({...editingServiceType, emergencyAvailable: checked});
+                        } else {
+                          setNewServiceType({...newServiceType, emergencyAvailable: checked});
+                        }
+                      }}
+                      data-testid="switch-emergency-available"
+                    />
+                    <Label htmlFor="emergency-available">Available for Emergency</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="scheduled-available"
+                      checked={editingServiceType?.scheduledAvailable !== false && newServiceType.scheduledAvailable}
+                      onCheckedChange={(checked) => {
+                        if (editingServiceType) {
+                          setEditingServiceType({...editingServiceType, scheduledAvailable: checked});
+                        } else {
+                          setNewServiceType({...newServiceType, scheduledAvailable: checked});
+                        }
+                      }}
+                      data-testid="switch-scheduled-available"
+                    />
+                    <Label htmlFor="scheduled-available">Available for Scheduled</Label>
+                  </div>
+                </div>
+                
+                <div className="flex justify-end gap-2">
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setShowAddServiceType(false);
+                      setEditingServiceType(null);
+                      setNewServiceType({
+                        name: '',
+                        description: '',
+                        baseRate: 0,
+                        perUnit: 0,
+                        unitType: 'hour',
+                        isActive: true,
+                        emergencyAvailable: true,
+                        scheduledAvailable: true,
+                        categories: []
+                      });
+                    }}
+                    data-testid="button-cancel-service-type"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={() => {
+                      const data = editingServiceType || newServiceType;
+                      if (!data.name && !editingServiceType?.service) {
+                        toast({
+                          variant: "destructive",
+                          title: "Validation Error",
+                          description: "Service name is required"
+                        });
+                        return;
+                      }
+                      serviceTypeMutation.mutate({
+                        action: editingServiceType ? 'update' : 'add',
+                        serviceType: editingServiceType || {
+                          ...newServiceType,
+                          service: newServiceType.name,
+                          base: newServiceType.baseRate,
+                          perHour: newServiceType.unitType === 'hour' ? newServiceType.perUnit : undefined,
+                          perTruck: newServiceType.unitType === 'truck' ? newServiceType.perUnit : undefined,
+                          perTire: newServiceType.unitType === 'tire' ? newServiceType.perUnit : undefined,
+                          perUnit: !['hour', 'truck', 'tire'].includes(newServiceType.unitType) ? newServiceType.perUnit : undefined,
+                        }
+                      });
+                    }}
+                    disabled={serviceTypeMutation.isPending}
+                    data-testid="button-save-service-type"
+                  >
+                    {serviceTypeMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    {editingServiceType ? 'Update' : 'Add'} Service Type
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Fleet Discounts */}
           <Card>

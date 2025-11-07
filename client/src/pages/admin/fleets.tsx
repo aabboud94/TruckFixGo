@@ -101,7 +101,10 @@ export default function AdminFleets() {
     },
   });
 
-  const fleetsData = fleets?.data || [
+  const fleetsData = Array.isArray(fleets) ? fleets : (fleets?.data || []);
+  
+  // Mock data fallback for development
+  const mockFleets = [
     {
       id: "FLT-001",
       name: "ABC Transport",
@@ -142,37 +145,26 @@ export default function AdminFleets() {
     },
   ];
 
-  const pendingData = pendingApprovals?.data || [
-    {
-      id: "FLT-003",
-      name: "Quick Fleet Solutions",
-      contactName: "Mike Davis",
-      email: "mike@quickfleet.com",
-      phone: "(555) 555-1234",
-      requestedTier: "silver",
-      estimatedMonthlyVolume: 15000,
-      numberOfVehicles: 30,
-      submittedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    },
-  ];
+  const pendingData = Array.isArray(pendingApprovals) ? pendingApprovals : (pendingApprovals?.data || []);
 
   const getTierBadge = (tier: string) => {
-    const colors: any = {
-      standard: 'secondary',
-      silver: 'default',
-      gold: 'warning',
-      platinum: 'destructive',
+    const colorConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline', className?: string }> = {
+      standard: { variant: 'secondary' },
+      silver: { variant: 'default' },
+      gold: { variant: 'default', className: 'bg-yellow-500 hover:bg-yellow-600' },
+      platinum: { variant: 'default', className: 'bg-purple-500 hover:bg-purple-600' },
     };
-    return <Badge variant={colors[tier] || 'secondary'}>{tier.toUpperCase()}</Badge>;
+    const config = colorConfig[tier] || { variant: 'secondary' };
+    return <Badge variant={config.variant} className={config.className}>{tier.toUpperCase()}</Badge>;
   };
 
   const handleExport = async () => {
     try {
-      const response = await apiRequest('POST', '/api/admin/fleets/export', { 
+      const data = await apiRequest<string>('POST', '/api/admin/fleets/export', { 
         format: 'csv' 
       });
       
-      const blob = new Blob([response.data], { type: 'text/csv' });
+      const blob = new Blob([data], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
