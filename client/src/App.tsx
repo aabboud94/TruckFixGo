@@ -36,6 +36,7 @@ import FleetContracts from "@/pages/fleet/contracts";
 
 // Admin Pages
 import AdminLogin from "@/pages/admin/login";
+import AdminSetup from "@/pages/admin-setup";
 import AdminDashboard from "@/pages/admin";
 import AdminSettings from "@/pages/admin/settings";
 import AdminJobs from "@/pages/admin/jobs";
@@ -96,6 +97,7 @@ function Router() {
       
       {/* Admin Pages - Protected Routes */}
       <Route path="/admin/login" component={AdminLogin} />
+      <Route path="/admin/setup" component={AdminSetup} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/admin/settings" component={AdminSettings} />
       <Route path="/admin/jobs" component={AdminJobs} />
