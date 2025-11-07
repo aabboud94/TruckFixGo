@@ -38,11 +38,11 @@ export default function AdminLogin() {
   const loginMutation = useMutation({
     mutationFn: async (data: LoginForm) => {
       // Use the general auth login endpoint - it handles all user types including admins
-      const response = await apiRequest('POST', '/api/auth/login', {
+      // apiRequest already returns parsed JSON, no need to call .json()
+      return await apiRequest('POST', '/api/auth/login', {
         email: data.email,
         password: data.password
       });
-      return response.json();
     },
     onSuccess: (data) => {
       // Check if user is actually an admin
