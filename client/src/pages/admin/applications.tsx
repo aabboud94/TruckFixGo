@@ -97,37 +97,36 @@ export default function AdminApplications() {
       const params = new URLSearchParams();
       if (filterStatus !== 'all') params.append('status', filterStatus);
       if (searchQuery) params.append('search', searchQuery);
-      return apiRequest(`/api/admin/applications?${params}`);
+      return apiRequest('GET', `/api/admin/applications?${params}`);
     }
   });
 
   // Query for selected application details
   const { data: applicationDetails } = useQuery({
     queryKey: ['/api/admin/applications', selectedApplication?.id],
-    queryFn: async () => apiRequest(`/api/admin/applications/${selectedApplication?.id}`),
+    queryFn: async () => apiRequest('GET', `/api/admin/applications/${selectedApplication?.id}`),
     enabled: !!selectedApplication?.id
   });
 
   // Query for application documents
   const { data: documents = [] } = useQuery<ApplicationDocument[]>({
     queryKey: ['/api/admin/applications', selectedApplication?.id, 'documents'],
-    queryFn: async () => apiRequest(`/api/admin/applications/${selectedApplication?.id}/documents`),
+    queryFn: async () => apiRequest('GET', `/api/admin/applications/${selectedApplication?.id}/documents`),
     enabled: !!selectedApplication?.id
   });
 
   // Query for background checks
   const { data: backgroundChecks = [] } = useQuery<BackgroundCheck[]>({
     queryKey: ['/api/admin/applications', selectedApplication?.id, 'background-checks'],
-    queryFn: async () => apiRequest(`/api/admin/applications/${selectedApplication?.id}/background-checks`),
+    queryFn: async () => apiRequest('GET', `/api/admin/applications/${selectedApplication?.id}/background-checks`),
     enabled: !!selectedApplication?.id
   });
 
   // Mutation for updating application status
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status, notes, rejectionReason }: any) => {
-      return apiRequest(`/api/admin/applications/${id}/status`, {
-        method: 'PUT',
-        body: JSON.stringify({ status, notes, rejectionReason })
+      return apiRequest('PUT', `/api/admin/applications/${id}/status`, {
+        status, notes, rejectionReason
       });
     },
     onSuccess: () => {
@@ -144,9 +143,8 @@ export default function AdminApplications() {
   // Mutation for verifying documents
   const verifyDocumentMutation = useMutation({
     mutationFn: async ({ documentId, status, notes }: any) => {
-      return apiRequest(`/api/admin/applications/documents/${documentId}/verify`, {
-        method: 'POST',
-        body: JSON.stringify({ status, notes })
+      return apiRequest('POST', `/api/admin/applications/documents/${documentId}/verify`, {
+        status, notes
       });
     },
     onSuccess: () => {
@@ -161,9 +159,8 @@ export default function AdminApplications() {
   // Mutation for running background checks
   const runBackgroundCheckMutation = useMutation({
     mutationFn: async ({ applicationId, checkType }: any) => {
-      return apiRequest(`/api/admin/applications/${applicationId}/background-check`, {
-        method: 'POST',
-        body: JSON.stringify({ checkType })
+      return apiRequest('POST', `/api/admin/applications/${applicationId}/background-check`, {
+        checkType
       });
     },
     onSuccess: () => {
@@ -178,9 +175,8 @@ export default function AdminApplications() {
   // Mutation for sending communications
   const sendCommunicationMutation = useMutation({
     mutationFn: async ({ applicationId, type, subject, message }: any) => {
-      return apiRequest(`/api/admin/applications/${applicationId}/communicate`, {
-        method: 'POST',
-        body: JSON.stringify({ type, subject, message })
+      return apiRequest('POST', `/api/admin/applications/${applicationId}/communicate`, {
+        type, subject, message
       });
     },
     onSuccess: () => {
