@@ -37,19 +37,26 @@ export default function AdminFleets() {
   // Query for fleets
   const { data: fleets, isLoading, refetch } = useQuery({
     queryKey: ['/api/admin/fleets', { tier: tierFilter, status: statusFilter, search: searchQuery }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (tierFilter !== 'all') params.append('tier', tierFilter);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (searchQuery) params.append('search', searchQuery);
+      return apiRequest('GET', `/api/admin/fleets?${params}`);
+    }
   });
 
   // Query for pending approvals
   const { data: pendingApprovals } = useQuery({
     queryKey: ['/api/admin/fleets/pending'],
+    queryFn: async () => apiRequest('GET', '/api/admin/fleets/pending')
   });
 
   // Mutation for updating fleet tier
   const updateTierMutation = useMutation({
     mutationFn: async ({ fleetId, tier }: { fleetId: string; tier: string }) => {
-      return apiRequest(`/api/admin/fleets/${fleetId}/tier`, {
-        method: 'PUT',
-        body: JSON.stringify({ tier }),
+      return apiRequest('PUT', `/api/admin/fleets/${fleetId}/tier`, { 
+        tier 
       });
     },
     onSuccess: () => {
@@ -64,9 +71,8 @@ export default function AdminFleets() {
   // Mutation for updating credit limit
   const updateCreditMutation = useMutation({
     mutationFn: async ({ fleetId, creditLimit, paymentTerms }: any) => {
-      return apiRequest(`/api/admin/fleets/${fleetId}/credit`, {
-        method: 'PUT',
-        body: JSON.stringify({ creditLimit, paymentTerms }),
+      return apiRequest('PUT', `/api/admin/fleets/${fleetId}/credit`, {
+        creditLimit, paymentTerms
       });
     },
     onSuccess: () => {
@@ -81,9 +87,8 @@ export default function AdminFleets() {
   // Mutation for generating invoices
   const generateInvoiceMutation = useMutation({
     mutationFn: async ({ fleetIds, period }: { fleetIds: string[]; period: string }) => {
-      return apiRequest('/api/admin/fleets/invoices', {
-        method: 'POST',
-        body: JSON.stringify({ fleetIds, period }),
+      return apiRequest('POST', '/api/admin/fleets/invoices', {
+        fleetIds, period
       });
     },
     onSuccess: () => {
@@ -163,9 +168,8 @@ export default function AdminFleets() {
 
   const handleExport = async () => {
     try {
-      const response = await apiRequest('/api/admin/fleets/export', {
-        method: 'POST',
-        body: JSON.stringify({ format: 'csv' }),
+      const response = await apiRequest('POST', '/api/admin/fleets/export', { 
+        format: 'csv' 
       });
       
       const blob = new Blob([response.data], { type: 'text/csv' });
