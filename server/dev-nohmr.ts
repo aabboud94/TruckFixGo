@@ -7,7 +7,6 @@ import billingScheduler from "./billing-scheduler";
 import { createServer as createViteServer, createLogger } from "vite";
 import path from "path";
 import fs from "fs";
-import { nanoid } from "nanoid";
 import type { Server } from "http";
 
 const app = express();
@@ -87,10 +86,7 @@ async function setupViteNoHMR(app: express.Express, server: Server) {
 
       // always reload the index.html file from disk incase it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
-      template = template.replace(
-        `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid()}"`,
-      );
+      // Don't add nanoid() - it causes constant reloads
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {

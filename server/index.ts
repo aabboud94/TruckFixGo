@@ -1,11 +1,63 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import { serveStatic, log } from "./vite";
 import { trackingWSServer } from "./websocket";
 import { reminderScheduler } from "./reminder-scheduler";
 import billingScheduler from "./billing-scheduler";
+import { createServer as createViteServer, createLogger } from "vite";
+import path from "path";
+import fs from "fs";
+import type { Server } from "http";
+import viteConfig from "../vite.config";
 
 const app = express();
+
+// Fixed Vite setup that doesn't use nanoid() to prevent constant reloads
+async function setupViteFixed(app: express.Express, server: Server) {
+  const viteLogger = createLogger();
+  
+  const serverOptions = {
+    middlewareMode: true,
+    hmr: false, // Disable HMR to prevent infinite reload loops
+    allowedHosts: true as const,
+  };
+
+  const vite = await createViteServer({
+    ...viteConfig,
+    configFile: false,
+    customLogger: {
+      ...viteLogger,
+      error: (msg, options) => {
+        viteLogger.error(msg, options);
+        process.exit(1);
+      },
+    },
+    server: serverOptions,
+    appType: "custom",
+  });
+
+  app.use(vite.middlewares);
+  app.use("*", async (req, res, next) => {
+    const url = req.originalUrl;
+
+    try {
+      const clientTemplate = path.resolve(
+        import.meta.dirname,
+        "..",
+        "client",
+        "index.html",
+      );
+
+      // Read the template without adding nanoid() - this was causing constant reloads
+      let template = await fs.promises.readFile(clientTemplate, "utf-8");
+      const page = await vite.transformIndexHtml(url, template);
+      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+    } catch (e) {
+      vite.ssrFixStacktrace(e as Error);
+      next(e);
+    }
+  });
+}
 
 declare module 'http' {
   interface IncomingMessage {
@@ -64,7 +116,7 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
-    await setupVite(app, server);
+    await setupViteFixed(app, server); // Use fixed version without nanoid() issue
   } else {
     serveStatic(app);
   }
