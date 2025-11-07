@@ -190,20 +190,35 @@ function corsMiddleware(req: Request, res: Response, next: NextFunction) {
         'https://truckfixgo.com', // Future custom domain
         'https://www.truckfixgo.com'
       ]
-    : ['http://localhost:5000', 'http://localhost:5001', 'http://localhost:3000'];
+    : [
+        'http://localhost:5000', 
+        'http://localhost:5001', 
+        'http://localhost:3000',
+        'http://127.0.0.1:5000',
+        'http://127.0.0.1:5001',
+        'http://0.0.0.0:5000'
+      ];
   
   const origin = req.headers.origin;
   
-  if (origin && allowedOrigins.includes(origin)) {
+  // For same-origin requests (no origin header), allow them
+  if (!origin && process.env.NODE_ENV !== 'production') {
+    // Same-origin request in development, allow it
+    res.header('Access-Control-Allow-Credentials', 'true');
+  } else if (origin && allowedOrigins.includes(origin)) {
+    // Explicitly allowed origin
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Credentials', 'true');
-  } else if (process.env.NODE_ENV !== 'production') {
-    // In development, be more permissive
-    res.header('Access-Control-Allow-Origin', '*');
+  } else if (process.env.NODE_ENV !== 'production' && origin) {
+    // In development, if we have an origin but it's not in the list,
+    // still allow it but with credentials (for flexibility during development)
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
   }
   
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-CSRF-Token');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-CSRF-Token, Cookie');
+  res.header('Access-Control-Expose-Headers', 'Set-Cookie');
   
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
@@ -245,11 +260,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production', // Only secure in production
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax' // Add sameSite for better security
-    }
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // lax for development
+      path: '/', // Ensure cookie is available for all paths
+      domain: undefined // Let the browser handle domain
+    },
+    name: 'truckfixgo.sid', // Custom session name to avoid conflicts
+    proxy: process.env.NODE_ENV === 'production' // Trust proxy in production
   }));
 
   // ==================== AUTHENTICATION & USER ROUTES ====================

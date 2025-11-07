@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -6,9 +6,10 @@ import { AdminSidebar } from "@/components/admin-sidebar";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Bell, Search, Settings, User } from "lucide-react";
+import { Bell, Search, Settings, User, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Toaster } from "@/components/ui/toaster";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { apiRequest } from "@/lib/queryClient";
 
 interface AdminLayoutProps {
@@ -19,19 +20,50 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children, title, breadcrumbs = [] }: AdminLayoutProps) {
   const [location, setLocation] = useLocation();
+  const [redirectAttempts, setRedirectAttempts] = useState(0);
+  const hasRedirected = useRef(false);
 
-  // Check admin authentication
-  const { data: adminSession, isLoading, error } = useQuery({
+  // Check admin authentication with better error handling
+  const { data: adminSession, isLoading, error, isError } = useQuery({
     queryKey: ['/api/admin/session'],
-    retry: 1
+    retry: 2, // Retry twice before giving up
+    retryDelay: 1000, // Wait 1 second between retries
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
   });
 
-  // Redirect to login if not authenticated
+  // Redirect to login if not authenticated, but prevent loops
   useEffect(() => {
-    if (!isLoading && (!adminSession || error)) {
-      setLocation('/admin/login');
+    // Don't redirect if we're already on the login page
+    if (location === '/admin/login') {
+      hasRedirected.current = false;
+      setRedirectAttempts(0);
+      return;
     }
-  }, [adminSession, isLoading, error, setLocation]);
+
+    // Only redirect if loading is done and there's definitely no session
+    if (!isLoading && !adminSession) {
+      // Prevent infinite redirect loops
+      if (redirectAttempts >= 3) {
+        console.error('Too many redirect attempts. Stopping to prevent loop.');
+        return;
+      }
+
+      // Only redirect once per mount to prevent loops
+      if (!hasRedirected.current) {
+        hasRedirected.current = true;
+        setRedirectAttempts(prev => prev + 1);
+        
+        console.log('AdminLayout: No session found, redirecting to login', {
+          isLoading,
+          hasSession: !!adminSession,
+          error: error?.message,
+          attempts: redirectAttempts + 1
+        });
+        
+        setLocation('/admin/login');
+      }
+    }
+  }, [adminSession, isLoading, location, setLocation, redirectAttempts, error]);
 
   // Check for notifications
   const { data: notifications } = useQuery<{ unread: number }>({
@@ -49,6 +81,49 @@ export default function AdminLayout({ children, title, breadcrumbs = [] }: Admin
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
           <p className="text-muted-foreground">Loading admin dashboard...</p>
         </div>
+      </div>
+    );
+  }
+
+  // Show error if too many redirect attempts
+  if (redirectAttempts >= 3) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Alert className="max-w-md">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Authentication Error</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>Unable to verify your admin session. This could be due to:</p>
+            <ul className="list-disc list-inside text-sm">
+              <li>Session expired or invalid</li>
+              <li>Network connectivity issues</li>
+              <li>Browser cookie settings blocking session</li>
+            </ul>
+            <div className="mt-4">
+              <Button 
+                onClick={() => {
+                  setRedirectAttempts(0);
+                  hasRedirected.current = false;
+                  setLocation('/admin/login');
+                }}
+                variant="default"
+                className="mr-2"
+              >
+                Go to Login
+              </Button>
+              <Button 
+                onClick={() => {
+                  setRedirectAttempts(0);
+                  hasRedirected.current = false;
+                  window.location.reload();
+                }}
+                variant="outline"
+              >
+                Retry
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }

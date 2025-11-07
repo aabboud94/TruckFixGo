@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Admin Login - Fixed Version</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Admin Dashboard Fixed - Test Suite</h1>
+    
+    <div class="test-section">
+        <h2>Test Credentials</h2>
+        <div class="info">
+            <strong>Email:</strong> admin@truckfixgo.com<br>
+            <strong>Password:</strong> Admin123!
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>1. Test Admin Login</h2>
+        <button onclick="testLogin()">Test Login</button>
+        <div id="loginResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Test Session Persistence</h2>
+        <button onclick="testSession()">Check Session</button>
+        <div id="sessionResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Test Admin Dashboard Access</h2>
+        <button onclick="testDashboard()">Test Dashboard API</button>
+        <button onclick="openDashboard()">Open Admin Dashboard</button>
+        <div id="dashboardResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Test Logout</h2>
+        <button onclick="testLogout()">Test Logout</button>
+        <div id="logoutResult"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000';
+        
+        async function testLogin() {
+            const resultDiv = document.getElementById('loginResult');
+            resultDiv.innerHTML = 'Testing login...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include', // Important: Include cookies
+                    body: JSON.stringify({
+                        email: 'admin@truckfixgo.com',
+                        password: 'Admin123!'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✓ Login successful!</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                        <div class="info">Session cookie has been set. You can now access admin routes.</div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">✗ Login failed</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">✗ Request failed: ${error.message}</div>
+                `;
+            }
+        }
+        
+        async function testSession() {
+            const resultDiv = document.getElementById('sessionResult');
+            resultDiv.innerHTML = 'Checking session...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/session`, {
+                    method: 'GET',
+                    credentials: 'include', // Include cookies
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✓ Session is valid!</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">✗ No valid session</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                        <div class="info">Please login first.</div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">✗ Request failed: ${error.message}</div>
+                `;
+            }
+        }
+        
+        async function testDashboard() {
+            const resultDiv = document.getElementById('dashboardResult');
+            resultDiv.innerHTML = 'Testing dashboard API access...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/analytics/overview`, {
+                    method: 'GET',
+                    credentials: 'include',
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = `
+                        <div class="success">✓ Dashboard API accessible!</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else if (response.status === 401) {
+                    resultDiv.innerHTML = `
+                        <div class="error">✗ Not authenticated</div>
+                        <div class="info">Please login first.</div>
+                    `;
+                } else if (response.status === 403) {
+                    resultDiv.innerHTML = `
+                        <div class="error">✗ Not authorized</div>
+                        <div class="info">You need admin privileges.</div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">✗ Request failed with status ${response.status}</div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">✗ Request failed: ${error.message}</div>
+                `;
+            }
+        }
+        
+        function openDashboard() {
+            window.open('/admin', '_blank');
+        }
+        
+        async function testLogout() {
+            const resultDiv = document.getElementById('logoutResult');
+            resultDiv.innerHTML = 'Testing logout...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/logout`, {
+                    method: 'POST',
+                    credentials: 'include',
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✓ Logged out successfully!</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                        <div class="info">Session has been destroyed. You will need to login again.</div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">✗ Logout failed</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">✗ Request failed: ${error.message}</div>
+                `;
+            }
+        }
+        
+        // Test login on page load for convenience
+        window.addEventListener('load', () => {
+            console.log('Admin test page loaded. Use the buttons to test different scenarios.');
+            console.log('Fixed issues:');
+            console.log('1. CORS configuration now properly handles credentials');
+            console.log('2. Session cookies configured with correct sameSite settings');
+            console.log('3. AdminLayout has better error handling to prevent infinite loops');
+            console.log('4. Added redirect attempt limits and user feedback');
+        });
+    </script>
+</body>
+</html>
