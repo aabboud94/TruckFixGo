@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
+        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+  
+  <!-- Homepage - Highest Priority -->
+  <url>
+    <loc>https://truckfixgo.com/</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  
+  <!-- Emergency Service Page - High Priority -->
+  <url>
+    <loc>https://truckfixgo.com/emergency</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  
+  <!-- Services Page - High Priority -->
+  <url>
+    <loc>https://truckfixgo.com/services</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  
+  <!-- About Page -->
+  <url>
+    <loc>https://truckfixgo.com/about</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <!-- Contact Page -->
+  <url>
+    <loc>https://truckfixgo.com/contact</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <!-- Pricing Page -->
+  <url>
+    <loc>https://truckfixgo.com/pricing</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <!-- Fleet Landing Page -->
+  <url>
+    <loc>https://truckfixgo.com/fleet</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <!-- Fleet Registration -->
+  <url>
+    <loc>https://truckfixgo.com/fleet/register</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  
+  <!-- Fleet Login -->
+  <url>
+    <loc>https://truckfixgo.com/fleet/login</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <!-- Fleet Schedule PM -->
+  <url>
+    <loc>https://truckfixgo.com/fleet/schedule-pm</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  
+  <!-- Contractor Application -->
+  <url>
+    <loc>https://truckfixgo.com/contractor/apply</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  
+  <!-- Contractor Auth -->
+  <url>
+    <loc>https://truckfixgo.com/contractor/auth</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <!-- Contractor Signup -->
+  <url>
+    <loc>https://truckfixgo.com/contractor-signup</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <!-- Bidding Page -->
+  <url>
+    <loc>https://truckfixgo.com/bidding</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <!-- Login Page -->
+  <url>
+    <loc>https://truckfixgo.com/login</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  
+  <!-- Payment Methods Page -->
+  <url>
+    <loc>https://truckfixgo.com/payment-methods</loc>
+    <lastmod>2025-01-10T00:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+</urlset>

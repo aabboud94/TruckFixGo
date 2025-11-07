@@ -6,50 +6,50 @@ import {
   Truck, Wrench, Clock, Shield, Zap, DollarSign,
   CheckCircle, AlertCircle, Calendar, MapPin, Phone,
   Settings, Droplets, Battery, Gauge, Disc, Wind,
-  Fuel, Tool, Navigation, Package, Users, Building
+  Fuel, Navigation, Package, Users, Building
 } from "lucide-react";
 import { Link } from "wouter";
 
 export default function Services() {
   const emergencyServices = [
     {
-      name: "Roadside Repair",
-      description: "On-site repairs to get you back on the road quickly",
+      name: "24 Hour Mobile Truck Repair",
+      description: "Emergency roadside help with on-site truck repairs to get you back on the road quickly",
       icon: Wrench,
-      features: ["Engine diagnostics", "Electrical repairs", "Brake adjustments", "Minor mechanical fixes"],
+      features: ["Mobile truck diagnostics", "Electrical system repairs", "Brake adjustments", "Emergency mechanical fixes"],
       responseTime: "45-60 minutes"
     },
     {
-      name: "Tire Service",
-      description: "Complete tire repair and replacement services",
+      name: "Tire Blowout Assistance", 
+      description: "Complete mobile tire service for roadside assistance - repair and replacement for semi trucks",
       icon: Disc,
-      features: ["Tire replacement", "Patch repairs", "Wheel alignment check", "Tire pressure adjustment"],
+      features: ["Emergency tire replacement", "Tire patch repairs", "Wheel alignment check", "Tire pressure service"],
       responseTime: "30-45 minutes"
     },
     {
-      name: "Battery Service",
-      description: "Battery testing, jump starts, and replacement",
+      name: "Battery Jump Start Service",
+      description: "Emergency battery service - roadside help for dead batteries, testing, and replacement",
       icon: Battery,
-      features: ["Jump start service", "Battery testing", "Battery replacement", "Cable repairs"],
+      features: ["24/7 jump start service", "Battery testing", "Battery replacement", "Cable repairs"],
       responseTime: "30-45 minutes"
     },
     {
-      name: "Fuel Delivery",
-      description: "Emergency fuel delivery when you run out",
+      name: "Roadside Fuel Delivery",
+      description: "Emergency fuel delivery service - roadside help when you run out of diesel",
       icon: Fuel,
-      features: ["Diesel delivery", "DEF fluid delivery", "Up to 50 gallons", "24/7 availability"],
+      features: ["Diesel fuel delivery", "DEF fluid delivery", "Up to 50 gallons", "24/7 availability"],
       responseTime: "45-60 minutes"
     },
     {
-      name: "Towing Service",
-      description: "Heavy-duty towing for major breakdowns",
+      name: "Heavy-Duty Towing Service",
+      description: "Professional towing for semi trucks - roadside assistance for major breakdowns",
       icon: Truck,
       features: ["Heavy-duty towing", "Flatbed service", "Winch recovery", "Long-distance towing"],
       responseTime: "60-90 minutes"
     },
     {
-      name: "Mobile Welding",
-      description: "On-site welding repairs for structural issues",
+      name: "Mobile Welding Repair",
+      description: "On-site welding services - emergency roadside help for structural truck repairs",
       icon: Tool,
       features: ["Frame repairs", "Exhaust repairs", "Custom fabrication", "Emergency patches"],
       responseTime: "60-90 minutes"

@@ -1,0 +1,29 @@
+# TruckFixGo Robots.txt
+# Allow all crawlers to index our site for maximum visibility
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /contractor/dashboard
+Disallow: /contractor/earnings
+Disallow: /contractor/jobs/
+Disallow: /fleet/dashboard
+Disallow: /fleet/analytics
+Disallow: /fleet/invoices
+Disallow: /fleet/billing
+Crawl-delay: 1
+
+# Googlebot specific
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 0
+
+# Bingbot specific  
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 0
+
+# Sitemap location
+Sitemap: https://truckfixgo.com/sitemap.xml
+Sitemap: https://truck-fix-go-aabboud94.replit.app/sitemap.xml

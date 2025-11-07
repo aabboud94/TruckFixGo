@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import SEOHead from "@/components/SEOHead";
 import {
   Truck,
   Wrench,
@@ -32,7 +33,12 @@ export default function Homepage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Navigation Header */}
+      <SEOHead 
+        title="24/7 Roadside Help for Trucks | Emergency Mobile Truck Repair | TruckFixGo"
+        description="Get immediate roadside help for trucks nationwide. 24/7 emergency roadside assistance, mobile truck repair, tire service, fuel delivery. 15-minute response time. Call 1-800-TRUCK-FIX now!"
+        canonical="https://truckfixgo.com/"
+      />
+      {/* Navigation Header - Enhanced with SEO */}
       <header className="sticky top-0 z-50 bg-background border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -45,29 +51,29 @@ export default function Homepage() {
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center space-x-8">
-              <a href="#services" className="text-foreground hover:text-primary transition-colors" data-testid="link-services">
+              <a href="/services" className="text-foreground hover:text-primary transition-colors" data-testid="link-services">
                 Services
               </a>
-              <a href="#how-it-works" className="text-foreground hover:text-primary transition-colors" data-testid="link-how-it-works">
-                How It Works
-              </a>
-              <a href="#fleet" className="text-foreground hover:text-primary transition-colors" data-testid="link-fleet">
-                Fleet Solutions
-              </a>
-              <a href="#about" className="text-foreground hover:text-primary transition-colors" data-testid="link-about">
+              <a href="/about" className="text-foreground hover:text-primary transition-colors" data-testid="link-about">
                 About
+              </a>
+              <a href="/pricing" className="text-foreground hover:text-primary transition-colors" data-testid="link-pricing">
+                Pricing
+              </a>
+              <a href="/contact" className="text-foreground hover:text-primary transition-colors" data-testid="link-contact">
+                Contact
               </a>
             </nav>
 
-            {/* Desktop CTAs */}
+            {/* Desktop CTAs with Phone Number */}
             <div className="hidden md:flex items-center space-x-4">
-              <Button variant="default" className="bg-primary hover-elevate" onClick={() => setLocation("/fleet")} data-testid="button-fleet-services-header">
-                <Phone className="w-4 h-4 mr-2" />
-                Fleet Services
-              </Button>
+              <a href="tel:1-800-TRUCK-FIX" className="flex items-center text-destructive font-semibold hover:underline">
+                <Phone className="w-4 h-4 mr-1" />
+                1-800-TRUCK-FIX
+              </a>
               <Button variant="destructive" className="hover-elevate" onClick={() => setLocation("/emergency")} data-testid="button-emergency-repair-header">
                 <AlertCircle className="w-4 h-4 mr-2" />
-                Emergency Repair
+                Get Help Now
               </Button>
             </div>
 
@@ -84,26 +90,26 @@ export default function Homepage() {
           {/* Mobile Menu */}
           {mobileMenuOpen && (
             <div className="md:hidden py-4 space-y-4">
-              <a href="#services" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-services">
+              <a href="/services" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-services">
                 Services
               </a>
-              <a href="#how-it-works" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-how-it-works">
-                How It Works
-              </a>
-              <a href="#fleet" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-fleet">
-                Fleet Solutions
-              </a>
-              <a href="#about" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-about">
+              <a href="/about" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-about">
                 About
               </a>
+              <a href="/pricing" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-pricing">
+                Pricing
+              </a>
+              <a href="/contact" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-contact">
+                Contact
+              </a>
               <div className="flex flex-col space-y-2 pt-4">
-                <Button variant="default" className="w-full bg-primary hover-elevate" onClick={() => setLocation("/fleet")} data-testid="mobile-button-fleet-services">
-                  <Phone className="w-4 h-4 mr-2" />
-                  Fleet Services
-                </Button>
+                <a href="tel:1-800-TRUCK-FIX" className="flex items-center justify-center text-destructive font-semibold hover:underline py-2">
+                  <Phone className="w-4 h-4 mr-1" />
+                  1-800-TRUCK-FIX
+                </a>
                 <Button variant="destructive" className="w-full hover-elevate" onClick={() => setLocation("/emergency")} data-testid="mobile-button-emergency-repair">
                   <AlertCircle className="w-4 h-4 mr-2" />
-                  Emergency Repair
+                  Get Help Now
                 </Button>
               </div>
             </div>
@@ -119,13 +125,14 @@ export default function Homepage() {
         {/* Dark Overlay for Text Readability */}
         <div className="absolute inset-0 bg-black/40" />
         
-        {/* Hero Content */}
+        {/* Hero Content - SEO Optimized */}
         <div className="relative z-10 text-center px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
-            24/7 Mobile Truck Repair<br />At Your Location
+            24/7 Roadside Help for Trucks<br />Emergency Mobile Repair Service
           </h1>
           <p className="text-lg sm:text-xl text-gray-100 mb-8 max-w-3xl mx-auto">
-            Professional mechanics come to you. Emergency repairs, PM services, and truck washing.
+            Get immediate roadside assistance when you need it most. Professional mobile mechanics for semi trucks, 
+            emergency roadside service, tire blowout assistance, and roadside fuel delivery - all with a 15-minute average response time.
           </p>
           
           {/* Dual CTAs */}
@@ -387,7 +394,7 @@ export default function Homepage() {
         </div>
       </section>
 
-      {/* Footer */}
+      {/* Footer - SEO Optimized with Internal Links */}
       <footer className="bg-background border-t">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
@@ -395,46 +402,57 @@ export default function Homepage() {
             <div>
               <h3 className="text-2xl font-bold text-primary mb-4">TruckFixGo</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Your trusted partner for 24/7 mobile truck repair and fleet maintenance services.
+                Your trusted 24/7 roadside help provider. Professional mobile truck repair, 
+                emergency roadside assistance, and fleet maintenance services nationwide.
               </p>
               <div className="flex space-x-4">
-                <a href="#" className="text-muted-foreground hover:text-primary transition-colors" data-testid="social-facebook">
+                <a href="https://facebook.com/TruckFixGo" aria-label="TruckFixGo Facebook" className="text-muted-foreground hover:text-primary transition-colors" data-testid="social-facebook">
                   <Facebook className="w-5 h-5" />
                 </a>
-                <a href="#" className="text-muted-foreground hover:text-primary transition-colors" data-testid="social-twitter">
+                <a href="https://twitter.com/TruckFixGo" aria-label="TruckFixGo Twitter" className="text-muted-foreground hover:text-primary transition-colors" data-testid="social-twitter">
                   <Twitter className="w-5 h-5" />
                 </a>
-                <a href="#" className="text-muted-foreground hover:text-primary transition-colors" data-testid="social-linkedin">
+                <a href="https://linkedin.com/company/truckfixgo" aria-label="TruckFixGo LinkedIn" className="text-muted-foreground hover:text-primary transition-colors" data-testid="social-linkedin">
                   <Linkedin className="w-5 h-5" />
                 </a>
-                <a href="#" className="text-muted-foreground hover:text-primary transition-colors" data-testid="social-instagram">
+                <a href="https://instagram.com/truckfixgo" aria-label="TruckFixGo Instagram" className="text-muted-foreground hover:text-primary transition-colors" data-testid="social-instagram">
                   <Instagram className="w-5 h-5" />
                 </a>
               </div>
             </div>
 
-            {/* Services */}
+            {/* Services - SEO Optimized Links */}
             <div>
-              <h4 className="text-lg font-semibold mb-4">Services</h4>
+              <h4 className="text-lg font-semibold mb-4">Roadside Help Services</h4>
               <ul className="space-y-2">
                 <li>
-                  <a href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-emergency">
-                    Emergency Repairs
+                  <a href="/emergency" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-emergency">
+                    24 Hour Emergency Roadside Assistance
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-pm">
-                    PM Services
+                  <a href="/services" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-mobile-repair">
+                    Mobile Truck Repair Near Me
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-washing">
-                    Truck Washing
+                  <a href="/services#tire-service" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-tire">
+                    Tire Blowout Assistance
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-fleet">
-                    Fleet Programs
+                  <a href="/services#fuel-delivery" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-fuel">
+                    Roadside Fuel Delivery
+                  </a>
+                </li>
+                <li>
+                  <a href="/fleet" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-fleet">
+                    Fleet Maintenance Programs
+                  </a>
+                </li>
+                <li>
+                  <a href="/services#diagnostics" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-diagnostics">
+                    Mobile Truck Diagnostics
                   </a>
                 </li>
               </ul>
@@ -445,35 +463,42 @@ export default function Homepage() {
               <h4 className="text-lg font-semibold mb-4">Resources</h4>
               <ul className="space-y-2">
                 <li>
-                  <a href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-about">
-                    About Us
+                  <a href="/about" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-about">
+                    About TruckFixGo
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-blog">
-                    Blog
+                  <a href="/pricing" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-pricing">
+                    Service Pricing
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-careers">
-                    Careers
+                  <a href="/track/demo" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-tracking">
+                    Track Your Service
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-partners">
-                    Partners
+                  <a href="/contractor/apply" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-contractors">
+                    Become a Contractor
+                  </a>
+                </li>
+                <li>
+                  <a href="/fleet/register" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-fleet-signup">
+                    Fleet Account Signup
                   </a>
                 </li>
               </ul>
             </div>
 
-            {/* Contact */}
+            {/* Contact - Enhanced for SEO */}
             <div>
-              <h4 className="text-lg font-semibold mb-4">Contact</h4>
+              <h4 className="text-lg font-semibold mb-4">Get Roadside Help Now</h4>
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p className="flex items-center gap-2">
                   <Phone className="w-4 h-4" />
-                  <span data-testid="footer-phone">1-800-FIX-TRUCK</span>
+                  <a href="tel:1-800-TRUCK-FIX" className="font-semibold text-destructive hover:underline" data-testid="footer-phone">
+                    1-800-TRUCK-FIX
+                  </a>
                 </p>
                 <p className="flex items-center gap-2">
                   <Clock className="w-4 h-4" />
@@ -483,6 +508,16 @@ export default function Homepage() {
                   <MapPin className="w-4 h-4" />
                   <span data-testid="footer-location">Nationwide Coverage</span>
                 </p>
+                <div className="mt-4">
+                  <Button 
+                    variant="destructive" 
+                    className="w-full hover-elevate" 
+                    onClick={() => setLocation("/emergency")}
+                    data-testid="footer-emergency-button"
+                  >
+                    Get Emergency Help Now
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -491,14 +526,20 @@ export default function Homepage() {
 
           <div className="flex flex-col md:flex-row items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              © 2024 TruckFixGo. All rights reserved.
+              © 2025 TruckFixGo - Professional Roadside Help & Mobile Truck Repair. All rights reserved.
             </p>
             <div className="flex items-center space-x-4 mt-4 md:mt-0">
-              <a href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-privacy">
+              <a href="/privacy" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-privacy">
                 Privacy Policy
               </a>
-              <a href="#" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-terms">
+              <a href="/terms" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-terms">
                 Terms of Service
+              </a>
+              <a href="/contact" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-contact">
+                Contact Us
+              </a>
+              <a href="/sitemap.xml" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="footer-link-sitemap">
+                Sitemap
               </a>
             </div>
           </div>
