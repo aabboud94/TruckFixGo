@@ -2773,7 +2773,7 @@ export class PostgreSQLStorage implements IStorage {
     if (fromDate) dateConditions.push(gte(jobs.createdAt, fromDate));
     if (toDate) dateConditions.push(lte(jobs.createdAt, toDate));
 
-    const [jobMetrics, contractorCount, fleetCount, revenueMetrics, responseMetrics] = await Promise.all([
+    const [jobMetrics, contractorCount, fleetCount, revenueMetrics, responseMetrics, onlineContractorCount, userCount, jobValueMetrics, platformFeesMetrics] = await Promise.all([
       // Job metrics
       db.select({
         active: sql<number>`COUNT(*) FILTER (WHERE ${jobs.status} IN ('new', 'assigned', 'en_route', 'on_site'))`,
@@ -2783,12 +2783,11 @@ export class PostgreSQLStorage implements IStorage {
       .from(jobs)
       .where(dateConditions.length > 0 ? and(...dateConditions) : undefined),
       
-      // Contractor count
+      // Total contractor count
       db.select({
         count: sql<number>`COUNT(*)`
       })
-      .from(contractorProfiles)
-      .where(eq(contractorProfiles.isAvailable, true)),
+      .from(contractorProfiles),
       
       // Fleet count
       db.select({
@@ -2799,7 +2798,7 @@ export class PostgreSQLStorage implements IStorage {
       
       // Revenue
       db.select({
-        total: sql<number>`SUM(${transactions.amount})`
+        total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
       })
       .from(transactions)
       .where(
@@ -2819,6 +2818,44 @@ export class PostgreSQLStorage implements IStorage {
           sql`${jobs.assignedAt} IS NOT NULL`,
           ...(dateConditions.length > 0 ? dateConditions : [])
         )
+      ),
+      
+      // Online contractor count
+      db.select({
+        count: sql<number>`COUNT(*)`
+      })
+      .from(contractorProfiles)
+      .where(eq(contractorProfiles.isAvailable, true)),
+      
+      // Total user count
+      db.select({
+        count: sql<number>`COUNT(*)`
+      })
+      .from(users)
+      .where(eq(users.isActive, true)),
+      
+      // Average job value
+      db.select({
+        avgValue: sql<number>`COALESCE(AVG(${transactions.amount}), 0)`
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.status, 'completed'),
+          ...(dateConditions.length > 0 ? dateConditions : [])
+        )
+      ),
+      
+      // Platform fees (calculated as percentage of revenue - assuming 10% fee)
+      db.select({
+        fees: sql<number>`COALESCE(SUM(${transactions.amount}) * 0.1, 0)`
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.status, 'completed'),
+          ...(dateConditions.length > 0 ? dateConditions : [])
+        )
       )
     ]);
 
@@ -2831,7 +2868,11 @@ export class PostgreSQLStorage implements IStorage {
       completionRate: totalJobs > 0 ? (completedJobs / totalJobs) * 100 : 0,
       totalRevenue: revenueMetrics[0]?.total || 0,
       totalContractors: contractorCount[0]?.count || 0,
-      totalFleets: fleetCount[0]?.count || 0
+      totalFleets: fleetCount[0]?.count || 0,
+      onlineContractors: onlineContractorCount[0]?.count || 0,
+      totalUsers: userCount[0]?.count || 0,
+      avgJobValue: jobValueMetrics[0]?.avgValue || 0,
+      platformFees: platformFeesMetrics[0]?.fees || 0
     };
   }
 
