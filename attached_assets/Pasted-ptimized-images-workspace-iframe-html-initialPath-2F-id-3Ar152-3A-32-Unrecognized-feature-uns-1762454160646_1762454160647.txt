@@ -1,0 +1,43 @@
+ptimized-images'.
+workspace_iframe.html?initialPath=%2F&id=%3Ar152%3A:32  Unrecognized feature: 'unsized-media'.
+workspace_iframe.html?initialPath=%2F&id=%3Ar152%3A:32  Allow attribute will take precedence over 'allowfullscreen'.
+workspace_iframe.html?initialPath=%2F&id=%3Ar152%3A:32  Allow attribute will take precedence over 'allowpaymentrequest'.
+VM8 injected.js:27 [PWA] Service Worker temporarily disabled
+VM12 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=HA0sncILFYDi' failed: Invalid frame header
+setupWebSocket @ VM12 client:536
+VM8 injected.js:27 [vite] server connection lost. Polling for restart...
+(index):1  The resource https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/src/index.css was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally.
+VM8 injected.js:27 [PWA] Service Worker temporarily disabled
+VM12 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=HA0sncILFYDi' failed: Invalid frame header
+setupWebSocket @ VM12 client:536
+VM8 injected.js:27 [vite] server connection lost. Polling for restart...
+[NEW] Explain Console errors by using Copilot in Edge: click
+         
+         to explain an error. 
+        Learn more
+        Don't show again
+VM233 injected.js:27 [PWA] Service Worker temporarily disabled
+VM238 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=HA0sncILFYDi' failed: Invalid frame header
+setupWebSocket @ VM238 client:536
+(anonymous) @ VM238 client:531
+VM233 injected.js:27 [vite] server connection lost. Polling for restart...
+VM396 injected.js:27 [PWA] Service Worker temporarily disabled
+VM399 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=HA0sncILFYDi' failed: Invalid frame header
+setupWebSocket @ VM399 client:536
+(anonymous) @ VM399 client:531
+VM396 injected.js:27 [vite] server connection lost. Polling for restart...
+VM538 injected.js:27 [PWA] Service Worker temporarily disabled
+VM542 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=HA0sncILFYDi' failed: Invalid frame header
+setupWebSocket @ VM542 client:536
+(anonymous) @ VM542 client:531
+VM538 injected.js:27 [vite] server connection lost. Polling for restart...
+VM701 injected.js:27 [PWA] Service Worker temporarily disabled
+VM704 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=HA0sncILFYDi' failed: Invalid frame header
+setupWebSocket @ VM704 client:536
+(anonymous) @ VM704 client:531
+VM701 injected.js:27 [vite] server connection lost. Polling for restart...
+VM860 injected.js:27 [PWA] Service Worker temporarily disabled
+VM865 client:536  WebSocket connection to 'wss://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/?token=HA0sncILFYDi' failed: Invalid frame header
+setupWebSocket @ VM865 client:536
+(anonymous) @ VM865 client:531
+VM860 injected.js:27 [vite] server connection lost. Polling for restart...
