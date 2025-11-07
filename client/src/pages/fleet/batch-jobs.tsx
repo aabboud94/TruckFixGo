@@ -468,7 +468,7 @@ export default function BatchJobs() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="">Auto-assign best available</SelectItem>
+                              <SelectItem value="auto">Auto-assign best available</SelectItem>
                               {contractors.map((contractor) => (
                                 <SelectItem key={contractor.id} value={contractor.id}>
                                   <div className="flex items-center justify-between w-full">
