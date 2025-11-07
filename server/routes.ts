@@ -5044,6 +5044,245 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== SERVICE AREA MANAGEMENT ====================
+  
+  // Get all service areas with contractor counts
+  app.get('/api/admin/service-areas',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        // Get all service areas
+        const areas = await storage.getAllServiceAreas();
+        
+        // Add contractor count for each area
+        const areasWithCounts = await Promise.all(areas.map(async (area) => {
+          // Count contractors in this service area
+          // For radius-based areas, we'd need PostGIS for accurate counts
+          // For now, we'll count all active contractors as a placeholder
+          const contractorCount = await db.select({
+            count: sql<number>`COUNT(*)`
+          })
+          .from(contractorProfiles)
+          .where(eq(contractorProfiles.isAvailable, true))
+          .then(result => result[0]?.count || 0);
+          
+          // Transform database schema to frontend expectations
+          const coordinates = area.coordinates as any || { center: { lat: 0, lng: 0 }, radius: 0 };
+          
+          return {
+            id: area.id,
+            name: area.name,
+            description: area.name, // Use name as description if not available
+            latitude: coordinates.center?.lat || 0,
+            longitude: coordinates.center?.lng || 0,
+            radiusMiles: coordinates.radius || 50,
+            baseSurcharge: Number(area.surchargeAmount || 0),
+            isActive: area.isActive,
+            contractorCount: Number(contractorCount)
+          };
+        }));
+        
+        res.json(areasWithCounts);
+      } catch (error) {
+        console.error('Get service areas error:', error);
+        res.status(500).json({ message: 'Failed to get service areas' });
+      }
+    }
+  );
+  
+  // Create new service area
+  app.post('/api/admin/service-areas',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      name: z.string().min(1),
+      description: z.string().optional(),
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
+      radiusMiles: z.number().min(1).max(500),
+      baseSurcharge: z.number().min(0),
+      isActive: z.boolean()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { name, description, latitude, longitude, radiusMiles, baseSurcharge, isActive } = req.body;
+        
+        // Transform frontend data to database schema
+        const serviceAreaData = {
+          name,
+          type: 'radius' as const,
+          coordinates: {
+            center: { lat: latitude, lng: longitude },
+            radius: radiusMiles
+          },
+          surchargeType: 'distance' as const,
+          surchargeAmount: baseSurcharge.toString(),
+          surchargePercentage: '0',
+          isActive
+        };
+        
+        const area = await storage.createServiceArea(serviceAreaData);
+        
+        // Transform back to frontend format
+        const response = {
+          id: area.id,
+          name: area.name,
+          description: description || area.name,
+          latitude,
+          longitude,
+          radiusMiles,
+          baseSurcharge,
+          isActive: area.isActive,
+          contractorCount: 0
+        };
+        
+        res.status(201).json(response);
+      } catch (error) {
+        console.error('Create service area error:', error);
+        res.status(500).json({ message: 'Failed to create service area' });
+      }
+    }
+  );
+  
+  // Update service area
+  app.put('/api/admin/service-areas/:id',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      name: z.string().min(1),
+      description: z.string().optional(),
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
+      radiusMiles: z.number().min(1).max(500),
+      baseSurcharge: z.number().min(0),
+      isActive: z.boolean()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { id } = req.params;
+        const { name, description, latitude, longitude, radiusMiles, baseSurcharge, isActive } = req.body;
+        
+        // Check if area exists
+        const existingArea = await storage.getServiceArea(id);
+        if (!existingArea) {
+          return res.status(404).json({ message: 'Service area not found' });
+        }
+        
+        // Transform frontend data to database schema
+        const updateData = {
+          name,
+          type: 'radius' as const,
+          coordinates: {
+            center: { lat: latitude, lng: longitude },
+            radius: radiusMiles
+          },
+          surchargeType: 'distance' as const,
+          surchargeAmount: baseSurcharge.toString(),
+          isActive
+        };
+        
+        const updatedArea = await storage.updateServiceArea(id, updateData);
+        
+        if (!updatedArea) {
+          return res.status(404).json({ message: 'Service area not found' });
+        }
+        
+        // Transform back to frontend format
+        const response = {
+          id: updatedArea.id,
+          name: updatedArea.name,
+          description: description || updatedArea.name,
+          latitude,
+          longitude,
+          radiusMiles,
+          baseSurcharge,
+          isActive: updatedArea.isActive,
+          contractorCount: 0
+        };
+        
+        res.json(response);
+      } catch (error) {
+        console.error('Update service area error:', error);
+        res.status(500).json({ message: 'Failed to update service area' });
+      }
+    }
+  );
+  
+  // Delete service area
+  app.delete('/api/admin/service-areas/:id',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { id } = req.params;
+        
+        // Check if area exists
+        const existingArea = await storage.getServiceArea(id);
+        if (!existingArea) {
+          return res.status(404).json({ message: 'Service area not found' });
+        }
+        
+        const deleted = await storage.deleteServiceArea(id);
+        
+        if (!deleted) {
+          return res.status(404).json({ message: 'Service area not found' });
+        }
+        
+        res.json({ message: 'Service area deleted successfully' });
+      } catch (error) {
+        console.error('Delete service area error:', error);
+        res.status(500).json({ message: 'Failed to delete service area' });
+      }
+    }
+  );
+  
+  // Toggle service area active status
+  app.patch('/api/admin/service-areas/:id/status',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      isActive: z.boolean()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { id } = req.params;
+        const { isActive } = req.body;
+        
+        // Check if area exists
+        const existingArea = await storage.getServiceArea(id);
+        if (!existingArea) {
+          return res.status(404).json({ message: 'Service area not found' });
+        }
+        
+        const updatedArea = await storage.updateServiceArea(id, { isActive });
+        
+        if (!updatedArea) {
+          return res.status(404).json({ message: 'Service area not found' });
+        }
+        
+        // Transform back to frontend format
+        const coordinates = updatedArea.coordinates as any || { center: { lat: 0, lng: 0 }, radius: 0 };
+        const response = {
+          id: updatedArea.id,
+          name: updatedArea.name,
+          description: updatedArea.name,
+          latitude: coordinates.center?.lat || 0,
+          longitude: coordinates.center?.lng || 0,
+          radiusMiles: coordinates.radius || 50,
+          baseSurcharge: Number(updatedArea.surchargeAmount || 0),
+          isActive: updatedArea.isActive,
+          contractorCount: 0
+        };
+        
+        res.json(response);
+      } catch (error) {
+        console.error('Toggle service area status error:', error);
+        res.status(500).json({ message: 'Failed to update service area status' });
+      }
+    }
+  );
+
   // Get platform KPIs
   app.get('/api/admin/metrics',
     requireAuth,

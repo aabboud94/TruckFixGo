@@ -504,6 +504,9 @@ export interface IStorage {
   createServiceArea(area: InsertServiceArea): Promise<ServiceArea>;
   updateServiceArea(id: string, updates: Partial<InsertServiceArea>): Promise<ServiceArea | undefined>;
   getActiveServiceAreas(): Promise<ServiceArea[]>;
+  getAllServiceAreas(): Promise<ServiceArea[]>;
+  getServiceArea(id: string): Promise<ServiceArea | undefined>;
+  deleteServiceArea(id: string): Promise<boolean>;
   checkServiceAvailability(location: {lat: number, lng: number}): Promise<boolean>;
   
   createPricingRule(rule: InsertPricingRule): Promise<PricingRule>;
@@ -1303,6 +1306,25 @@ export class PostgreSQLStorage implements IStorage {
     return await db.select().from(serviceAreas)
       .where(eq(serviceAreas.isActive, true))
       .orderBy(asc(serviceAreas.name));
+  }
+
+  async getAllServiceAreas(): Promise<ServiceArea[]> {
+    return await db.select().from(serviceAreas)
+      .orderBy(asc(serviceAreas.name));
+  }
+
+  async getServiceArea(id: string): Promise<ServiceArea | undefined> {
+    const result = await db.select().from(serviceAreas)
+      .where(eq(serviceAreas.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async deleteServiceArea(id: string): Promise<boolean> {
+    const result = await db.delete(serviceAreas)
+      .where(eq(serviceAreas.id, id))
+      .returning();
+    return result.length > 0;
   }
 
   async checkServiceAvailability(location: {lat: number, lng: number}): Promise<boolean> {
