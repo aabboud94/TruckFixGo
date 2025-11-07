@@ -50,7 +50,7 @@ export default function Services() {
     {
       name: "Mobile Welding Repair",
       description: "On-site welding services - emergency roadside help for structural truck repairs",
-      icon: Tool,
+      icon: Wrench,
       features: ["Frame repairs", "Exhaust repairs", "Custom fabrication", "Emergency patches"],
       responseTime: "60-90 minutes"
     }
