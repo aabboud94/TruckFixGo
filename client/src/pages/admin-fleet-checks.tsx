@@ -65,8 +65,8 @@ export default function AdminFleetChecks() {
   const [showDetails, setShowDetails] = useState(false);
   const [showVoidDialog, setShowVoidDialog] = useState(false);
   const [filters, setFilters] = useState({
-    provider: "",
-    status: "",
+    provider: "all",
+    status: "all",
     checkNumber: "",
     jobId: "",
     fromDate: "",
@@ -79,18 +79,20 @@ export default function AdminFleetChecks() {
     queryFn: async () => {
       const params = new URLSearchParams();
       Object.entries(filters).forEach(([key, value]) => {
-        if (value) params.append(key, value);
+        if (value && value !== "all") params.append(key, value);
       });
-      return apiRequest(`/api/admin/fleet-checks?${params.toString()}`);
+      const response = await fetch(`/api/admin/fleet-checks?${params.toString()}`, {
+        credentials: "include"
+      });
+      if (!response.ok) throw new Error("Failed to fetch fleet checks");
+      return response.json();
     }
   });
 
   // Void check mutation
   const voidCheckMutation = useMutation({
     mutationFn: async (checkId: string) => {
-      return apiRequest(`/api/payments/checks/${checkId}/void`, {
-        method: "POST"
-      });
+      return apiRequest("POST", `/api/payments/checks/${checkId}/void`);
     },
     onSuccess: () => {
       toast({
@@ -232,7 +234,7 @@ export default function AdminFleetChecks() {
                   <SelectValue placeholder="All Providers" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Providers</SelectItem>
+                  <SelectItem value="all">All Providers</SelectItem>
                   <SelectItem value="efs">EFS</SelectItem>
                   <SelectItem value="comdata">Comdata</SelectItem>
                 </SelectContent>
@@ -248,7 +250,7 @@ export default function AdminFleetChecks() {
                   <SelectValue placeholder="All Statuses" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Statuses</SelectItem>
+                  <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="authorized">Authorized</SelectItem>
                   <SelectItem value="captured">Captured</SelectItem>
