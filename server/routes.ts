@@ -6,7 +6,7 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { db } from "./db";
 import { storage } from "./storage";
-import { desc, asc } from "drizzle-orm";
+import { desc, asc, and, eq, gte, sql } from "drizzle-orm";
 import aiService from "./ai-service";
 import { reminderService } from "./reminder-service";
 import { reminderScheduler } from "./reminder-scheduler";
@@ -51,6 +51,7 @@ import {
   insertBillingUsageTrackingSchema,
   insertSplitPaymentTemplateSchema,
   splitPayments,
+  transactions,
   insertFleetContractSchema,
   insertContractSlaMetricSchema,
   insertContractPenaltySchema,
@@ -5049,9 +5050,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole('admin'),
     async (req: Request, res: Response) => {
       try {
+        // Get base metrics
         const metrics = await storage.getPlatformMetrics();
         
-        res.json({ metrics });
+        // Calculate revenue for different time periods
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        
+        // Get revenue for today
+        const todayRevenue = await db.select({
+          total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
+        })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.status, 'completed'),
+            gte(transactions.createdAt, startOfDay)
+          )
+        );
+        
+        // Get revenue for this week
+        const weekRevenue = await db.select({
+          total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
+        })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.status, 'completed'),
+            gte(transactions.createdAt, startOfWeek)
+          )
+        );
+        
+        // Get revenue for this month
+        const monthRevenue = await db.select({
+          total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
+        })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.status, 'completed'),
+            gte(transactions.createdAt, startOfMonth)
+          )
+        );
+        
+        // Map the field names and include all expected fields
+        const response = {
+          activeJobs: metrics.activeJobs,
+          onlineContractors: metrics.onlineContractors,
+          avgResponseTime: metrics.averageResponseTime, // Map field name
+          completionRate: metrics.completionRate,
+          revenueToday: todayRevenue[0]?.total || 0,
+          revenueWeek: weekRevenue[0]?.total || 0,
+          revenueMonth: monthRevenue[0]?.total || 0,
+          totalFleets: metrics.totalFleets,
+          totalContractors: metrics.totalContractors,
+          totalUsers: metrics.totalUsers
+        };
+        
+        res.json({ metrics: response });
       } catch (error) {
         console.error('Get metrics error:', error);
         res.status(500).json({ message: 'Failed to get metrics' });
