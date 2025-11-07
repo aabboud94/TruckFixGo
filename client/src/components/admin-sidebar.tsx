@@ -54,6 +54,8 @@ const menuItems = [
       { title: "Fleet Accounts", url: "/admin/fleets", icon: Building2, badge: null },
       { title: "Contracts", url: "/admin/contracts", icon: FileSignature, badge: null },
       { title: "Users", url: "/admin/users", icon: UserCog, badge: null },
+      { title: "Invoices", url: "/admin/invoices", icon: FileText, badge: null },
+      { title: "Billing", url: "/admin/billing", icon: DollarSign, badge: null },
     ]
   },
   {
@@ -77,6 +79,7 @@ const menuItems = [
     group: "Support",
     items: [
       { title: "Support Tools", url: "/admin/support", icon: HeadphonesIcon, badge: "3" },
+      { title: "Review Moderation", url: "/admin/review-moderation", icon: MessageSquare, badge: null },
       { title: "System Health", url: "/admin/health", icon: ShieldCheck, badge: null },
     ]
   }
