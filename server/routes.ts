@@ -649,6 +649,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Get admin session - verifies admin authentication for admin dashboard
+  app.get('/api/admin/session',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const user = await storage.getUser(req.session.userId!);
+        if (!user) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Verify the user is still an admin (double check)
+        if (user.role !== 'admin') {
+          return res.status(401).json({ message: 'Not an admin user' });
+        }
+
+        // Return admin user data
+        res.json({
+          user: {
+            id: user.id,
+            email: user.email,
+            phone: user.phone,
+            role: user.role,
+            firstName: user.firstName,
+            lastName: user.lastName
+          }
+        });
+      } catch (error) {
+        console.error('Get admin session error:', error);
+        res.status(500).json({ message: 'Failed to get admin session' });
+      }
+    }
+  );
+
   // ==================== JOB ROUTES ====================
 
   // Create new job
