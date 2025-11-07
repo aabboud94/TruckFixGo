@@ -81,12 +81,9 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
   // Photo analysis mutation
   const analyzePhotoMutation = useMutation({
     mutationFn: async (photoBase64: string) => {
-      return apiRequest('/api/ai/analyze-photo', {
-        method: 'POST',
-        body: JSON.stringify({
-          photo: photoBase64,
-          context: "Emergency roadside truck repair request - analyze damage and provide repair recommendations"
-        }),
+      return apiRequest('POST', '/api/ai/analyze-photo', {
+        photo: photoBase64,
+        context: "Emergency roadside truck repair request - analyze damage and provide repair recommendations"
       });
     },
     onSuccess: (analysis) => {
@@ -123,10 +120,7 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
   // Submit job mutation
   const submitJobMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('/api/auth/guest-booking', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
+      return apiRequest('POST', '/api/auth/guest-booking', data);
     },
     onSuccess: (response) => {
       // Store job info in localStorage for tracking
