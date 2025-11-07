@@ -7,6 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
@@ -57,6 +68,7 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { format } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
 
 const COLORS = {
   primary: "#1E3A8A",
@@ -78,9 +90,11 @@ const CHART_COLORS = [
 
 export default function FleetAnalytics() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
   const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('overview');
+  const [showSettings, setShowSettings] = useState(false);
 
   // Get fleet ID from session/auth context (mocked for now)
   const fleetId = 'fleet-123';
@@ -169,6 +183,33 @@ export default function FleetAnalytics() {
     }
   };
 
+  const handleExportData = () => {
+    // Generate CSV data
+    const csvHeaders = ['Month', 'Maintenance Cost', 'Fuel Cost', 'Total Cost'];
+    const csvRows = costTrendData.map(row => 
+      [row.month, row.maintenance, row.fuel, row.total].join(',')
+    );
+    const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
+    
+    // Create blob and download link
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `fleet-analytics-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export Successful",
+      description: "Analytics data exported to CSV file",
+    });
+  };
+
+  const handleSettingsToggle = () => {
+    setShowSettings(!showSettings);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -201,10 +242,10 @@ export default function FleetAnalytics() {
               <Button variant="outline" size="icon" onClick={() => refetch?.()} data-testid="button-refresh">
                 <RefreshCcw className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="icon" data-testid="button-download">
+              <Button variant="outline" size="icon" onClick={handleExportData} data-testid="button-download">
                 <Download className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="icon" data-testid="button-settings">
+              <Button variant="outline" size="icon" onClick={handleSettingsToggle} data-testid="button-settings">
                 <Settings className="h-4 w-4" />
               </Button>
             </div>
@@ -899,6 +940,110 @@ export default function FleetAnalytics() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Settings Dialog */}
+      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+        <DialogContent className="sm:max-w-[425px]" data-testid="dialog-settings">
+          <DialogHeader>
+            <DialogTitle>Analytics Settings</DialogTitle>
+            <DialogDescription>
+              Configure your analytics dashboard preferences
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="refresh-rate" className="text-right">
+                Auto Refresh
+              </Label>
+              <div className="col-span-3 flex items-center gap-2">
+                <Switch id="auto-refresh" defaultChecked data-testid="switch-auto-refresh" />
+                <Select defaultValue="30">
+                  <SelectTrigger className="w-[180px]" data-testid="select-refresh-rate">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">Every 10 seconds</SelectItem>
+                    <SelectItem value="30">Every 30 seconds</SelectItem>
+                    <SelectItem value="60">Every minute</SelectItem>
+                    <SelectItem value="300">Every 5 minutes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="notifications" className="text-right">
+                Notifications
+              </Label>
+              <div className="col-span-3">
+                <Switch id="notifications" defaultChecked data-testid="switch-notifications" />
+              </div>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="alert-threshold" className="text-right">
+                Alert Threshold
+              </Label>
+              <div className="col-span-3">
+                <Input
+                  id="alert-threshold"
+                  type="number"
+                  defaultValue="75"
+                  data-testid="input-alert-threshold"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="export-format" className="text-right">
+                Export Format
+              </Label>
+              <div className="col-span-3">
+                <Select defaultValue="csv">
+                  <SelectTrigger data-testid="select-export-format">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="csv">CSV</SelectItem>
+                    <SelectItem value="excel">Excel</SelectItem>
+                    <SelectItem value="pdf">PDF</SelectItem>
+                    <SelectItem value="json">JSON</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="date-range" className="text-right">
+                Default Range
+              </Label>
+              <div className="col-span-3">
+                <Select defaultValue="30">
+                  <SelectTrigger data-testid="select-date-range">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7">Last 7 days</SelectItem>
+                    <SelectItem value="30">Last 30 days</SelectItem>
+                    <SelectItem value="90">Last 90 days</SelectItem>
+                    <SelectItem value="365">Last year</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSettings(false)} data-testid="button-cancel-settings">
+              Cancel
+            </Button>
+            <Button onClick={() => {
+              toast({
+                title: "Settings Saved",
+                description: "Your analytics preferences have been updated",
+              });
+              setShowSettings(false);
+            }} data-testid="button-save-settings">
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
