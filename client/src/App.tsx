@@ -10,9 +10,16 @@ import TrackingPage from "@/pages/tracking";
 import PaymentMethodsPage from "@/pages/payment-methods";
 import BiddingJobsPage from "@/pages/bidding-jobs";
 
+// Public Pages
+import Contact from "@/pages/contact";
+import About from "@/pages/about";
+import Services from "@/pages/services";
+import Pricing from "@/pages/pricing";
+
 // Contractor Pages
 import ContractorAuth from "@/pages/contractor/auth";
 import ContractorApply from "@/pages/contractor-apply";
+import ContractorSignup from "@/pages/contractor-signup";
 import ContractorDashboard from "@/pages/contractor/dashboard";
 import ContractorJobs from "@/pages/contractor/jobs";
 import ContractorEarnings from "@/pages/contractor/earnings";
@@ -73,6 +80,12 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/emergency" component={EmergencyBooking} />
       
+      {/* Public Pages */}
+      <Route path="/contact" component={Contact} />
+      <Route path="/about" component={About} />
+      <Route path="/services" component={Services} />
+      <Route path="/pricing" component={Pricing} />
+      
       {/* Tracking Pages */}
       <Route path="/track/:jobId" component={TrackingPage} />
       
@@ -85,6 +98,7 @@ function Router() {
       {/* Contractor Pages */}
       <Route path="/contractor/auth" component={ContractorAuth} />
       <Route path="/contractor/apply" component={ContractorApply} />
+      <Route path="/contractor-signup" component={ContractorSignup} />
       <Route path="/contractor/dashboard" component={ContractorDashboard} />
       <Route path="/contractor/bidding" component={ContractorBidding} />
       <Route path="/contractor/jobs" component={ContractorJobs} />

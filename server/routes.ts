@@ -5016,9 +5016,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole('admin'),
     async (req: Request, res: Response) => {
       try {
-        const settings = await storage.getAllSettings();
+        const settingsArray = await storage.getAllSettings();
         
-        res.json({ settings });
+        // Transform array to object with expected structure
+        const settingsObject = settingsArray.reduce((acc, setting) => {
+          if (setting.key && setting.value) {
+            acc[setting.key] = setting.value;
+          }
+          return acc;
+        }, {} as any);
+        
+        // Return settings with default structure
+        const defaultSettings = {
+          general: {
+            platformName: "TruckFixGo",
+            supportEmail: "support@truckfixgo.com",
+            supportPhone: "1-800-FIX-TRUCK",
+            businessHours: "24/7",
+            timezone: "America/New_York",
+            maintenanceMode: false,
+          },
+          pricing: {
+            emergencySurcharge: 25,
+            nightSurcharge: 15,
+            weekendSurcharge: 10,
+            waterSourceSurcharge: 50,
+            baseRates: [
+              { service: "Emergency Repair", base: 150, perHour: 125 },
+              { service: "Truck Wash", base: 75, perTruck: 60 },
+              { service: "PM Service", base: 200, perHour: 100 },
+              { service: "Tire Service", base: 175, perTire: 150 },
+            ],
+            fleetDiscounts: {
+              standard: 0,
+              silver: 5,
+              gold: 10,
+              platinum: 15,
+            },
+            distanceTiers: [
+              { miles: 10, multiplier: 1.0 },
+              { miles: 25, multiplier: 1.2 },
+              { miles: 50, multiplier: 1.5 },
+              { miles: 100, multiplier: 2.0 },
+            ],
+          },
+          integrations: {
+            stripe: {
+              publicKey: "",
+              secretKey: "",
+              webhookSecret: "",
+              enabled: false,
+            },
+            twilio: {
+              accountSid: "",
+              authToken: "",
+              phoneNumber: "",
+              enabled: false,
+            },
+            openai: {
+              apiKey: "",
+              model: "gpt-4",
+              enabled: false,
+            },
+            email: {
+              provider: "smtp",
+              host: "",
+              port: 587,
+              secure: false,
+              user: "",
+              pass: "",
+              from: "noreply@truckfixgo.com",
+              enabled: false,
+            },
+            efs: {
+              accountCode: "",
+              apiKey: "",
+              enabled: false,
+            },
+            comdata: {
+              accountCode: "",
+              apiKey: "",
+              enabled: false,
+            },
+          },
+          features: {
+            autoAssignment: true,
+            biddingSystem: true,
+            fleetManagement: true,
+            splitPayments: true,
+            aiAssistant: true,
+            reminders: true,
+            invoicing: true,
+            analytics: true,
+            waterSource: true,
+            backgroundChecks: true,
+            contractorReviews: true,
+            emergencyServices: true,
+            scheduledServices: true,
+          }
+        };
+        
+        // Merge saved settings with defaults
+        const mergedSettings = {
+          ...defaultSettings,
+          ...settingsObject
+        };
+        
+        res.json(mergedSettings);
       } catch (error) {
         console.error('Get settings error:', error);
         res.status(500).json({ message: 'Failed to get settings' });
