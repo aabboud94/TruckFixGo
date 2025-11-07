@@ -32,6 +32,14 @@ export default function AdminUsers() {
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUserData, setNewUserData] = useState({
+    email: '',
+    phone: '',
+    name: '',
+    role: 'driver',
+    password: '',
+  });
 
   // Query for users
   const { data: users, isLoading, refetch } = useQuery({
@@ -47,10 +55,7 @@ export default function AdminUsers() {
   // Mutation for updating user role
   const updateRoleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
-      return apiRequest(`/api/admin/users/${userId}/role`, {
-        method: 'PUT',
-        body: JSON.stringify({ role }),
-      });
+      return apiRequest('PUT', `/api/admin/users/${userId}/role`, { role });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
@@ -64,10 +69,7 @@ export default function AdminUsers() {
   // Mutation for suspending/activating user
   const updateStatusMutation = useMutation({
     mutationFn: async ({ userId, status }: { userId: string; status: string }) => {
-      return apiRequest(`/api/admin/users/${userId}/status`, {
-        method: 'PUT',
-        body: JSON.stringify({ status }),
-      });
+      return apiRequest('PUT', `/api/admin/users/${userId}/status`, { status });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
@@ -81,9 +83,7 @@ export default function AdminUsers() {
   // Mutation for password reset
   const passwordResetMutation = useMutation({
     mutationFn: async ({ userId }: { userId: string }) => {
-      return apiRequest(`/api/admin/users/${userId}/reset-password`, {
-        method: 'POST',
-      });
+      return apiRequest('POST', `/api/admin/users/${userId}/reset-password`, {});
     },
     onSuccess: () => {
       setShowPasswordReset(false);
@@ -94,7 +94,36 @@ export default function AdminUsers() {
     },
   });
 
-  const usersData = users?.data || [
+  // Mutation for creating a new user
+  const createUserMutation = useMutation({
+    mutationFn: async (data: typeof newUserData) => {
+      return apiRequest('POST', '/api/admin/users', data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      setShowAddUser(false);
+      setNewUserData({
+        email: '',
+        phone: '',
+        name: '',
+        role: 'driver',
+        password: '',
+      });
+      toast({
+        title: "User created",
+        description: "New user has been created successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error creating user",
+        description: error.message || "Failed to create user",
+      });
+    },
+  });
+
+  const usersData = users?.users || users?.data || [
     {
       id: "USR-001",
       name: "John Smith",
@@ -242,6 +271,7 @@ export default function AdminUsers() {
                 Export
               </Button>
               <Button
+                onClick={() => setShowAddUser(true)}
                 data-testid="button-add-user"
               >
                 <UserPlus className="mr-2 h-4 w-4" />
@@ -756,6 +786,111 @@ export default function AdminUsers() {
                 <Mail className="mr-2 h-4 w-4" />
               )}
               Send Reset Link
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add User Dialog */}
+      <Dialog open={showAddUser} onOpenChange={setShowAddUser}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add New User</DialogTitle>
+            <DialogDescription>
+              Create a new user account with the specified role and permissions
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Full Name</Label>
+              <Input
+                id="name"
+                value={newUserData.name}
+                onChange={(e) => setNewUserData({ ...newUserData, name: e.target.value })}
+                placeholder="John Smith"
+                data-testid="input-new-user-name"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="email">Email Address</Label>
+              <Input
+                id="email"
+                type="email"
+                value={newUserData.email}
+                onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
+                placeholder="john@example.com"
+                data-testid="input-new-user-email"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input
+                id="phone"
+                value={newUserData.phone}
+                onChange={(e) => setNewUserData({ ...newUserData, phone: e.target.value })}
+                placeholder="(555) 123-4567"
+                data-testid="input-new-user-phone"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="password">Temporary Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={newUserData.password}
+                onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
+                placeholder="••••••••"
+                data-testid="input-new-user-password"
+              />
+              <p className="text-xs text-muted-foreground">
+                User will be prompted to change password on first login
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="role">User Role</Label>
+              <Select 
+                value={newUserData.role}
+                onValueChange={(value) => setNewUserData({ ...newUserData, role: value })}
+              >
+                <SelectTrigger data-testid="select-new-user-role">
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="driver">Driver</SelectItem>
+                  <SelectItem value="contractor">Contractor</SelectItem>
+                  <SelectItem value="dispatcher">Dispatcher</SelectItem>
+                  <SelectItem value="fleet_manager">Fleet Manager</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <DialogFooter className="mt-6">
+            <Button variant="outline" onClick={() => setShowAddUser(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createUserMutation.mutate(newUserData)}
+              disabled={createUserMutation.isPending || !newUserData.email || !newUserData.name || !newUserData.password}
+              data-testid="button-confirm-add-user"
+            >
+              {createUserMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Create User
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
