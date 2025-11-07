@@ -42,6 +42,25 @@ const jobStatusData = [
   { status: "New", count: 8, color: "#9CA3AF" },
 ];
 
+// Helper functions for safe numeric operations
+const safeNumber = (value: any, defaultValue: number = 0): number => {
+  const num = Number(value);
+  return isNaN(num) || value === null || value === undefined ? defaultValue : num;
+};
+
+const safePercentage = (numerator: any, denominator: any, defaultValue: number = 0): number => {
+  const num = safeNumber(numerator, 0);
+  const den = safeNumber(denominator, 1); // Use 1 to avoid division by zero
+  if (den === 0) return defaultValue;
+  const percentage = (num / den) * 100;
+  return Math.min(100, Math.max(0, percentage)); // Clamp between 0 and 100
+};
+
+const formatCurrency = (value: any, defaultValue: string = '$0'): string => {
+  const num = safeNumber(value, 0);
+  return `$${num.toLocaleString()}`;
+};
+
 export default function AdminDashboard() {
   // Query for real-time metrics
   const { data: metrics, isLoading: metricsLoading } = useQuery({
@@ -61,17 +80,18 @@ export default function AdminDashboard() {
     refetchInterval: 30000,
   });
 
-  const stats = metrics || {
-    activeJobs: 35,
-    onlineContractors: 87,
-    avgResponseTime: 12,
-    completionRate: 94.5,
-    revenueToday: 24650,
-    revenueWeek: 142800,
-    revenueMonth: 587400,
-    totalFleets: 126,
-    totalContractors: 342,
-    totalUsers: 5821,
+  // Ensure all numeric fields have safe default values
+  const stats = {
+    activeJobs: safeNumber(metrics?.activeJobs, 35),
+    onlineContractors: safeNumber(metrics?.onlineContractors, 87),
+    avgResponseTime: safeNumber(metrics?.avgResponseTime, 12),
+    completionRate: safeNumber(metrics?.completionRate, 94.5),
+    revenueToday: safeNumber(metrics?.revenueToday, 24650),
+    revenueWeek: safeNumber(metrics?.revenueWeek, 142800),
+    revenueMonth: safeNumber(metrics?.revenueMonth, 587400),
+    totalFleets: safeNumber(metrics?.totalFleets, 126),
+    totalContractors: safeNumber(metrics?.totalContractors, 342),
+    totalUsers: safeNumber(metrics?.totalUsers, 5821),
   };
 
   const activities = recentActivity || [
@@ -144,7 +164,7 @@ export default function AdminDashboard() {
             <div className="text-xs text-muted-foreground">
               Out of {stats.totalContractors} total
             </div>
-            <Progress value={(stats.onlineContractors / stats.totalContractors) * 100} className="mt-2" />
+            <Progress value={safePercentage(stats.onlineContractors, stats.totalContractors, 0)} className="mt-2" />
           </CardContent>
         </Card>
 
@@ -169,7 +189,7 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.completionRate}%</div>
-            <Progress value={stats.completionRate} className="mt-2" />
+            <Progress value={Math.min(100, Math.max(0, stats.completionRate))} className="mt-2" />
           </CardContent>
         </Card>
       </div>
@@ -183,12 +203,12 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              ${stats.revenueToday.toLocaleString()}
+              {formatCurrency(stats.revenueToday)}
             </div>
             <div className="text-xs text-muted-foreground">
               Target: $30,000
             </div>
-            <Progress value={(stats.revenueToday / 30000) * 100} className="mt-2" />
+            <Progress value={safePercentage(stats.revenueToday, 30000, 0)} className="mt-2" />
           </CardContent>
         </Card>
 
@@ -199,12 +219,12 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              ${stats.revenueWeek.toLocaleString()}
+              {formatCurrency(stats.revenueWeek)}
             </div>
             <div className="text-xs text-muted-foreground">
               Target: $175,000
             </div>
-            <Progress value={(stats.revenueWeek / 175000) * 100} className="mt-2" />
+            <Progress value={safePercentage(stats.revenueWeek, 175000, 0)} className="mt-2" />
           </CardContent>
         </Card>
 
@@ -215,12 +235,12 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-purple-600">
-              ${stats.revenueMonth.toLocaleString()}
+              {formatCurrency(stats.revenueMonth)}
             </div>
             <div className="text-xs text-muted-foreground">
               Target: $700,000
             </div>
-            <Progress value={(stats.revenueMonth / 700000) * 100} className="mt-2" />
+            <Progress value={safePercentage(stats.revenueMonth, 700000, 0)} className="mt-2" />
           </CardContent>
         </Card>
       </div>
@@ -245,7 +265,7 @@ export default function AdminDashboard() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" />
                 <YAxis />
-                <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                <Tooltip formatter={(value) => formatCurrency(value)} />
                 <Area
                   type="monotone"
                   dataKey="revenue"
