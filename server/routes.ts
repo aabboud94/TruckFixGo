@@ -224,7 +224,11 @@ function getPagination(req: Request) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
+  // Apply CORS FIRST to handle preflight OPTIONS requests
+  app.use(corsMiddleware);
+  
   // Setup session middleware with PostgreSQL store for production
+  // IMPORTANT: Session middleware must be set up AFTER CORS for proper cookie handling
   const PgStore = connectPgSimple(session);
   const sessionStore = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL
     ? new PgStore({
@@ -243,12 +247,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     cookie: {
       secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax' // Add sameSite for better security
     }
   }));
-
-  // Apply CORS to all routes
-  app.use(corsMiddleware);
 
   // ==================== AUTHENTICATION & USER ROUTES ====================
   

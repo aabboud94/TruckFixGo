@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Authentication Test</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    .success { color: green; }
+    .error { color: red; }
+    button {
+      padding: 10px 20px;
+      margin: 10px 5px;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Admin Authentication Test</h1>
+  
+  <div class="test-section">
+    <h2>1. Test Admin Login</h2>
+    <button id="testLogin">Test Login (admin@truckfixgo.com)</button>
+    <div id="loginResult"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>2. Check Admin Session</h2>
+    <button id="checkSession">Check /api/admin/session</button>
+    <div id="sessionResult"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>3. Test Auth Me Endpoint</h2>
+    <button id="checkAuthMe">Check /api/auth/me</button>
+    <div id="authMeResult"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>4. Test Logout</h2>
+    <button id="testLogout">Test Logout</button>
+    <div id="logoutResult"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>5. Complete Flow Test</h2>
+    <button id="testFlow">Run Complete Flow</button>
+    <div id="flowResult"></div>
+  </div>
+
+  <script>
+    const baseURL = 'http://localhost:5000';
+
+    // Helper function to display results
+    function displayResult(elementId, success, data) {
+      const element = document.getElementById(elementId);
+      element.innerHTML = `
+        <div class="${success ? 'success' : 'error'}">
+          ${success ? '✅' : '❌'} ${success ? 'Success' : 'Failed'}
+        </div>
+        <pre>${JSON.stringify(data, null, 2)}</pre>
+      `;
+    }
+
+    // Test Admin Login
+    document.getElementById('testLogin').addEventListener('click', async () => {
+      try {
+        const response = await fetch(`${baseURL}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            email: 'admin@truckfixgo.com',
+            password: 'Admin123!'
+          })
+        });
+        
+        const data = await response.json();
+        displayResult('loginResult', response.ok, {
+          status: response.status,
+          statusText: response.statusText,
+          data: data,
+          cookies: document.cookie
+        });
+      } catch (error) {
+        displayResult('loginResult', false, { error: error.message });
+      }
+    });
+
+    // Check Admin Session
+    document.getElementById('checkSession').addEventListener('click', async () => {
+      try {
+        const response = await fetch(`${baseURL}/api/admin/session`, {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        const data = await response.json();
+        displayResult('sessionResult', response.ok, {
+          status: response.status,
+          statusText: response.statusText,
+          data: data,
+          cookies: document.cookie
+        });
+      } catch (error) {
+        displayResult('sessionResult', false, { error: error.message });
+      }
+    });
+
+    // Check Auth Me
+    document.getElementById('checkAuthMe').addEventListener('click', async () => {
+      try {
+        const response = await fetch(`${baseURL}/api/auth/me`, {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        const data = await response.json();
+        displayResult('authMeResult', response.ok, {
+          status: response.status,
+          statusText: response.statusText,
+          data: data,
+          cookies: document.cookie
+        });
+      } catch (error) {
+        displayResult('authMeResult', false, { error: error.message });
+      }
+    });
+
+    // Test Logout
+    document.getElementById('testLogout').addEventListener('click', async () => {
+      try {
+        const response = await fetch(`${baseURL}/api/auth/logout`, {
+          method: 'POST',
+          credentials: 'include'
+        });
+        
+        const data = await response.json();
+        displayResult('logoutResult', response.ok, {
+          status: response.status,
+          statusText: response.statusText,
+          data: data,
+          cookies: document.cookie
+        });
+      } catch (error) {
+        displayResult('logoutResult', false, { error: error.message });
+      }
+    });
+
+    // Test Complete Flow
+    document.getElementById('testFlow').addEventListener('click', async () => {
+      let results = [];
+      
+      try {
+        // Step 1: Login
+        const loginResponse = await fetch(`${baseURL}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            email: 'admin@truckfixgo.com',
+            password: 'Admin123!'
+          })
+        });
+        const loginData = await loginResponse.json();
+        results.push({
+          step: 'Login',
+          success: loginResponse.ok,
+          status: loginResponse.status,
+          data: loginData
+        });
+        
+        // Step 2: Check Session
+        const sessionResponse = await fetch(`${baseURL}/api/admin/session`, {
+          method: 'GET',
+          credentials: 'include'
+        });
+        const sessionData = await sessionResponse.json();
+        results.push({
+          step: 'Check Admin Session',
+          success: sessionResponse.ok,
+          status: sessionResponse.status,
+          data: sessionData
+        });
+        
+        // Step 3: Check Auth Me
+        const authMeResponse = await fetch(`${baseURL}/api/auth/me`, {
+          method: 'GET',
+          credentials: 'include'
+        });
+        const authMeData = await authMeResponse.json();
+        results.push({
+          step: 'Check Auth Me',
+          success: authMeResponse.ok,
+          status: authMeResponse.status,
+          data: authMeData
+        });
+        
+        displayResult('flowResult', true, results);
+      } catch (error) {
+        displayResult('flowResult', false, { 
+          error: error.message,
+          results: results
+        });
+      }
+    });
+  </script>
+</body>
+</html>
