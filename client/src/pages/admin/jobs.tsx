@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
@@ -43,10 +44,7 @@ export default function AdminJobs() {
   // Mutation for updating job status
   const updateStatusMutation = useMutation({
     mutationFn: async ({ jobId, status }: { jobId: string; status: string }) => {
-      return apiRequest(`/api/admin/jobs/${jobId}/status`, {
-        method: 'PUT',
-        body: JSON.stringify({ status }),
-      });
+      return apiRequest('PUT', `/api/admin/jobs/${jobId}/status`, { status });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/jobs'] });
@@ -60,10 +58,7 @@ export default function AdminJobs() {
   // Mutation for assigning contractor
   const assignContractorMutation = useMutation({
     mutationFn: async ({ jobId, contractorId }: { jobId: string; contractorId: string }) => {
-      return apiRequest(`/api/admin/jobs/${jobId}/assign`, {
-        method: 'PUT',
-        body: JSON.stringify({ contractorId }),
-      });
+      return apiRequest('PUT', `/api/admin/jobs/${jobId}/assign`, { contractorId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/jobs'] });
@@ -78,10 +73,7 @@ export default function AdminJobs() {
   // Mutation for refunding
   const refundMutation = useMutation({
     mutationFn: async ({ jobId, amount, reason }: { jobId: string; amount: number; reason: string }) => {
-      return apiRequest(`/api/admin/jobs/${jobId}/refund`, {
-        method: 'POST',
-        body: JSON.stringify({ amount, reason }),
-      });
+      return apiRequest('POST', `/api/admin/jobs/${jobId}/refund`, { amount, reason });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/jobs'] });
@@ -93,7 +85,7 @@ export default function AdminJobs() {
     },
   });
 
-  const jobsData = jobs?.data || [
+  const jobsData = Array.isArray(jobs) ? jobs : [
     {
       id: "JOB-001",
       type: "emergency",
@@ -168,13 +160,16 @@ export default function AdminJobs() {
 
   const handleExport = async () => {
     try {
-      const response = await apiRequest('/api/admin/jobs/export', {
-        method: 'POST',
-        body: JSON.stringify({ format: 'csv', filters: { status: statusFilter, type: typeFilter } }),
+      const response = await apiRequest('POST', '/api/admin/jobs/export', {
+        format: 'csv',
+        filters: { status: statusFilter, type: typeFilter }
       });
       
+      // Get the response data
+      const data = await response.text();
+      
       // Create download link
-      const blob = new Blob([response.data], { type: 'text/csv' });
+      const blob = new Blob([data], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -551,7 +546,7 @@ export default function AdminJobs() {
           <div className="space-y-4">
             <ScrollArea className="h-[300px]">
               <div className="space-y-2">
-                {contractors?.data?.map((contractor: any) => (
+                {Array.isArray(contractors) && contractors.map((contractor: any) => (
                   <div
                     key={contractor.id}
                     className="p-3 border rounded-lg hover:bg-muted cursor-pointer"
