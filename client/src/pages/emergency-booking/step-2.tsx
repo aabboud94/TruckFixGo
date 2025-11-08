@@ -266,6 +266,8 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
     const jobData = {
       guestPhone: bookingData.phone,
       guestEmail: bookingData.email,
+      customerName: bookingData.name || 'Guest', // Store guest name directly on job
+      customerPhone: bookingData.phone, // Store guest phone directly on job
       jobType: "emergency",
       serviceTypeId: mapIssueToServiceType(values.issue),
       location: bookingData.location || {

@@ -331,8 +331,8 @@ export default function AdminJobs() {
                         <TableCell>{job.service}</TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{job.customer.name}</p>
-                            <p className="text-sm text-muted-foreground">{job.customer.phone}</p>
+                            <p className="font-medium">{job.customer?.name || job.customerName || 'Guest'}</p>
+                            <p className="text-sm text-muted-foreground">{job.customer?.phone || job.customerPhone || 'N/A'}</p>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -441,12 +441,12 @@ export default function AdminJobs() {
 
                   <div className="space-y-2">
                     <Label>Customer Name</Label>
-                    <Input value={selectedJob.customer.name} readOnly />
+                    <Input value={selectedJob.customer?.name || selectedJob.customerName || 'Guest'} readOnly />
                   </div>
 
                   <div className="space-y-2">
                     <Label>Customer Phone</Label>
-                    <Input value={selectedJob.customer.phone} readOnly />
+                    <Input value={selectedJob.customer?.phone || selectedJob.customerPhone || 'N/A'} readOnly />
                   </div>
 
                   <div className="space-y-2">

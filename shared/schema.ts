@@ -316,6 +316,10 @@ export const jobs = pgTable("jobs", {
   vehicleId: varchar("vehicle_id").references(() => fleetVehicles.id),
   serviceTypeId: varchar("service_type_id").notNull().references(() => serviceTypes.id),
   
+  // Guest customer info (when customerId is null)
+  customerName: text("customer_name"),
+  customerPhone: varchar("customer_phone", { length: 20 }),
+  
   // Location data
   location: jsonb("location").notNull(),
   locationAddress: text("location_address"),
