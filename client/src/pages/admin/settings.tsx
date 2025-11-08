@@ -395,62 +395,66 @@ export default function AdminSettings() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {currentSettings.pricing.baseRates.map((rate, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium">{rate.service}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {rate.description || 'No description'}
-                      </TableCell>
-                      <TableCell>${rate.base}</TableCell>
-                      <TableCell>
-                        ${rate.perHour || rate.perTruck || rate.perTire || rate.perUnit || 0}
-                      </TableCell>
-                      <TableCell>
-                        {rate.unitType || (rate.perHour ? 'hour' : rate.perTruck ? 'truck' : rate.perTire ? 'tire' : 'service')}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          {rate.emergencyAvailable !== false && <Badge variant="outline" className="text-xs">Emergency</Badge>}
-                          {rate.scheduledAvailable !== false && <Badge variant="outline" className="text-xs">Scheduled</Badge>}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={rate.isActive !== false ? "default" : "secondary"}>
-                          {rate.isActive !== false ? 'Active' : 'Inactive'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button 
-                            size="icon" 
-                            variant="ghost"
-                            onClick={() => {
-                              setEditingServiceType({...rate, index});
-                              setShowAddServiceType(true);
-                            }}
-                            data-testid={`button-edit-service-${index}`}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            size="icon" 
-                            variant="ghost"
-                            onClick={() => {
-                              if (confirm('Are you sure you want to delete this service type?')) {
-                                serviceTypeMutation.mutate({ 
-                                  action: 'delete', 
-                                  serviceType: { id: rate.id || index }
-                                });
-                              }
-                            }}
-                            data-testid={`button-delete-service-${index}`}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {currentSettings.pricing.baseRates.map((rate, index) => {
+                    // Generate a stable ID based on service name if not present
+                    const serviceId = rate.id || `service-${rate.service.toLowerCase().replace(/\s+/g, '-')}`;
+                    return (
+                      <TableRow key={serviceId}>
+                        <TableCell className="font-medium">{rate.service}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {rate.description || 'No description'}
+                        </TableCell>
+                        <TableCell>${rate.base}</TableCell>
+                        <TableCell>
+                          ${rate.perHour || rate.perTruck || rate.perTire || rate.perUnit || 0}
+                        </TableCell>
+                        <TableCell>
+                          {rate.unitType || (rate.perHour ? 'hour' : rate.perTruck ? 'truck' : rate.perTire ? 'tire' : 'service')}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {rate.emergencyAvailable !== false && <Badge variant="outline" className="text-xs">Emergency</Badge>}
+                            {rate.scheduledAvailable !== false && <Badge variant="outline" className="text-xs">Scheduled</Badge>}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={rate.isActive !== false ? "default" : "secondary"}>
+                            {rate.isActive !== false ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button 
+                              size="icon" 
+                              variant="ghost"
+                              onClick={() => {
+                                setEditingServiceType({...rate, id: serviceId});
+                                setShowAddServiceType(true);
+                              }}
+                              data-testid={`button-edit-service-${index}`}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              size="icon" 
+                              variant="ghost"
+                              onClick={() => {
+                                if (confirm('Are you sure you want to delete this service type?')) {
+                                  serviceTypeMutation.mutate({ 
+                                    action: 'delete', 
+                                    serviceType: { id: serviceId }
+                                  });
+                                }
+                              }}
+                              data-testid={`button-delete-service-${index}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
