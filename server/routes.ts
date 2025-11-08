@@ -941,15 +941,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           
           if (index !== -1) {
-            // Update the service type in the base rates
+            // Update the service type in the base rates with proper field mapping
             baseRates[index] = {
               ...baseRates[index],
-              ...req.body
+              service: req.body.name || req.body.service || baseRates[index].service,
+              base: req.body.basePrice || req.body.base || baseRates[index].base,
+              perHour: req.body.perHourRate || req.body.perHour || baseRates[index].perHour,
+              perTruck: req.body.perTruck || baseRates[index].perTruck,
+              perTire: req.body.perTire || baseRates[index].perTire,
+              perUnit: req.body.perUnit || baseRates[index].perUnit,
+              description: req.body.description || baseRates[index].description,
+              isActive: req.body.isActive ?? baseRates[index].isActive,
+              emergencyAvailable: req.body.isEmergency ?? req.body.emergencyAvailable ?? baseRates[index].emergencyAvailable,
+              scheduledAvailable: req.body.isSchedulable ?? req.body.scheduledAvailable ?? baseRates[index].scheduledAvailable,
             };
             
             // Save the updated settings
             pricingData.baseRates = baseRates;
             await storage.updateSetting('pricing', pricingData);
+            
+            // Also update the actual service type if it exists
+            const existingServiceType = await storage.getServiceType(serviceId);
+            if (existingServiceType) {
+              await storage.updateServiceType(serviceId, {
+                name: req.body.name || req.body.service,
+                description: req.body.description,
+                isActive: req.body.isActive,
+                isEmergency: req.body.isEmergency ?? req.body.emergencyAvailable,
+                isSchedulable: req.body.isSchedulable ?? req.body.scheduledAvailable,
+              });
+              
+              // Update pricing for the service type
+              const currentPricing = await storage.getCurrentPricing(serviceId);
+              if (currentPricing) {
+                await storage.updateServicePricing(currentPricing.id, {
+                  basePrice: String(req.body.basePrice || req.body.base || 0),
+                  perHourRate: req.body.perHourRate || req.body.perHour ? String(req.body.perHourRate || req.body.perHour) : undefined,
+                  perMileRate: req.body.perMileRate || req.body.perMile ? String(req.body.perMileRate || req.body.perMile) : undefined,
+                });
+              }
+            }
             
             res.json({
               message: 'Service type updated successfully',

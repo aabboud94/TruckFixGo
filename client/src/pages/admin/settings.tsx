@@ -73,13 +73,27 @@ export default function AdminSettings() {
       if (action === 'delete') {
         return apiRequest('DELETE', `/api/admin/service-types/${serviceType.id}`);
       } else if (action === 'update') {
-        return apiRequest('PUT', `/api/admin/service-types/${serviceType.id}`, serviceType);
+        // Transform the data to match backend expectations
+        const updateData = {
+          name: serviceType.service || serviceType.name,
+          description: serviceType.description,
+          basePrice: serviceType.base || serviceType.baseRate || serviceType.basePrice,
+          perHourRate: serviceType.perHour || serviceType.perHourRate,
+          perMileRate: serviceType.perMile || serviceType.perMileRate,
+          isActive: serviceType.isActive,
+          isEmergency: serviceType.emergencyAvailable || serviceType.isEmergency,
+          isSchedulable: serviceType.scheduledAvailable || serviceType.isSchedulable,
+        };
+        return apiRequest('PUT', `/api/admin/service-types/${serviceType.id}`, updateData);
       } else {
         return apiRequest('POST', '/api/admin/service-types', serviceType);
       }
     },
     onSuccess: async () => {
+      // Invalidate all related queries to ensure fresh data
       await queryClient.invalidateQueries({ queryKey: ['/api/admin/settings'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/service-types'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/public/services-with-pricing'] });
       await queryClient.refetchQueries({ queryKey: ['/api/admin/settings'] });
       setShowAddServiceType(false);
       setEditingServiceType(null);
