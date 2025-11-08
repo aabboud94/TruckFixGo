@@ -470,8 +470,8 @@ export default function AdminJobs() {
 
                   <div className="space-y-2">
                     <Label>Vehicle Info</Label>
-                    <Input value={`VIN: ${selectedJob.vehicle.vin}`} readOnly />
-                    <Input value={`Unit: ${selectedJob.vehicle.unit}`} readOnly />
+                    <Input value={`VIN: ${selectedJob.vehicle?.vin || selectedJob.vin || 'N/A'}`} readOnly />
+                    <Input value={`Unit: ${selectedJob.vehicle?.unit || selectedJob.unitNumber || 'N/A'}`} readOnly />
                   </div>
 
                   <div className="space-y-2">
