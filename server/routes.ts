@@ -7563,12 +7563,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
+        // Handle equipment field
+        if ('equipment' in req.body) {
+          updateData.equipment = Array.isArray(req.body.equipment)
+            ? req.body.equipment
+            : [];
+        }
+        
+        // Handle tools field
+        if ('tools' in req.body) {
+          updateData.tools = Array.isArray(req.body.tools)
+            ? req.body.tools
+            : [];
+        }
+        
         // Handle other Step 4 fields
         if ('serviceRadius' in req.body) {
           updateData.serviceRadius = req.body.serviceRadius;
         }
         if ('baseLocation' in req.body) {
-          updateData.baseLocation = req.body.baseLocation;
+          // Handle empty string for baseLocation
+          updateData.baseLocation = req.body.baseLocation || null;
+        }
+        
+        // Clean up empty string fields that should be null
+        for (const key in updateData) {
+          if (updateData[key] === '') {
+            updateData[key] = null;
+          }
         }
         
         // Now remove fields that don't exist in the database and haven't been mapped
