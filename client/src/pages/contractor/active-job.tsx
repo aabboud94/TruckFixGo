@@ -15,6 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useTrackingWebSocket } from "@/hooks/use-tracking-websocket";
+import JobPhotoGallery from "@/components/job-photo-gallery";
 import {
   MapPin,
   Phone,
@@ -709,198 +710,7 @@ export default function ContractorActiveJob() {
             </TabsContent>
 
             <TabsContent value="photos" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Job Photos & AI Analysis</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handlePhotoSelect}
-                      className="hidden"
-                      disabled={isAnalyzing}
-                    />
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isAnalyzing}
-                      data-testid="button-add-photos"
-                    >
-                      {isAnalyzing ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Analyzing Photo...
-                        </>
-                      ) : (
-                        <>
-                          <Camera className="w-4 h-4 mr-2" />
-                          Add Photos for AI Analysis
-                        </>
-                      )}
-                    </Button>
-                  </div>
-
-                  {selectedPhotos.length > 0 && (
-                    <div className="space-y-2">
-                      {selectedPhotos.map((photo, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between p-2 border rounded-lg"
-                        >
-                          <span className="text-sm truncate">{photo.name}</span>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => removePhoto(index)}
-                            disabled={isAnalyzing}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* AI Analysis Results */}
-                  {photoAnalyses.length > 0 && (
-                    <div className="space-y-3">
-                      <h4 className="font-medium text-sm text-muted-foreground">AI Damage Analysis</h4>
-                      {photoAnalyses.map((analysis, index) => (
-                        <Alert key={index} className={
-                          analysis.severity === "Severe" ? "border-red-500 bg-red-50 dark:bg-red-950/20" :
-                          analysis.severity === "Moderate" ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20" :
-                          "border-green-500 bg-green-50 dark:bg-green-950/20"
-                        }>
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertTitle>Analysis {index + 1}</AlertTitle>
-                          <AlertDescription>
-                            <div className="mt-2 space-y-2">
-                              <div className="grid grid-cols-2 gap-2 text-xs">
-                                <div>
-                                  <p className="font-medium">Issue:</p>
-                                  <p>{analysis.damageType}</p>
-                                </div>
-                                <div>
-                                  <p className="font-medium">Severity:</p>
-                                  <Badge variant={
-                                    analysis.severity === "Severe" ? "destructive" :
-                                    analysis.severity === "Moderate" ? "secondary" :
-                                    "default"
-                                  } className="text-xs">
-                                    {analysis.severity}
-                                  </Badge>
-                                </div>
-                              </div>
-                              
-                              <div className="grid grid-cols-2 gap-2 text-xs">
-                                <div className="flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  <span>{analysis.estimatedRepairTime}</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <DollarSign className="w-3 h-3" />
-                                  <span>{analysis.costEstimate}</span>
-                                </div>
-                              </div>
-
-                              {!analysis.canDriveSafely && (
-                                <div className="p-2 bg-red-100 dark:bg-red-950/30 rounded text-xs font-medium text-red-700 dark:text-red-300">
-                                  ⚠️ Vehicle unsafe to drive
-                                </div>
-                              )}
-                            </div>
-                          </AlertDescription>
-                        </Alert>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Repair Recommendations */}
-                  {repairRecommendations && (
-                    <Card className="border-2 border-primary/20">
-                      <CardHeader>
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <Wrench className="w-4 h-4" />
-                          AI Repair Recommendations
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3 text-xs">
-                        {repairRecommendations.recommendations && repairRecommendations.recommendations.length > 0 && (
-                          <div>
-                            <p className="font-medium mb-1">Repair Steps:</p>
-                            <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                              {repairRecommendations.recommendations.map((rec: string, idx: number) => (
-                                <li key={idx}>{rec}</li>
-                              ))}
-                            </ol>
-                          </div>
-                        )}
-
-                        {repairRecommendations.toolsNeeded && repairRecommendations.toolsNeeded.length > 0 && (
-                          <div>
-                            <p className="font-medium mb-1">Tools Required:</p>
-                            <div className="flex flex-wrap gap-1">
-                              {repairRecommendations.toolsNeeded.map((tool: string, idx: number) => (
-                                <Badge key={idx} variant="outline" className="text-xs">
-                                  {tool}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {repairRecommendations.partsNeeded && repairRecommendations.partsNeeded.length > 0 && (
-                          <div>
-                            <p className="font-medium mb-1">Parts Needed:</p>
-                            <div className="flex flex-wrap gap-1">
-                              {repairRecommendations.partsNeeded.map((part: string, idx: number) => (
-                                <Badge key={idx} variant="secondary" className="text-xs">
-                                  {part}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {repairRecommendations.safetyNotes && repairRecommendations.safetyNotes.length > 0 && (
-                          <Alert className="border-orange-500 bg-orange-50 dark:bg-orange-950/20">
-                            <Shield className="h-3 w-3" />
-                            <AlertDescription>
-                              <p className="font-medium mb-1">Safety Notes:</p>
-                              <ul className="list-disc list-inside space-y-0.5">
-                                {repairRecommendations.safetyNotes.map((note: string, idx: number) => (
-                                  <li key={idx}>{note}</li>
-                                ))}
-                              </ul>
-                            </AlertDescription>
-                          </Alert>
-                        )}
-
-                        <div className="flex items-center gap-2 pt-2 border-t">
-                          <Clock className="w-3 h-3 text-muted-foreground" />
-                          <span className="text-muted-foreground">
-                            Estimated time: {repairRecommendations.estimatedTime}
-                          </span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  <Button
-                    className="w-full"
-                    disabled={selectedPhotos.length === 0}
-                    data-testid="button-upload-photos"
-                  >
-                    <Upload className="w-4 h-4 mr-2" />
-                    Upload {selectedPhotos.length} Photo{selectedPhotos.length !== 1 ? "s" : ""}
-                  </Button>
-                </CardContent>
-              </Card>
+              <JobPhotoGalleryForContractor jobId={job?.id || ''} />
             </TabsContent>
 
             <TabsContent value="chat" className="space-y-4">
@@ -960,5 +770,32 @@ export default function ContractorActiveJob() {
         )}
       </div>
     </div>
+  );
+}
+
+// Component for the photos tab content
+function JobPhotoGalleryForContractor({ jobId }: { jobId: string }) {
+  const { data: photosData, isLoading, refetch } = useQuery({
+    queryKey: [`/api/jobs/${jobId}/photos`],
+    enabled: !!jobId,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  const photos = photosData?.photos || [];
+
+  return (
+    <JobPhotoGallery
+      jobId={jobId}
+      photos={photos}
+      canUpload={true}
+      onPhotosChange={refetch}
+    />
   );
 }

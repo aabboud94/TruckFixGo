@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
+import JobPhotoGallery from "@/components/job-photo-gallery";
 import {
   Search, Filter, Download, RefreshCw, MapPin, Clock, DollarSign,
   User, Truck, AlertCircle, CheckCircle, XCircle, Edit, Eye,
@@ -559,9 +560,7 @@ export default function AdminJobs() {
               </TabsContent>
 
               <TabsContent value="photos">
-                <div className="text-center py-8 text-muted-foreground">
-                  No photos uploaded
-                </div>
+                <JobPhotoGalleryContent jobId={selectedJob?.id || ''} />
               </TabsContent>
             </Tabs>
           )}
@@ -670,3 +669,30 @@ export default function AdminJobs() {
 
 // Add missing import
 import { Label } from "@/components/ui/label";
+
+// Component for the photos tab content
+function JobPhotoGalleryContent({ jobId }: { jobId: string }) {
+  const { data: photosData, isLoading, refetch } = useQuery({
+    queryKey: [`/api/jobs/${jobId}/photos`],
+    enabled: !!jobId,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  const photos = photosData?.photos || [];
+
+  return (
+    <JobPhotoGallery
+      jobId={jobId}
+      photos={photos}
+      canUpload={true}
+      onPhotosChange={refetch}
+    />
+  );
+}

@@ -12,6 +12,11 @@ import { reminderService } from "./reminder-service";
 import { reminderScheduler } from "./reminder-scheduler";
 import efsComdataService from "./efs-comdata-service";
 import stripeService from "./stripe-service";
+import multer from "multer";
+import sharp from "sharp";
+import path from "path";
+import fs from "fs/promises";
+import { randomUUID } from "crypto";
 import { 
   insertUserSchema,
   insertDriverProfileSchema,
@@ -1685,7 +1690,213 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  // Upload photos for job
+  // Configure multer for memory storage (we'll process and save to object storage)
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB limit per file
+      files: 5 // Max 5 files per upload
+    },
+    fileFilter: (req, file, cb) => {
+      // Accept images only
+      if (!file.mimetype.startsWith('image/')) {
+        cb(new Error('Only image files are allowed'));
+        return;
+      }
+      cb(null, true);
+    }
+  });
+
+  // NEW: Upload photos for job with actual file upload
+  app.post('/api/jobs/:id/upload-photos',
+    requireAuth,
+    upload.array('photos', 5), // Accept up to 5 photos
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        const photoType = req.body.photoType || 'before'; // 'before', 'during', or 'after'
+        const description = req.body.description || '';
+        
+        // Verify job exists and user has permission
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        // Check permissions: admin, the contractor assigned, or the customer
+        const userId = req.session.userId!;
+        const user = await storage.getUser(userId);
+        const isAdmin = user?.role === 'admin';
+        const isAssignedContractor = job.contractorId === userId;
+        const isCustomer = job.customerId === userId;
+        
+        if (!isAdmin && !isAssignedContractor && !isCustomer) {
+          return res.status(403).json({ message: 'Not authorized to upload photos for this job' });
+        }
+        
+        if (!req.files || !Array.isArray(req.files)) {
+          return res.status(400).json({ message: 'No files uploaded' });
+        }
+        
+        const uploadedPhotos = [];
+        const privateDir = process.env.PRIVATE_OBJECT_DIR || '/replit-objstore-c279c855-0ac0-434d-9783-ad25c3b34e4d/.private';
+        const jobPhotoDir = path.join(privateDir, 'jobs', jobId);
+        
+        // Create directory if it doesn't exist
+        await fs.mkdir(jobPhotoDir, { recursive: true });
+        
+        // Process and save each photo
+        for (const file of req.files) {
+          const photoId = randomUUID();
+          const timestamp = Date.now();
+          const ext = path.extname(file.originalname) || '.jpg';
+          const filename = `${photoType}_${photoId}_${timestamp}${ext}`;
+          const filepath = path.join(jobPhotoDir, filename);
+          
+          // Process image with sharp (resize if needed, optimize)
+          const processedImage = await sharp(file.buffer)
+            .resize(1920, 1080, { 
+              fit: 'inside',
+              withoutEnlargement: true 
+            })
+            .jpeg({ quality: 85, progressive: true })
+            .toBuffer();
+          
+          // Save to object storage
+          await fs.writeFile(filepath, processedImage);
+          
+          // Create relative URL for storage (will be served through our endpoint)
+          const photoUrl = `/api/jobs/${jobId}/photos/${filename}`;
+          
+          // Save photo record to database
+          const photoRecord = await storage.addJobPhoto({
+            jobId,
+            uploadedBy: userId,
+            photoUrl,
+            photoType,
+            description,
+            isBeforePhoto: photoType === 'before',
+            metadata: {
+              originalName: file.originalname,
+              size: processedImage.length,
+              mimeType: 'image/jpeg',
+              uploadedAt: new Date().toISOString()
+            }
+          });
+          
+          uploadedPhotos.push(photoRecord);
+        }
+        
+        res.status(201).json({
+          message: `${uploadedPhotos.length} photo(s) uploaded successfully`,
+          photos: uploadedPhotos
+        });
+      } catch (error) {
+        console.error('Upload photo error:', error);
+        res.status(500).json({ 
+          message: error instanceof Error ? error.message : 'Failed to upload photos' 
+        });
+      }
+    }
+  );
+  
+  // Serve job photos from object storage
+  app.get('/api/jobs/:jobId/photos/:filename',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { jobId, filename } = req.params;
+        
+        // Verify job exists and user has permission
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        // Check permissions
+        const userId = req.session.userId!;
+        const user = await storage.getUser(userId);
+        const isAdmin = user?.role === 'admin';
+        const isAssignedContractor = job.contractorId === userId;
+        const isCustomer = job.customerId === userId;
+        const isFleetManager = user?.role === 'fleet_manager' && job.fleetAccountId;
+        
+        if (!isAdmin && !isAssignedContractor && !isCustomer && !isFleetManager) {
+          return res.status(403).json({ message: 'Not authorized to view photos for this job' });
+        }
+        
+        const privateDir = process.env.PRIVATE_OBJECT_DIR || '/replit-objstore-c279c855-0ac0-434d-9783-ad25c3b34e4d/.private';
+        const filepath = path.join(privateDir, 'jobs', jobId, filename);
+        
+        // Check if file exists
+        try {
+          await fs.access(filepath);
+        } catch {
+          return res.status(404).json({ message: 'Photo not found' });
+        }
+        
+        // Read and serve the file
+        const fileBuffer = await fs.readFile(filepath);
+        
+        // Set appropriate headers
+        const ext = path.extname(filename).toLowerCase();
+        const mimeTypes: Record<string, string> = {
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.gif': 'image/gif',
+          '.webp': 'image/webp'
+        };
+        
+        res.set({
+          'Content-Type': mimeTypes[ext] || 'image/jpeg',
+          'Cache-Control': 'private, max-age=3600'
+        });
+        
+        res.send(fileBuffer);
+      } catch (error) {
+        console.error('Get photo error:', error);
+        res.status(500).json({ message: 'Failed to retrieve photo' });
+      }
+    }
+  );
+
+  // Get all photos for a job
+  app.get('/api/jobs/:id/photos',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        
+        // Verify job exists and user has permission
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        // Check permissions
+        const userId = req.session.userId!;
+        const user = await storage.getUser(userId);
+        const isAdmin = user?.role === 'admin';
+        const isAssignedContractor = job.contractorId === userId;
+        const isCustomer = job.customerId === userId;
+        const isFleetManager = user?.role === 'fleet_manager' && job.fleetAccountId;
+        
+        if (!isAdmin && !isAssignedContractor && !isCustomer && !isFleetManager) {
+          return res.status(403).json({ message: 'Not authorized to view photos for this job' });
+        }
+        
+        const photos = await storage.getJobPhotos(jobId);
+        
+        res.json({ photos });
+      } catch (error) {
+        console.error('Get job photos error:', error);
+        res.status(500).json({ message: 'Failed to get job photos' });
+      }
+    }
+  );
+  
+  // LEGACY: Upload photos for job (URL-based, keeping for backward compatibility)
   app.post('/api/jobs/:id/photos',
     requireAuth,
     validateRequest(insertJobPhotoSchema.omit({ jobId: true })),
@@ -1703,29 +1914,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Upload photo error:', error);
         res.status(500).json({ message: 'Failed to upload photo' });
-      }
-    }
-  );
-
-  // Send message in job chat
-  app.post('/api/jobs/:id/messages',
-    requireAuth,
-    validateRequest(insertJobMessageSchema.omit({ jobId: true, senderId: true })),
-    async (req: Request, res: Response) => {
-      try {
-        const message = await storage.addJobMessage({
-          ...req.body,
-          jobId: req.params.id,
-          senderId: req.session.userId!
-        });
-        
-        res.status(201).json({
-          message: 'Message sent successfully',
-          data: message
-        });
-      } catch (error) {
-        console.error('Send message error:', error);
-        res.status(500).json({ message: 'Failed to send message' });
       }
     }
   );
