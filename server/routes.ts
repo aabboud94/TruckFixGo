@@ -5948,15 +5948,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const filters = {
           ...getPagination(req),
           performanceTier: req.query.performanceTier as any,
-          isAvailable: req.query.isAvailable === 'true'
+          isAvailable: req.query.isAvailable === 'true',
+          search: req.query.search as string,
+          status: req.query.status as string
         };
         
         const contractors = await storage.findContractors(filters);
         
-        res.json({ contractors });
+        res.json({ data: contractors });
       } catch (error) {
-        console.error('Get contractors for approval error:', error);
+        console.error('Get contractors error:', error);
         res.status(500).json({ message: 'Failed to get contractors' });
+      }
+    }
+  );
+
+  // Get pending contractor applications
+  app.get('/api/admin/contractors/pending',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const pendingContractors = await storage.getPendingContractors();
+        
+        res.json(pendingContractors);
+      } catch (error) {
+        console.error('Get pending contractors error:', error);
+        res.status(500).json({ message: 'Failed to get pending contractors' });
+      }
+    }
+  );
+
+  // Update contractor status (approve/reject)
+  app.put('/api/admin/contractors/:id/status',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      status: z.enum(['active', 'rejected', 'suspended'])
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { id } = req.params;
+        const { status } = req.body;
+        
+        const success = await storage.updateContractorStatus(id, status);
+        
+        if (!success) {
+          return res.status(404).json({ message: 'Contractor not found' });
+        }
+        
+        res.json({ 
+          message: `Contractor ${status === 'active' ? 'approved' : status === 'rejected' ? 'rejected' : 'suspended'} successfully` 
+        });
+      } catch (error) {
+        console.error('Update contractor status error:', error);
+        res.status(500).json({ message: 'Failed to update contractor status' });
       }
     }
   );
