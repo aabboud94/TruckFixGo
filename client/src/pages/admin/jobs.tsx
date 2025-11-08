@@ -464,7 +464,7 @@ export default function AdminJobs() {
 
       {/* Job Details Dialog */}
       <Dialog open={showJobDetails} onOpenChange={setShowJobDetails}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto z-[200]" style={{ pointerEvents: 'auto' }}>
           <DialogHeader>
             <DialogTitle>Job Details - {editedJob?.id}</DialogTitle>
             <DialogDescription>
@@ -494,7 +494,7 @@ export default function AdminJobs() {
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="z-[100]" style={{ zIndex: 100 }}>
+                      <SelectContent className="z-[300]" style={{ zIndex: 300, position: 'relative' }}>
                         <SelectItem value="new">New</SelectItem>
                         <SelectItem value="assigned">Assigned</SelectItem>
                         <SelectItem value="en_route">En Route</SelectItem>
