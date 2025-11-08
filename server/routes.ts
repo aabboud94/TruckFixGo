@@ -6994,44 +6994,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         console.log('Update data received:', JSON.stringify(updateData, null, 2));
         
-        // Remove any fields that don't exist in the database
+        // Map client fields to database fields first
+        if ('companyName' in req.body) {
+          updateData.businessName = req.body.companyName;
+        }
+        if ('yearsInBusiness' in req.body) {
+          updateData.yearsExperience = req.body.yearsInBusiness;
+        }
+        if ('hasOwnVehicle' in req.body) {
+          updateData.hasServiceTruck = req.body.hasOwnVehicle;
+        }
+        if ('totalYearsExperience' in req.body) {
+          updateData.yearsExperience = req.body.totalYearsExperience;
+        }
+        if ('hasOwnTools' in req.body) {
+          // Map hasOwnTools to database field if needed
+          updateData.hasOwnTools = req.body.hasOwnTools;
+        }
+        
+        // Handle array fields - these are PostgreSQL arrays in the database
+        if ('serviceTypes' in req.body) {
+          updateData.serviceTypes = Array.isArray(req.body.serviceTypes) 
+            ? req.body.serviceTypes 
+            : [];
+        }
+        if ('certifications' in req.body) {
+          updateData.certifications = Array.isArray(req.body.certifications)
+            ? req.body.certifications
+            : [];
+        }
+        if ('coverageAreas' in req.body) {
+          updateData.additionalAreas = Array.isArray(req.body.coverageAreas)
+            ? req.body.coverageAreas
+            : [];
+        }
+        if ('specializations' in req.body) {
+          // Specializations doesn't exist in DB, merge with certifications
+          if (Array.isArray(req.body.specializations) && req.body.specializations.length > 0) {
+            if (!updateData.certifications) {
+              updateData.certifications = req.body.specializations;
+            } else {
+              updateData.certifications = [...(updateData.certifications as any[]), ...req.body.specializations];
+            }
+          }
+        }
+        
+        // Handle other Step 4 fields
+        if ('serviceRadius' in req.body) {
+          updateData.serviceRadius = req.body.serviceRadius;
+        }
+        if ('baseLocation' in req.body) {
+          updateData.baseLocation = req.body.baseLocation;
+        }
+        
+        // Now remove fields that don't exist in the database and haven't been mapped
         const fieldsToRemove = ['address', 'city', 'state', 'zip', 'experienceLevel', 
                                'totalYearsExperience', 'companyName', 'yearsInBusiness',
                                'hasOwnTools', 'hasOwnVehicle', 'coverageAreas', 'serviceTypes',
                                'references', 'vehicleInfo', 'specializations', 'previousEmployers',
                                'certifications'];
         for (const field of fieldsToRemove) {
-          delete updateData[field];
-        }
-        
-        // Map client fields to database fields
-        if ('companyName' in req.body) updateData.businessName = req.body.companyName;
-        if ('yearsInBusiness' in req.body) updateData.yearsExperience = req.body.yearsInBusiness;
-        if ('hasOwnVehicle' in req.body) updateData.hasServiceTruck = req.body.hasOwnVehicle;
-        if ('totalYearsExperience' in req.body) updateData.yearsExperience = req.body.totalYearsExperience;
-        
-        // Handle array fields - these are JSONB in the database
-        if ('serviceTypes' in req.body && req.body.serviceTypes) {
-          updateData.serviceTypes = Array.isArray(req.body.serviceTypes) 
-            ? req.body.serviceTypes 
-            : [];
-        }
-        if ('certifications' in req.body && req.body.certifications) {
-          updateData.certifications = Array.isArray(req.body.certifications)
-            ? req.body.certifications
-            : [];
-        }
-        if ('coverageAreas' in req.body && req.body.coverageAreas) {
-          updateData.additionalAreas = Array.isArray(req.body.coverageAreas)
-            ? req.body.coverageAreas
-            : [];
-        }
-        if ('specializations' in req.body && req.body.specializations) {
-          // Specializations doesn't exist in DB, could map to certifications or ignore
-          // For now, we'll merge it with certifications
-          if (!updateData.certifications) updateData.certifications = [];
-          if (Array.isArray(req.body.specializations)) {
-            updateData.certifications = [...(updateData.certifications as any[]), ...req.body.specializations];
+          if (field in updateData && 
+              field !== 'serviceTypes' && 
+              field !== 'certifications' && 
+              field !== 'hasServiceTruck' && 
+              field !== 'serviceRadius' && 
+              field !== 'baseLocation' &&
+              field !== 'businessName' &&
+              field !== 'yearsExperience' &&
+              field !== 'additionalAreas') {
+            delete updateData[field];
           }
         }
         

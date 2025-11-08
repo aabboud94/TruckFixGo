@@ -133,6 +133,65 @@ const termsSchema = z.object({
   })).min(2, "Please provide at least 2 references")
 });
 
+// Helper function to get field names for each step
+const getStepFields = (step: number): any => {
+  switch (step) {
+    case 1:
+      return {
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+        address: '',
+        city: '',
+        state: '',
+        zip: ''
+      };
+    case 2:
+      return {
+        companyName: '',
+        businessType: '',
+        dotNumber: '',
+        mcNumber: '',
+        yearsInBusiness: 0,
+        insuranceProvider: '',
+        insurancePolicyNumber: '',
+        insuranceExpiryDate: ''
+      };
+    case 3:
+      return {
+        experienceLevel: '',
+        totalYearsExperience: 0,
+        certifications: [],
+        specializations: [],
+        previousEmployers: []
+      };
+    case 4:
+      return {
+        serviceTypes: [],
+        serviceRadius: 50,
+        coverageAreas: [],
+        hasOwnTools: false,
+        hasOwnVehicle: false,
+        baseLocation: '',
+        vehicleInfo: {
+          make: '',
+          model: '',
+          year: 0,
+          type: ''
+        }
+      };
+    case 5:
+      return {
+        backgroundCheckConsent: false,
+        termsAccepted: false,
+        references: []
+      };
+    default:
+      return {};
+  }
+};
+
 export default function ContractorApply() {
   const [currentStep, setCurrentStep] = useState(0); // Start at 0 for landing page
   const [formData, setFormData] = useState<any>({
@@ -244,28 +303,81 @@ export default function ContractorApply() {
 
   const handleNext = async () => {
     const isValid = await form.trigger();
-    if (isValid) {
-      const stepData = form.getValues();
-      const newFormData = { ...formData, ...stepData };
-      setFormData(newFormData);
+    
+    if (!isValid) {
+      const errors = form.formState.errors;
+      console.log('Form validation errors:', errors);
       
-      // Save draft on each step completion
-      saveDraftMutation.mutate(newFormData);
-      
-      if (currentStep < 5) {
-        setCurrentStep(currentStep + 1);
-        form.reset(newFormData);
-      } else {
-        // Submit the application
-        handleSubmit();
+      // Show specific validation error in toast
+      if (errors.serviceTypes) {
+        toast({
+          title: "Validation Error",
+          description: errors.serviceTypes.message || "Please select at least one service type",
+          variant: "destructive"
+        });
       }
+      return;
+    }
+    
+    // Get ALL form values before any reset
+    const stepData = form.getValues();
+    console.log(`Step ${currentStep} form values:`, stepData);
+    
+    // Merge with existing formData
+    const newFormData = { ...formData, ...stepData };
+    console.log(`Merged formData:`, newFormData);
+    
+    // Update state immediately
+    setFormData(newFormData);
+    
+    // Save draft with merged data
+    if (applicationId) {
+      console.log('Saving draft with data:', newFormData);
+      saveDraftMutation.mutate(newFormData);
+    }
+    
+    if (currentStep < 5) {
+      const nextStep = currentStep + 1;
+      setCurrentStep(nextStep);
+      
+      // Now reset form with data for the next step
+      const nextStepFields = getStepFields(nextStep);
+      const nextStepData = Object.keys(nextStepFields).reduce((acc: any, key) => {
+        if (key in newFormData) {
+          acc[key] = newFormData[key];
+        } else if (key in nextStepFields) {
+          acc[key] = nextStepFields[key];
+        }
+        return acc;
+      }, {});
+      
+      // Use setTimeout to ensure state updates have completed
+      setTimeout(() => {
+        form.reset(nextStepData);
+      }, 0);
+    } else {
+      // Submit the application
+      handleSubmit();
     }
   };
 
   const handlePrevious = () => {
     if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-      form.reset(formData);
+      const prevStep = currentStep - 1;
+      setCurrentStep(prevStep);
+      
+      // Only reset form with data relevant to the previous step
+      const prevStepFields = getStepFields(prevStep);
+      const prevStepData = Object.keys(prevStepFields).reduce((acc: any, key) => {
+        if (key in formData) {
+          acc[key] = formData[key];
+        } else if (key in prevStepFields) {
+          // Use default values for fields not in formData
+          acc[key] = prevStepFields[key];
+        }
+        return acc;
+      }, {});
+      form.reset(prevStepData);
     }
   };
 
@@ -297,7 +409,7 @@ export default function ContractorApply() {
                   <FormItem>
                     <FormLabel>First Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="John" {...field} data-testid="input-first-name" />
+                      <Input placeholder="John" {...field} data-testid="input-firstName" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -310,7 +422,7 @@ export default function ContractorApply() {
                   <FormItem>
                     <FormLabel>Last Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Doe" {...field} data-testid="input-last-name" />
+                      <Input placeholder="Doe" {...field} data-testid="input-lastName" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -433,7 +545,7 @@ export default function ContractorApply() {
                 <FormItem>
                   <FormLabel>Company Name (Optional)</FormLabel>
                   <FormControl>
-                    <Input placeholder="ABC Trucking LLC" {...field} data-testid="input-company-name" />
+                    <Input placeholder="ABC Trucking LLC" {...field} data-testid="input-businessName" />
                   </FormControl>
                   <FormDescription>
                     Leave blank if operating as an individual
@@ -518,7 +630,7 @@ export default function ContractorApply() {
                         field.onChange(isNaN(value) ? 0 : value);
                       }}
                       value={field.value || ''}
-                      data-testid="input-years-in-business"
+                      data-testid="input-yearsExperience"
                     />
                   </FormControl>
                   <FormMessage />
@@ -700,34 +812,40 @@ export default function ContractorApply() {
             <FormField
               control={form.control}
               name="serviceTypes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Service Types You Can Provide</FormLabel>
-                  <FormDescription>Select at least one service type</FormDescription>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                    {serviceTypes.map((service: ServiceType) => (
-                      <FormItem key={service.id} className="flex items-center space-x-3">
-                        <FormControl>
-                          <Checkbox
-                            checked={(field.value || []).includes(service.id)}
-                            onCheckedChange={(checked) => {
-                              const updatedValue = checked
-                                ? [...(field.value || []), service.id]
-                                : (field.value || []).filter((s: string) => s !== service.id);
-                              field.onChange(updatedValue);
-                            }}
-                            data-testid={`checkbox-service-${service.id}`}
-                          />
-                        </FormControl>
-                        <FormLabel className="font-normal cursor-pointer">
-                          {service.name}
-                        </FormLabel>
-                      </FormItem>
-                    ))}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                // Ensure field.value is always an array
+                const currentValues = field.value || [];
+                return (
+                  <FormItem>
+                    <FormLabel>Service Types You Can Provide</FormLabel>
+                    <FormDescription>Select at least one service type</FormDescription>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                      {serviceTypes.map((service: ServiceType) => (
+                        <FormItem key={service.id} className="flex items-center space-x-3 space-y-0">
+                          <FormControl>
+                            <Checkbox
+                              checked={currentValues.includes(service.id)}
+                              onCheckedChange={(checked) => {
+                                const updatedValue = checked
+                                  ? [...currentValues, service.id]
+                                  : currentValues.filter((s: string) => s !== service.id);
+                                field.onChange(updatedValue);
+                                // Also manually trigger form update
+                                form.setValue("serviceTypes", updatedValue, { shouldValidate: true });
+                              }}
+                              data-testid={`checkbox-service-${service.id}`}
+                            />
+                          </FormControl>
+                          <FormLabel className="font-normal cursor-pointer">
+                            {service.name}
+                          </FormLabel>
+                        </FormItem>
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             <FormField
@@ -746,11 +864,28 @@ export default function ContractorApply() {
                         field.onChange(isNaN(value) ? 0 : value);
                       }}
                       value={field.value || ''}
-                      data-testid="input-service-radius"
+                      data-testid="input-serviceRadius"
                     />
                   </FormControl>
                   <FormDescription>
                     Maximum distance you're willing to travel for jobs
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="baseLocation"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Base Location</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Houston, TX" {...field} data-testid="input-baseLocation" />
+                  </FormControl>
+                  <FormDescription>
+                    Your primary service area or home base
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -785,7 +920,7 @@ export default function ContractorApply() {
                     <Checkbox 
                       checked={field.value}
                       onCheckedChange={field.onChange}
-                      data-testid="checkbox-own-vehicle"
+                      data-testid="checkbox-hasServiceTruck"
                     />
                   </FormControl>
                   <FormLabel className="font-normal cursor-pointer">
