@@ -3654,7 +3654,7 @@ export class PostgreSQLStorage implements IStorage {
           ilike(contractorApplications.lastName, `%${filters.search}%`),
           ilike(contractorApplications.email, `%${filters.search}%`),
           ilike(contractorApplications.phone, `%${filters.search}%`),
-          ilike(contractorApplications.companyName, `%${filters.search}%`)
+          ilike(contractorApplications.businessName, `%${filters.search}%`)
         )
       );
     }

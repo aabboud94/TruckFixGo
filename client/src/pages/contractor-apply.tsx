@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -23,7 +23,7 @@ import {
   ChevronLeft, ChevronRight, User, Building, Briefcase,
   Wrench, Upload, FileCheck, AlertCircle, CheckCircle,
   Home, Phone, Mail, MapPin, Shield, Calendar, Plus, X,
-  FileText, Camera, Award, Car
+  FileText, Camera, Award, Car, Truck, Clock
 } from "lucide-react";
 import type { ServiceType } from "@shared/schema";
 
@@ -134,7 +134,7 @@ const termsSchema = z.object({
 });
 
 export default function ContractorApply() {
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(0); // Start at 0 for landing page
   const [formData, setFormData] = useState<any>({
     // Initialize default values to prevent validation errors
     serviceTypes: [],
@@ -155,18 +155,37 @@ export default function ContractorApply() {
     queryKey: ['/api/service-types']
   });
 
+  // Mutation for starting application
+  const startApplicationMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', '/api/contractor/apply/start');
+    },
+    onSuccess: (response) => {
+      setApplicationId(response.id);
+      setCurrentStep(1);
+      toast({
+        title: "Application started",
+        description: "Let's begin with your personal information."
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to start application. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
   // Mutation for saving draft
   const saveDraftMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('/api/contractor/apply/draft', {
-        method: 'POST',
-        body: JSON.stringify({ ...data, applicationId })
-      });
-    },
-    onSuccess: (response) => {
       if (!applicationId) {
-        setApplicationId(response.id);
+        return; // Don't save draft if no application started
       }
+      return apiRequest('PUT', `/api/contractor/apply/${applicationId}`, data);
+    },
+    onSuccess: () => {
       toast({
         title: "Draft saved",
         description: "Your application progress has been saved."
@@ -177,15 +196,20 @@ export default function ContractorApply() {
   // Mutation for submitting application
   const submitApplicationMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('/api/contractor/apply', {
-        method: 'POST',
-        body: JSON.stringify({ ...data, applicationId })
-      });
+      if (!applicationId) {
+        throw new Error('No application ID found');
+      }
+      
+      // First update the application with all form data
+      await apiRequest('PUT', `/api/contractor/apply/${applicationId}`, data);
+      
+      // Then submit the application
+      return apiRequest('POST', `/api/contractor/apply/${applicationId}/submit`);
     },
     onSuccess: () => {
       toast({
         title: "Application submitted!",
-        description: "We'll review your application and get back to you within 2-3 business days."
+        description: "Check your email for login credentials. We'll review your application within 24-48 hours."
       });
       navigate("/contractor/auth");
     }
@@ -211,12 +235,12 @@ export default function ContractorApply() {
   // Auto-save draft every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      if (Object.keys(formData).length > 0) {
+      if (applicationId && Object.keys(formData).length > 0) {
         saveDraftMutation.mutate(formData);
       }
     }, 30000);
     return () => clearInterval(interval);
-  }, [formData]);
+  }, [formData, applicationId]);
 
   const handleNext = async () => {
     const isValid = await form.trigger();
@@ -489,7 +513,11 @@ export default function ContractorApply() {
                       type="number" 
                       placeholder="5" 
                       {...field} 
-                      onChange={(e) => field.onChange(parseInt(e.target.value))}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value);
+                        field.onChange(isNaN(value) ? 0 : value);
+                      }}
+                      value={field.value || ''}
                       data-testid="input-years-in-business"
                     />
                   </FormControl>
@@ -597,7 +625,11 @@ export default function ContractorApply() {
                       type="number" 
                       placeholder="10" 
                       {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value))}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value);
+                        field.onChange(isNaN(value) ? 0 : value);
+                      }}
+                      value={field.value || ''}
                       data-testid="input-total-experience"
                     />
                   </FormControl>
@@ -709,7 +741,11 @@ export default function ContractorApply() {
                       type="number" 
                       placeholder="50" 
                       {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value))}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value);
+                        field.onChange(isNaN(value) ? 0 : value);
+                      }}
+                      value={field.value || ''}
                       data-testid="input-service-radius"
                     />
                   </FormControl>
@@ -796,7 +832,11 @@ export default function ContractorApply() {
                           type="number" 
                           placeholder="2020" 
                           {...field}
-                          onChange={(e) => field.onChange(parseInt(e.target.value))}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value);
+                            field.onChange(isNaN(value) ? 0 : value);
+                          }}
+                          value={field.value || ''}
                           data-testid="input-vehicle-year"
                         />
                       </FormControl>
@@ -956,6 +996,98 @@ export default function ContractorApply() {
         return null;
     }
   };
+
+  // Show landing page if currentStep is 0
+  if (currentStep === 0) {
+    return (
+      <div className="min-h-screen bg-background">
+        {/* Header */}
+        <header className="border-b">
+          <div className="container mx-auto px-4 py-4">
+            <Link to="/" className="flex items-center gap-2">
+              <Truck className="h-8 w-8 text-primary" />
+              <span className="text-2xl font-bold">TruckFixGo</span>
+            </Link>
+          </div>
+        </header>
+
+        <main className="container mx-auto px-4 py-8 max-w-4xl">
+          <div className="text-center space-y-8">
+            <div>
+              <h1 className="text-4xl font-bold mb-4">Apply to Become a Contractor</h1>
+              <p className="text-xl text-muted-foreground">
+                Join TruckFixGo's network of certified mobile mechanics
+              </p>
+            </div>
+
+            <Card className="max-w-2xl mx-auto">
+              <CardContent className="pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                  <div className="flex items-start gap-3">
+                    <Shield className="h-6 w-6 text-primary mt-1" />
+                    <div className="text-left">
+                      <h3 className="font-semibold mb-1">Background Verified</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Comprehensive background and license checks
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Clock className="h-6 w-6 text-primary mt-1" />
+                    <div className="text-left">
+                      <h3 className="font-semibold mb-1">Quick Process</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Complete application in 10-15 minutes
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <FileText className="h-6 w-6 text-primary mt-1" />
+                    <div className="text-left">
+                      <h3 className="font-semibold mb-1">Documents Later</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Upload documents after creating your account
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <User className="h-6 w-6 text-primary mt-1" />
+                    <div className="text-left">
+                      <h3 className="font-semibold mb-1">Immediate Access</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Log in right after application submission
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <Button 
+                  size="lg" 
+                  className="w-full md:w-auto"
+                  onClick={() => startApplicationMutation.mutate()}
+                  disabled={startApplicationMutation.isPending}
+                  data-testid="button-start-application"
+                >
+                  {startApplicationMutation.isPending ? (
+                    <>Starting...</>
+                  ) : (
+                    <>Start Application</>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <div className="text-sm text-muted-foreground">
+              <p>By starting your application, you agree to our background check process</p>
+              <p className="mt-2">
+                Already have an application? <Link to="/contractor/auth" className="text-primary hover:underline">Sign In</Link>
+              </p>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

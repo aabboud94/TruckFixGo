@@ -734,82 +734,68 @@ export const contractorDocuments = pgTable("contractor_documents", {
 export const contractorApplications = pgTable("contractor_applications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   
-  // Applicant details
+  // User reference
+  userId: varchar("user_id").references(() => users.id),
+  
+  // Status
+  status: applicationStatusEnum("status").notNull().default('draft'),
+  
+  // Personal details
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email").notNull(),
   phone: varchar("phone", { length: 20 }).notNull(),
-  address: text("address").notNull(),
-  city: varchar("city", { length: 100 }).notNull(),
-  state: varchar("state", { length: 2 }).notNull(),
-  zip: varchar("zip", { length: 10 }).notNull(),
   
-  // Business information
-  companyName: text("company_name"),
-  dotNumber: varchar("dot_number", { length: 20 }),
-  mcNumber: varchar("mc_number", { length: 20 }),
+  // CDL Information
+  cdlNumber: varchar("cdl_number", { length: 50 }),
+  cdlClass: varchar("cdl_class", { length: 10 }),
+  yearsExperience: integer("years_experience"),
+  
+  // Business information  
+  businessName: text("business_name"),
   businessType: varchar("business_type", { length: 50 }), // sole_proprietor, llc, corporation
-  yearsInBusiness: integer("years_in_business"),
+  taxId: varchar("tax_id", { length: 20 }),
+  
+  // Insurance
+  hasInsurance: boolean("has_insurance").default(false),
   insuranceProvider: text("insurance_provider"),
   insurancePolicyNumber: varchar("insurance_policy_number", { length: 100 }),
-  insuranceExpiryDate: timestamp("insurance_expiry_date"),
-  
-  // Experience and qualifications
-  experienceLevel: varchar("experience_level", { length: 20 }).notNull(), // entry, intermediate, expert
-  totalYearsExperience: integer("total_years_experience"),
-  certifications: jsonb("certifications").default('[]'), // Array of certification names
-  specializations: jsonb("specializations").default('[]'), // Array of specializations
-  previousEmployers: jsonb("previous_employers").default('[]'), // Array of previous employment
+  insuranceExpiry: timestamp("insurance_expiry"),
   
   // Service capabilities
-  serviceTypes: jsonb("service_types").notNull().default('[]'), // Array of service type IDs
-  serviceRadius: integer("service_radius").notNull().default(50),
-  coverageAreas: jsonb("coverage_areas").default('[]'), // Array of zip codes or cities
-  hasOwnTools: boolean("has_own_tools").notNull().default(false),
-  hasOwnVehicle: boolean("has_own_vehicle").notNull().default(false),
-  vehicleInfo: jsonb("vehicle_info"), // Vehicle details if has_own_vehicle
+  serviceTypes: text("service_types").array().default(sql`ARRAY[]::text[]`), // Array of service types
+  certifications: text("certifications").array().default(sql`ARRAY[]::text[]`), // Array of certifications
+  serviceRadius: integer("service_radius").default(50),
+  baseLocation: text("base_location"),
+  additionalAreas: text("additional_areas").array().default(sql`ARRAY[]::text[]`), // Additional service areas
   
-  // Application metadata
-  status: applicationStatusEnum("status").notNull().default('draft'),
-  submittedAt: timestamp("submitted_at"),
-  reviewStartedAt: timestamp("review_started_at"),
-  reviewCompletedAt: timestamp("review_completed_at"),
-  reviewedBy: varchar("reviewed_by").references(() => users.id),
-  approvedBy: varchar("approved_by").references(() => users.id),
-  approvedAt: timestamp("approved_at"),
-  rejectionReason: text("rejection_reason"),
+  // Equipment
+  hasServiceTruck: boolean("has_service_truck").default(false),
+  truckMake: varchar("truck_make", { length: 50 }),
+  truckModel: varchar("truck_model", { length: 50 }),
+  truckYear: integer("truck_year"),
+  equipment: text("equipment").array().default(sql`ARRAY[]::text[]`),
+  tools: text("tools").array().default(sql`ARRAY[]::text[]`),
+  
+  // Availability
+  emergencyAvailable: boolean("emergency_available").default(false),
+  scheduledAvailable: boolean("scheduled_available").default(false),
+  nightShiftAvailable: boolean("night_shift_available").default(false),
+  weekendAvailable: boolean("weekend_available").default(false),
+  
+  // Consents
+  backgroundCheckConsent: boolean("background_check_consent").default(false),
+  termsAccepted: boolean("terms_accepted").default(false),
+  dataProcessingConsent: boolean("data_processing_consent").default(false),
+  
+  // Review
   reviewNotes: text("review_notes"),
-  internalNotes: text("internal_notes"),
+  rejectionReason: text("rejection_reason"),
+  submittedAt: timestamp("submitted_at"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
   
-  // Background checks
-  backgroundCheckConsent: boolean("background_check_consent").notNull().default(false),
-  backgroundCheckConsentDate: timestamp("background_check_consent_date"),
-  backgroundCheckStatus: backgroundCheckStatusEnum("background_check_status"),
-  backgroundCheckCompletedAt: timestamp("background_check_completed_at"),
-  backgroundCheckResults: jsonb("background_check_results"),
-  
-  // Verification results
-  emailVerified: boolean("email_verified").notNull().default(false),
-  phoneVerified: boolean("phone_verified").notNull().default(false),
-  dotNumberVerified: boolean("dot_number_verified").notNull().default(false),
-  mcNumberVerified: boolean("mc_number_verified").notNull().default(false),
-  insuranceVerified: boolean("insurance_verified").notNull().default(false),
-  
-  // References
-  references: jsonb("references").default('[]'), // Array of reference contacts
-  referencesVerified: boolean("references_verified").notNull().default(false),
-  
-  // Terms and conditions
-  termsAccepted: boolean("terms_accepted").notNull().default(false),
-  termsAcceptedAt: timestamp("terms_accepted_at"),
-  termsVersion: varchar("terms_version", { length: 20 }),
-  
-  // Tracking
-  ipAddress: varchar("ip_address", { length: 45 }),
-  userAgent: text("user_agent"),
-  source: varchar("source", { length: 50 }), // web, mobile, referral, etc.
-  referralCode: varchar("referral_code", { length: 50 }),
-  
+  // Timestamps
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow()
 }, (table) => ({
