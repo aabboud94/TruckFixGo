@@ -4408,6 +4408,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Alias for service types (used by contractor application form)
+  app.get('/api/service-types', async (req: Request, res: Response) => {
+    try {
+      const serviceTypes = await storage.getActiveServiceTypes();
+      res.json(serviceTypes);
+    } catch (error) {
+      console.error('Get service types error:', error);
+      res.status(500).json({ message: 'Failed to get service types' });
+    }
+  });
+
   // Get pricing for service
   app.get('/api/services/:id/pricing', async (req: Request, res: Response) => {
     try {

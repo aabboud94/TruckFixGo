@@ -144,7 +144,16 @@ const termsSchema = z.object({
 
 export default function ContractorApply() {
   const [currentStep, setCurrentStep] = useState(1);
-  const [formData, setFormData] = useState<any>({});
+  const [formData, setFormData] = useState<any>({
+    // Initialize default values to prevent validation errors
+    serviceTypes: [],
+    serviceRadius: 50,
+    hasOwnTools: false,
+    hasOwnVehicle: false,
+    references: [{}, {}],
+    backgroundCheckConsent: false,
+    termsAccepted: false
+  });
   const [uploadedDocuments, setUploadedDocuments] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [applicationId, setApplicationId] = useState<string | null>(null);
@@ -264,7 +273,12 @@ export default function ContractorApply() {
 
   const handleDocumentUpload = (type: string, file: File, expirationDate?: string) => {
     const newDoc = { type, file, expirationDate, uploadedAt: new Date() };
-    setUploadedDocuments([...uploadedDocuments, newDoc]);
+    const updatedDocs = [...uploadedDocuments, newDoc];
+    setUploadedDocuments(updatedDocs);
+    
+    // Also set the form value so validation passes
+    form.setValue('documents', updatedDocs);
+    
     toast({
       title: "Document uploaded",
       description: `${file.name} has been uploaded successfully.`
@@ -272,7 +286,11 @@ export default function ContractorApply() {
   };
 
   const removeDocument = (index: number) => {
-    setUploadedDocuments(uploadedDocuments.filter((_, i) => i !== index));
+    const updatedDocs = uploadedDocuments.filter((_, i) => i !== index);
+    setUploadedDocuments(updatedDocs);
+    
+    // Also update the form value
+    form.setValue('documents', updatedDocs);
   };
 
   const renderStepContent = () => {
