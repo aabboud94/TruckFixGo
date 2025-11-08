@@ -7021,11 +7021,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         );
 
-        // Send confirmation email
-        // await sendEmail(application.email, 'Application Received', ...);
+        // Send confirmation email with login credentials
+        try {
+          const emailContent = `
+            <h2>Welcome to TruckFixGo!</h2>
+            <p>Dear ${application.firstName} ${application.lastName},</p>
+            <p>Thank you for applying to become a TruckFixGo contractor. Your application has been received and is now under review.</p>
+            
+            <h3>Your Account Information:</h3>
+            <p><strong>Email:</strong> ${application.email}</p>
+            <p><strong>Temporary Password:</strong> ${application.phone}Temp!</p>
+            
+            <h3>Next Steps:</h3>
+            <ol>
+              <li>Our team will review your application within 24-48 hours</li>
+              <li>Once approved, you can log in at <a href="https://truckfixgo.com/contractor/auth">https://truckfixgo.com/contractor/auth</a></li>
+              <li>Please complete your document uploads after logging in</li>
+              <li>Change your password after your first login</li>
+            </ol>
+            
+            <h3>Required Documents:</h3>
+            <p>Please have the following documents ready to upload once you log in:</p>
+            <ul>
+              <li>Commercial Driver's License (CDL)</li>
+              <li>Business Insurance Certificate</li>
+              <li>W-9 Tax Form</li>
+              <li>Vehicle Registration</li>
+              <li>DOT Medical Certificate</li>
+              <li>ASE Mechanic Certifications</li>
+            </ul>
+            
+            <p>If you have any questions, please contact us at support@truckfixgo.com</p>
+            
+            <p>Best regards,<br>
+            The TruckFixGo Team</p>
+          `;
+
+          // Send email using reminder service
+          await reminderService.sendEmail({
+            to: application.email,
+            subject: 'Welcome to TruckFixGo - Application Received',
+            html: emailContent,
+            text: emailContent.replace(/<[^>]*>/g, '') // Strip HTML for text version
+          });
+
+          console.log(`Sent welcome email to contractor applicant: ${application.email}`);
+        } catch (emailError) {
+          console.error('Failed to send welcome email:', emailError);
+          // Don't fail the application submission if email fails
+        }
 
         res.json({
-          message: 'Application submitted successfully',
+          message: 'Application submitted successfully. Check your email for login credentials.',
           application: updatedApplication
         });
       } catch (error) {
