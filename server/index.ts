@@ -4,6 +4,7 @@ import { serveStatic, log } from "./vite";
 import { trackingWSServer } from "./websocket";
 import { reminderScheduler } from "./reminder-scheduler";
 import billingScheduler from "./billing-scheduler";
+import { storage } from "./storage";
 import { createServer as createViteServer, createLogger } from "vite";
 import path from "path";
 import fs from "fs";
@@ -102,6 +103,111 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Initialize essential service types on startup
+  async function initializeServiceTypes() {
+    try {
+      const essentialServices = [
+        {
+          id: 'emergency-repair',
+          code: 'EMRG_REPAIR',
+          name: 'Emergency Repair',
+          category: 'emergency',
+          description: 'Emergency roadside repair service',
+          estimatedDuration: 60,
+          isEmergency: true,
+          isSchedulable: false,
+          isActive: true
+        },
+        {
+          id: 'flat-tire',
+          code: 'FLAT_TIRE',
+          name: 'Flat Tire Service',
+          category: 'emergency',
+          description: 'Flat tire repair or replacement',
+          estimatedDuration: 30,
+          isEmergency: true,
+          isSchedulable: false,
+          isActive: true
+        },
+        {
+          id: 'fuel-delivery',
+          code: 'FUEL_DELIV',
+          name: 'Fuel Delivery',
+          category: 'emergency',
+          description: 'Emergency fuel delivery service',
+          estimatedDuration: 20,
+          isEmergency: true,
+          isSchedulable: false,
+          isActive: true
+        },
+        {
+          id: 'jump-start',
+          code: 'JUMP_START',
+          name: 'Jump Start',
+          category: 'emergency',
+          description: 'Battery jump start service',
+          estimatedDuration: 20,
+          isEmergency: true,
+          isSchedulable: false,
+          isActive: true
+        },
+        {
+          id: 'towing',
+          code: 'TOWING',
+          name: 'Towing Service',
+          category: 'emergency',
+          description: 'Emergency towing service',
+          estimatedDuration: 90,
+          isEmergency: true,
+          isSchedulable: false,
+          isActive: true
+        }
+      ];
+
+      let created = 0;
+      let existing = 0;
+
+      for (const service of essentialServices) {
+        try {
+          const exists = await storage.getServiceType(service.id);
+          if (!exists) {
+            await storage.createServiceType(service);
+            
+            // Also create default pricing
+            await storage.createServicePricing({
+              serviceTypeId: service.id,
+              basePrice: 150,
+              perMileRate: 3,
+              emergencySurcharge: 50,
+              weekendSurcharge: 25,
+              nightSurcharge: 35,
+              effectiveDate: new Date(),
+              isActive: true
+            });
+            created++;
+            console.log(`✅ Created service type: ${service.name}`);
+          } else {
+            existing++;
+          }
+        } catch (error) {
+          console.error(`Failed to initialize service type ${service.name}:`, error);
+        }
+      }
+
+      if (created > 0) {
+        console.log(`✅ Initialized ${created} service types`);
+      }
+      if (existing > 0) {
+        console.log(`ℹ️ ${existing} service types already exist`);
+      }
+    } catch (error) {
+      console.error('Service types initialization error:', error);
+    }
+  }
+
+  // Initialize service types before starting the server
+  await initializeServiceTypes();
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

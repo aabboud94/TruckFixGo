@@ -460,14 +460,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Guest booking
   app.post('/api/auth/guest-booking',
-    rateLimiter(3, 60000),
+    rateLimiter(20, 60000), // Increased to 20 requests per minute for emergency situations
     async (req: Request, res: Response) => {
       try {
         const { 
           guestPhone, 
           guestEmail, 
           jobType = 'emergency',
-          serviceTypeId = 'emergency-repair',
+          serviceTypeId, // Do not default here - use the value sent from frontend
           location,
           locationAddress,
           description,
@@ -485,6 +485,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ 
             message: 'Phone number and location are required' 
           });
+        }
+        
+        // Validate serviceTypeId - use emergency-repair only as last resort
+        const resolvedServiceTypeId = serviceTypeId || 'emergency-repair';
+        
+        // Verify the service type exists
+        const serviceType = await storage.getServiceType(resolvedServiceTypeId);
+        if (!serviceType) {
+          console.error(`Service type '${resolvedServiceTypeId}' not found, using 'emergency-repair'`);
+          // Fall back to emergency-repair if the requested service type doesn't exist
+          const fallbackServiceType = await storage.getServiceType('emergency-repair');
+          if (!fallbackServiceType) {
+            return res.status(400).json({
+              message: 'Service type configuration error. Please contact support.'
+            });
+          }
         }
         
         // Create guest user (check if exists first)
@@ -506,7 +522,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Create job with proper structure
         const jobData = {
           jobType: jobType as 'emergency' | 'scheduled',
-          serviceTypeId: serviceTypeId,
+          serviceTypeId: resolvedServiceTypeId, // Use the validated serviceTypeId
           customerId: guestUser.id,
           location: location, // This should be {lat: number, lng: number}
           locationAddress: locationAddress,
@@ -722,6 +738,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Quick admin setup error:', error);
         res.status(500).json({ message: 'Quick admin setup failed' });
+      }
+    }
+  );
+
+  // Initialize service types - creates all necessary service types in database
+  app.post('/api/admin/service-types/initialize',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        // Define all required service types
+        const serviceTypesToCreate = [
+          {
+            id: 'emergency-repair',
+            code: 'EMRG_REPAIR',
+            name: 'Emergency Repair',
+            category: 'emergency',
+            description: 'Emergency roadside repair service',
+            estimatedDuration: 60,
+            isEmergency: true,
+            isSchedulable: false,
+            isActive: true
+          },
+          {
+            id: 'flat-tire',
+            code: 'FLAT_TIRE',
+            name: 'Flat Tire Service',
+            category: 'emergency',
+            description: 'Flat tire repair or replacement',
+            estimatedDuration: 30,
+            isEmergency: true,
+            isSchedulable: false,
+            isActive: true
+          },
+          {
+            id: 'fuel-delivery',
+            code: 'FUEL_DELIV',
+            name: 'Fuel Delivery',
+            category: 'emergency',
+            description: 'Emergency fuel delivery service',
+            estimatedDuration: 20,
+            isEmergency: true,
+            isSchedulable: false,
+            isActive: true
+          },
+          {
+            id: 'jump-start',
+            code: 'JUMP_START',
+            name: 'Jump Start',
+            category: 'emergency',
+            description: 'Battery jump start service',
+            estimatedDuration: 20,
+            isEmergency: true,
+            isSchedulable: false,
+            isActive: true
+          },
+          {
+            id: 'towing',
+            code: 'TOWING',
+            name: 'Towing Service',
+            category: 'emergency',
+            description: 'Emergency towing service',
+            estimatedDuration: 90,
+            isEmergency: true,
+            isSchedulable: false,
+            isActive: true
+          }
+        ];
+
+        const createdServices: any[] = [];
+        const skippedServices: string[] = [];
+        const errors: string[] = [];
+
+        // Try to create each service type
+        for (const serviceType of serviceTypesToCreate) {
+          try {
+            // Check if service type already exists
+            const existing = await storage.getServiceType(serviceType.id);
+            if (existing) {
+              skippedServices.push(serviceType.name);
+            } else {
+              const created = await storage.createServiceType(serviceType);
+              createdServices.push(created);
+              
+              // Also create default pricing for each service type
+              await storage.createServicePricing({
+                serviceTypeId: serviceType.id,
+                basePrice: 150, // Default base price
+                perMileRate: 3,
+                emergencySurcharge: 50,
+                weekendSurcharge: 25,
+                nightSurcharge: 35,
+                effectiveDate: new Date(),
+                isActive: true
+              });
+            }
+          } catch (error) {
+            console.error(`Failed to create service type ${serviceType.name}:`, error);
+            errors.push(`${serviceType.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }
+
+        res.json({
+          message: 'Service types initialization completed',
+          created: createdServices.length,
+          skipped: skippedServices.length,
+          createdServices: createdServices.map(s => s.name),
+          skippedServices,
+          errors
+        });
+      } catch (error) {
+        console.error('Initialize service types error:', error);
+        res.status(500).json({ message: 'Failed to initialize service types' });
       }
     }
   );
