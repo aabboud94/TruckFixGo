@@ -428,6 +428,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByPhone(phone: string): Promise<User | undefined>;
+  findUsers(filters: { phone?: string; email?: string; role?: string }): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<boolean>;
@@ -803,6 +804,29 @@ export class PostgreSQLStorage implements IStorage {
   async getUserByPhone(phone: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
     return result[0];
+  }
+
+  async findUsers(filters: { phone?: string; email?: string; role?: string }): Promise<User[]> {
+    const conditions: any[] = [];
+    
+    if (filters.phone) {
+      conditions.push(eq(users.phone, filters.phone));
+    }
+    if (filters.email) {
+      conditions.push(eq(users.email, filters.email));
+    }
+    if (filters.role) {
+      conditions.push(eq(users.role, filters.role as typeof userRoleEnum.enumValues[number]));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(users).limit(100);
+    }
+    
+    return await db.select()
+      .from(users)
+      .where(and(...conditions))
+      .limit(100);
   }
 
   async createUser(user: InsertUser): Promise<User> {
