@@ -680,31 +680,38 @@ export default function ContractorApply() {
       case 4:
         return (
           <div className="space-y-6">
-            <div>
-              <FormLabel>Service Types You Can Provide</FormLabel>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                {serviceTypes.map((service: ServiceType) => (
-                  <FormItem key={service.id} className="flex items-center space-x-3">
-                    <FormControl>
-                      <Checkbox
-                        onCheckedChange={(checked) => {
-                          const current = form.getValues("serviceTypes") || [];
-                          if (checked) {
-                            form.setValue("serviceTypes", [...current, service.id]);
-                          } else {
-                            form.setValue("serviceTypes", current.filter((s: string) => s !== service.id));
-                          }
-                        }}
-                        data-testid={`checkbox-service-${service.id}`}
-                      />
-                    </FormControl>
-                    <FormLabel className="font-normal cursor-pointer">
-                      {service.name}
-                    </FormLabel>
-                  </FormItem>
-                ))}
-              </div>
-            </div>
+            <FormField
+              control={form.control}
+              name="serviceTypes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Service Types You Can Provide</FormLabel>
+                  <FormDescription>Select at least one service type</FormDescription>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                    {serviceTypes.map((service: ServiceType) => (
+                      <FormItem key={service.id} className="flex items-center space-x-3">
+                        <FormControl>
+                          <Checkbox
+                            checked={(field.value || []).includes(service.id)}
+                            onCheckedChange={(checked) => {
+                              const updatedValue = checked
+                                ? [...(field.value || []), service.id]
+                                : (field.value || []).filter((s: string) => s !== service.id);
+                              field.onChange(updatedValue);
+                            }}
+                            data-testid={`checkbox-service-${service.id}`}
+                          />
+                        </FormControl>
+                        <FormLabel className="font-normal cursor-pointer">
+                          {service.name}
+                        </FormLabel>
+                      </FormItem>
+                    ))}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}

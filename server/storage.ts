@@ -446,6 +446,16 @@ export interface IStorage {
   createContractorProfile(profile: InsertContractorProfile): Promise<ContractorProfile>;
   updateContractorProfile(userId: string, updates: Partial<InsertContractorProfile>): Promise<ContractorProfile | undefined>;
   updatePerformanceTier(userId: string, tier: typeof performanceTierEnum.enumValues[number]): Promise<boolean>;
+  findContractors(filters: { 
+    status?: string;
+    performanceTier?: string;
+    isAvailable?: boolean;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any[]>;
+  updateContractorStatus(contractorId: string, status: string): Promise<boolean>;
+  getPendingContractors(): Promise<any[]>;
   
   checkUserRole(userId: string, requiredRole: string): Promise<boolean>;
   hasAdminUsers(): Promise<boolean>;
@@ -915,6 +925,126 @@ export class PostgreSQLStorage implements IStorage {
       .where(eq(contractorProfiles.userId, userId))
       .returning();
     return result.length > 0;
+  }
+
+  async findContractors(filters: { 
+    status?: string;
+    performanceTier?: string;
+    isAvailable?: boolean;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any[]> {
+    const query = db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        phone: users.phone,
+        company: contractorProfiles.companyName,
+        status: users.role,
+        tier: contractorProfiles.performanceTier,
+        rating: contractorProfiles.rating,
+        totalJobs: contractorProfiles.totalJobs,
+        completedJobs: contractorProfiles.completedJobs,
+        avgResponseTime: contractorProfiles.avgResponseTime,
+        totalEarnings: sql<number>`COALESCE(${contractorEarnings.totalEarnings}, 0)`,
+        currentBalance: sql<number>`COALESCE(${contractorEarnings.currentBalance}, 0)`,
+        documentsVerified: contractorProfiles.documentsVerified,
+        isAvailable: contractorProfiles.isAvailable,
+        joinedAt: users.createdAt
+      })
+      .from(users)
+      .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
+      .leftJoin(
+        db
+          .select({
+            contractorId: contractorEarnings.contractorId,
+            totalEarnings: sql<number>`SUM(${contractorEarnings.amount})`.as('totalEarnings'),
+            currentBalance: sql<number>`SUM(CASE WHEN ${contractorEarnings.status} = 'pending' THEN ${contractorEarnings.amount} ELSE 0 END)`.as('currentBalance')
+          })
+          .from(contractorEarnings)
+          .groupBy(contractorEarnings.contractorId)
+          .as('earnings'),
+        eq(users.id, sql`earnings."contractorId"`)
+      )
+      .where(eq(users.role, 'contractor'));
+
+    const conditions = [];
+    
+    if (filters.performanceTier) {
+      conditions.push(eq(contractorProfiles.performanceTier, filters.performanceTier as any));
+    }
+    
+    if (filters.isAvailable !== undefined) {
+      conditions.push(eq(contractorProfiles.isAvailable, filters.isAvailable));
+    }
+    
+    if (filters.search) {
+      conditions.push(
+        or(
+          ilike(users.name, `%${filters.search}%`),
+          ilike(users.email, `%${filters.search}%`),
+          ilike(users.phone, `%${filters.search}%`),
+          ilike(contractorProfiles.companyName, `%${filters.search}%`)
+        )
+      );
+    }
+
+    let finalQuery = query;
+    if (conditions.length > 0) {
+      finalQuery = query.where(and(...conditions)) as any;
+    }
+
+    if (filters.limit) {
+      finalQuery = finalQuery.limit(filters.limit) as any;
+    }
+    if (filters.offset) {
+      finalQuery = finalQuery.offset(filters.offset) as any;
+    }
+
+    return await finalQuery;
+  }
+
+  async updateContractorStatus(contractorId: string, status: string): Promise<boolean> {
+    const result = await db.update(users)
+      .set({ role: status === 'active' ? 'contractor' : 'driver', updatedAt: new Date() })
+      .where(eq(users.id, contractorId))
+      .returning();
+    
+    // Also update the contractor application status if it exists
+    if (status === 'active' || status === 'rejected') {
+      await db.update(contractorApplications)
+        .set({ status: status as any, updatedAt: new Date() })
+        .where(eq(contractorApplications.userId, contractorId));
+    }
+    
+    return result.length > 0;
+  }
+
+  async getPendingContractors(): Promise<any[]> {
+    return await db
+      .select({
+        id: contractorApplications.userId,
+        applicationId: contractorApplications.id,
+        name: sql<string>`${contractorApplications.firstName} || ' ' || ${contractorApplications.lastName}`,
+        firstName: contractorApplications.firstName,
+        lastName: contractorApplications.lastName,
+        email: contractorApplications.email,
+        phone: contractorApplications.phone,
+        company: contractorApplications.companyName,
+        status: contractorApplications.status,
+        experience: contractorApplications.yearsExperience,
+        hasInsurance: contractorApplications.hasInsurance,
+        insuranceProvider: contractorApplications.insuranceProvider,
+        policyNumber: contractorApplications.policyNumber,
+        documentsSubmitted: contractorApplications.documentsSubmitted,
+        documentsRequired: contractorApplications.documentsRequired,
+        createdAt: contractorApplications.createdAt
+      })
+      .from(contractorApplications)
+      .where(eq(contractorApplications.status, 'pending'))
+      .orderBy(desc(contractorApplications.createdAt));
   }
 
   async checkUserRole(userId: string, requiredRole: string): Promise<boolean> {
