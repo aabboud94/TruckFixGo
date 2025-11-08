@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import AdminLayout from "@/layouts/AdminLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,11 +32,19 @@ export default function AdminSettings() {
     scheduledAvailable: true,
     categories: [] as string[]
   });
+  const [featureStates, setFeatureStates] = useState<Record<string, boolean>>({});
 
   // Query for current settings
   const { data: settings, isLoading } = useQuery({
     queryKey: ['/api/admin/settings'],
   });
+
+  // Initialize feature states when settings are loaded
+  useEffect(() => {
+    if (settings?.features && Object.keys(featureStates).length === 0) {
+      setFeatureStates(settings.features);
+    }
+  }, [settings]);
 
   // Mutation for saving settings
   const saveMutation = useMutation({
@@ -948,7 +956,13 @@ export default function AdminSettings() {
                     </div>
                     <Switch
                       id={key}
-                      defaultChecked={enabled as boolean}
+                      checked={featureStates[key] ?? enabled}
+                      onCheckedChange={(checked) => {
+                        setFeatureStates(prev => ({
+                          ...prev,
+                          [key]: checked
+                        }));
+                      }}
                       data-testid={`switch-${key}`}
                     />
                   </div>
@@ -956,7 +970,7 @@ export default function AdminSettings() {
               </div>
               <div className="flex justify-end mt-6">
                 <Button 
-                  onClick={() => handleSaveSettings('features', currentSettings.features)}
+                  onClick={() => handleSaveSettings('features', featureStates)}
                   disabled={saveMutation.isPending}
                   data-testid="button-save-features"
                 >
