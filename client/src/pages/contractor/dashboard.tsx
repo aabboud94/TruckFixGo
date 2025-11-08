@@ -44,7 +44,8 @@ import {
   Target,
   ArrowUp,
   ArrowDown,
-  Sparkles
+  Sparkles,
+  Upload
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -911,7 +912,7 @@ export default function ContractorDashboard() {
         </Tabs>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Button 
             variant="outline" 
             className="h-auto py-4"
@@ -932,6 +933,17 @@ export default function ContractorDashboard() {
             <div className="flex flex-col items-center gap-2">
               <DollarSign className="w-5 h-5" />
               <span>View Earnings</span>
+            </div>
+          </Button>
+          <Button 
+            variant="outline" 
+            className="h-auto py-4"
+            onClick={() => navigate("/contractor/documents")}
+            data-testid="button-documents"
+          >
+            <div className="flex flex-col items-center gap-2">
+              <Upload className="w-5 h-5" />
+              <span>Documents</span>
             </div>
           </Button>
           <Button 
