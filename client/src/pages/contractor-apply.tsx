@@ -54,8 +54,7 @@ const FORM_STEPS = [
   { id: 2, title: "Business Details", icon: Building, description: "Company information" },
   { id: 3, title: "Experience", icon: Briefcase, description: "Qualifications and skills" },
   { id: 4, title: "Service Capabilities", icon: Wrench, description: "Services you can provide" },
-  { id: 5, title: "Document Upload", icon: Upload, description: "Required documents" },
-  { id: 6, title: "Terms & Submit", icon: FileCheck, description: "Review and accept" }
+  { id: 5, title: "Terms & Submit", icon: FileCheck, description: "Review and accept" }
 ];
 
 // Document types configuration
@@ -123,14 +122,6 @@ const serviceCapabilitiesSchema = z.object({
   }).optional()
 });
 
-const documentsSchema = z.object({
-  documents: z.array(z.object({
-    type: z.string(),
-    file: z.instanceof(File),
-    expirationDate: z.string().optional()
-  })).min(6, "All required documents must be uploaded")
-});
-
 const termsSchema = z.object({
   backgroundCheckConsent: z.boolean().refine(val => val === true, "Background check consent is required"),
   termsAccepted: z.boolean().refine(val => val === true, "You must accept the terms and conditions"),
@@ -154,7 +145,6 @@ export default function ContractorApply() {
     backgroundCheckConsent: false,
     termsAccepted: false
   });
-  const [uploadedDocuments, setUploadedDocuments] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [applicationId, setApplicationId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -208,8 +198,7 @@ export default function ContractorApply() {
       case 2: return businessDetailsSchema;
       case 3: return experienceSchema;
       case 4: return serviceCapabilitiesSchema;
-      case 5: return documentsSchema;
-      case 6: return termsSchema;
+      case 5: return termsSchema;
       default: return z.object({});
     }
   };
@@ -239,7 +228,7 @@ export default function ContractorApply() {
       // Save draft on each step completion
       saveDraftMutation.mutate(newFormData);
       
-      if (currentStep < 6) {
+      if (currentStep < 5) {
         setCurrentStep(currentStep + 1);
         form.reset(newFormData);
       } else {
@@ -259,7 +248,7 @@ export default function ContractorApply() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      await submitApplicationMutation.mutateAsync({ ...formData, uploadedDocuments });
+      await submitApplicationMutation.mutateAsync(formData);
     } catch (error) {
       toast({
         title: "Error",
@@ -269,28 +258,6 @@ export default function ContractorApply() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleDocumentUpload = (type: string, file: File, expirationDate?: string) => {
-    const newDoc = { type, file, expirationDate, uploadedAt: new Date() };
-    const updatedDocs = [...uploadedDocuments, newDoc];
-    setUploadedDocuments(updatedDocs);
-    
-    // Also set the form value so validation passes
-    form.setValue('documents', updatedDocs);
-    
-    toast({
-      title: "Document uploaded",
-      description: `${file.name} has been uploaded successfully.`
-    });
-  };
-
-  const removeDocument = (index: number) => {
-    const updatedDocs = uploadedDocuments.filter((_, i) => i !== index);
-    setUploadedDocuments(updatedDocs);
-    
-    // Also update the form value
-    form.setValue('documents', updatedDocs);
   };
 
   const renderStepContent = () => {
@@ -857,126 +824,6 @@ export default function ContractorApply() {
         return (
           <div className="space-y-6">
             <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                All documents must be clear, legible, and in PDF, JPG, or PNG format.
-                Maximum file size is 5MB per document.
-              </AlertDescription>
-            </Alert>
-
-            <div className="space-y-4">
-              <h3 className="font-semibold">Required Documents</h3>
-              {REQUIRED_DOCUMENTS.map((doc) => (
-                <div key={doc.type} className="border rounded-lg p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <label className="font-medium">{doc.label}</label>
-                      <p className="text-sm text-muted-foreground">
-                        Accepted formats: {doc.accept}
-                      </p>
-                      <input
-                        type="file"
-                        accept={doc.accept}
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            handleDocumentUpload(doc.type, e.target.files[0]);
-                          }
-                        }}
-                        className="mt-2"
-                        data-testid={`file-input-${doc.type}`}
-                      />
-                    </div>
-                    {uploadedDocuments.some(d => d.type === doc.type) && (
-                      <Badge className="ml-4">
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Uploaded
-                      </Badge>
-                    )}
-                  </div>
-                  
-                  {doc.type === "cdl" || doc.type === "dot_medical" ? (
-                    <div className="mt-3">
-                      <label className="text-sm">Expiration Date</label>
-                      <Input 
-                        type="date" 
-                        className="w-48 mt-1"
-                        onChange={(e) => {
-                          const existingDoc = uploadedDocuments.find(d => d.type === doc.type);
-                          if (existingDoc) {
-                            existingDoc.expirationDate = e.target.value;
-                            setUploadedDocuments([...uploadedDocuments]);
-                          }
-                        }}
-                        data-testid={`date-expiry-${doc.type}`}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-
-            <div className="space-y-4">
-              <h3 className="font-semibold">Optional Documents</h3>
-              {OPTIONAL_DOCUMENTS.map((doc) => (
-                <div key={doc.type} className="border rounded-lg p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <label className="font-medium">{doc.label}</label>
-                      <p className="text-sm text-muted-foreground">
-                        Accepted formats: {doc.accept}
-                      </p>
-                      <input
-                        type="file"
-                        accept={doc.accept}
-                        multiple={doc.type === "portfolio_photo"}
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            handleDocumentUpload(doc.type, e.target.files[0]);
-                          }
-                        }}
-                        className="mt-2"
-                        data-testid={`file-input-optional-${doc.type}`}
-                      />
-                    </div>
-                    {uploadedDocuments.some(d => d.type === doc.type) && (
-                      <Badge variant="secondary">
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Uploaded
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {uploadedDocuments.length > 0 && (
-              <div className="space-y-2">
-                <h3 className="font-semibold">Uploaded Documents</h3>
-                <div className="space-y-2">
-                  {uploadedDocuments.map((doc, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
-                      <span className="text-sm">{doc.file.name}</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeDocument(index)}
-                        data-testid={`button-remove-doc-${index}`}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        );
-
-      case 6:
-        return (
-          <div className="space-y-6">
-            <Alert>
               <Shield className="h-4 w-4" />
               <AlertDescription>
                 Please review all information carefully before submitting your application.
@@ -1210,7 +1057,7 @@ export default function ContractorApply() {
               disabled={isSubmitting}
               data-testid="button-next"
             >
-              {currentStep === 6 ? (
+              {currentStep === 5 ? (
                 isSubmitting ? (
                   <>Submitting...</>
                 ) : (
