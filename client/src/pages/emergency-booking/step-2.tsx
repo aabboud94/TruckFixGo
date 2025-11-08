@@ -154,6 +154,24 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
     return "other";
   };
 
+  // Helper function to map issue to service type ID
+  const mapIssueToServiceType = (issueId: string): string => {
+    switch(issueId) {
+      case "flat_tire":
+        return "flat-tire";
+      case "out_of_fuel":
+        return "fuel-delivery";
+      case "engine_wont_start":
+      case "electrical":
+        return "jump-start";
+      case "overheating":
+      case "brakes_issue":
+      case "other":
+      default:
+        return "emergency-repair";
+    }
+  };
+
   const handleIssueSelect = (issueId: string) => {
     setSelectedIssue(issueId);
     form.setValue("issue", issueId);
@@ -244,26 +262,24 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
       }
     }
 
-    // Prepare job data
+    // Prepare job data with correct structure
     const jobData = {
       guestPhone: bookingData.phone,
       guestEmail: bookingData.email,
-      jobType: "emergency" as const,
-      serviceTypeId: "emergency-repair", // This would be mapped to actual service type ID
+      jobType: "emergency",
+      serviceTypeId: mapIssueToServiceType(values.issue),
       location: bookingData.location || {
         lat: 0,
-        lng: 0,
-        address: bookingData.manualLocation
+        lng: 0
       },
-      locationAddress: bookingData.manualLocation || bookingData.location?.address || "",
+      locationAddress: bookingData.manualLocation || bookingData.location?.address || "Location provided",
       description: issueText,
-      unitNumber: values.unitNumber,
-      carrierName: values.carrierName,
-      vehicleMake: "Unknown", // Could be enhanced with more fields
-      vehicleModel: "Truck",
+      unitNumber: values.unitNumber || undefined,
+      carrierName: values.carrierName || undefined,
+      vehicleMake: "Unknown",
+      vehicleModel: "Semi Truck",
       urgencyLevel: 5, // Max urgency for emergency
-      vehicleLocation: bookingData.location,
-      photoUrl: photoUrl,
+      photoUrl: photoUrl || undefined,
     };
 
     submitJobMutation.mutate(jobData);
