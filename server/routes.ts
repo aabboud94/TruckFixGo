@@ -971,14 +971,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 isSchedulable: req.body.isSchedulable ?? req.body.scheduledAvailable,
               });
               
-              // Update pricing for the service type
+              // Update or create pricing for the service type
               const currentPricing = await storage.getCurrentPricing(serviceId);
+              const newBasePrice = String(req.body.basePrice || req.body.base || 0);
+              const newPerHourRate = req.body.perHourRate || req.body.perHour ? String(req.body.perHourRate || req.body.perHour) : undefined;
+              const newPerMileRate = req.body.perMileRate || req.body.perMile ? String(req.body.perMileRate || req.body.perMile) : undefined;
+              
               if (currentPricing) {
+                // Update existing pricing
                 await storage.updateServicePricing(currentPricing.id, {
-                  basePrice: String(req.body.basePrice || req.body.base || 0),
-                  perHourRate: req.body.perHourRate || req.body.perHour ? String(req.body.perHourRate || req.body.perHour) : undefined,
-                  perMileRate: req.body.perMileRate || req.body.perMile ? String(req.body.perMileRate || req.body.perMile) : undefined,
+                  basePrice: newBasePrice,
+                  perHourRate: newPerHourRate,
+                  perMileRate: newPerMileRate,
                 });
+                console.log(`Updated pricing for ${serviceId}: basePrice=${newBasePrice}`);
+              } else {
+                // Create new pricing if it doesn't exist
+                await storage.createServicePricing({
+                  serviceTypeId: serviceId,
+                  basePrice: newBasePrice,
+                  perHourRate: newPerHourRate,
+                  perMileRate: newPerMileRate,
+                  emergencySurcharge: "50",
+                  weekendSurcharge: "25",
+                  nightSurcharge: "35",
+                  effectiveDate: new Date()
+                });
+                console.log(`Created pricing for ${serviceId}: basePrice=${newBasePrice}`);
               }
             }
             
