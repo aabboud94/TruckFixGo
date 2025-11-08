@@ -4753,6 +4753,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get service types with pricing for public pricing page
+  app.get('/api/public/services-with-pricing', async (req: Request, res: Response) => {
+    try {
+      const serviceTypes = await storage.getActiveServiceTypes();
+      const servicesWithPricing = await Promise.all(
+        serviceTypes.map(async (service) => {
+          const pricing = await storage.getCurrentPricing(service.id);
+          return {
+            ...service,
+            pricing: pricing || {
+              basePrice: "0",
+              perMileRate: "0",
+              perHourRate: "0",
+              emergencySurcharge: "0",
+              nightSurcharge: "0",
+              weekendSurcharge: "0"
+            }
+          };
+        })
+      );
+      res.json(servicesWithPricing);
+    } catch (error) {
+      console.error('Get services with pricing error:', error);
+      res.status(500).json({ message: 'Failed to get services with pricing' });
+    }
+  });
+
   // Get pricing for service
   app.get('/api/services/:id/pricing', async (req: Request, res: Response) => {
     try {
