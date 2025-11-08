@@ -26,6 +26,7 @@ import ContractorJobs from "@/pages/contractor/jobs";
 import ContractorEarnings from "@/pages/contractor/earnings";
 import ContractorPerformance from "@/pages/contractor/performance";
 import ContractorProfile from "@/pages/contractor/profile";
+import ContractorDocuments from "@/pages/contractor/documents";
 import ContractorActiveJob from "@/pages/contractor/active-job";
 import ContractorBidding from "@/pages/contractor/bidding";
 import ContractorJobAcceptance from "@/pages/contractor/job-acceptance";
@@ -111,6 +112,7 @@ function Router() {
       <Route path="/contractor/earnings" component={ContractorEarnings} />
       <Route path="/contractor/performance" component={ContractorPerformance} />
       <Route path="/contractor/profile" component={ContractorProfile} />
+      <Route path="/contractor/documents" component={ContractorDocuments} />
       <Route path="/contractor/active-job" component={ContractorActiveJob} />
       <Route path="/contractor/job/:jobId" component={ContractorJobAcceptance} />
       
