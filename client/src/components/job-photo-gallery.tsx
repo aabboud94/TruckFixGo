@@ -107,11 +107,18 @@ export default function JobPhotoGallery({
     formData.append('description', description);
 
     try {
-      await apiRequest('POST', `/api/jobs/${jobId}/upload-photos`, formData, {
-        headers: {
-          // Don't set Content-Type - let browser set it with boundary
-        }
+      // Use fetch directly for FormData instead of apiRequest
+      const res = await fetch(`/api/jobs/${jobId}/upload-photos`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+        // Don't set Content-Type - let browser set it with boundary
       });
+
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error || 'Upload failed');
+      }
 
       toast({
         title: "Photos uploaded",
