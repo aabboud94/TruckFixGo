@@ -11,7 +11,8 @@ import {
   AlertCircle, Shield, TrendingUp, Package, Phone
 } from "lucide-react";
 import { Link } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 export default function Pricing() {
   const [estimatedMiles, setEstimatedMiles] = useState([50]);
@@ -19,9 +20,20 @@ export default function Pricing() {
   const [isNightTime, setIsNightTime] = useState(false);
   const [isWeekend, setIsWeekend] = useState(false);
 
+  // Fetch service types with pricing from the API
+  const { data: servicesWithPricing, isLoading } = useQuery({
+    queryKey: ['/api/public/services-with-pricing'],
+  });
+
   // Calculate estimated price
   const calculateEstimate = () => {
-    let basePrice = isEmergency ? 150 : 100;
+    if (!servicesWithPricing?.length) return 0;
+    
+    // Find an emergency service to use as base
+    const emergencyService = servicesWithPricing.find(s => s.isEmergency);
+    if (!emergencyService || !emergencyService.pricing) return 0;
+    
+    let basePrice = parseFloat(emergencyService.pricing.basePrice) || 150;
     let distanceMultiplier = 1;
     
     if (estimatedMiles[0] > 100) distanceMultiplier = 2.0;
@@ -29,30 +41,33 @@ export default function Pricing() {
     else if (estimatedMiles[0] > 25) distanceMultiplier = 1.2;
     
     let surcharges = 0;
-    if (isEmergency) surcharges += basePrice * 0.25; // 25% emergency surcharge
-    if (isNightTime) surcharges += basePrice * 0.15; // 15% night surcharge
-    if (isWeekend) surcharges += basePrice * 0.10; // 10% weekend surcharge
+    if (isEmergency && emergencyService.pricing.emergencySurcharge) {
+      surcharges += parseFloat(emergencyService.pricing.emergencySurcharge);
+    }
+    if (isNightTime && emergencyService.pricing.nightSurcharge) {
+      surcharges += parseFloat(emergencyService.pricing.nightSurcharge);
+    }
+    if (isWeekend && emergencyService.pricing.weekendSurcharge) {
+      surcharges += parseFloat(emergencyService.pricing.weekendSurcharge);
+    }
     
     return Math.round((basePrice * distanceMultiplier) + surcharges);
   };
 
-  const emergencyPricing = [
-    { service: "Roadside Repair", base: "$150", perHour: "$125/hr", response: "45-60 min" },
-    { service: "Tire Service", base: "$175", perTire: "$150/tire", response: "30-45 min" },
-    { service: "Battery Service", base: "$125", perUnit: "$100-200/battery", response: "30-45 min" },
-    { service: "Fuel Delivery", base: "$100", perGallon: "$4-5/gal", response: "45-60 min" },
-    { service: "Towing Service", base: "$250", perMile: "$5-10/mile", response: "60-90 min" },
-    { service: "Mobile Welding", base: "$200", perHour: "$150/hr", response: "60-90 min" }
-  ];
+  // Generate pricing tables from API data
+  const emergencyPricing = servicesWithPricing?.filter(s => s.isEmergency).map(service => ({
+    service: service.name,
+    base: `$${parseFloat(service.pricing?.basePrice || 0).toFixed(0)}`,
+    perHour: service.pricing?.perHourRate ? `$${parseFloat(service.pricing.perHourRate).toFixed(0)}/hr` : "Contact for quote",
+    response: service.estimatedDuration ? `${service.estimatedDuration} min` : "45-60 min"
+  })) || [];
 
-  const scheduledPricing = [
-    { service: "PM Service", base: "$200", duration: "2-3 hours", frequency: "Every 10,000 miles" },
-    { service: "DOT Inspection", base: "$150", duration: "1-2 hours", frequency: "Annual" },
-    { service: "Oil Change", base: "$125", duration: "30-45 min", frequency: "Every 15,000 miles" },
-    { service: "Brake Service", base: "$250", duration: "2-4 hours", frequency: "As needed" },
-    { service: "Truck Wash", base: "$75", duration: "30-60 min", frequency: "Weekly/Monthly" },
-    { service: "HVAC Service", base: "$125", duration: "1-2 hours", frequency: "Seasonal" }
-  ];
+  const scheduledPricing = servicesWithPricing?.filter(s => s.isSchedulable && !s.isEmergency).map(service => ({
+    service: service.name,
+    base: `$${parseFloat(service.pricing?.basePrice || 0).toFixed(0)}`,
+    duration: service.estimatedDuration ? `${Math.floor(service.estimatedDuration / 60)} hours` : "2-3 hours",
+    frequency: service.description || "As needed"
+  })) || [];
 
   const fleetPlans = [
     {
