@@ -95,12 +95,6 @@ function Router() {
       {/* Payment Pages */}
       <Route path="/payment-methods" component={PaymentMethodsPage} />
       
-      {/* Bidding Pages */}
-      <Route path="/bidding" component={BiddingJobsPage} />
-      
-      {/* Jobs Dashboard */}
-      <Route path="/jobs" component={JobsDashboard} />
-      
       {/* Contractor Pages */}
       <Route path="/contractor/auth" component={ContractorAuth} />
       <Route path="/contractor/apply" component={ContractorApply} />
