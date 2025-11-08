@@ -85,20 +85,51 @@ export default function ContractorActiveJob() {
   // Update job status mutation
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
+      // Safety check: Ensure job and job.id exist
+      if (!job || !job.id) {
+        console.error('Cannot update status: Job or Job ID is missing', { 
+          job, 
+          jobId: job?.id,
+          status 
+        });
+        throw new Error('Job information is not available. Please refresh the page.');
+      }
+      
+      console.log('Updating job status:', { 
+        jobId: job.id, 
+        newStatus: status,
+        currentStatus: job.status 
+      });
+      
       return await apiRequest("PATCH", `/api/jobs/${job.id}/status`, { status });
     },
     onSuccess: (data, status) => {
+      console.log('Job status updated successfully:', { data, status });
       toast({
         title: "Status Updated",
-        description: `Job status changed to ${status}`
+        description: `Job status changed to ${status.replace('_', ' ')}`
       });
       queryClient.invalidateQueries({ queryKey: ["/api/contractor/active-job"] });
       sendStatusUpdate(status);
     },
-    onError: () => {
+    onError: (error: any) => {
+      // Log detailed error for debugging
+      console.error('Failed to update job status:', {
+        error: error.message || error,
+        response: error.response,
+        data: error.response?.data,
+        status: error.response?.status,
+        jobId: job?.id,
+        attemptedStatus: error.config?.data
+      });
+      
+      const errorMessage = error.response?.data?.message || 
+                          error.message || 
+                          "Failed to update job status. Please check your connection and try again.";
+      
       toast({
-        title: "Error",
-        description: "Failed to update job status",
+        title: "Status Update Failed",
+        description: errorMessage,
         variant: "destructive"
       });
     }
@@ -107,22 +138,54 @@ export default function ContractorActiveJob() {
   // Complete job mutation
   const completeJobMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("POST", `/api/jobs/${job.id}/complete`, {
+      // Safety check: Ensure job and job.id exist
+      if (!job || !job.id) {
+        console.error('Cannot complete job: Job or Job ID is missing', { 
+          job,
+          jobId: job?.id 
+        });
+        throw new Error('Job information is not available. Please refresh the page.');
+      }
+      
+      console.log('Completing job:', { 
+        jobId: job.id,
         completionNotes,
-        photos: selectedPhotos.map(f => f.name) // In real app, would upload first
+        photosCount: selectedPhotos.length
+      });
+      
+      // Note: The server expects 'completionNotes' and 'finalPhotos'
+      return await apiRequest("POST", `/api/jobs/${job.id}/complete`, {
+        completionNotes: completionNotes || '',
+        finalPhotos: selectedPhotos.map(f => f.name) // In real app, would upload first
       });
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('Job completed successfully:', { data });
       toast({
         title: "Job Completed",
         description: "Great work! The job has been marked as complete."
       });
       navigate("/contractor/dashboard");
     },
-    onError: () => {
+    onError: (error: any) => {
+      // Log detailed error for debugging
+      console.error('Failed to complete job:', {
+        error: error.message || error,
+        response: error.response,
+        data: error.response?.data,
+        status: error.response?.status,
+        jobId: job?.id,
+        completionNotes,
+        photosCount: selectedPhotos.length
+      });
+      
+      const errorMessage = error.response?.data?.message || 
+                          error.message || 
+                          "Failed to complete job. Please ensure all required fields are filled.";
+      
       toast({
-        title: "Error",
-        description: "Failed to complete job",
+        title: "Job Completion Failed",
+        description: errorMessage,
         variant: "destructive"
       });
     }
@@ -131,13 +194,28 @@ export default function ContractorActiveJob() {
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async (message: string) => {
+      // Safety check: Ensure job and job.id exist
+      if (!job || !job.id) {
+        console.error('Cannot send message: Job or Job ID is missing', { 
+          job,
+          jobId: job?.id 
+        });
+        throw new Error('Job information is not available. Please refresh the page.');
+      }
+      
       return await apiRequest("POST", `/api/jobs/${job.id}/messages`, { message });
     },
     onSuccess: () => {
       setMessageText("");
       queryClient.invalidateQueries({ queryKey: ["/api/contractor/active-job"] });
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error('Failed to send message:', {
+        error: error.message || error,
+        response: error.response,
+        jobId: job?.id
+      });
+      
       toast({
         title: "Error",
         description: "Failed to send message",
@@ -489,12 +567,32 @@ export default function ContractorActiveJob() {
             <CardContent className="p-4">
               <Button
                 className="w-full h-14 text-lg"
-                onClick={() => updateStatusMutation.mutate("en_route")}
-                disabled={updateStatusMutation.isPending}
+                onClick={() => {
+                  if (!job || !job.id) {
+                    console.error('Cannot update status: Job not loaded');
+                    toast({
+                      title: "Error",
+                      description: "Job information not available. Please refresh the page.",
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+                  updateStatusMutation.mutate("en_route");
+                }}
+                disabled={updateStatusMutation.isPending || !job?.id}
                 data-testid="button-start-route"
               >
-                <Navigation className="w-5 h-5 mr-2" />
-                Start Route
+                {updateStatusMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <Navigation className="w-5 h-5 mr-2" />
+                    Start Route
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
@@ -506,12 +604,32 @@ export default function ContractorActiveJob() {
               <Button
                 className="w-full h-14 text-lg"
                 variant="destructive"
-                onClick={() => updateStatusMutation.mutate("on_site")}
-                disabled={updateStatusMutation.isPending}
+                onClick={() => {
+                  if (!job || !job.id) {
+                    console.error('Cannot update status: Job not loaded');
+                    toast({
+                      title: "Error",
+                      description: "Job information not available. Please refresh the page.",
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+                  updateStatusMutation.mutate("on_site");
+                }}
+                disabled={updateStatusMutation.isPending || !job?.id}
                 data-testid="button-arrived"
               >
-                <MapPin className="w-5 h-5 mr-2" />
-                I've Arrived
+                {updateStatusMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <MapPin className="w-5 h-5 mr-2" />
+                    I've Arrived
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
@@ -551,12 +669,40 @@ export default function ContractorActiveJob() {
 
                   <Button
                     className="w-full h-14 text-lg"
-                    onClick={() => completeJobMutation.mutate()}
-                    disabled={completeJobMutation.isPending || !completionNotes}
+                    onClick={() => {
+                      if (!job || !job.id) {
+                        console.error('Cannot complete job: Job not loaded');
+                        toast({
+                          title: "Error",
+                          description: "Job information not available. Please refresh the page.",
+                          variant: "destructive"
+                        });
+                        return;
+                      }
+                      if (!completionNotes || completionNotes.trim() === '') {
+                        toast({
+                          title: "Required Field",
+                          description: "Please add completion notes before marking the job as complete.",
+                          variant: "destructive"
+                        });
+                        return;
+                      }
+                      completeJobMutation.mutate();
+                    }}
+                    disabled={completeJobMutation.isPending || !completionNotes || !job?.id}
                     data-testid="button-complete-job"
                   >
-                    <CheckCircle className="w-5 h-5 mr-2" />
-                    Mark as Complete
+                    {completeJobMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Completing...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        Mark as Complete
+                      </>
+                    )}
                   </Button>
                 </CardContent>
               </Card>
