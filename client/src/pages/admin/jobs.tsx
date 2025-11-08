@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import AdminLayout from "@/layouts/AdminLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
@@ -19,7 +21,7 @@ import JobPhotoGallery from "@/components/job-photo-gallery";
 import {
   Search, Filter, Download, RefreshCw, MapPin, Clock, DollarSign,
   User, Truck, AlertCircle, CheckCircle, XCircle, Edit, Eye,
-  MessageSquare, Camera, Ban, CreditCard, Loader2
+  MessageSquare, Camera, Ban, CreditCard, Loader2, Save, ChevronDown
 } from "lucide-react";
 
 export default function AdminJobs() {
@@ -31,6 +33,10 @@ export default function AdminJobs() {
   const [showJobDetails, setShowJobDetails] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showRefundDialog, setShowRefundDialog] = useState(false);
+  
+  // State for editable job details
+  const [editedJob, setEditedJob] = useState<any>(null);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
 
   // Query for jobs
   const { data: jobs, isLoading, refetch } = useQuery({
@@ -49,6 +55,12 @@ export default function AdminJobs() {
     queryKey: ['/api/admin/contractors/available'],
     queryFn: async () => apiRequest('GET', '/api/admin/contractors/available'),
     enabled: showAssignDialog,
+  });
+  
+  // Query for service types
+  const { data: serviceTypes } = useQuery({
+    queryKey: ['/api/service-types'],
+    queryFn: async () => apiRequest('GET', '/api/service-types'),
   });
 
   // Mutation for updating job status
@@ -94,9 +106,64 @@ export default function AdminJobs() {
       });
     },
   });
+  
+  // Mutation for updating job details
+  const updateJobMutation = useMutation({
+    mutationFn: async ({ jobId, updates }: { jobId: string; updates: any }) => {
+      return apiRequest('PUT', `/api/admin/jobs/${jobId}`, updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/jobs'] });
+      toast({
+        title: "Job updated",
+        description: "Job details have been updated successfully",
+      });
+      setSelectedJob(editedJob); // Update selected job with edited values
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Update failed",
+        description: "Failed to update job details",
+      });
+    },
+  });
 
   // Use real data from API response
   const jobsData = Array.isArray(jobs) ? jobs : (jobs?.jobs ?? []);
+  
+  // Initialize edited job when selected job changes
+  useEffect(() => {
+    if (selectedJob) {
+      setEditedJob({ ...selectedJob });
+      // Initialize selected services from the job's service field
+      if (selectedJob.service) {
+        setSelectedServices(Array.isArray(selectedJob.service) ? selectedJob.service : [selectedJob.service]);
+      } else {
+        setSelectedServices([]);
+      }
+    }
+  }, [selectedJob]);
+  
+  // Handle save job changes
+  const handleSaveChanges = () => {
+    if (!editedJob) return;
+    
+    updateJobMutation.mutate({
+      jobId: editedJob.id,
+      updates: {
+        customerName: editedJob.customerName || editedJob.customer?.name,
+        customerPhone: editedJob.customerPhone || editedJob.customer?.phone,
+        location: editedJob.location,
+        locationAddress: editedJob.locationAddress,
+        vin: editedJob.vin || editedJob.vehicle?.vin,
+        unitNumber: editedJob.unitNumber || editedJob.vehicle?.unit,
+        price: parseFloat(editedJob.price),
+        service: selectedServices.join(', '), // Join services for now
+        status: editedJob.status,
+      }
+    });
+  };
 
   // Removed mock data - now using real API data
   /*
@@ -399,13 +466,13 @@ export default function AdminJobs() {
       <Dialog open={showJobDetails} onOpenChange={setShowJobDetails}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Job Details - {selectedJob?.id}</DialogTitle>
+            <DialogTitle>Job Details - {editedJob?.id}</DialogTitle>
             <DialogDescription>
               Complete job information and management options
             </DialogDescription>
           </DialogHeader>
           
-          {selectedJob && (
+          {editedJob && (
             <Tabs defaultValue="details" className="mt-4">
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="details">Details</TabsTrigger>
@@ -419,18 +486,15 @@ export default function AdminJobs() {
                   <div className="space-y-2">
                     <Label>Status</Label>
                     <Select
-                      value={selectedJob.status}
+                      value={editedJob.status}
                       onValueChange={(value) => {
-                        updateStatusMutation.mutate({
-                          jobId: selectedJob.id,
-                          status: value,
-                        });
+                        setEditedJob({ ...editedJob, status: value });
                       }}
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="z-[100]" style={{ zIndex: 100 }}>
                         <SelectItem value="new">New</SelectItem>
                         <SelectItem value="assigned">Assigned</SelectItem>
                         <SelectItem value="en_route">En Route</SelectItem>
@@ -442,76 +506,171 @@ export default function AdminJobs() {
                   </div>
                   
                   <div className="space-y-2">
-                    <Label>Service Type</Label>
-                    <Input value={selectedJob.service} readOnly />
+                    <Label>Service Types</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className="truncate">
+                            {selectedServices.length > 0
+                              ? `${selectedServices.length} selected`
+                              : "Select services"}
+                          </span>
+                          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-full p-0 z-[110]" align="start" style={{ zIndex: 110 }}>
+                        <ScrollArea className="h-[200px]">
+                          <div className="p-2 space-y-1">
+                            {serviceTypes && serviceTypes.map((service: any) => (
+                              <div 
+                                key={service.id} 
+                                className="flex items-center space-x-2 p-2 hover:bg-muted rounded-md cursor-pointer"
+                                onClick={() => {
+                                  if (selectedServices.includes(service.name)) {
+                                    setSelectedServices(selectedServices.filter(s => s !== service.name));
+                                  } else {
+                                    setSelectedServices([...selectedServices, service.name]);
+                                  }
+                                }}
+                              >
+                                <Checkbox 
+                                  checked={selectedServices.includes(service.name)}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setSelectedServices([...selectedServices, service.name]);
+                                    } else {
+                                      setSelectedServices(selectedServices.filter(s => s !== service.name));
+                                    }
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">
+                                  {service.name}
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </PopoverContent>
+                    </Popover>
+                    {selectedServices.length > 0 && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Selected: {selectedServices.join(', ')}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">
                     <Label>Customer Name</Label>
-                    <Input value={selectedJob.customer?.name || selectedJob.customerName || 'Guest'} readOnly />
+                    <Input 
+                      value={editedJob.customerName || editedJob.customer?.name || ''} 
+                      onChange={(e) => setEditedJob({ ...editedJob, customerName: e.target.value })}
+                      placeholder="Enter customer name"
+                    />
                   </div>
 
                   <div className="space-y-2">
                     <Label>Customer Phone</Label>
-                    <Input value={selectedJob.customer?.phone || selectedJob.customerPhone || 'N/A'} readOnly />
+                    <Input 
+                      value={editedJob.customerPhone || editedJob.customer?.phone || ''} 
+                      onChange={(e) => setEditedJob({ ...editedJob, customerPhone: e.target.value })}
+                      placeholder="Enter customer phone"
+                    />
                   </div>
 
                   <div className="space-y-2">
                     <Label>Location</Label>
                     <Textarea 
                       value={
-                        typeof selectedJob.location === 'object' && selectedJob.location 
-                          ? selectedJob.locationAddress || `Lat: ${selectedJob.location.lat?.toFixed(4)}, Lng: ${selectedJob.location.lng?.toFixed(4)}`
-                          : selectedJob.location || 'Unknown'
+                        typeof editedJob.location === 'object' && editedJob.location 
+                          ? editedJob.locationAddress || `Lat: ${editedJob.location.lat?.toFixed(4)}, Lng: ${editedJob.location.lng?.toFixed(4)}`
+                          : editedJob.locationAddress || editedJob.location || ''
                       } 
-                      readOnly 
+                      onChange={(e) => setEditedJob({ ...editedJob, locationAddress: e.target.value })}
                       className="resize-none" 
+                      placeholder="Enter location address"
                     />
                   </div>
 
                   <div className="space-y-2">
                     <Label>Vehicle Info</Label>
-                    <Input value={`VIN: ${selectedJob.vehicle?.vin || selectedJob.vin || 'N/A'}`} readOnly />
-                    <Input value={`Unit: ${selectedJob.vehicle?.unit || selectedJob.unitNumber || 'N/A'}`} readOnly />
+                    <Input 
+                      value={editedJob.vin || editedJob.vehicle?.vin || ''} 
+                      onChange={(e) => setEditedJob({ ...editedJob, vin: e.target.value })}
+                      placeholder="VIN Number"
+                    />
+                    <Input 
+                      value={editedJob.unitNumber || editedJob.vehicle?.unit || ''} 
+                      onChange={(e) => setEditedJob({ ...editedJob, unitNumber: e.target.value })}
+                      placeholder="Unit Number"
+                    />
                   </div>
 
                   <div className="space-y-2">
                     <Label>Price</Label>
-                    <Input value={`$${selectedJob.price}`} readOnly />
+                    <Input 
+                      type="number"
+                      step="0.01"
+                      value={editedJob.price || 0} 
+                      onChange={(e) => setEditedJob({ ...editedJob, price: parseFloat(e.target.value) || 0 })}
+                      placeholder="0.00"
+                    />
                   </div>
 
                   <div className="space-y-2">
                     <Label>Created At</Label>
-                    <Input value={format(selectedJob.createdAt, 'PPpp')} readOnly />
+                    <Input value={format(editedJob.createdAt, 'PPpp')} readOnly />
                   </div>
                 </div>
 
-                <div className="flex gap-2 pt-4">
+                <div className="flex gap-2 pt-4 justify-between">
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowAssignDialog(true)}
+                      data-testid="button-reassign"
+                    >
+                      Reassign Contractor
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowRefundDialog(true)}
+                      data-testid="button-refund"
+                    >
+                      Process Refund
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => {
+                        updateStatusMutation.mutate({
+                          jobId: editedJob.id,
+                          status: 'cancelled',
+                        });
+                      }}
+                      data-testid="button-cancel-job"
+                    >
+                      Cancel Job
+                    </Button>
+                  </div>
                   <Button
-                    variant="outline"
-                    onClick={() => setShowAssignDialog(true)}
-                    data-testid="button-reassign"
+                    onClick={handleSaveChanges}
+                    disabled={updateJobMutation.isPending}
+                    data-testid="button-save-changes"
                   >
-                    Reassign Contractor
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowRefundDialog(true)}
-                    data-testid="button-refund"
-                  >
-                    Process Refund
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    onClick={() => {
-                      updateStatusMutation.mutate({
-                        jobId: selectedJob.id,
-                        status: 'cancelled',
-                      });
-                    }}
-                    data-testid="button-cancel-job"
-                  >
-                    Cancel Job
+                    {updateJobMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Changes
+                      </>
+                    )}
                   </Button>
                 </div>
               </TabsContent>
@@ -529,11 +688,11 @@ export default function AdminJobs() {
                       <div className="flex-1 pb-4">
                         <p className="font-medium">Job Created</p>
                         <p className="text-sm text-muted-foreground">
-                          {format(selectedJob.createdAt, 'PPpp')}
+                          {format(editedJob.createdAt, 'PPpp')}
                         </p>
                       </div>
                     </div>
-                    {selectedJob.startedAt && (
+                    {editedJob.startedAt && (
                       <div className="flex gap-4">
                         <div className="flex flex-col items-center">
                           <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
@@ -544,7 +703,7 @@ export default function AdminJobs() {
                         <div className="flex-1 pb-4">
                           <p className="font-medium">Job Started</p>
                           <p className="text-sm text-muted-foreground">
-                            {format(selectedJob.startedAt, 'PPpp')}
+                            {format(editedJob.startedAt, 'PPpp')}
                           </p>
                         </div>
                       </div>
@@ -560,7 +719,7 @@ export default function AdminJobs() {
               </TabsContent>
 
               <TabsContent value="photos">
-                <JobPhotoGalleryContent jobId={selectedJob?.id || ''} />
+                <JobPhotoGalleryContent jobId={editedJob?.id || ''} />
               </TabsContent>
             </Tabs>
           )}

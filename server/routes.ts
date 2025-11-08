@@ -6543,6 +6543,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Update job details (admin)
+  app.put('/api/admin/jobs/:id',
+    requireAuth,
+    requireRole('admin', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        const updates = req.body;
+
+        // Get existing job first
+        const existingJob = await storage.getJob(jobId);
+        if (!existingJob) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        // Prepare update data
+        const jobUpdates: any = {};
+        
+        if (updates.customerName !== undefined) jobUpdates.customerName = updates.customerName;
+        if (updates.customerPhone !== undefined) jobUpdates.customerPhone = updates.customerPhone;
+        if (updates.location !== undefined) jobUpdates.location = updates.location;
+        if (updates.locationAddress !== undefined) jobUpdates.locationAddress = updates.locationAddress;
+        if (updates.vin !== undefined) jobUpdates.vin = updates.vin;
+        if (updates.unitNumber !== undefined) jobUpdates.unitNumber = updates.unitNumber;
+        if (updates.price !== undefined) jobUpdates.price = updates.price;
+        if (updates.service !== undefined) jobUpdates.service = updates.service;
+        if (updates.status !== undefined) {
+          // Update status using proper status update method to track timestamps
+          await storage.updateJobStatus(jobId, updates.status, req.session.userId, 'Admin update');
+          delete updates.status; // Remove from jobUpdates since it's handled separately
+        }
+
+        // Update the job with other fields
+        const updatedJob = await storage.updateJob(jobId, jobUpdates);
+        
+        if (!updatedJob) {
+          return res.status(500).json({ message: 'Failed to update job' });
+        }
+
+        res.json({
+          message: 'Job updated successfully',
+          job: updatedJob
+        });
+      } catch (error) {
+        console.error('Admin update job error:', error);
+        res.status(500).json({ message: 'Failed to update job details' });
+      }
+    }
+  );
+
   // ==================== PUBLIC ROUTES ====================
 
   // Get price estimate without login
