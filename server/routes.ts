@@ -7888,10 +7888,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           updateData.approvedAt = new Date();
           updateData.approvedBy = req.session.userId;
           
-          // Create contractor profile from approved application
           try {
+            // First check if user already exists
+            let user = await storage.getUserByEmail(application.email);
+            
+            // Create user account if it doesn't exist
+            if (!user) {
+              // Generate a temporary password - they will need to reset it
+              const tempPassword = await bcrypt.hash(`temp-${randomUUID()}`, 10);
+              
+              user = await storage.createUser({
+                email: application.email,
+                phone: application.phone,
+                role: 'contractor',
+                firstName: application.firstName,
+                lastName: application.lastName,
+                password: tempPassword,
+                isActive: true,
+                isGuest: false
+              });
+              
+              // TODO: Send email to contractor with login instructions and password reset link
+            }
+            
+            // Now create contractor profile linked to the user
             const contractorProfile = await storage.createContractorProfile({
-              userId: '', // This would be created after user registration
+              userId: user.id,
               firstName: application.firstName,
               lastName: application.lastName,
               phone: application.phone,
@@ -7907,8 +7929,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               specializations: application.specializations,
               certifications: application.certifications
             });
+            
+            console.log(`Created contractor account for ${application.email} with user ID: ${user.id}`);
           } catch (profileError) {
             console.error('Create contractor profile error:', profileError);
+            return res.status(500).json({ 
+              message: 'Failed to create contractor account. Please try again.' 
+            });
           }
         }
 
@@ -7927,6 +7954,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Update application status error:', error);
         res.status(500).json({ message: 'Failed to update status' });
+      }
+    }
+  );
+
+  // Admin: Approve application directly
+  app.post('/api/admin/applications/:id/approve',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const application = await storage.getContractorApplication(req.params.id);
+        
+        if (!application) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+
+        if (application.status === 'approved') {
+          return res.status(400).json({ message: 'Application is already approved' });
+        }
+
+        // First check if user already exists
+        let user = await storage.getUserByEmail(application.email);
+        
+        // Create user account if it doesn't exist
+        if (!user) {
+          // Generate a temporary password - they will need to reset it
+          const tempPassword = await bcrypt.hash(`temp-${randomUUID()}`, 10);
+          
+          user = await storage.createUser({
+            email: application.email,
+            phone: application.phone,
+            role: 'contractor',
+            firstName: application.firstName,
+            lastName: application.lastName,
+            password: tempPassword,
+            isActive: true,
+            isGuest: false
+          });
+          
+          console.log(`Created user account for contractor ${application.email} with ID: ${user.id}`);
+        } else {
+          // If user exists but is not a contractor, update their role
+          if (user.role !== 'contractor') {
+            await storage.updateUser(user.id, { role: 'contractor' });
+            console.log(`Updated user ${user.email} role to contractor`);
+          }
+        }
+        
+        // Check if contractor profile already exists
+        const existingProfile = await storage.getContractorProfile(user.id);
+        
+        if (!existingProfile) {
+          // Create contractor profile linked to the user
+          const contractorProfile = await storage.createContractorProfile({
+            userId: user.id,
+            firstName: application.firstName,
+            lastName: application.lastName,
+            phone: application.phone,
+            vehicleInfo: application.vehicleInfo || {},
+            serviceRadius: application.serviceRadius || 50,
+            availability: 'available',
+            rating: 0,
+            totalJobs: 0,
+            completedJobs: 0,
+            responseTime: 0,
+            avgResponseTime: 0,
+            verificationStatus: 'verified',
+            backgroundCheckStatus: 'passed',
+            insuranceStatus: 'active',
+            specializations: application.specializations || [],
+            certifications: application.certifications || [],
+            companyName: application.companyName || '',
+            isAvailable: true,
+            isFleetCapable: false,
+            performanceTier: 'bronze',
+            documentsVerified: true
+          });
+          
+          console.log(`Created contractor profile for ${application.email}`);
+        }
+        
+        // Update application status to approved
+        const updatedApplication = await storage.updateContractorApplication(
+          req.params.id,
+          {
+            status: 'approved',
+            approvedAt: new Date(),
+            approvedBy: req.session.userId,
+            updatedAt: new Date()
+          }
+        );
+
+        res.json({
+          message: 'Application approved successfully',
+          application: updatedApplication,
+          userId: user.id
+        });
+      } catch (error) {
+        console.error('Approve application error:', error);
+        res.status(500).json({ 
+          message: 'Failed to approve application',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
     }
   );

@@ -125,12 +125,19 @@ export default function AdminApplications() {
   // Mutation for updating application status
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status, notes, rejectionReason }: any) => {
+      // Use the dedicated approve endpoint for approvals
+      if (status === 'approved') {
+        return apiRequest('POST', `/api/admin/applications/${id}/approve`, {
+          notes
+        });
+      }
       return apiRequest('PUT', `/api/admin/applications/${id}/status`, {
         status, notes, rejectionReason
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/applications'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/contractors'] });
       toast({
         title: "Application updated",
         description: "The application status has been updated successfully."

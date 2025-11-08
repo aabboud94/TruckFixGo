@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import AdminLayout from "@/layouts/AdminLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,22 +26,17 @@ import {
 
 export default function AdminContractors() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [tierFilter, setTierFilter] = useState("all");
   const [selectedContractor, setSelectedContractor] = useState<any>(null);
   const [showContractorDetails, setShowContractorDetails] = useState(false);
-  const [showApprovalQueue, setShowApprovalQueue] = useState(false);
   const [selectedContractors, setSelectedContractors] = useState<string[]>([]);
 
   // Query for contractors
   const { data: contractors, isLoading, refetch } = useQuery({
     queryKey: ['/api/admin/contractors', { status: statusFilter, tier: tierFilter, search: searchQuery }],
-  });
-
-  // Query for pending approvals
-  const { data: pendingApprovals } = useQuery({
-    queryKey: ['/api/admin/contractors/pending'],
   });
 
   // Mutation for updating contractor status
@@ -95,57 +91,7 @@ export default function AdminContractors() {
     },
   });
 
-  const contractorsData = contractors?.data || [
-    {
-      id: "CTR-001",
-      name: "Mike Johnson",
-      email: "mike@contractor.com",
-      phone: "(555) 987-6543",
-      company: "Mike's Mobile Repair",
-      status: "active",
-      tier: "gold",
-      rating: 4.8,
-      totalJobs: 342,
-      completedJobs: 335,
-      avgResponseTime: 12,
-      totalEarnings: 45600,
-      currentBalance: 1250,
-      documentsVerified: true,
-      isAvailable: true,
-      joinedAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
-    },
-    {
-      id: "CTR-002",
-      name: "Sarah Williams",
-      email: "sarah@cleanteam.com",
-      phone: "(555) 123-7890",
-      company: "Clean Team Pro",
-      status: "pending",
-      tier: "silver",
-      rating: 4.5,
-      totalJobs: 128,
-      completedJobs: 125,
-      avgResponseTime: 15,
-      totalEarnings: 18500,
-      currentBalance: 750,
-      documentsVerified: false,
-      isAvailable: true,
-      joinedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
-    },
-  ];
-
-  const pendingData = pendingApprovals?.data || [
-    {
-      id: "CTR-003",
-      name: "John Davis",
-      email: "john@newcontractor.com",
-      phone: "(555) 555-1234",
-      company: "Davis Truck Services",
-      documentsSubmitted: 3,
-      documentsRequired: 4,
-      submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-    },
-  ];
+  const contractorsData = contractors?.data || [];
 
   const getTierColor = (tier: string) => {
     switch (tier) {
@@ -197,27 +143,6 @@ export default function AdminContractors() {
       title="Contractor Management"
       breadcrumbs={[{ label: "Contractors" }]}
     >
-      {/* Pending Approvals Alert */}
-      {pendingData.length > 0 && (
-        <Card className="mb-6 border-orange-200 bg-orange-50/50 dark:bg-orange-950/20">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-orange-600" />
-                <CardTitle className="text-lg">Pending Approvals</CardTitle>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowApprovalQueue(true)}
-                data-testid="button-view-pending"
-              >
-                View All ({pendingData.length})
-              </Button>
-            </div>
-          </CardHeader>
-        </Card>
-      )}
 
       {/* Main Contractors Card */}
       <Card>
@@ -245,11 +170,11 @@ export default function AdminContractors() {
                 Export
               </Button>
               <Button
-                onClick={() => setShowApprovalQueue(true)}
-                data-testid="button-add-contractor"
+                onClick={() => navigate('/admin/applications')}
+                data-testid="button-view-applications"
               >
                 <UserPlus className="mr-2 h-4 w-4" />
-                Add Contractor
+                View Applications
               </Button>
             </div>
           </div>
@@ -617,66 +542,6 @@ export default function AdminContractors() {
         </DialogContent>
       </Dialog>
 
-      {/* Approval Queue Dialog */}
-      <Dialog open={showApprovalQueue} onOpenChange={setShowApprovalQueue}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Contractor Approval Queue</DialogTitle>
-            <DialogDescription>
-              Review and approve pending contractor applications
-            </DialogDescription>
-          </DialogHeader>
-          
-          <ScrollArea className="h-[400px]">
-            <div className="space-y-4">
-              {pendingData.map((contractor: any) => (
-                <Card key={contractor.id}>
-                  <CardContent className="pt-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold">{contractor.name}</h3>
-                        <p className="text-sm text-muted-foreground">{contractor.company}</p>
-                        <p className="text-sm text-muted-foreground">{contractor.email}</p>
-                        <p className="text-sm text-muted-foreground mt-2">
-                          Documents: {contractor.documentsSubmitted}/{contractor.documentsRequired}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            updateStatusMutation.mutate({
-                              contractorId: contractor.id,
-                              status: 'active',
-                            });
-                          }}
-                        >
-                          <UserCheck className="mr-2 h-4 w-4" />
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            updateStatusMutation.mutate({
-                              contractorId: contractor.id,
-                              status: 'rejected',
-                            });
-                          }}
-                        >
-                          <UserX className="mr-2 h-4 w-4" />
-                          Reject
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
     </AdminLayout>
   );
 }
