@@ -6429,6 +6429,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== EMAIL TEST ENDPOINT ====================
+  
+  // Test email sending functionality
+  app.post('/api/admin/test-email',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      to: z.string().email(),
+      subject: z.string().optional(),
+      message: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { to, subject, message } = req.body;
+        const { reminderService } = await import('./reminder-service');
+        
+        const htmlContent = `
+          <html>
+            <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background-color: #1e3a5f; color: white; padding: 20px; text-align: center;">
+                <h1 style="margin: 0;">TruckFixGo Test Email</h1>
+              </div>
+              <div style="padding: 30px; background-color: #f5f5f5;">
+                <h2 style="color: #1e3a5f;">${subject || 'Email Configuration Test'}</h2>
+                <p>${message || 'This is a test email from your TruckFixGo platform to verify that email sending is configured correctly.'}</p>
+                <div style="background: white; border-left: 4px solid #ff6b35; padding: 15px; margin: 20px 0;">
+                  <h3 style="color: #1e3a5f; margin-top: 0;">Email Settings Verified</h3>
+                  <p style="color: #666;">✓ Office365 SMTP Connection Established<br>
+                  ✓ Email Template Rendering Working<br>
+                  ✓ Professional Signature Attached</p>
+                </div>
+                <p style="color: #666; font-size: 14px; margin-top: 30px;">
+                  This test email was sent from the TruckFixGo admin panel to verify email functionality.
+                </p>
+              </div>
+            </body>
+          </html>
+        `;
+        
+        const result = await reminderService.sendTestReminder('email', to, htmlContent);
+        
+        if (result.success) {
+          res.json({ 
+            message: 'Test email sent successfully',
+            to,
+            subject: subject || 'Email Configuration Test'
+          });
+        } else {
+          res.status(500).json({ 
+            message: 'Failed to send test email',
+            error: result.error 
+          });
+        }
+      } catch (error) {
+        console.error('Test email error:', error);
+        res.status(500).json({ 
+          message: 'Failed to send test email',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+  );
+
   // ==================== PRICING RULES MANAGEMENT ====================
   
   // Get all pricing rules
@@ -7944,8 +8007,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
           updateData
         );
 
-        // Send notification email
-        // await sendStatusUpdateEmail(application.email, status);
+        // Send notification email for approvals
+        if (status === 'approved') {
+          try {
+            const { reminderService } = await import('./reminder-service');
+            const emailContent = `
+              <html>
+                <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <div style="background-color: #1e3a5f; color: white; padding: 20px; text-align: center;">
+                    <h1 style="margin: 0;">Welcome to TruckFixGo!</h1>
+                  </div>
+                  <div style="padding: 30px; background-color: #f5f5f5;">
+                    <h2 style="color: #1e3a5f;">Congratulations, Your Application Has Been Approved!</h2>
+                    <p>Dear ${application.firstName} ${application.lastName},</p>
+                    <p>We're excited to welcome you to the TruckFixGo network of certified mobile mechanics!</p>
+                    <div style="background: white; border-left: 4px solid #ff6b35; padding: 15px; margin: 20px 0;">
+                      <h3 style="color: #1e3a5f; margin-top: 0;">Next Steps:</h3>
+                      <ol style="color: #666;">
+                        <li>Log into your contractor dashboard</li>
+                        <li>Complete your profile setup</li>
+                        <li>Set your service areas and availability</li>
+                        <li>Start accepting jobs!</li>
+                      </ol>
+                    </div>
+                    <div style="margin-top: 30px;">
+                      <a href="https://truckfixgo.com/contractor/login" 
+                         style="background-color: #ff6b35; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                        Access Your Dashboard
+                      </a>
+                    </div>
+                    <p style="color: #666; margin-top: 30px;">
+                      If you have any questions, our support team is here to help at support@truckfixgo.com
+                    </p>
+                  </div>
+                </body>
+              </html>
+            `;
+            
+            await reminderService.sendTestReminder('email', application.email, emailContent);
+            console.log(`Sent approval email to ${application.email}`);
+          } catch (emailError) {
+            console.error('Failed to send approval email:', emailError);
+            // Don't fail the approval if email fails
+          }
+        }
 
         res.json({
           message: 'Application status updated successfully',
