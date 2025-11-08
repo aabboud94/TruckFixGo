@@ -9,6 +9,7 @@ import EmergencyBooking from "@/pages/emergency-booking";
 import TrackingPage from "@/pages/tracking";
 import PaymentMethodsPage from "@/pages/payment-methods";
 import BiddingJobsPage from "@/pages/bidding-jobs";
+import JobsDashboard from "@/pages/jobs";
 
 // Public Pages
 import Contact from "@/pages/contact";
@@ -27,6 +28,7 @@ import ContractorPerformance from "@/pages/contractor/performance";
 import ContractorProfile from "@/pages/contractor/profile";
 import ContractorActiveJob from "@/pages/contractor/active-job";
 import ContractorBidding from "@/pages/contractor/bidding";
+import ContractorJobAcceptance from "@/pages/contractor/job-acceptance";
 
 // Fleet Pages
 import FleetLanding from "@/pages/fleet";
@@ -95,6 +97,9 @@ function Router() {
       {/* Bidding Pages */}
       <Route path="/bidding" component={BiddingJobsPage} />
       
+      {/* Jobs Dashboard */}
+      <Route path="/jobs" component={JobsDashboard} />
+      
       {/* Contractor Pages */}
       <Route path="/contractor/auth" component={ContractorAuth} />
       <Route path="/contractor/apply" component={ContractorApply} />
@@ -107,6 +112,7 @@ function Router() {
       <Route path="/contractor/performance" component={ContractorPerformance} />
       <Route path="/contractor/profile" component={ContractorProfile} />
       <Route path="/contractor/active-job" component={ContractorActiveJob} />
+      <Route path="/contractor/job/:jobId" component={ContractorJobAcceptance} />
       
       {/* Fleet Pages */}
       <Route path="/fleet" component={FleetLanding} />

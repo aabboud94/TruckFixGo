@@ -121,68 +121,45 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
         </CardContent>
       </Card>
 
-      {/* Payment Section - Show before mechanic arrives */}
+      {/* Payment Information - Service First, Pay Later */}
       {!paymentComplete && (
-        <Card className="border-2 border-orange-500/20 bg-orange-50/50">
+        <Card className="border-2 border-blue-500/20 bg-blue-50/50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
-              Payment Required
+              <CheckCircle className="h-5 w-5" />
+              Service First Policy
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Alert className="bg-orange-100/50 border-orange-200">
-              <AlertCircle className="h-4 w-4 text-orange-600" />
+            <Alert className="bg-blue-100/50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
               <AlertDescription>
-                <span className="font-medium">Estimated Cost: ${(estimatedPrice.total / 100).toFixed(2)}</span>
+                <span className="font-medium">No upfront payment required!</span>
                 <br />
-                Pay now to confirm your emergency service request. Final price may vary based on actual work performed.
+                Our mechanic will complete the service first. Payment will be arranged after the repair is done based on actual work performed.
               </AlertDescription>
             </Alert>
             
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span>Service Fee</span>
-                <span>${(estimatedPrice.serviceCost / 100).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Emergency Surcharge</span>
-                <span className="text-orange-600">${(estimatedPrice.emergencySurcharge / 100).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Distance Fee</span>
-                <span>${(estimatedPrice.distanceFee / 100).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Tax</span>
-                <span>${(estimatedPrice.tax / 100).toFixed(2)}</span>
-              </div>
-              <Separator />
-              <div className="flex justify-between font-semibold text-base">
-                <span>Estimated Total</span>
-                <span>${(estimatedPrice.total / 100).toFixed(2)}</span>
-              </div>
+              <p className="text-muted-foreground">
+                Our transparent pricing policy ensures you only pay for the work that's actually completed. The mechanic will:
+              </p>
+              <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                <li>Diagnose the issue on-site</li>
+                <li>Provide a detailed quote before starting work</li>
+                <li>Complete the repairs with your approval</li>
+                <li>Present the final invoice after completion</li>
+              </ul>
             </div>
             
-            <div className="flex gap-3">
-              <Button
-                onClick={() => setShowPayment(true)}
-                className="flex-1 bg-orange-600 hover:bg-orange-700"
-                size="lg"
-                data-testid="button-pay-now"
-              >
-                <CreditCard className="mr-2 h-4 w-4" />
-                Pay Now
-              </Button>
-              <Button
-                onClick={handlePayLater}
-                variant="outline"
-                className="flex-1"
-                size="lg"
-                data-testid="button-pay-later"
-              >
-                Pay After Service
-              </Button>
+            <div className="p-3 bg-background rounded-lg border">
+              <p className="text-sm font-medium mb-1">Payment Options Available:</p>
+              <div className="flex gap-2 flex-wrap">
+                <Badge variant="secondary">Credit Card</Badge>
+                <Badge variant="secondary">Debit Card</Badge>
+                <Badge variant="secondary">Fleet Check</Badge>
+                <Badge variant="secondary">Company Account</Badge>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -278,7 +255,7 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
                 4
               </Badge>
               <p className="text-sm flex-1">
-                Pay directly to the mechanic after service
+                Review final invoice and complete payment after service
               </p>
             </div>
           </div>

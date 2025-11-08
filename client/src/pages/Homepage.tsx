@@ -54,6 +54,9 @@ export default function Homepage() {
               <a href="/services" className="text-foreground hover:text-primary transition-colors" data-testid="link-services">
                 Services
               </a>
+              <a href="/jobs" className="text-foreground hover:text-primary transition-colors" data-testid="link-jobs">
+                Jobs
+              </a>
               <a href="/about" className="text-foreground hover:text-primary transition-colors" data-testid="link-about">
                 About
               </a>
@@ -92,6 +95,9 @@ export default function Homepage() {
             <div className="md:hidden py-4 space-y-4">
               <a href="/services" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-services">
                 Services
+              </a>
+              <a href="/jobs" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-jobs">
+                Jobs
               </a>
               <a href="/about" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-about">
                 About
