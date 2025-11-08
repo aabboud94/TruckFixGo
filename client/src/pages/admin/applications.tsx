@@ -220,7 +220,7 @@ export default function AdminApplications() {
     });
   };
 
-  const handleBulkAction = () => {
+  const handleBulkAction = (action: 'approve' | 'reject') => {
     if (selectedDocuments.length === 0) {
       toast({
         title: "No applications selected",
@@ -234,9 +234,9 @@ export default function AdminApplications() {
     selectedDocuments.forEach(id => {
       updateStatusMutation.mutate({
         id,
-        status: bulkAction === 'approve' ? 'approved' : 'rejected',
-        notes: bulkAction === 'approve' ? 'Bulk approved' : 'Bulk rejected',
-        rejectionReason: bulkAction === 'reject' ? 'Does not meet requirements' : undefined
+        status: action === 'approve' ? 'approved' : 'rejected',
+        notes: action === 'approve' ? 'Bulk approved' : 'Bulk rejected',
+        rejectionReason: action === 'reject' ? 'Does not meet requirements' : undefined
       });
     });
 
@@ -398,10 +398,7 @@ export default function AdminApplications() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setBulkAction('approve');
-                    handleBulkAction();
-                  }}
+                  onClick={() => handleBulkAction('approve')}
                   data-testid="button-bulk-approve"
                 >
                   <CheckCircle className="h-4 w-4 mr-2" />
@@ -410,10 +407,7 @@ export default function AdminApplications() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setBulkAction('reject');
-                    handleBulkAction();
-                  }}
+                  onClick={() => handleBulkAction('reject')}
                   data-testid="button-bulk-reject"
                 >
                   <XCircle className="h-4 w-4 mr-2" />
