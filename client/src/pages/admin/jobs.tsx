@@ -346,8 +346,14 @@ export default function AdminJobs() {
                           )}
                         </TableCell>
                         <TableCell className="max-w-[200px]">
-                          <p className="truncate" title={job.location}>
-                            {job.location}
+                          <p className="truncate" title={
+                            typeof job.location === 'object' && job.location 
+                              ? job.locationAddress || `${job.location.lat?.toFixed(4)}, ${job.location.lng?.toFixed(4)}`
+                              : job.location || 'Unknown'
+                          }>
+                            {typeof job.location === 'object' && job.location 
+                              ? job.locationAddress || `${job.location.lat?.toFixed(4)}, ${job.location.lng?.toFixed(4)}`
+                              : job.location || 'Unknown'}
                           </p>
                         </TableCell>
                         <TableCell>${job.price}</TableCell>
@@ -451,7 +457,15 @@ export default function AdminJobs() {
 
                   <div className="space-y-2">
                     <Label>Location</Label>
-                    <Textarea value={selectedJob.location} readOnly className="resize-none" />
+                    <Textarea 
+                      value={
+                        typeof selectedJob.location === 'object' && selectedJob.location 
+                          ? selectedJob.locationAddress || `Lat: ${selectedJob.location.lat?.toFixed(4)}, Lng: ${selectedJob.location.lng?.toFixed(4)}`
+                          : selectedJob.location || 'Unknown'
+                      } 
+                      readOnly 
+                      className="resize-none" 
+                    />
                   </div>
 
                   <div className="space-y-2">
