@@ -74,32 +74,30 @@ export default function ContractorJobs() {
 
   // Fetch jobs based on status
   const { data: activeJobs, isLoading: loadingActive } = useQuery<Job[]>({
-    queryKey: ["/api/contractor/jobs", "active"],
+    queryKey: ["/api/contractor/jobs/active"],
     enabled: activeTab === "active"
   });
 
   const { data: availableJobs, isLoading: loadingAvailable, refetch: refetchAvailable } = useQuery<Job[]>({
-    queryKey: ["/api/contractor/jobs", "available"],
+    queryKey: ["/api/contractor/jobs/available"],
     enabled: activeTab === "available",
     refetchInterval: 30000 // Auto-refresh every 30 seconds
   });
 
   const { data: scheduledJobs, isLoading: loadingScheduled } = useQuery<Job[]>({
-    queryKey: ["/api/contractor/jobs", "scheduled"],
+    queryKey: ["/api/contractor/jobs/scheduled"],
     enabled: activeTab === "scheduled"
   });
 
   const { data: completedJobs, isLoading: loadingCompleted } = useQuery<Job[]>({
-    queryKey: ["/api/contractor/jobs", "completed"],
+    queryKey: ["/api/contractor/jobs/completed"],
     enabled: activeTab === "completed"
   });
 
   // Accept job mutation
   const acceptJobMutation = useMutation({
     mutationFn: async (jobId: string) => {
-      return await apiRequest(`/api/jobs/${jobId}/accept`, {
-        method: "POST"
-      });
+      return await apiRequest("POST", `/api/jobs/${jobId}/accept`);
     },
     onSuccess: () => {
       toast({
@@ -120,9 +118,8 @@ export default function ContractorJobs() {
   // Cancel job mutation
   const cancelJobMutation = useMutation({
     mutationFn: async (jobId: string) => {
-      return await apiRequest(`/api/jobs/${jobId}/cancel`, {
-        method: "POST",
-        body: JSON.stringify({ reason: "Contractor cancelled" })
+      return await apiRequest("POST", `/api/jobs/${jobId}/cancel`, {
+        reason: "Contractor cancelled"
       });
     },
     onSuccess: () => {

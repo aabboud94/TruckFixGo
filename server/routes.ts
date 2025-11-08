@@ -6,7 +6,7 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { db } from "./db";
 import { storage } from "./storage";
-import { desc, asc, and, eq, gte, sql } from "drizzle-orm";
+import { desc, asc, and, eq, gte, sql, inArray, isNull } from "drizzle-orm";
 import aiService from "./ai-service";
 import { reminderService } from "./reminder-service";
 import { reminderScheduler } from "./reminder-scheduler";
@@ -53,6 +53,7 @@ import {
   splitPayments,
   transactions,
   contractorProfiles,
+  jobs,
   insertFleetContractSchema,
   insertContractSlaMetricSchema,
   insertContractPenaltySchema,
@@ -1062,7 +1063,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Find active job for contractor
         const jobs = await storage.findJobs({
           contractorId: req.session.userId!,
-          status: ['assigned', 'en_route', 'on_site'] as any,
+          status: ['assigned', 'en_route', 'on_site'],
           limit: 1,
           offset: 0,
           orderBy: 'createdAt',
@@ -1101,6 +1102,165 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Get active job error:', error);
         res.status(500).json({ message: 'Failed to get active job' });
+      }
+    }
+  );
+
+  // Get contractor jobs by status (available, active, scheduled, completed)
+  app.get('/api/contractor/jobs/:status',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const status = req.params.status as string;
+        const contractorId = req.session.userId!;
+
+        // Get contractor profile to check services
+        const contractorProfile = await storage.getContractorProfile(contractorId);
+        if (!contractorProfile) {
+          return res.status(404).json({ message: 'Contractor profile not found' });
+        }
+
+        // Get contractor services
+        const contractorServices = await storage.getContractorServices(contractorId);
+        const serviceTypeIds = contractorServices
+          .filter(s => s.isAvailable)
+          .map(s => s.serviceTypeId);
+
+        if (serviceTypeIds.length === 0) {
+          // No services configured - return empty array
+          return res.json([]);
+        }
+
+        let jobsList: Job[] = [];
+
+        switch (status) {
+          case 'available':
+            // Get new jobs that match contractor's services and service radius
+            jobsList = await db.select()
+              .from(jobs)
+              .where(and(
+                eq(jobs.status, 'new'),
+                inArray(jobs.serviceTypeId, serviceTypeIds),
+                isNull(jobs.contractorId)
+              ))
+              .orderBy(desc(jobs.createdAt))
+              .limit(50)
+              .execute() as Job[];
+
+            // Filter by service radius if contractor has a location
+            if (contractorProfile.currentLocation) {
+              const contractorLat = contractorProfile.currentLocation.lat;
+              const contractorLng = contractorProfile.currentLocation.lng;
+              const serviceRadius = contractorProfile.serviceRadius || 50;
+
+              jobsList = jobsList.filter(job => {
+                if (!job.location || typeof job.location !== 'object') return false;
+                const jobLocation = job.location as { lat: number; lng: number };
+                
+                // Calculate distance using Haversine formula
+                const R = 3959; // Earth's radius in miles
+                const dLat = (jobLocation.lat - contractorLat) * Math.PI / 180;
+                const dLon = (jobLocation.lng - contractorLng) * Math.PI / 180;
+                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(contractorLat * Math.PI / 180) * Math.cos(jobLocation.lat * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                const distance = R * c;
+
+                return distance <= serviceRadius;
+              });
+            }
+            break;
+
+          case 'active':
+            // Get assigned, en_route, or on_site jobs
+            // Now findJobs supports arrays, we can query all at once
+            jobsList = await storage.findJobs({
+              contractorId,
+              status: ['assigned', 'en_route', 'on_site'],
+              orderBy: 'createdAt',
+              orderDir: 'desc'
+            });
+            break;
+
+          case 'scheduled':
+            // Get scheduled jobs
+            jobsList = await storage.findJobs({
+              contractorId,
+              jobType: 'scheduled',
+              status: 'assigned',
+              orderBy: 'scheduledDate',
+              orderDir: 'asc'
+            });
+            break;
+
+          case 'completed':
+            // Get completed jobs
+            jobsList = await storage.findJobs({
+              contractorId,
+              status: 'completed',
+              orderBy: 'completedAt',
+              orderDir: 'desc',
+              limit: 100
+            });
+            break;
+
+          default:
+            return res.status(400).json({ message: 'Invalid status' });
+        }
+
+        // Format jobs for the response
+        const formattedJobs = await Promise.all(jobsList.map(async (job) => {
+          // Get customer info
+          let customer = null;
+          if (job.customerId) {
+            const customerUser = await storage.getUser(job.customerId);
+            if (customerUser) {
+              customer = {
+                name: `${customerUser.firstName || ''} ${customerUser.lastName || ''}`.trim() || 'Guest User',
+                phone: customerUser.phone || '',
+                email: customerUser.email || ''
+              };
+            }
+          }
+
+          // Get service type info
+          const serviceType = await storage.getServiceType(job.serviceTypeId);
+
+          return {
+            id: job.id,
+            jobNumber: job.jobNumber,
+            status: job.status,
+            jobType: job.jobType,
+            serviceType: serviceType?.name || 'Unknown Service',
+            customerName: customer?.name || 'Guest User',
+            customerPhone: customer?.phone || '',
+            vehicleInfo: `${job.vehicleMake || ''} ${job.vehicleModel || ''}`.trim() || 'Vehicle',
+            location: {
+              address: job.locationAddress || 'No address provided',
+              lat: job.location?.lat || 0,
+              lng: job.location?.lng || 0
+            },
+            issueDescription: job.description || '',
+            scheduledDate: job.scheduledDate,
+            scheduledTime: job.scheduledTime,
+            assignedAt: job.assignedAt,
+            completedAt: job.completedAt,
+            cancelledAt: job.cancelledAt,
+            estimatedPayout: Number(job.estimatedPrice || 0),
+            actualPayout: Number(job.finalPrice || job.estimatedPrice || 0),
+            tips: Number(job.tips || 0),
+            rating: job.rating,
+            customerReview: job.customerReview,
+            completionNotes: job.completionNotes
+          };
+        }));
+
+        res.json(formattedJobs);
+      } catch (error) {
+        console.error('Get contractor jobs error:', error);
+        res.status(500).json({ message: 'Failed to get contractor jobs' });
       }
     }
   );
@@ -1326,6 +1486,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Assign contractor error:', error);
         res.status(500).json({ message: 'Failed to assign contractor' });
+      }
+    }
+  );
+
+  // Accept job (contractor accepts an available job)
+  app.post('/api/jobs/:id/accept',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        const contractorId = req.session.userId!;
+        
+        // Get the job
+        const job = await storage.getJob(jobId);
+        
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        // Check if job is available (status should be 'new' and no contractor assigned)
+        if (job.status !== 'new') {
+          return res.status(400).json({ 
+            message: 'Job is not available for acceptance',
+            currentStatus: job.status 
+          });
+        }
+        
+        if (job.contractorId) {
+          return res.status(400).json({ 
+            message: 'Job has already been assigned to another contractor' 
+          });
+        }
+        
+        // Assign the contractor and update status to 'assigned'
+        // This also automatically adds to job status history
+        const updatedJob = await storage.assignContractorToJob(jobId, contractorId);
+        
+        if (!updatedJob) {
+          return res.status(500).json({ message: 'Failed to accept job' });
+        }
+        
+        res.json({
+          message: 'Job accepted successfully',
+          job: updatedJob
+        });
+      } catch (error) {
+        console.error('Accept job error:', error);
+        res.status(500).json({ message: 'Failed to accept job' });
       }
     }
   );

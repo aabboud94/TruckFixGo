@@ -210,7 +210,7 @@ export interface PaginationOptions {
 
 // Filter options for different entities
 export interface JobFilterOptions extends PaginationOptions {
-  status?: typeof jobStatusEnum.enumValues[number];
+  status?: typeof jobStatusEnum.enumValues[number] | typeof jobStatusEnum.enumValues[number][];
   jobType?: typeof jobTypeEnum.enumValues[number];
   contractorId?: string;
   customerId?: string;
@@ -467,6 +467,8 @@ export interface IStorage {
   calculateJobPrice(jobId: string): Promise<number>;
   
   getJobStatusHistory(jobId: string): Promise<JobStatusHistory[]>;
+  addJobStatusHistory(history: InsertJobStatusHistory): Promise<JobStatusHistory>;
+  recordJobStatusChange(data: { jobId: string; fromStatus: string; toStatus: string; changedBy?: string; reason?: string }): Promise<void>;
   
   // ==================== FLEET OPERATIONS ====================
   createFleetAccount(fleet: InsertFleetAccount): Promise<FleetAccount>;
@@ -991,7 +993,14 @@ export class PostgreSQLStorage implements IStorage {
     let query = db.select().from(jobs);
     const conditions = [];
 
-    if (filters.status) conditions.push(eq(jobs.status, filters.status));
+    // Handle status as either single value or array
+    if (filters.status) {
+      if (Array.isArray(filters.status)) {
+        conditions.push(inArray(jobs.status, filters.status));
+      } else {
+        conditions.push(eq(jobs.status, filters.status));
+      }
+    }
     if (filters.jobType) conditions.push(eq(jobs.jobType, filters.jobType));
     if (filters.contractorId) conditions.push(eq(jobs.contractorId, filters.contractorId));
     if (filters.customerId) conditions.push(eq(jobs.customerId, filters.customerId));
@@ -1106,6 +1115,20 @@ export class PostgreSQLStorage implements IStorage {
     return await db.select().from(jobStatusHistory)
       .where(eq(jobStatusHistory.jobId, jobId))
       .orderBy(desc(jobStatusHistory.createdAt));
+  }
+
+  async addJobStatusHistory(history: InsertJobStatusHistory): Promise<JobStatusHistory> {
+    const result = await db.insert(jobStatusHistory).values(history).returning();
+    return result[0];
+  }
+
+  async recordJobStatusChange(data: { jobId: string; fromStatus: string; toStatus: string; changedBy?: string; reason?: string }): Promise<void> {
+    await this.addJobStatusHistory({
+      jobId: data.jobId,
+      status: data.toStatus as typeof jobStatusEnum.enumValues[number],
+      changedBy: data.changedBy,
+      notes: data.reason
+    });
   }
 
   // ==================== FLEET OPERATIONS ====================

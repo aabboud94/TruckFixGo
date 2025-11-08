@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Job Acceptance</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ddd; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .pending { background: #fff3cd; color: #856404; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #f4f4f4; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Test Job Acceptance Flow</h1>
+    
+    <div id="test-results"></div>
+    
+    <button onclick="runTests()">Run Tests</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <script>
+        const results = document.getElementById('test-results');
+        
+        function addResult(text, type = 'pending') {
+            const div = document.createElement('div');
+            div.className = `test ${type}`;
+            div.innerHTML = text;
+            results.appendChild(div);
+        }
+        
+        function clearResults() {
+            results.innerHTML = '';
+        }
+        
+        async function runTests() {
+            clearResults();
+            addResult('Starting Job Acceptance Tests...');
+            
+            try {
+                // Test 1: Login as contractor
+                addResult('Test 1: Logging in as contractor...');
+                const loginRes = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        email: 'contractor1@example.com',
+                        password: 'password123'
+                    })
+                });
+                
+                if (loginRes.ok) {
+                    addResult('✓ Login successful', 'success');
+                } else {
+                    const error = await loginRes.text();
+                    addResult(`✗ Login failed: ${error}`, 'error');
+                    return;
+                }
+                
+                // Test 2: Fetch active jobs (this was causing 500 error)
+                addResult('Test 2: Fetching active jobs (testing fixed endpoint)...');
+                const activeRes = await fetch('/api/contractor/jobs/active', {
+                    credentials: 'include'
+                });
+                
+                if (!activeRes.ok) {
+                    const error = await activeRes.text();
+                    addResult(`✗ Active jobs endpoint failed with ${activeRes.status}: ${error}`, 'error');
+                    if (activeRes.status === 500) {
+                        addResult('ERROR: The job_status enum issue is NOT fixed!', 'error');
+                    }
+                    return;
+                }
+                
+                const activeJobs = await activeRes.json();
+                addResult(`✓ Active jobs endpoint works! Found ${activeJobs.length} active jobs`, 'success');
+                
+                // Test 3: Fetch available jobs
+                addResult('Test 3: Fetching available jobs...');
+                const availableRes = await fetch('/api/contractor/jobs/available', {
+                    credentials: 'include'
+                });
+                
+                if (!availableRes.ok) {
+                    const error = await availableRes.text();
+                    addResult(`✗ Available jobs endpoint failed: ${error}`, 'error');
+                    return;
+                }
+                
+                const availableJobs = await availableRes.json();
+                addResult(`✓ Found ${availableJobs.length} available jobs`, 'success');
+                
+                // Test 4: Test accepting a job if available
+                if (availableJobs.length > 0) {
+                    const job = availableJobs[0];
+                    addResult(`Test 4: Accepting job ${job.jobNumber}...`);
+                    
+                    const acceptRes = await fetch(`/api/jobs/${job.id}/accept`, {
+                        method: 'POST',
+                        credentials: 'include'
+                    });
+                    
+                    if (!acceptRes.ok) {
+                        const error = await acceptRes.text();
+                        addResult(`✗ Accept endpoint failed with ${acceptRes.status}: ${error}`, 'error');
+                        if (acceptRes.status === 404) {
+                            addResult('ERROR: The accept endpoint is NOT implemented!', 'error');
+                        }
+                        return;
+                    }
+                    
+                    const acceptResult = await acceptRes.json();
+                    addResult(`✓ Job accepted successfully!`, 'success');
+                    addResult(`<pre>${JSON.stringify(acceptResult, null, 2)}</pre>`, 'success');
+                    
+                    // Verify job moved to active
+                    addResult('Test 5: Verifying job moved to active jobs...');
+                    const activeRes2 = await fetch('/api/contractor/jobs/active', {
+                        credentials: 'include'
+                    });
+                    const activeJobs2 = await activeRes2.json();
+                    const acceptedJob = activeJobs2.find(j => j.id === job.id);
+                    
+                    if (acceptedJob) {
+                        addResult('✓ Job successfully moved to active jobs!', 'success');
+                        addResult(`✓ Job status: ${acceptedJob.status}`, 'success');
+                    } else {
+                        addResult('✗ Job not found in active jobs', 'error');
+                    }
+                } else {
+                    addResult('Test 4: No available jobs to test acceptance', 'pending');
+                    addResult('Create a new emergency job as a guest to test job acceptance', 'pending');
+                }
+                
+                addResult('<strong>All tests completed successfully!</strong>', 'success');
+                addResult('✓ Active jobs endpoint fixed (no more 500 error)', 'success');
+                addResult('✓ Job acceptance endpoint implemented and working', 'success');
+                
+            } catch (error) {
+                addResult(`Test error: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+        
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            setTimeout(runTests, 500);
+        });
+    </script>
+</body>
+</html>

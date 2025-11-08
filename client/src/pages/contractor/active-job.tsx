@@ -85,10 +85,7 @@ export default function ContractorActiveJob() {
   // Update job status mutation
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
-      return await apiRequest(`/api/jobs/${job.id}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ status })
-      });
+      return await apiRequest("PATCH", `/api/jobs/${job.id}/status`, { status });
     },
     onSuccess: (data, status) => {
       toast({
@@ -110,12 +107,9 @@ export default function ContractorActiveJob() {
   // Complete job mutation
   const completeJobMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest(`/api/jobs/${job.id}/complete`, {
-        method: "POST",
-        body: JSON.stringify({
-          completionNotes,
-          photos: selectedPhotos.map(f => f.name) // In real app, would upload first
-        })
+      return await apiRequest("POST", `/api/jobs/${job.id}/complete`, {
+        completionNotes,
+        photos: selectedPhotos.map(f => f.name) // In real app, would upload first
       });
     },
     onSuccess: () => {
@@ -137,10 +131,7 @@ export default function ContractorActiveJob() {
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async (message: string) => {
-      return await apiRequest(`/api/jobs/${job.id}/messages`, {
-        method: "POST",
-        body: JSON.stringify({ message })
-      });
+      return await apiRequest("POST", `/api/jobs/${job.id}/messages`, { message });
     },
     onSuccess: () => {
       setMessageText("");
@@ -158,12 +149,9 @@ export default function ContractorActiveJob() {
   // AI Photo analysis mutation
   const analyzePhotoMutation = useMutation({
     mutationFn: async (photoBase64: string) => {
-      return apiRequest('/api/ai/analyze-photo', {
-        method: 'POST',
-        body: JSON.stringify({
-          photo: photoBase64,
-          context: `Contractor analyzing damage for Job #${job?.jobNumber}. ${job?.description || ''}`
-        }),
+      return apiRequest('POST', '/api/ai/analyze-photo', {
+        photo: photoBase64,
+        context: `Contractor analyzing damage for Job #${job?.jobNumber}. ${job?.description || ''}`
       });
     },
     onSuccess: (analysis) => {
@@ -200,10 +188,7 @@ export default function ContractorActiveJob() {
   // Get repair recommendations mutation
   const getRepairRecommendationsMutation = useMutation({
     mutationFn: async (data: { issueDescription: string; photoAnalysis?: any }) => {
-      return apiRequest('/api/ai/repair-recommendations', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
+      return apiRequest('POST', '/api/ai/repair-recommendations', data);
     },
     onSuccess: (recommendations) => {
       setRepairRecommendations(recommendations);
