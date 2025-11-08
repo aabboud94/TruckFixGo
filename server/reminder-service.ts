@@ -52,8 +52,43 @@ class ReminderService {
       const emailIntegration = await storage.getIntegrationsConfig('email');
       const smsIntegration = await storage.getIntegrationsConfig('twilio');
 
-      // Initialize email transporter (Office 365/Outlook)
-      if (emailIntegration?.config) {
+      // Check for Office365 environment variables first
+      const office365Email = process.env.OFFICE365_EMAIL;
+      const office365Password = process.env.OFFICE365_PASSWORD;
+
+      if (office365Email && office365Password) {
+        // Use Office365 credentials from environment variables
+        this.emailConfig = {
+          host: 'smtp.office365.com',
+          port: 587,
+          secure: false,
+          auth: {
+            user: office365Email,
+            pass: office365Password
+          },
+          from: office365Email
+        };
+
+        this.emailTransporter = nodemailer.createTransport({
+          host: this.emailConfig.host,
+          port: this.emailConfig.port,
+          secure: this.emailConfig.secure,
+          auth: this.emailConfig.auth,
+          tls: {
+            rejectUnauthorized: false,
+            ciphers: 'SSLv3'
+          }
+        });
+
+        // Verify email connection
+        try {
+          await this.emailTransporter.verify();
+          console.log('Office365 email service initialized successfully with:', office365Email);
+        } catch (verifyError) {
+          console.error('Failed to verify Office365 email connection:', verifyError);
+        }
+      } else if (emailIntegration?.config) {
+        // Fall back to database config if no environment variables
         const config = emailIntegration.config as any;
         this.emailConfig = {
           host: config.host || 'smtp.office365.com',
@@ -219,6 +254,49 @@ class ReminderService {
     }
   }
 
+  // Generate professional email signature
+  private getEmailSignature(): string {
+    const companyName = "TruckFixGo";
+    const tagline = "Your Mobile Mechanics Solution for Semi-Trucks & Trailers";
+    const phone = "1-800-TRUCK-FIX";
+    const website = "www.truckfixgo.com";
+    const address = "Available 24/7 Nationwide";
+    
+    return `
+      <br><br>
+      <table style="font-family: Arial, sans-serif; color: #333; border-top: 3px solid #ff6b35; padding-top: 20px; margin-top: 30px;">
+        <tr>
+          <td style="padding-right: 20px; border-right: 2px solid #e0e0e0;">
+            <div style="font-size: 20px; font-weight: bold; color: #1e3a5f; margin-bottom: 5px;">${companyName}</div>
+            <div style="font-size: 12px; color: #666; margin-bottom: 10px; font-style: italic;">${tagline}</div>
+            <div style="font-size: 14px; color: #ff6b35; font-weight: bold; margin: 5px 0;">📞 ${phone}</div>
+            <div style="font-size: 13px; color: #666;">
+              <a href="https://${website}" style="color: #4a90e2; text-decoration: none;">🌐 ${website}</a>
+            </div>
+            <div style="font-size: 12px; color: #888; margin-top: 5px;">📍 ${address}</div>
+          </td>
+          <td style="padding-left: 20px; vertical-align: middle;">
+            <div style="font-size: 11px; color: #888; line-height: 1.4;">
+              <strong>Services:</strong><br>
+              • Emergency Roadside Repair<br>
+              • Preventive Maintenance<br>
+              • Mobile Washing<br>
+              • Fleet Management Solutions
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="2" style="padding-top: 15px;">
+            <div style="font-size: 10px; color: #999; border-top: 1px solid #e0e0e0; padding-top: 10px; text-align: center;">
+              This email and any attachments are confidential and intended solely for the addressee. 
+              If you are not the intended recipient, please delete this message and notify the sender.
+            </div>
+          </td>
+        </tr>
+      </table>
+    `;
+  }
+
   // Send email reminder
   private async sendEmail(reminder: Reminder): Promise<{ success: boolean; error?: string }> {
     if (!reminder.recipientEmail) {
@@ -253,12 +331,15 @@ class ReminderService {
     }
 
     try {
+      // Add email signature to HTML content
+      const htmlContentWithSignature = (reminder.messageHtml || reminder.messageContent || '') + this.getEmailSignature();
+      
       const mailOptions = {
-        from: this.emailConfig.from,
+        from: `TruckFixGo <${this.emailConfig.from}>`,
         to: reminder.recipientEmail,
         subject: reminder.messageSubject || 'TruckFixGo Service Reminder',
         text: reminder.messageContent || '',
-        html: reminder.messageHtml || reminder.messageContent || ''
+        html: htmlContentWithSignature
       };
 
       if (this.testMode) {
