@@ -856,6 +856,152 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== SERVICE TYPE CRUD ENDPOINTS ====================
+
+  // Get all service types
+  app.get('/api/admin/service-types',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const serviceTypes = await storage.findServiceTypes();
+        res.json({ serviceTypes });
+      } catch (error) {
+        console.error('Get service types error:', error);
+        res.status(500).json({ message: 'Failed to get service types' });
+      }
+    }
+  );
+
+  // Create a new service type
+  app.post('/api/admin/service-types',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        // This endpoint is for dynamically adding service types from the admin UI
+        const serviceTypeData = {
+          id: req.body.id || `service-${req.body.service.toLowerCase().replace(/\s+/g, '-')}`,
+          code: req.body.code || req.body.service.toUpperCase().replace(/\s+/g, '_'),
+          name: req.body.service,
+          description: req.body.description,
+          isActive: req.body.isActive ?? true,
+          isEmergency: req.body.emergencyAvailable ?? true,
+          isScheduled: req.body.scheduledAvailable ?? true,
+          categories: req.body.categories || []
+        };
+
+        const serviceType = await storage.createServiceType(serviceTypeData);
+
+        // Create default pricing for the service type
+        await storage.createServicePricing({
+          serviceTypeId: serviceType.id,
+          basePrice: req.body.base || 150,
+          perMileRate: 3,
+          emergencySurcharge: 50,
+          weekendSurcharge: 25,
+          nightSurcharge: 35,
+          effectiveDate: new Date(),
+          isActive: true
+        });
+
+        res.status(201).json({
+          message: 'Service type created successfully',
+          serviceType
+        });
+      } catch (error) {
+        console.error('Create service type error:', error);
+        res.status(500).json({ message: 'Failed to create service type' });
+      }
+    }
+  );
+
+  // Update a service type
+  app.put('/api/admin/service-types/:id',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        // For now, we'll update the admin settings directly since service types are stored there
+        // In production, this would update the service_types table
+        const pricingSettings = await storage.getSetting('pricing');
+        const serviceId = req.params.id;
+        
+        if (pricingSettings && pricingSettings.value) {
+          const pricingData = pricingSettings.value;
+          const baseRates = pricingData.baseRates || [];
+          const index = baseRates.findIndex((rate: any) => {
+            const rateId = rate.id || `service-${rate.service.toLowerCase().replace(/\s+/g, '-')}`;
+            return rateId === serviceId;
+          });
+          
+          if (index !== -1) {
+            // Update the service type in the base rates
+            baseRates[index] = {
+              ...baseRates[index],
+              ...req.body
+            };
+            
+            // Save the updated settings
+            pricingData.baseRates = baseRates;
+            await storage.updateSetting('pricing', pricingData);
+            
+            res.json({
+              message: 'Service type updated successfully',
+              serviceType: baseRates[index]
+            });
+          } else {
+            res.status(404).json({ message: 'Service type not found' });
+          }
+        } else {
+          res.status(404).json({ message: 'Pricing settings not found' });
+        }
+      } catch (error) {
+        console.error('Update service type error:', error);
+        res.status(500).json({ message: 'Failed to update service type' });
+      }
+    }
+  );
+
+  // Delete a service type
+  app.delete('/api/admin/service-types/:id',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        // For now, we'll update the admin settings directly since service types are stored there
+        const pricingSettings = await storage.getSetting('pricing');
+        const serviceId = req.params.id;
+        
+        if (pricingSettings && pricingSettings.value) {
+          const pricingData = pricingSettings.value;
+          const baseRates = pricingData.baseRates || [];
+          const filteredRates = baseRates.filter((rate: any) => {
+            const rateId = rate.id || `service-${rate.service.toLowerCase().replace(/\s+/g, '-')}`;
+            return rateId !== serviceId;
+          });
+          
+          if (filteredRates.length !== baseRates.length) {
+            // Update the settings with filtered rates
+            pricingData.baseRates = filteredRates;
+            await storage.updateSetting('pricing', pricingData);
+            
+            res.json({
+              message: 'Service type deleted successfully'
+            });
+          } else {
+            res.status(404).json({ message: 'Service type not found' });
+          }
+        } else {
+          res.status(404).json({ message: 'Pricing settings not found' });
+        }
+      } catch (error) {
+        console.error('Delete service type error:', error);
+        res.status(500).json({ message: 'Failed to delete service type' });
+      }
+    }
+  );
+
   // Get admin session - verifies admin authentication for admin dashboard
   app.get('/api/admin/session',
     requireAuth,

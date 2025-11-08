@@ -78,8 +78,9 @@ export default function AdminSettings() {
         return apiRequest('POST', '/api/admin/service-types', serviceType);
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/settings'] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['/api/admin/settings'] });
+      await queryClient.refetchQueries({ queryKey: ['/api/admin/settings'] });
       setShowAddServiceType(false);
       setEditingServiceType(null);
       toast({
