@@ -929,7 +929,10 @@ export class PostgreSQLStorage implements IStorage {
   // ==================== JOB OPERATIONS ====================
   
   async createJob(job: InsertJob): Promise<Job> {
-    const jobNumber = `JOB-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    // Generate a shorter job number (max 20 chars for VARCHAR(20))
+    const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
+    const random = Math.random().toString(36).substr(2, 4).toUpperCase(); // 4 random chars
+    const jobNumber = `JOB-${timestamp}-${random}`; // e.g., JOB-123456-A1B2 (15 chars max)
     const result = await db.insert(jobs).values({ ...job, jobNumber }).returning();
     
     // Create initial status history
