@@ -1125,9 +1125,10 @@ export class PostgreSQLStorage implements IStorage {
   async recordJobStatusChange(data: { jobId: string; fromStatus: string; toStatus: string; changedBy?: string; reason?: string }): Promise<void> {
     await this.addJobStatusHistory({
       jobId: data.jobId,
-      status: data.toStatus as typeof jobStatusEnum.enumValues[number],
+      fromStatus: data.fromStatus as typeof jobStatusEnum.enumValues[number],
+      toStatus: data.toStatus as typeof jobStatusEnum.enumValues[number],
       changedBy: data.changedBy,
-      notes: data.reason
+      reason: data.reason
     });
   }
 
