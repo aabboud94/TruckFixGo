@@ -94,10 +94,7 @@ export default function ContractorAuth() {
   // Login mutation
   const loginMutation = useMutation({
     mutationFn: async (data: z.infer<typeof loginSchema>) => {
-      return await apiRequest("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify(data)
-      });
+      return await apiRequest("POST", "/api/auth/login", data);
     },
     onSuccess: () => {
       toast({
@@ -119,12 +116,9 @@ export default function ContractorAuth() {
   const registerMutation = useMutation({
     mutationFn: async (data: z.infer<typeof registerSchema>) => {
       const { confirmPassword, ...registrationData } = data;
-      return await apiRequest("/api/contractor/register", {
-        method: "POST",
-        body: JSON.stringify({
-          ...registrationData,
-          role: "contractor"
-        })
+      return await apiRequest("POST", "/api/contractor/register", {
+        ...registrationData,
+        role: "contractor"
       });
     },
     onSuccess: () => {
