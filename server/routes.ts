@@ -461,38 +461,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Guest booking
   app.post('/api/auth/guest-booking',
     rateLimiter(3, 60000),
-    validateRequest(insertJobSchema.extend({
-      guestPhone: z.string(),
-      guestEmail: z.string().email().optional()
-    })),
     async (req: Request, res: Response) => {
       try {
-        const { guestPhone, guestEmail, ...jobData } = req.body;
-        
-        // Create guest user
-        const guestUser = await storage.createUser({
-          phone: guestPhone,
-          email: guestEmail,
-          role: 'driver',
-          isGuest: true,
-          isActive: true
-        });
+        const { 
+          guestPhone, 
+          guestEmail, 
+          jobType = 'emergency',
+          serviceTypeId = 'emergency-repair',
+          location,
+          locationAddress,
+          description,
+          unitNumber,
+          carrierName,
+          vehicleMake,
+          vehicleModel,
+          urgencyLevel = 5,
+          vehicleLocation,
+          photoUrl
+        } = req.body;
 
-        // Create job
-        const job = await storage.createJob({
-          ...jobData,
-          customerId: guestUser.id
-        });
+        // Validate required fields
+        if (!guestPhone || !location || !locationAddress) {
+          return res.status(400).json({ 
+            message: 'Phone number and location are required' 
+          });
+        }
+        
+        // Create guest user (check if exists first)
+        let guestUser;
+        const existingUsers = await storage.findUsers({ phone: guestPhone });
+        
+        if (existingUsers && existingUsers.length > 0) {
+          guestUser = existingUsers[0];
+        } else {
+          guestUser = await storage.createUser({
+            phone: guestPhone,
+            email: guestEmail || undefined,
+            role: 'driver',
+            isGuest: true,
+            isActive: true
+          });
+        }
+
+        // Create job with proper structure
+        const jobData = {
+          jobType: jobType as 'emergency' | 'scheduled',
+          serviceTypeId: serviceTypeId,
+          customerId: guestUser.id,
+          location: location, // This should be {lat: number, lng: number}
+          locationAddress: locationAddress,
+          description: description || 'Emergency roadside assistance needed',
+          unitNumber: unitNumber || undefined,
+          vehicleMake: vehicleMake || 'Unknown',
+          vehicleModel: vehicleModel || 'Semi Truck',
+          urgencyLevel: urgencyLevel,
+          estimatedArrival: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes from now
+          allowBidding: false
+        };
+
+        const job = await storage.createJob(jobData);
+
+        // Store photo if provided
+        if (photoUrl) {
+          await storage.createJobPhoto({
+            jobId: job.id,
+            photoUrl: photoUrl,
+            uploadedBy: guestUser.id,
+            photoType: 'damage'
+          });
+        }
 
         res.status(201).json({
           message: 'Guest booking created successfully',
-          job,
+          job: {
+            ...job,
+            jobNumber: job.jobNumber,
+            estimatedArrival: '15-30 minutes'
+          },
           guestUserId: guestUser.id,
-          trackingUrl: `/api/public/track/${job.id}`
+          trackingUrl: `/track/${job.jobNumber}`
         });
       } catch (error) {
         console.error('Guest booking error:', error);
-        res.status(500).json({ message: 'Guest booking failed' });
+        res.status(500).json({ 
+          message: 'Guest booking failed', 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
       }
     }
   );
