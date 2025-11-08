@@ -7696,7 +7696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               insurancePolicyNumber: application.insurancePolicyNumber,
               serviceRadius: application.serviceRadius || 50,
               isAvailable: false, // Will be set to true when approved
-              performanceTier: 'standard',
+              performanceTier: 'bronze', // New contractors start at bronze tier
               totalJobsCompleted: 0,
               averageRating: 0,
               completionRate: 0,
