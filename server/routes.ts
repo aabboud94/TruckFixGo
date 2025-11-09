@@ -6409,6 +6409,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Update contractor details (admin access)
+  app.put('/api/admin/contractors/:id',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { id } = req.params;
+        const { name, company, email, phone } = req.body;
+
+        // Validate input
+        if (!name || !email) {
+          return res.status(400).json({ message: 'Name and email are required' });
+        }
+
+        // Email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          return res.status(400).json({ message: 'Invalid email address' });
+        }
+
+        // Phone validation (basic)
+        if (phone && phone.length < 7) {
+          return res.status(400).json({ message: 'Invalid phone number' });
+        }
+
+        // Update contractor details
+        const updatedContractor = await storage.updateContractorDetails(id, {
+          name: name.trim(),
+          company: (company || '').trim(),
+          email: email.trim().toLowerCase(),
+          phone: (phone || '').trim()
+        });
+
+        if (!updatedContractor) {
+          return res.status(404).json({ message: 'Contractor not found' });
+        }
+
+        res.json({
+          message: 'Contractor details updated successfully',
+          contractor: updatedContractor
+        });
+      } catch (error: any) {
+        console.error('Error updating contractor details:', error);
+        
+        // Handle unique constraint violations
+        if (error.message?.includes('Email address is already in use')) {
+          return res.status(409).json({ message: 'Email address is already in use' });
+        }
+        
+        res.status(500).json({ message: 'Failed to update contractor details' });
+      }
+    }
+  );
+
   // Manage contractor approvals
   app.get('/api/admin/contractors',
     requireAuth,
