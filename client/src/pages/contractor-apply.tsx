@@ -394,8 +394,8 @@ export default function ContractorApply() {
         form.reset(nextStepData);
       }, 0);
     } else {
-      // Submit the application
-      handleSubmit();
+      // Submit the application with the merged data including step 5 fields
+      handleSubmit(newFormData);
     }
   };
 
@@ -421,10 +421,11 @@ export default function ContractorApply() {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (dataToSubmit?: any) => {
     setIsSubmitting(true);
     try {
-      await submitApplicationMutation.mutateAsync(formData);
+      // Use provided data or fallback to formData
+      await submitApplicationMutation.mutateAsync(dataToSubmit || formData);
     } catch (error) {
       toast({
         title: "Error",
