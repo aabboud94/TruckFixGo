@@ -6,13 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { MapPin, Loader2, Navigation, Phone } from "lucide-react";
+import { MapPin, Loader2, Navigation, Phone, Mail } from "lucide-react";
 import { EmergencyBookingData } from "./index";
 
 const formSchema = z.object({
   phone: z.string()
     .min(10, "Phone number is required")
     .regex(/^[\d\s\-\+\(\)]+$/, "Invalid phone number format"),
+  email: z.string()
+    .email("Please enter a valid email address")
+    .min(1, "Email is required"),
   manualLocation: z.string().optional(),
 });
 
@@ -31,6 +34,7 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       phone: initialData.phone || "",
+      email: initialData.email || "",
       manualLocation: initialData.manualLocation || "",
     },
   });
@@ -89,6 +93,7 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
 
     onComplete({
       phone: values.phone,
+      email: values.email,
       location: location,
       manualLocation: values.manualLocation,
     });
@@ -180,9 +185,10 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
             </CardContent>
           </Card>
 
-          {/* Phone Number Card */}
+          {/* Contact Information Card */}
           <Card className="border-2">
-            <CardContent className="p-6">
+            <CardContent className="p-6 space-y-4">
+              {/* Phone Number Field */}
               <FormField
                 control={form.control}
                 name="phone"
@@ -206,6 +212,34 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
                     <FormMessage />
                     <p className="text-sm text-muted-foreground mt-2">
                       We'll send you updates via SMS
+                    </p>
+                  </FormItem>
+                )}
+              />
+
+              {/* Email Field */}
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base font-medium flex items-center gap-2">
+                      <Mail className="w-4 h-4" />
+                      Email for Updates (Required)
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="email"
+                        placeholder="your@email.com"
+                        className="h-14 text-base"
+                        data-testid="input-customer-email"
+                        autoComplete="email"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                    <p className="text-sm text-muted-foreground mt-2">
+                      We'll send job updates and ETA to this email
                     </p>
                   </FormItem>
                 )}

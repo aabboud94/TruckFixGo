@@ -398,6 +398,13 @@ export const jobs = pgTable("jobs", {
   // assignmentAttemptedAt: timestamp("assignment_attempted_at"),
   // assignmentNotificationSent: boolean("assignment_notification_sent").notNull().default(false),
   
+  // Notification tracking fields to prevent email spam
+  lastAdminAlertAt: timestamp("last_admin_alert_at"),
+  lastCustomerNotificationAt: timestamp("last_customer_notification_at"),
+  
+  // Customer email for notifications
+  customerEmail: varchar("customer_email", { length: 255 }),
+  
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow()
 }, (table) => ({

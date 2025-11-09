@@ -543,6 +543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           jobType: jobType as 'emergency' | 'scheduled',
           serviceTypeId: resolvedServiceTypeId, // Use the validated serviceTypeId
           customerId: guestUser.id,
+          customerEmail: guestEmail || guestUser.email || undefined, // Store customer email for notifications
           location: location, // This should be {lat: number, lng: number}
           locationAddress: locationAddress,
           description: description || 'Emergency roadside assistance needed',
