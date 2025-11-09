@@ -1159,23 +1159,19 @@ export class PostgreSQLStorage implements IStorage {
 
   async getAvailableContractors(jobLat?: number, jobLon?: number): Promise<any[]> {
     try {
-      // First, let's also check for contractors without the strict availability filter
-      // In production, many contractors might not have is_available set to true
+      console.log('[getAvailableContractors] Fetching contractors for assignment, jobLat:', jobLat, 'jobLon:', jobLon);
+      
+      // Get all contractors - be less strict about availability
+      // We'll include all contractors with a profile, regardless of isAvailable status
       const contractors = await db
         .select()
         .from(users)
         .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
         .where(
-          and(
-            eq(users.role, 'contractor'),
-            // Remove strict availability check for now - we'll handle it more gracefully
-            // Allow contractors with profile OR those who are explicitly available
-            or(
-              eq(contractorProfiles.isAvailable, true),
-              isNotNull(contractorProfiles.id) // Allow any contractor with a profile
-            )
-          )
+          eq(users.role, 'contractor')
         );
+      
+      console.log(`[getAvailableContractors] Found ${contractors.length} total contractors`);
 
       // Calculate distance if job coordinates provided and format response
       return contractors.map(row => {
