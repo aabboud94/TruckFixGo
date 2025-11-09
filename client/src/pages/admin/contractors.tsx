@@ -34,9 +34,18 @@ export default function AdminContractors() {
   const [showContractorDetails, setShowContractorDetails] = useState(false);
   const [selectedContractors, setSelectedContractors] = useState<string[]>([]);
 
+  // Build query parameters for contractors
+  const buildQueryParams = () => {
+    const params = new URLSearchParams();
+    if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter);
+    if (tierFilter && tierFilter !== 'all') params.append('tier', tierFilter);
+    if (searchQuery) params.append('search', searchQuery);
+    return params.toString() ? `?${params.toString()}` : '';
+  };
+
   // Query for contractors
   const { data: contractors, isLoading, refetch } = useQuery({
-    queryKey: ['/api/admin/contractors', { status: statusFilter, tier: tierFilter, search: searchQuery }],
+    queryKey: [`/api/admin/contractors${buildQueryParams()}`],
   });
 
   // Mutation for updating contractor status

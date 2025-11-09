@@ -6378,13 +6378,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole('admin'),
     async (req: Request, res: Response) => {
       try {
-        const filters = {
+        const filters: any = {
           ...getPagination(req),
           performanceTier: req.query.performanceTier as any,
-          isAvailable: req.query.isAvailable === 'true',
           search: req.query.search as string,
           status: req.query.status as string
         };
+        
+        // Only add isAvailable filter if explicitly provided
+        if (req.query.isAvailable !== undefined) {
+          filters.isAvailable = req.query.isAvailable === 'true';
+        }
         
         const contractors = await storage.findContractors(filters);
         
