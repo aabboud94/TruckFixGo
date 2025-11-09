@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -33,6 +34,9 @@ export default function AdminJobs() {
   const [showJobDetails, setShowJobDetails] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showRefundDialog, setShowRefundDialog] = useState(false);
+  const [selectedContractorId, setSelectedContractorId] = useState<string>('');
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>('');
+  const [assigneeType, setAssigneeType] = useState<'contractor' | 'driver'>('contractor');
   
   // State for editable job details
   const [editedJob, setEditedJob] = useState<any>(null);
@@ -55,6 +59,13 @@ export default function AdminJobs() {
     queryKey: ['/api/admin/contractors/available'],
     queryFn: async () => apiRequest('GET', '/api/admin/contractors/available'),
     enabled: showAssignDialog,
+  });
+
+  // Query for drivers managed by selected contractor
+  const { data: managedDrivers } = useQuery({
+    queryKey: ['/api/admin/contractors', selectedContractorId, 'drivers'],
+    queryFn: async () => apiRequest('GET', `/api/admin/contractors/${selectedContractorId}/drivers`),
+    enabled: !!selectedContractorId && showAssignDialog,
   });
   
   // Query for service types
@@ -727,47 +738,133 @@ export default function AdminJobs() {
       </Dialog>
 
       {/* Assign Contractor Dialog */}
-      <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
-        <DialogContent>
+      <Dialog open={showAssignDialog} onOpenChange={(open) => {
+        setShowAssignDialog(open);
+        if (!open) {
+          setSelectedContractorId('');
+          setSelectedAssigneeId('');
+          setAssigneeType('contractor');
+        }
+      }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Assign Contractor</DialogTitle>
+            <DialogTitle>Assign Contractor or Driver</DialogTitle>
             <DialogDescription>
-              Select a contractor to assign to job {selectedJob?.id}
+              Select a contractor or their managed driver to assign to job {selectedJob?.id}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">
-            <ScrollArea className="h-[300px]">
-              <div className="space-y-2">
-                {Array.isArray(contractors) && contractors.map((contractor: any) => (
-                  <div
-                    key={contractor.id}
-                    className="p-3 border rounded-lg hover:bg-muted cursor-pointer"
-                    onClick={() => {
-                      assignContractorMutation.mutate({
-                        jobId: selectedJob?.id,
-                        contractorId: contractor.id,
-                      });
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{contractor.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {contractor.distance} miles away • {contractor.rating} ⭐
-                        </p>
+            {/* Step 1: Select Contractor */}
+            <div className="space-y-2">
+              <Label>Select Contractor</Label>
+              <Select 
+                value={selectedContractorId} 
+                onValueChange={(value) => {
+                  setSelectedContractorId(value);
+                  setSelectedAssigneeId(value);
+                  setAssigneeType('contractor');
+                }}
+              >
+                <SelectTrigger data-testid="select-contractor">
+                  <SelectValue placeholder="Choose a contractor..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.isArray(contractors) && contractors.map((contractor: any) => (
+                    <SelectItem key={contractor.id} value={contractor.id}>
+                      <div className="flex items-center justify-between w-full">
+                        <span>{contractor.name}</span>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{contractor.distance} mi</span>
+                          <span>{contractor.rating} ⭐</span>
+                          <Badge variant="secondary" className="h-5">{contractor.tier}</Badge>
+                        </div>
                       </div>
-                      <Badge>{contractor.tier}</Badge>
-                    </div>
-                  </div>
-                ))}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Step 2: Optionally Select Driver (if contractor has managed drivers) */}
+            {selectedContractorId && managedDrivers && managedDrivers.length > 0 && (
+              <div className="space-y-2">
+                <Label>Or Assign to Managed Driver</Label>
+                <Select 
+                  value={assigneeType === 'driver' ? selectedAssigneeId : ''} 
+                  onValueChange={(value) => {
+                    setSelectedAssigneeId(value);
+                    setAssigneeType('driver');
+                  }}
+                >
+                  <SelectTrigger data-testid="select-driver">
+                    <SelectValue placeholder="Choose a driver managed by this contractor..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">
+                      <span className="text-muted-foreground">Assign to contractor directly</span>
+                    </SelectItem>
+                    {managedDrivers.map((driver: any) => (
+                      <SelectItem key={driver.id} value={driver.id}>
+                        <div className="flex items-center justify-between w-full">
+                          <span>{driver.firstName} {driver.lastName}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {driver.phoneNumber}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            </ScrollArea>
+            )}
+
+            {/* Assignment Summary */}
+            {selectedContractorId && (
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm">
+                  <span className="font-medium">Assignment:</span> Job will be assigned to{' '}
+                  <span className="font-medium">
+                    {assigneeType === 'contractor' 
+                      ? contractors?.find((c: any) => c.id === selectedContractorId)?.name
+                      : managedDrivers?.find((d: any) => d.id === selectedAssigneeId)?.firstName + ' ' + 
+                        managedDrivers?.find((d: any) => d.id === selectedAssigneeId)?.lastName}
+                  </span>
+                  {assigneeType === 'driver' && (
+                    <span className="text-muted-foreground"> (Driver managed by contractor)</span>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAssignDialog(false)}>
+            <Button variant="outline" onClick={() => {
+              setShowAssignDialog(false);
+              setSelectedContractorId('');
+              setSelectedAssigneeId('');
+              setAssigneeType('contractor');
+            }}>
               Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                assignContractorMutation.mutate({
+                  jobId: selectedJob?.id,
+                  contractorId: selectedContractorId,
+                  driverId: assigneeType === 'driver' ? selectedAssigneeId : undefined,
+                });
+              }}
+              disabled={!selectedContractorId || assignContractorMutation.isPending}
+            >
+              {assignContractorMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Assigning...
+                </>
+              ) : (
+                'Assign'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
