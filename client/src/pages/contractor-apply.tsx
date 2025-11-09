@@ -788,24 +788,29 @@ export default function ContractorApply() {
               <div className="space-y-3 mt-2">
                 {["ASE Certified", "DOT Medical Certified", "HAZMAT Certified", "EPA 609 Certified", 
                   "Welding Certified", "Diesel Engine Specialist"].map((cert) => (
-                  <FormItem key={cert} className="flex items-center space-x-3">
-                    <FormControl>
-                      <Checkbox 
-                        onCheckedChange={(checked) => {
-                          const current = form.getValues("certifications") || [];
-                          if (checked) {
-                            form.setValue("certifications", [...current, cert]);
-                          } else {
-                            form.setValue("certifications", current.filter((c: string) => c !== cert));
-                          }
-                        }}
-                        data-testid={`checkbox-cert-${cert.toLowerCase().replace(/\s+/g, '-')}`}
-                      />
-                    </FormControl>
-                    <FormLabel className="font-normal cursor-pointer">
+                  <div key={cert} className="flex items-start space-x-3">
+                    <input
+                      type="checkbox"
+                      id={`cert-${cert.toLowerCase().replace(/\s+/g, '-')}`}
+                      className="w-4 h-4 mt-1 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                      checked={(form.getValues("certifications") || []).includes(cert)}
+                      onChange={(e) => {
+                        const current = form.getValues("certifications") || [];
+                        if (e.target.checked) {
+                          form.setValue("certifications", [...current, cert]);
+                        } else {
+                          form.setValue("certifications", current.filter((c: string) => c !== cert));
+                        }
+                      }}
+                      data-testid={`checkbox-cert-${cert.toLowerCase().replace(/\s+/g, '-')}`}
+                    />
+                    <label 
+                      htmlFor={`cert-${cert.toLowerCase().replace(/\s+/g, '-')}`}
+                      className="text-sm font-normal cursor-pointer select-none flex-1"
+                    >
                       {cert}
-                    </FormLabel>
-                  </FormItem>
+                    </label>
+                  </div>
                 ))}
               </div>
             </div>
@@ -815,24 +820,29 @@ export default function ContractorApply() {
               <div className="space-y-3 mt-2">
                 {["Engine Repair", "Transmission", "Brakes", "Electrical Systems", 
                   "HVAC", "Suspension", "Tires", "Preventive Maintenance"].map((spec) => (
-                  <FormItem key={spec} className="flex items-center space-x-3">
-                    <FormControl>
-                      <Checkbox
-                        onCheckedChange={(checked) => {
-                          const current = form.getValues("specializations") || [];
-                          if (checked) {
-                            form.setValue("specializations", [...current, spec]);
-                          } else {
-                            form.setValue("specializations", current.filter((s: string) => s !== spec));
-                          }
-                        }}
-                        data-testid={`checkbox-spec-${spec.toLowerCase().replace(/\s+/g, '-')}`}
-                      />
-                    </FormControl>
-                    <FormLabel className="font-normal cursor-pointer">
+                  <div key={spec} className="flex items-start space-x-3">
+                    <input
+                      type="checkbox"
+                      id={`spec-${spec.toLowerCase().replace(/\s+/g, '-')}`}
+                      className="w-4 h-4 mt-1 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                      checked={(form.getValues("specializations") || []).includes(spec)}
+                      onChange={(e) => {
+                        const current = form.getValues("specializations") || [];
+                        if (e.target.checked) {
+                          form.setValue("specializations", [...current, spec]);
+                        } else {
+                          form.setValue("specializations", current.filter((s: string) => s !== spec));
+                        }
+                      }}
+                      data-testid={`checkbox-spec-${spec.toLowerCase().replace(/\s+/g, '-')}`}
+                    />
+                    <label 
+                      htmlFor={`spec-${spec.toLowerCase().replace(/\s+/g, '-')}`}
+                      className="text-sm font-normal cursor-pointer select-none flex-1"
+                    >
                       {spec}
-                    </FormLabel>
-                  </FormItem>
+                    </label>
+                  </div>
                 ))}
               </div>
             </div>
