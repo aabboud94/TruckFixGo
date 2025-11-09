@@ -7666,7 +7666,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        // Check required fields are complete (matching actual database columns)
+        // Check required fields are complete (Drizzle returns camelCase)
         const requiredFields = [
           'firstName', 'lastName', 'email', 'phone'
         ];
