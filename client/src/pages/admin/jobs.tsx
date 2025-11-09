@@ -57,7 +57,14 @@ export default function AdminJobs() {
   // Query for available contractors
   const { data: contractors } = useQuery({
     queryKey: ['/api/admin/contractors/available'],
-    queryFn: async () => apiRequest('GET', '/api/admin/contractors/available'),
+    queryFn: async () => {
+      console.log('[AssignDialog] Fetching available contractors...');
+      const result = await apiRequest('GET', '/api/admin/contractors/available');
+      console.log('[AssignDialog] Available contractors response:', result);
+      console.log('[AssignDialog] Is array?', Array.isArray(result));
+      console.log('[AssignDialog] Length:', result?.length);
+      return result;
+    },
     enabled: showAssignDialog,
   });
 
