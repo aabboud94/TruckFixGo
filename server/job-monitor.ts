@@ -3,10 +3,14 @@ import { emailService } from './services/email-service';
 
 class JobMonitor {
   private monitoringInterval: NodeJS.Timeout | null = null;
-  private alertedJobs = new Set<string>(); // Track jobs we've already alerted about
+  
+  // Cooldown periods in milliseconds
+  private readonly ADMIN_ALERT_COOLDOWN = 60 * 60 * 1000; // 1 hour
+  private readonly CUSTOMER_NOTIFICATION_COOLDOWN = 30 * 60 * 1000; // 30 minutes
 
   public start() {
     console.log('[JobMonitor] Starting job monitoring service');
+    console.log('[JobMonitor] Cooldown periods: Admin alerts = 1 hour, Customer notifications = 30 minutes');
     
     // Check for unassigned jobs every minute
     this.monitoringInterval = setInterval(async () => {
@@ -55,43 +59,70 @@ class JobMonitor {
           customer = {
             firstName: job.customerName.split(' ')[0] || 'Customer',
             lastName: job.customerName.split(' ').slice(1).join(' ') || '',
-            email: null
+            email: job.customerEmail || null // Use job.customerEmail from database
           };
         }
 
         // Alert admin if job has been unassigned for more than 5 minutes
-        if (minutesWaiting >= 5 && !this.alertedJobs.has(job.id)) {
-          console.log(`[JobMonitor] Job ${job.jobNumber} has been unassigned for ${minutesWaiting} minutes`);
-
-          // Send alert to admin
-          await emailService.sendUnassignedJobAlert(job, customer);
+        // Check database cooldown instead of in-memory tracking
+        if (minutesWaiting >= 5) {
+          const shouldSendAdminAlert = !job.lastAdminAlertAt || 
+            (now.getTime() - new Date(job.lastAdminAlertAt).getTime() >= this.ADMIN_ALERT_COOLDOWN);
           
-          // Mark as alerted so we don't send duplicate alerts
-          this.alertedJobs.add(job.id);
-          
-          console.log(`[JobMonitor] Alert sent to admin for job ${job.jobNumber}`);
+          if (shouldSendAdminAlert) {
+            console.log(`[JobMonitor] Job ${job.jobNumber} has been unassigned for ${minutesWaiting} minutes - sending admin alert`);
+            
+            try {
+              // Send alert to admin
+              await emailService.sendUnassignedJobAlert(job, customer);
+              
+              // Update database with alert timestamp
+              await storage.updateJob(job.id, { lastAdminAlertAt: new Date() });
+              
+              console.log(`[JobMonitor] Admin alert sent and database updated for job ${job.jobNumber}`);
+            } catch (error) {
+              console.error(`[JobMonitor] Failed to send admin alert for job ${job.jobNumber}:`, error);
+            }
+          } else {
+            const timeSinceLastAlert = Math.floor((now.getTime() - new Date(job.lastAdminAlertAt!).getTime()) / 60000);
+            console.log(`[JobMonitor] Skipping admin alert for job ${job.jobNumber} - last alert was ${timeSinceLastAlert} minutes ago (cooldown: 60 min)`);
+          }
         }
 
-        // Send pending notification to customer after 3 minutes if not sent yet
-        // Track notification sent status in memory for now
-        const notificationKey = `${job.id}_pending_sent`;
-        if (minutesWaiting >= 3 && customer?.email && !this.alertedJobs.has(notificationKey)) {
-          console.log(`[JobMonitor] Sending pending notification to customer for job ${job.jobNumber}`);
+        // Send pending notification to customer after 3 minutes if customer email exists
+        const customerEmail = customer?.email || job.customerEmail;
+        if (minutesWaiting >= 3 && customerEmail) {
+          const shouldSendCustomerNotification = !job.lastCustomerNotificationAt || 
+            (now.getTime() - new Date(job.lastCustomerNotificationAt).getTime() >= this.CUSTOMER_NOTIFICATION_COOLDOWN);
           
-          // Send the notification
-          await emailService.sendPendingJobNotification(job, customer);
-          
-          // Mark notification as sent in memory
-          this.alertedJobs.add(notificationKey);
-          console.log(`[JobMonitor] Notification sent for job ${job.jobNumber}`);
-        }
-      }
-
-      // Clean up alerted jobs that are no longer unassigned
-      const unassignedJobIds = new Set(unassignedJobs.map(j => j.id));
-      for (const jobId of this.alertedJobs) {
-        if (!unassignedJobIds.has(jobId)) {
-          this.alertedJobs.delete(jobId);
+          if (shouldSendCustomerNotification) {
+            console.log(`[JobMonitor] Sending pending notification to customer for job ${job.jobNumber} (email: ${customerEmail})`);
+            
+            try {
+              // Ensure customer object has the email
+              const customerWithEmail = customer || {
+                firstName: job.customerName?.split(' ')[0] || 'Customer',
+                lastName: job.customerName?.split(' ').slice(1).join(' ') || '',
+                email: customerEmail
+              };
+              
+              // Send the notification
+              await emailService.sendPendingJobNotification(job, customerWithEmail);
+              
+              // Update database with notification timestamp
+              await storage.updateJob(job.id, { lastCustomerNotificationAt: new Date() });
+              
+              console.log(`[JobMonitor] Customer notification sent and database updated for job ${job.jobNumber}`);
+            } catch (error) {
+              console.error(`[JobMonitor] Failed to send customer notification for job ${job.jobNumber}:`, error);
+            }
+          } else {
+            const timeSinceLastNotification = Math.floor((now.getTime() - new Date(job.lastCustomerNotificationAt!).getTime()) / 60000);
+            console.log(`[JobMonitor] Skipping customer notification for job ${job.jobNumber} - last notification was ${timeSinceLastNotification} minutes ago (cooldown: 30 min)`);
+          }
+        } else if (minutesWaiting >= 3 && !customerEmail) {
+          // Log that we can't send notification due to missing email
+          console.log(`[JobMonitor] Cannot send customer notification for job ${job.jobNumber} - no customer email available`);
         }
       }
     } catch (error) {

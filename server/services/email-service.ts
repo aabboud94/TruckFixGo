@@ -244,8 +244,21 @@ class EmailService {
       return false;
     }
 
-    const template = this.generateTemplate(type, data);
+    // Skip emails to invalid test domains
+    const INVALID_DOMAINS = ['example.com', 'test.com', 'localhost'];
     const recipients = Array.isArray(to) ? to.join(', ') : to;
+    
+    // Check if any recipient has an invalid domain
+    const recipientEmails = Array.isArray(to) ? to : [to];
+    for (const email of recipientEmails) {
+      const emailDomain = email.split('@')[1];
+      if (INVALID_DOMAINS.includes(emailDomain)) {
+        console.log(`[Email Service] Skipping email to ${email} - invalid test domain`);
+        return false; // Return false but don't retry
+      }
+    }
+
+    const template = this.generateTemplate(type, data);
 
     let attempt = 0;
     while (attempt < this.retryAttempts) {
