@@ -329,12 +329,15 @@ export default function ContractorApply() {
   // Auto-save draft every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      if (applicationId && Object.keys(formData).length > 0) {
-        saveDraftMutation.mutate(formData);
+      if (applicationId && currentStep > 0) {
+        // Get current form values and merge with existing formData
+        const currentValues = form.getValues();
+        const mergedData = { ...formData, ...currentValues };
+        saveDraftMutation.mutate(mergedData);
       }
     }, 30000);
     return () => clearInterval(interval);
-  }, [formData, applicationId]);
+  }, [formData, applicationId, currentStep, form]);
 
   const handleNext = async () => {
     const isValid = await form.trigger();
@@ -1313,7 +1316,12 @@ export default function ContractorApply() {
           <div className="ml-auto flex items-center space-x-4">
             <Button 
               variant="outline" 
-              onClick={() => saveDraftMutation.mutate(formData)}
+              onClick={() => {
+                // Get current form values and merge with existing formData
+                const currentValues = form.getValues();
+                const mergedData = { ...formData, ...currentValues };
+                saveDraftMutation.mutate(mergedData);
+              }}
               disabled={saveDraftMutation.isPending}
               data-testid="button-save-draft"
             >
