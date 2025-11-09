@@ -956,19 +956,19 @@ export class PostgreSQLStorage implements IStorage {
     const query = db
       .select({
         id: users.id,
-        name: users.name,
+        name: sql<string>`COALESCE(${users.firstName} || ' ' || ${users.lastName}, ${users.firstName}, ${users.email})`,
         email: users.email,
         phone: users.phone,
         company: contractorProfiles.companyName,
         status: users.role,
         tier: contractorProfiles.performanceTier,
-        rating: contractorProfiles.rating,
-        totalJobs: contractorProfiles.totalJobs,
-        completedJobs: contractorProfiles.completedJobs,
-        avgResponseTime: contractorProfiles.avgResponseTime,
+        rating: contractorProfiles.averageRating,
+        totalJobs: contractorProfiles.totalJobsCompleted,
+        completedJobs: contractorProfiles.totalJobsCompleted,
+        avgResponseTime: contractorProfiles.averageResponseTime,
         totalEarnings: sql<number>`COALESCE(${contractorEarnings.totalEarnings}, 0)`,
         currentBalance: sql<number>`COALESCE(${contractorEarnings.currentBalance}, 0)`,
-        documentsVerified: contractorProfiles.documentsVerified,
+        documentsVerified: contractorProfiles.isVerifiedContractor,
         isAvailable: contractorProfiles.isAvailable,
         joinedAt: users.createdAt
       })
