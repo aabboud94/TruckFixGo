@@ -375,16 +375,19 @@ export default function ContractorApply() {
       const nextStep = currentStep + 1;
       setCurrentStep(nextStep);
       
-      // Now reset form with data for the next step
+      // Reset form with ALL accumulated data plus defaults for the next step
       const nextStepFields = getStepFields(nextStep);
-      const nextStepData = Object.keys(nextStepFields).reduce((acc: any, key) => {
-        if (key in newFormData) {
-          acc[key] = newFormData[key];
-        } else if (key in nextStepFields) {
-          acc[key] = nextStepFields[key];
-        }
-        return acc;
-      }, {});
+      // Start with all accumulated data to preserve fields from previous steps
+      const nextStepData = {
+        ...newFormData, // Include ALL accumulated data
+        // Add defaults only for fields that don't have values yet
+        ...Object.keys(nextStepFields).reduce((acc: any, key) => {
+          if (!(key in newFormData)) {
+            acc[key] = nextStepFields[key];
+          }
+          return acc;
+        }, {})
+      };
       
       // Use setTimeout to ensure state updates have completed
       setTimeout(() => {
@@ -401,17 +404,19 @@ export default function ContractorApply() {
       const prevStep = currentStep - 1;
       setCurrentStep(prevStep);
       
-      // Only reset form with data relevant to the previous step
+      // Reset form with ALL accumulated data plus defaults for the previous step
       const prevStepFields = getStepFields(prevStep);
-      const prevStepData = Object.keys(prevStepFields).reduce((acc: any, key) => {
-        if (key in formData) {
-          acc[key] = formData[key];
-        } else if (key in prevStepFields) {
-          // Use default values for fields not in formData
-          acc[key] = prevStepFields[key];
-        }
-        return acc;
-      }, {});
+      // Start with all accumulated data to preserve fields from all steps
+      const prevStepData = {
+        ...formData, // Include ALL accumulated data
+        // Add defaults only for fields that don't have values yet
+        ...Object.keys(prevStepFields).reduce((acc: any, key) => {
+          if (!(key in formData)) {
+            acc[key] = prevStepFields[key];
+          }
+          return acc;
+        }, {})
+      };
       form.reset(prevStepData);
     }
   };
