@@ -7518,14 +7518,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         console.log('Update data received:', JSON.stringify(updateData, null, 2));
         
-        // Map client fields to database fields first
-        // Personal information fields (camelCase to snake_case)
-        if ('firstName' in req.body) {
-          updateData.first_name = req.body.firstName;
-        }
-        if ('lastName' in req.body) {
-          updateData.last_name = req.body.lastName;
-        }
+        // Don't map field names - Drizzle expects camelCase property names
+        // The schema defines firstName: text("first_name") so we pass firstName, not first_name
         
         // Business fields
         if ('companyName' in req.body) {
@@ -7671,8 +7665,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'firstName', 'lastName', 'email', 'phone'
         ];
 
+        console.log('Submit validation - Application data:', {
+          firstName: application.firstName,
+          lastName: application.lastName,
+          email: application.email,
+          phone: application.phone,
+          status: application.status
+        });
+
         for (const field of requiredFields) {
           if (!application[field as keyof typeof application]) {
+            console.log(`Submit validation failed: missing ${field}`);
             return res.status(400).json({
               message: `Incomplete application: missing ${field}`
             });
