@@ -11,6 +11,22 @@ The application serves three primary user types:
 
 Key features include live mechanic tracking with real-time ETA, multi-service support (tire blowouts, fuel delivery, diagnostics, PM services, mobile washing), photo uploads for damage documentation, service history tracking by VIN/unit number, and integrated payment processing with support for fleet accounts, credit cards, EFS/Comdata checks, and split payments.
 
+## Recent Changes (November 2024)
+
+### Critical Database Query Fixes  
+- **Fixed SQL syntax error in search**: Changed `users.name` to search on `firstName` and `lastName` separately
+- **Fixed response parsing in contractors page**: Changed from `contractors?.data` to `contractors` (API returns array directly)
+- **Fixed isAvailable filter logic**: Now only applies when explicitly provided in query, not defaulting to false
+- **Fixed column name mappings**: Updated all contractor queries to use correct schema column names
+
+### Database Column Mappings (Critical Reference)
+Correct column names to use in queries:
+- `contractorProfiles.averageRating` (NOT rating)
+- `contractorProfiles.totalJobsCompleted` (NOT totalJobs)  
+- `contractorProfiles.averageResponseTime` (NOT avgResponseTime)
+- `contractorProfiles.isVerifiedContractor` (NOT documentsVerified)
+- `users.firstName/lastName` (NOT users.name - doesn't exist)
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
