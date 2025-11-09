@@ -854,30 +854,28 @@ export default function ContractorApply() {
                     <FormDescription>Select at least one service type</FormDescription>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
                       {serviceTypes.map((service: ServiceType) => (
-                        <FormItem key={service.id} className="flex items-start space-x-3 space-y-0">
-                          <FormControl>
-                            <Checkbox
-                              id={`service-${service.id}`}
-                              className="mt-1"
-                              checked={currentValues.includes(service.id)}
-                              onCheckedChange={(checked) => {
-                                const updatedValue = checked
-                                  ? [...currentValues, service.id]
-                                  : currentValues.filter((s: string) => s !== service.id);
-                                field.onChange(updatedValue);
-                                // Also manually trigger form update
-                                form.setValue("serviceTypes", updatedValue, { shouldValidate: true });
-                              }}
-                              data-testid={`checkbox-service-${service.id}`}
-                            />
-                          </FormControl>
+                        <div key={service.id} className="flex items-start space-x-3">
+                          <input
+                            type="checkbox"
+                            id={`service-${service.id}`}
+                            className="w-4 h-4 mt-1 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                            checked={currentValues.includes(service.id)}
+                            onChange={(e) => {
+                              const updatedValue = e.target.checked
+                                ? [...currentValues, service.id]
+                                : currentValues.filter((s: string) => s !== service.id);
+                              field.onChange(updatedValue);
+                              form.setValue("serviceTypes", updatedValue, { shouldValidate: true });
+                            }}
+                            data-testid={`checkbox-service-${service.id}`}
+                          />
                           <label 
                             htmlFor={`service-${service.id}`}
-                            className="text-sm font-normal cursor-pointer select-none py-1 flex-1"
+                            className="text-sm font-normal cursor-pointer select-none flex-1"
                           >
                             {service.name}
                           </label>
-                        </FormItem>
+                        </div>
                       ))}
                     </div>
                     <FormMessage />
@@ -933,23 +931,24 @@ export default function ContractorApply() {
               control={form.control}
               name="hasOwnTools"
               render={({ field }) => (
-                <FormItem className="flex items-start space-x-3 space-y-0">
-                  <FormControl>
-                    <Checkbox 
-                      id="hasOwnTools"
-                      className="mt-1"
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      data-testid="checkbox-own-tools"
-                    />
-                  </FormControl>
+                <div className="flex items-start space-x-3">
+                  <input
+                    type="checkbox"
+                    id="hasOwnTools"
+                    className="w-4 h-4 mt-1 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                    checked={field.value || false}
+                    onChange={(e) => {
+                      field.onChange(e.target.checked);
+                    }}
+                    data-testid="checkbox-own-tools"
+                  />
                   <label 
                     htmlFor="hasOwnTools"
-                    className="text-sm font-normal cursor-pointer select-none py-1 flex-1"
+                    className="text-sm font-normal cursor-pointer select-none flex-1"
                   >
                     I have my own professional tools and equipment
                   </label>
-                </FormItem>
+                </div>
               )}
             />
 
@@ -957,23 +956,24 @@ export default function ContractorApply() {
               control={form.control}
               name="hasOwnVehicle"
               render={({ field }) => (
-                <FormItem className="flex items-start space-x-3 space-y-0">
-                  <FormControl>
-                    <Checkbox 
-                      id="hasOwnVehicle"
-                      className="mt-1"
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      data-testid="checkbox-hasServiceTruck"
-                    />
-                  </FormControl>
+                <div className="flex items-start space-x-3">
+                  <input
+                    type="checkbox"
+                    id="hasOwnVehicle"
+                    className="w-4 h-4 mt-1 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                    checked={field.value || false}
+                    onChange={(e) => {
+                      field.onChange(e.target.checked);
+                    }}
+                    data-testid="checkbox-hasServiceTruck"
+                  />
                   <label 
                     htmlFor="hasOwnVehicle"
-                    className="text-sm font-normal cursor-pointer select-none py-1 flex-1"
+                    className="text-sm font-normal cursor-pointer select-none flex-1"
                   >
                     I have my own service vehicle
                   </label>
-                </FormItem>
+                </div>
               )}
             />
 
