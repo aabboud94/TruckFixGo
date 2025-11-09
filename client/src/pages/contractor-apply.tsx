@@ -661,8 +661,13 @@ export default function ContractorApply() {
                       inputMode="numeric"
                       pattern="[0-9]*"
                       placeholder="5" 
-                      {...field}
-                      onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                      value={field.value ?? ''}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        field.onChange(value === '' ? undefined : Number(value));
+                      }}
                       className="touch-manipulation"
                       data-testid="input-yearsExperience"
                     />
@@ -772,8 +777,13 @@ export default function ContractorApply() {
                       inputMode="numeric"
                       pattern="[0-9]*"
                       placeholder="10" 
-                      {...field}
-                      onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                      value={field.value ?? ''}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        field.onChange(value === '' ? undefined : Number(value));
+                      }}
                       className="touch-manipulation"
                       data-testid="input-total-experience"
                     />
@@ -906,8 +916,13 @@ export default function ContractorApply() {
                       inputMode="numeric"
                       pattern="[0-9]*"
                       placeholder="50" 
-                      {...field}
-                      onChange={(e) => field.onChange(e.target.value === "" ? 50 : Number(e.target.value))}
+                      value={field.value ?? ''}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        field.onChange(value === '' ? undefined : Number(value));
+                      }}
                       className="touch-manipulation"
                       data-testid="input-serviceRadius"
                     />
