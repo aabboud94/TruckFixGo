@@ -1068,11 +1068,15 @@ export class PostgreSQLStorage implements IStorage {
     email: string;
     phone: string;
   }): Promise<any> {
+    console.log('[updateContractorDetails] Called with:', { contractorId, details });
+    
     try {
       // Parse name into first and last name
       const nameParts = details.name.trim().split(' ');
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ') || '';
+
+      console.log('[updateContractorDetails] Parsed name:', { firstName, lastName });
 
       // Start a transaction to update both tables
       const result = await db.transaction(async (tx) => {
