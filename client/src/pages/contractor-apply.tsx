@@ -196,11 +196,46 @@ export default function ContractorApply() {
   const [currentStep, setCurrentStep] = useState(0); // Start at 0 for landing page
   const [formData, setFormData] = useState<any>({
     // Initialize default values to prevent validation errors
+    // Personal info
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    address: '',
+    city: '',
+    state: '',
+    zip: '',
+    // Business details
+    companyName: '',
+    businessType: '',
+    dotNumber: '',
+    mcNumber: '',
+    yearsInBusiness: '',
+    insuranceProvider: '',
+    insurancePolicyNumber: '',
+    insuranceExpiryDate: '',
+    // Experience
+    experienceLevel: '',
+    totalYearsExperience: '',
+    certifications: [],
+    specializations: [],
+    // Service capabilities
     serviceTypes: [],
     serviceRadius: 50,
     hasOwnTools: false,
     hasOwnVehicle: false,
-    references: [{}, {}],
+    baseLocation: '',
+    vehicleInfo: {
+      make: '',
+      model: '',
+      year: '',
+      type: ''
+    },
+    // References - proper initialization with empty strings
+    references: [
+      { name: '', company: '', phone: '', email: '' },
+      { name: '', company: '', phone: '', email: '' }
+    ],
     backgroundCheckConsent: false,
     termsAccepted: false
   });
