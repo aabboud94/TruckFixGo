@@ -90,8 +90,8 @@ export default function AdminJobs() {
 
   // Mutation for assigning contractor
   const assignContractorMutation = useMutation({
-    mutationFn: async ({ jobId, contractorId }: { jobId: string; contractorId: string }) => {
-      return apiRequest('PUT', `/api/admin/jobs/${jobId}/assign`, { contractorId });
+    mutationFn: async ({ jobId, contractorId, driverId }: { jobId: string; contractorId: string; driverId?: string }) => {
+      return apiRequest('PUT', `/api/admin/jobs/${jobId}/assign`, { contractorId, driverId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/jobs'] });
@@ -922,9 +922,6 @@ export default function AdminJobs() {
     </AdminLayout>
   );
 }
-
-// Add missing import
-import { Label } from "@/components/ui/label";
 
 // Component for the photos tab content
 function JobPhotoGalleryContent({ jobId }: { jobId: string }) {
