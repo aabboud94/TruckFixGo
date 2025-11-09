@@ -6372,6 +6372,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Get available contractors for job assignment
+  app.get('/api/admin/contractors/available',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { lat, lon } = req.query;
+        const jobLat = lat ? parseFloat(lat as string) : undefined;
+        const jobLon = lon ? parseFloat(lon as string) : undefined;
+        
+        const contractors = await storage.getAvailableContractors(jobLat, jobLon);
+        res.json(contractors);
+      } catch (error) {
+        console.error('Error fetching available contractors:', error);
+        res.status(500).json({ message: 'Failed to fetch available contractors' });
+      }
+    }
+  );
+
   // Manage contractor approvals
   app.get('/api/admin/contractors',
     requireAuth,

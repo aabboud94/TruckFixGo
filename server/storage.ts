@@ -196,7 +196,7 @@ import {
 } from "@shared/schema";
 
 import { db } from "./db";
-import { eq, and, or, gte, lte, isNull, desc, asc, sql, inArray, ne, gt, lt, ilike } from "drizzle-orm";
+import { eq, and, or, gte, lte, isNull, isNotNull, desc, asc, sql, inArray, ne, gt, lt, ilike } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import memoize from "memoizee";
 
@@ -1060,6 +1060,56 @@ export class PostgreSQLStorage implements IStorage {
     const user = await this.getUser(userId);
     if (!user) return false;
     return user.role === requiredRole;
+  }
+
+  async getAvailableContractors(jobLat?: number, jobLon?: number): Promise<any[]> {
+    try {
+      // Get approved and available contractors only
+      const contractors = await db
+        .select()
+        .from(users)
+        .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
+        .where(
+          and(
+            eq(users.role, 'contractor'),
+            eq(contractorProfiles.isAvailable, true),
+            isNotNull(contractorProfiles.id) // Ensure contractor profile exists
+          )
+        );
+
+      // Calculate distance if job coordinates provided and format response
+      return contractors.map(row => {
+        const fullName = `${row.users.firstName || ''} ${row.users.lastName || ''}`.trim() || row.users.email;
+        let distance = 0;
+        
+        // Calculate distance if coordinates available
+        if (jobLat && jobLon && row.contractor_profiles?.baseLocationLat && row.contractor_profiles?.baseLocationLon) {
+          const contractorLat = row.contractor_profiles.baseLocationLat;
+          const contractorLon = row.contractor_profiles.baseLocationLon;
+          
+          // Haversine formula for distance calculation
+          const R = 3959; // miles
+          const dLat = (contractorLat - jobLat) * Math.PI / 180;
+          const dLon = (contractorLon - jobLon) * Math.PI / 180;
+          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(jobLat * Math.PI / 180) * Math.cos(contractorLat * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          distance = Math.round(R * c * 10) / 10;
+        }
+
+        return {
+          id: row.users.id,
+          name: fullName,
+          distance,
+          rating: row.contractor_profiles?.averageRating || 0,
+          tier: row.contractor_profiles?.performanceTier || 'bronze'
+        };
+      });
+    } catch (error) {
+      console.error('Error in getAvailableContractors:', error);
+      throw error;
+    }
   }
 
   async hasAdminUsers(): Promise<boolean> {
