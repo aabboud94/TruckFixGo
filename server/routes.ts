@@ -7519,6 +7519,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('Update data received:', JSON.stringify(updateData, null, 2));
         
         // Map client fields to database fields first
+        // Personal information fields (camelCase to snake_case)
+        if ('firstName' in req.body) {
+          updateData.first_name = req.body.firstName;
+        }
+        if ('lastName' in req.body) {
+          updateData.last_name = req.body.lastName;
+        }
+        
+        // Business fields
         if ('companyName' in req.body) {
           updateData.businessName = req.body.companyName;
         }
@@ -7596,9 +7605,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Now remove fields that don't exist in the database and haven't been mapped
         const fieldsToRemove = ['address', 'city', 'state', 'zip', 'experienceLevel', 
                                'totalYearsExperience', 'companyName', 'yearsInBusiness',
-                               'hasOwnTools', 'hasOwnVehicle', 'coverageAreas', 'serviceTypes',
+                               'hasOwnTools', 'hasOwnVehicle', 'coverageAreas', 
                                'references', 'vehicleInfo', 'specializations', 'previousEmployers',
-                               'certifications'];
+                               'firstName', 'lastName'];  // Add firstName/lastName since we mapped them to first_name/last_name
         for (const field of fieldsToRemove) {
           if (field in updateData && 
               field !== 'serviceTypes' && 
@@ -7608,7 +7617,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               field !== 'baseLocation' &&
               field !== 'businessName' &&
               field !== 'yearsExperience' &&
-              field !== 'additionalAreas') {
+              field !== 'additionalAreas' &&
+              field !== 'first_name' &&    // Don't remove the mapped database fields
+              field !== 'last_name' &&
+              field !== 'email' &&
+              field !== 'phone') {
             delete updateData[field];
           }
         }

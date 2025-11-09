@@ -210,13 +210,13 @@ export default function ContractorApply() {
     businessType: '',
     dotNumber: '',
     mcNumber: '',
-    yearsInBusiness: '',
+    yearsInBusiness: 0,
     insuranceProvider: '',
     insurancePolicyNumber: '',
     insuranceExpiryDate: '',
     // Experience
     experienceLevel: '',
-    totalYearsExperience: '',
+    totalYearsExperience: 0,
     certifications: [],
     specializations: [],
     // Service capabilities
@@ -659,8 +659,8 @@ export default function ContractorApply() {
                     <Input 
                       type="number" 
                       placeholder="5" 
-                      {...field} 
-                      onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : "")}
+                      {...field}
+                      onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
                       data-testid="input-yearsExperience"
                     />
                   </FormControl>
@@ -768,7 +768,7 @@ export default function ContractorApply() {
                       type="number" 
                       placeholder="10" 
                       {...field}
-                      onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : "")}
+                      onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
                       data-testid="input-total-experience"
                     />
                   </FormControl>
@@ -886,7 +886,7 @@ export default function ContractorApply() {
                       type="number" 
                       placeholder="50" 
                       {...field}
-                      onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : "")}
+                      onChange={(e) => field.onChange(e.target.value === "" ? 50 : Number(e.target.value))}
                       data-testid="input-serviceRadius"
                     />
                   </FormControl>
