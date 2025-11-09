@@ -658,9 +658,12 @@ export default function ContractorApply() {
                   <FormControl>
                     <Input 
                       type="number" 
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       placeholder="5" 
                       {...field}
                       onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                      className="touch-manipulation"
                       data-testid="input-yearsExperience"
                     />
                   </FormControl>
@@ -766,9 +769,12 @@ export default function ContractorApply() {
                   <FormControl>
                     <Input 
                       type="number" 
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       placeholder="10" 
                       {...field}
                       onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                      className="touch-manipulation"
                       data-testid="input-total-experience"
                     />
                   </FormControl>
@@ -848,9 +854,11 @@ export default function ContractorApply() {
                     <FormDescription>Select at least one service type</FormDescription>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
                       {serviceTypes.map((service: ServiceType) => (
-                        <FormItem key={service.id} className="flex items-center space-x-3 space-y-0">
+                        <FormItem key={service.id} className="flex items-start space-x-3 space-y-0">
                           <FormControl>
                             <Checkbox
+                              id={`service-${service.id}`}
+                              className="mt-1"
                               checked={currentValues.includes(service.id)}
                               onCheckedChange={(checked) => {
                                 const updatedValue = checked
@@ -863,9 +871,12 @@ export default function ContractorApply() {
                               data-testid={`checkbox-service-${service.id}`}
                             />
                           </FormControl>
-                          <FormLabel className="font-normal cursor-pointer">
+                          <label 
+                            htmlFor={`service-${service.id}`}
+                            className="text-sm font-normal cursor-pointer select-none py-1 flex-1"
+                          >
                             {service.name}
-                          </FormLabel>
+                          </label>
                         </FormItem>
                       ))}
                     </div>
@@ -884,9 +895,12 @@ export default function ContractorApply() {
                   <FormControl>
                     <Input 
                       type="number" 
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       placeholder="50" 
                       {...field}
                       onChange={(e) => field.onChange(e.target.value === "" ? 50 : Number(e.target.value))}
+                      className="touch-manipulation"
                       data-testid="input-serviceRadius"
                     />
                   </FormControl>
@@ -919,17 +933,22 @@ export default function ContractorApply() {
               control={form.control}
               name="hasOwnTools"
               render={({ field }) => (
-                <FormItem className="flex items-center space-x-3 space-y-0">
+                <FormItem className="flex items-start space-x-3 space-y-0">
                   <FormControl>
                     <Checkbox 
+                      id="hasOwnTools"
+                      className="mt-1"
                       checked={field.value}
                       onCheckedChange={field.onChange}
                       data-testid="checkbox-own-tools"
                     />
                   </FormControl>
-                  <FormLabel className="font-normal cursor-pointer">
+                  <label 
+                    htmlFor="hasOwnTools"
+                    className="text-sm font-normal cursor-pointer select-none py-1 flex-1"
+                  >
                     I have my own professional tools and equipment
-                  </FormLabel>
+                  </label>
                 </FormItem>
               )}
             />
@@ -938,17 +957,22 @@ export default function ContractorApply() {
               control={form.control}
               name="hasOwnVehicle"
               render={({ field }) => (
-                <FormItem className="flex items-center space-x-3 space-y-0">
+                <FormItem className="flex items-start space-x-3 space-y-0">
                   <FormControl>
                     <Checkbox 
+                      id="hasOwnVehicle"
+                      className="mt-1"
                       checked={field.value}
                       onCheckedChange={field.onChange}
                       data-testid="checkbox-hasServiceTruck"
                     />
                   </FormControl>
-                  <FormLabel className="font-normal cursor-pointer">
+                  <label 
+                    htmlFor="hasOwnVehicle"
+                    className="text-sm font-normal cursor-pointer select-none py-1 flex-1"
+                  >
                     I have my own service vehicle
-                  </FormLabel>
+                  </label>
                 </FormItem>
               )}
             />
