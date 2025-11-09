@@ -12,6 +12,8 @@ import { reminderService } from "./reminder-service";
 import { reminderScheduler } from "./reminder-scheduler";
 import efsComdataService from "./efs-comdata-service";
 import stripeService from "./stripe-service";
+import { emailService } from "./services/email-service";
+import { trackingWSServer } from "./websocket";
 import multer from "multer";
 import sharp from "sharp";
 import path from "path";
@@ -1673,30 +1675,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  // Assign contractor to job
+  // Assign contractor to job with smart round-robin
   app.post('/api/jobs/:id/assign',
     requireAuth,
     requireRole('admin', 'dispatcher'),
     validateRequest(z.object({
-      contractorId: z.string()
+      contractorId: z.string().optional(),
+      autoAssign: z.boolean().optional()
     })),
     async (req: Request, res: Response) => {
       try {
-        const job = await storage.assignContractorToJob(
-          req.params.id,
-          req.body.contractorId
-        );
+        const jobId = req.params.id;
+        console.log(`[AssignJob] Starting assignment for job: ${jobId}`);
         
+        // Get the job details
+        const job = await storage.getJob(jobId);
         if (!job) {
           return res.status(404).json({ message: 'Job not found' });
         }
-
+        
+        // Determine contractor to assign
+        let contractorId = req.body.contractorId;
+        
+        // If no contractor specified or autoAssign is true, use smart assignment
+        if (!contractorId || req.body.autoAssign) {
+          console.log('[AssignJob] Auto-assigning using round-robin logic');
+          
+          // Extract coordinates from job location if available
+          let jobLat, jobLon;
+          if (job.location && typeof job.location === 'object') {
+            const location = job.location as any;
+            jobLat = location.lat || location.latitude;
+            jobLon = location.lon || location.lng || location.longitude;
+          }
+          
+          // Get available contractors using round-robin logic
+          const availableContractors = await storage.getAvailableContractorsForAssignment(jobLat, jobLon);
+          
+          console.log('[AssignJob] Available contractors:', availableContractors.map(c => ({ 
+            id: c.id, 
+            name: c.name, 
+            tier: c.performanceTier, 
+            lastAssigned: c.lastAssignedAt,
+            distance: c.distance 
+          })));
+          
+          if (availableContractors.length === 0) {
+            console.log('[AssignJob] No available contractors found');
+            return res.status(400).json({ 
+              message: 'No available contractors found',
+              needsManualAssignment: true
+            });
+          }
+          
+          // Select the first contractor (already sorted by tier and round-robin)
+          const selectedContractor = availableContractors[0];
+          contractorId = selectedContractor.id;
+          console.log(`[AssignJob] Selected contractor: ${selectedContractor.name} (${selectedContractor.id}), Tier: ${selectedContractor.performanceTier}`);
+        }
+        
+        // Assign the contractor
+        const updatedJob = await storage.assignContractorToJob(jobId, contractorId);
+        if (!updatedJob) {
+          return res.status(500).json({ message: 'Failed to assign contractor' });
+        }
+        
+        // Get contractor and customer details for emails
+        const contractor = await storage.getUser(contractorId);
+        const contractorProfile = await storage.getContractorProfile(contractorId);
+        
+        let customer = null;
+        if (job.customerId) {
+          customer = await storage.getUser(job.customerId);
+        }
+        
+        // Send email notifications
+        if (contractor && contractorProfile) {
+          const contractorData = {
+            ...contractor,
+            ...contractorProfile
+          };
+          
+          console.log(`[Email] Sending assignment emails - Contractor: ${contractor.email}, Customer: ${customer?.email || 'N/A'}`);
+          
+          await emailService.sendJobAssignmentNotifications(
+            {
+              ...updatedJob,
+              jobNumber: updatedJob.jobNumber,
+              address: updatedJob.locationAddress || 'Location provided',
+              issueDescription: updatedJob.description || 'Service requested',
+              serviceType: 'Emergency Roadside Assistance',
+              estimatedPrice: updatedJob.estimatedPrice || 0
+            },
+            contractorData,
+            customer
+          );
+        }
+        
+        // Send WebSocket notification to contractor
+        try {
+          await trackingWSServer.broadcastJobAssignment(jobId, contractorId, {
+            jobId: updatedJob.id,
+            jobNumber: updatedJob.jobNumber,
+            customerName: customer ? `${customer.firstName} ${customer.lastName}` : 'Customer',
+            address: updatedJob.locationAddress || 'Location provided',
+            description: updatedJob.description || 'Service requested',
+            estimatedPrice: updatedJob.estimatedPrice || 0,
+            status: updatedJob.status
+          });
+          console.log(`[WebSocket] Job assignment notification sent for job ${jobId}`);
+        } catch (wsError) {
+          console.error('[WebSocket] Failed to send job assignment notification:', wsError);
+          // Don't fail the request if WebSocket fails
+        }
+        
+        console.log(`[AssignJob] Successfully assigned job ${jobId} to contractor ${contractorId}`);
+        
         res.json({
           message: 'Contractor assigned successfully',
-          job
+          job: updatedJob,
+          contractorAssigned: {
+            id: contractor?.id,
+            name: `${contractor?.firstName} ${contractor?.lastName}`,
+            email: contractor?.email
+          }
         });
       } catch (error) {
-        console.error('Assign contractor error:', error);
+        console.error('[AssignJob] Assignment error:', error);
         res.status(500).json({ message: 'Failed to assign contractor' });
       }
     }

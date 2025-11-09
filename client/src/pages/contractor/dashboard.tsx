@@ -112,7 +112,26 @@ export default function ContractorDashboard() {
   // Fetch dashboard data
   const { data: dashboardData, isLoading, refetch } = useQuery<DashboardData>({
     queryKey: ["/api/contractor/dashboard"],
-    refetchInterval: 30000 // Refresh every 30 seconds
+    refetchInterval: 10000, // Refresh every 10 seconds for faster updates
+    onSuccess: (data) => {
+      // Log for debugging
+      console.log('[ContractorDashboard] Dashboard data loaded:', {
+        contractorId: data?.contractor?.id,
+        activeJob: data?.activeJob,
+        availableJobs: data?.availableJobs?.length,
+        scheduledJobs: data?.scheduledJobs?.length
+      });
+      
+      // Play notification for new assigned jobs
+      if (data?.activeJob && !dashboardData?.activeJob) {
+        const audio = new Audio("/notification.mp3");
+        audio.play().catch(() => {});
+        toast({
+          title: "New Job Assigned!",
+          description: "You have a new job assignment",
+        });
+      }
+    }
   });
 
   // WebSocket for real-time updates

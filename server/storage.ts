@@ -1213,6 +1213,99 @@ export class PostgreSQLStorage implements IStorage {
     }
   }
 
+  async getAvailableContractorsForAssignment(jobLat?: number, jobLon?: number): Promise<any[]> {
+    try {
+      console.log('[AssignJob] Getting available contractors for assignment - Round Robin Logic');
+      
+      // Get all available contractors with their profiles
+      const contractors = await db
+        .select()
+        .from(users)
+        .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
+        .where(
+          and(
+            eq(users.role, 'contractor'),
+            eq(contractorProfiles.isAvailable, true)
+          )
+        )
+        .orderBy(
+          // Order by tier (gold first, then silver, then bronze)
+          desc(contractorProfiles.performanceTier),
+          // Then by least recently assigned (null values first, then oldest)
+          asc(contractorProfiles.lastAssignedAt)
+        );
+
+      console.log(`[AssignJob] Found ${contractors.length} available contractors`);
+
+      // Process and calculate distance for each contractor
+      const processedContractors = contractors.map(row => {
+        const fullName = `${row.users.firstName || ''} ${row.users.lastName || ''}`.trim() || row.users.email || 'Unknown';
+        let distance = 0;
+        
+        // Calculate distance if coordinates available
+        if (jobLat && jobLon && row.contractor_profiles?.baseLocationLat && row.contractor_profiles?.baseLocationLon) {
+          const contractorLat = row.contractor_profiles.baseLocationLat;
+          const contractorLon = row.contractor_profiles.baseLocationLon;
+          
+          // Haversine formula for distance calculation
+          const R = 3959; // Earth radius in miles
+          const lat1 = jobLat * Math.PI / 180;
+          const lat2 = Number(contractorLat) * Math.PI / 180;
+          const deltaLat = (Number(contractorLat) - jobLat) * Math.PI / 180;
+          const deltaLon = (Number(contractorLon) - jobLon) * Math.PI / 180;
+          
+          const a = Math.sin(deltaLat/2) * Math.sin(deltaLat/2) +
+                   Math.cos(lat1) * Math.cos(lat2) *
+                   Math.sin(deltaLon/2) * Math.sin(deltaLon/2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          distance = R * c;
+        }
+
+        const contractor = {
+          id: row.users.id,
+          email: row.users.email,
+          firstName: row.users.firstName,
+          lastName: row.users.lastName,
+          phone: row.users.phone,
+          name: fullName,
+          performanceTier: row.contractor_profiles?.performanceTier || 'bronze',
+          averageRating: Number(row.contractor_profiles?.averageRating) || 0,
+          totalJobsCompleted: row.contractor_profiles?.totalJobsCompleted || 0,
+          serviceRadius: row.contractor_profiles?.serviceRadius || 50,
+          isOnline: row.contractor_profiles?.isOnline || false,
+          lastAssignedAt: row.contractor_profiles?.lastAssignedAt,
+          lastHeartbeatAt: row.contractor_profiles?.lastHeartbeatAt,
+          distance: Math.round(distance * 10) / 10,
+          withinServiceRadius: distance <= (row.contractor_profiles?.serviceRadius || 50)
+        };
+        
+        console.log(`[AssignJob] Contractor: ${contractor.name}, Tier: ${contractor.performanceTier}, Last Assigned: ${contractor.lastAssignedAt || 'Never'}, Distance: ${contractor.distance} miles`);
+        
+        return contractor;
+      });
+
+      // Filter contractors within service radius if location provided
+      const eligibleContractors = jobLat && jobLon 
+        ? processedContractors.filter(c => c.withinServiceRadius)
+        : processedContractors;
+
+      console.log(`[AssignJob] ${eligibleContractors.length} contractors within service radius`);
+
+      // Sort by tier groups and round-robin within each tier
+      const goldContractors = eligibleContractors.filter(c => c.performanceTier === 'gold');
+      const silverContractors = eligibleContractors.filter(c => c.performanceTier === 'silver');
+      const bronzeContractors = eligibleContractors.filter(c => c.performanceTier === 'bronze');
+
+      console.log(`[AssignJob] By tier - Gold: ${goldContractors.length}, Silver: ${silverContractors.length}, Bronze: ${bronzeContractors.length}`);
+
+      // Return sorted list: gold tier first (round-robin), then silver, then bronze
+      return [...goldContractors, ...silverContractors, ...bronzeContractors];
+    } catch (error) {
+      console.error('[AssignJob] Error in getAvailableContractorsForAssignment:', error);
+      throw error;
+    }
+  }
+
   async hasAdminUsers(): Promise<boolean> {
     const result = await db.select().from(users).where(eq(users.role, 'admin')).limit(1);
     return result.length > 0;
@@ -1314,6 +1407,8 @@ export class PostgreSQLStorage implements IStorage {
   }
 
   async assignContractorToJob(jobId: string, contractorId: string): Promise<Job | undefined> {
+    console.log(`[AssignJob] Assigning job ${jobId} to contractor ${contractorId}`);
+    
     const result = await db.update(jobs)
       .set({ 
         contractorId, 
@@ -1325,6 +1420,17 @@ export class PostgreSQLStorage implements IStorage {
       .returning();
     
     if (result.length > 0) {
+      // Update contractor's last assigned timestamp for round-robin tracking
+      await db.update(contractorProfiles)
+        .set({ 
+          lastAssignedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(contractorProfiles.userId, contractorId));
+      
+      console.log(`[AssignJob] Updated lastAssignedAt for contractor ${contractorId}`);
+      
+      // Add to job status history
       await db.insert(jobStatusHistory).values({
         jobId,
         fromStatus: 'new',

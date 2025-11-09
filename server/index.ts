@@ -4,6 +4,7 @@ import { serveStatic, log } from "./vite";
 import { trackingWSServer } from "./websocket";
 import { reminderScheduler } from "./reminder-scheduler";
 import billingScheduler from "./billing-scheduler";
+import { jobMonitor } from "./job-monitor";
 import { storage } from "./storage";
 import { createServer as createViteServer, createLogger } from "vite";
 import path from "path";
@@ -241,6 +242,10 @@ app.use((req, res, next) => {
   // Start the billing scheduler
   billingScheduler.initialize();
   log(`Billing scheduler initialized`);
+
+  // Start the job monitor for unassigned job alerts
+  jobMonitor.start();
+  log(`Job monitor started - checking for unassigned jobs`);
 
   const port = parseInt(process.env.PORT || '5000', 10);
   server.listen(port, "0.0.0.0", () => {

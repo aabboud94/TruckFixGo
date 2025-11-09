@@ -149,6 +149,14 @@ export const contractorProfiles = pgTable("contractor_profiles", {
   lastLocationUpdate: timestamp("last_location_update"),
   stripeAccountId: varchar("stripe_account_id"),
   bankAccountInfo: jsonb("bank_account_info"),
+  
+  // Assignment tracking for round-robin
+  lastAssignedAt: timestamp("last_assigned_at"),
+  isOnline: boolean("is_online").notNull().default(false),
+  lastHeartbeatAt: timestamp("last_heartbeat_at"),
+  baseLocationLat: decimal("base_location_lat", { precision: 10, scale: 8 }),
+  baseLocationLon: decimal("base_location_lon", { precision: 11, scale: 8 }),
+  
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow()
 }, (table) => ({
@@ -385,6 +393,10 @@ export const jobs = pgTable("jobs", {
   customerSignature: text("customer_signature"),
   rating: integer("rating"),
   reviewText: text("review_text"),
+  
+  // Assignment tracking - commented out until migration is run
+  // assignmentAttemptedAt: timestamp("assignment_attempted_at"),
+  // assignmentNotificationSent: boolean("assignment_notification_sent").notNull().default(false),
   
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow()

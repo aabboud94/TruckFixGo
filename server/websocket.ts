@@ -13,6 +13,10 @@ const MessageTypeEnum = z.enum([
   'CONTRACTOR_JOINED',
   'CONTRACTOR_LEFT',
   'ERROR',
+  // Job assignment message types
+  'JOB_ASSIGNED',
+  'JOB_UNASSIGNED',
+  'CONTRACTOR_STATUS_CHANGE',
   // Bidding message types
   'JOIN_BIDDING',
   'LEAVE_BIDDING',
@@ -667,6 +671,46 @@ class TrackingWebSocketServer {
         this.sendMessage(admin, message);
       }
     });
+  }
+
+  // Broadcast job assignment to contractor
+  public async broadcastJobAssignment(jobId: string, contractorId: string, jobDetails: any) {
+    console.log(`[WebSocket] Broadcasting job assignment to contractor ${contractorId}`);
+    
+    // Find contractor's WebSocket connection
+    const contractorWs = this.clients.get(contractorId);
+    
+    if (contractorWs && contractorWs.readyState === WebSocket.OPEN) {
+      this.sendMessage(contractorWs, {
+        type: 'JOB_ASSIGNED',
+        payload: {
+          jobId,
+          ...jobDetails,
+          timestamp: new Date().toISOString()
+        }
+      });
+      console.log(`[WebSocket] Job assignment sent to contractor ${contractorId}`);
+    } else {
+      console.log(`[WebSocket] Contractor ${contractorId} not connected, will receive notification on next login`);
+    }
+  }
+
+  // Broadcast to all online contractors when a new job is available
+  public async broadcastNewJobAvailable(jobDetails: any) {
+    console.log('[WebSocket] Broadcasting new job available to all online contractors');
+    
+    let count = 0;
+    this.clients.forEach((ws, userId) => {
+      if (ws.role === 'contractor' && ws.readyState === WebSocket.OPEN) {
+        this.sendMessage(ws, {
+          type: 'NEW_JOB_AVAILABLE',
+          payload: jobDetails
+        });
+        count++;
+      }
+    });
+    
+    console.log(`[WebSocket] Notified ${count} online contractors about new job`);
   }
 
   public shutdown() {
