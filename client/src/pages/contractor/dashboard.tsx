@@ -912,7 +912,7 @@ export default function ContractorDashboard() {
         </Tabs>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           <Button 
             variant="outline" 
             className="h-auto py-4"
@@ -922,6 +922,17 @@ export default function ContractorDashboard() {
             <div className="flex flex-col items-center gap-2">
               <Truck className="w-5 h-5" />
               <span>Manage Jobs</span>
+            </div>
+          </Button>
+          <Button 
+            variant="outline" 
+            className="h-auto py-4"
+            onClick={() => navigate("/contractor/manage-drivers")}
+            data-testid="button-manage-drivers"
+          >
+            <div className="flex flex-col items-center gap-2">
+              <Users className="w-5 h-5" />
+              <span>Manage Drivers</span>
             </div>
           </Button>
           <Button 
