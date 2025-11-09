@@ -1008,7 +1008,7 @@ export default function ContractorApply() {
               )}
             />
 
-            {form.watch("hasOwnVehicle") && (
+            {(formData.hasOwnVehicle || form.watch("hasOwnVehicle")) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-8">
                 <FormField
                   control={form.control}
