@@ -388,8 +388,16 @@ export default function AdminContractors() {
                             size="icon"
                             variant="ghost"
                             onClick={() => {
-                              setSelectedContractor(contractor);
-                              setEditedContractor(contractor);
+                              // Transform contractor data to match the edit form expectations
+                              const contractorWithName = {
+                                ...contractor,
+                                name: `${contractor.firstName || ''} ${contractor.lastName || ''}`.trim() || contractor.name || '',
+                                company: contractor.company || contractor.companyName || '',
+                                email: contractor.email || '',
+                                phone: contractor.phone || ''
+                              };
+                              setSelectedContractor(contractorWithName);
+                              setEditedContractor(contractorWithName);
                               setShowContractorDetails(true);
                             }}
                             data-testid={`button-view-${contractor.id}`}
