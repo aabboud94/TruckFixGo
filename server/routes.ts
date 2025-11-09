@@ -7600,8 +7600,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const fieldsToRemove = ['address', 'city', 'state', 'zip', 'experienceLevel', 
                                'totalYearsExperience', 'companyName', 'yearsInBusiness',
                                'hasOwnTools', 'hasOwnVehicle', 'coverageAreas', 
-                               'references', 'vehicleInfo', 'specializations', 'previousEmployers',
-                               'firstName', 'lastName'];  // Add firstName/lastName since we mapped them to first_name/last_name
+                               'references', 'vehicleInfo', 'specializations', 'previousEmployers'];
+        // Don't remove firstName/lastName - Drizzle expects camelCase property names
+        console.log('Before field removal, updateData has:', Object.keys(updateData));
         for (const field of fieldsToRemove) {
           if (field in updateData && 
               field !== 'serviceTypes' && 
@@ -7612,13 +7613,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               field !== 'businessName' &&
               field !== 'yearsExperience' &&
               field !== 'additionalAreas' &&
-              field !== 'first_name' &&    // Don't remove the mapped database fields
-              field !== 'last_name' &&
+              field !== 'firstName' &&    // Keep camelCase field names
+              field !== 'lastName' &&     // Keep camelCase field names
               field !== 'email' &&
               field !== 'phone') {
+            console.log(`Deleting field: ${field}`);
             delete updateData[field];
           }
         }
+        console.log('After field removal, updateData has:', Object.keys(updateData));
         
         // Arrays are now properly defined as PostgreSQL arrays in the schema
         // No special handling needed - Drizzle will handle them correctly
