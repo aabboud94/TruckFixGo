@@ -139,8 +139,8 @@ export default function AdminDashboard() {
   return (
     <AdminLayout title="Admin Dashboard">
       {/* Key Metrics */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-        <Card>
+      <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+        <Card className="w-full">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Jobs</CardTitle>
             <Briefcase className="h-4 w-4 text-muted-foreground" />
@@ -154,7 +154,7 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="w-full">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Online Contractors</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -168,7 +168,7 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="w-full">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Avg Response Time</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
@@ -182,7 +182,7 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="w-full">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Completion Rate</CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
@@ -195,8 +195,8 @@ export default function AdminDashboard() {
       </div>
 
       {/* Revenue Cards */}
-      <div className="grid gap-4 md:grid-cols-3 mb-6">
-        <Card className="border-green-200 bg-green-50/50 dark:bg-green-950/20">
+      <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 mb-6">
+        <Card className="w-full border-green-200 bg-green-50/50 dark:bg-green-950/20">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Revenue Today</CardTitle>
             <DollarSign className="h-4 w-4 text-green-600" />
@@ -212,7 +212,7 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20">
+        <Card className="w-full border-blue-200 bg-blue-50/50 dark:bg-blue-950/20">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Revenue This Week</CardTitle>
             <DollarSign className="h-4 w-4 text-blue-600" />
@@ -228,7 +228,7 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-purple-200 bg-purple-50/50 dark:bg-purple-950/20">
+        <Card className="w-full border-purple-200 bg-purple-50/50 dark:bg-purple-950/20">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Revenue This Month</CardTitle>
             <DollarSign className="h-4 w-4 text-purple-600" />
@@ -246,16 +246,17 @@ export default function AdminDashboard() {
       </div>
 
       {/* Charts and Activity */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-3 md:gap-6 grid-cols-1 lg:grid-cols-3">
         {/* Revenue Chart */}
-        <Card className="lg:col-span-2">
+        <Card className="w-full lg:col-span-2">
           <CardHeader>
             <CardTitle>Revenue Trend</CardTitle>
             <CardDescription>Daily revenue for the past week</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={revenueData}>
+            <div className="overflow-x-auto">
+              <ResponsiveContainer width="100%" height={288} className="h-56 md:h-72">
+                <AreaChart data={revenueData}>
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#1E3A8A" stopOpacity={0.8} />
@@ -273,19 +274,20 @@ export default function AdminDashboard() {
                   fillOpacity={1}
                   fill="url(#colorRevenue)"
                 />
-              </AreaChart>
-            </ResponsiveContainer>
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
 
         {/* Recent Activity */}
-        <Card>
+        <Card className="w-full">
           <CardHeader>
             <CardTitle>Recent Activity</CardTitle>
             <CardDescription>Live platform activity feed</CardDescription>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[300px]">
+            <ScrollArea className="h-56 md:h-72">
               <div className="space-y-4">
                 {activities.map((activity) => (
                   <div key={activity.id} className="flex items-start gap-3">
@@ -307,16 +309,17 @@ export default function AdminDashboard() {
       </div>
 
       {/* Service Breakdown and Job Status */}
-      <div className="grid gap-6 lg:grid-cols-2 mt-6">
+      <div className="grid gap-3 md:gap-6 grid-cols-1 lg:grid-cols-2 mt-6">
         {/* Service Type Breakdown */}
-        <Card>
+        <Card className="w-full">
           <CardHeader>
             <CardTitle>Service Type Breakdown</CardTitle>
             <CardDescription>Distribution of jobs by service type</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
+            <div className="overflow-x-auto">
+              <ResponsiveContainer width="100%" height={224} className="h-56">
+                <PieChart>
                 <Pie
                   data={serviceBreakdown}
                   cx="50%"
@@ -332,8 +335,9 @@ export default function AdminDashboard() {
                 </Pie>
                 <Tooltip />
                 <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
             <div className="mt-4 space-y-2">
               {serviceBreakdown.map((service) => (
                 <div key={service.name} className="flex items-center justify-between">
@@ -352,28 +356,30 @@ export default function AdminDashboard() {
         </Card>
 
         {/* Job Status Distribution */}
-        <Card>
+        <Card className="w-full">
           <CardHeader>
             <CardTitle>Job Status Distribution</CardTitle>
             <CardDescription>Current status of all jobs</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={jobStatusData}>
+            <div className="overflow-x-auto">
+              <ResponsiveContainer width="100%" height={224} className="h-56">
+                <BarChart data={jobStatusData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="status" />
                 <YAxis />
                 <Tooltip />
                 <Bar dataKey="count" fill="#1E3A8A" />
-              </BarChart>
-            </ResponsiveContainer>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* System Alerts */}
       {systemAlerts.length > 0 && (
-        <Card className="mt-6">
+        <Card className="w-full mt-6">
           <CardHeader>
             <CardTitle>System Alerts</CardTitle>
             <CardDescription>Important notifications requiring attention</CardDescription>
