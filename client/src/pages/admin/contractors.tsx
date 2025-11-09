@@ -100,7 +100,7 @@ export default function AdminContractors() {
     },
   });
 
-  const contractorsData = contractors?.data || [];
+  const contractorsData = contractors || [];
 
   const getTierColor = (tier: string) => {
     switch (tier) {

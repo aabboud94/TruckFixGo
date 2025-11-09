@@ -991,7 +991,8 @@ export class PostgreSQLStorage implements IStorage {
     if (filters.search) {
       conditions.push(
         or(
-          ilike(users.name, `%${filters.search}%`),
+          ilike(users.firstName, `%${filters.search}%`),
+          ilike(users.lastName, `%${filters.search}%`),
           ilike(users.email, `%${filters.search}%`),
           ilike(users.phone, `%${filters.search}%`),
           ilike(contractorProfiles.companyName, `%${filters.search}%`)
