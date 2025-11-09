@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { MapPin, Navigation, Road, Search, Loader2, ChevronDown } from "lucide-react";
+import { MapPin, Navigation, Route, Search, Loader2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -299,7 +299,7 @@ export default function LocationInput({
             Address
           </TabsTrigger>
           <TabsTrigger value="highway" data-testid="tab-highway">
-            <Road className="w-4 h-4 mr-2" />
+            <Route className="w-4 h-4 mr-2" />
             Highway
           </TabsTrigger>
           <TabsTrigger value="gps" data-testid="tab-gps">
@@ -418,7 +418,7 @@ export default function LocationInput({
 
           {value?.highwayInfo && (
             <Alert>
-              <Road className="h-4 w-4" />
+              <Route className="h-4 w-4" />
               <AlertDescription>
                 Location set: {value.address}
               </AlertDescription>
