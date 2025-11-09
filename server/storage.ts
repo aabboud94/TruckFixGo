@@ -1062,9 +1062,39 @@ export class PostgreSQLStorage implements IStorage {
     return user.role === requiredRole;
   }
 
+  async getContractorDrivers(contractorId: string): Promise<any[]> {
+    try {
+      // Get all drivers managed by this contractor
+      const drivers = await db
+        .select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          email: users.email,
+          phoneNumber: driverProfiles.phoneNumber,
+          cdlNumber: driverProfiles.cdlNumber,
+          isAvailable: driverProfiles.isAvailable
+        })
+        .from(users)
+        .leftJoin(driverProfiles, eq(users.id, driverProfiles.userId))
+        .where(
+          and(
+            eq(users.role, 'driver'),
+            eq(driverProfiles.managedByContractorId, contractorId)
+          )
+        );
+      
+      return drivers;
+    } catch (error) {
+      console.error('Error fetching contractor drivers:', error);
+      return [];
+    }
+  }
+
   async getAvailableContractors(jobLat?: number, jobLon?: number): Promise<any[]> {
     try {
-      // Get approved and available contractors only
+      // First, let's also check for contractors without the strict availability filter
+      // In production, many contractors might not have is_available set to true
       const contractors = await db
         .select()
         .from(users)
@@ -1072,8 +1102,12 @@ export class PostgreSQLStorage implements IStorage {
         .where(
           and(
             eq(users.role, 'contractor'),
-            eq(contractorProfiles.isAvailable, true),
-            isNotNull(contractorProfiles.id) // Ensure contractor profile exists
+            // Remove strict availability check for now - we'll handle it more gracefully
+            // Allow contractors with profile OR those who are explicitly available
+            or(
+              eq(contractorProfiles.isAvailable, true),
+              isNotNull(contractorProfiles.id) // Allow any contractor with a profile
+            )
           )
         );
 
@@ -1103,7 +1137,8 @@ export class PostgreSQLStorage implements IStorage {
           name: fullName,
           distance,
           rating: row.contractor_profiles?.averageRating || 0,
-          tier: row.contractor_profiles?.performanceTier || 'bronze'
+          tier: row.contractor_profiles?.performanceTier || 'bronze',
+          isAvailable: row.contractor_profiles?.isAvailable || false
         };
       });
     } catch (error) {

@@ -770,18 +770,25 @@ export default function AdminJobs() {
                   <SelectValue placeholder="Choose a contractor..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {Array.isArray(contractors) && contractors.map((contractor: any) => (
-                    <SelectItem key={contractor.id} value={contractor.id}>
-                      <div className="flex items-center justify-between w-full">
-                        <span>{contractor.name}</span>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>{contractor.distance} mi</span>
-                          <span>{contractor.rating} ⭐</span>
-                          <Badge variant="secondary" className="h-5">{contractor.tier}</Badge>
+                  {Array.isArray(contractors) && contractors.length > 0 ? (
+                    contractors.map((contractor: any) => (
+                      <SelectItem key={contractor.id} value={contractor.id}>
+                        <div className="flex flex-col">
+                          <span>{contractor.name}</span>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {contractor.distance > 0 && <span>{contractor.distance} mi</span>}
+                            <span>{contractor.rating || 0} ⭐</span>
+                            <span className="capitalize">{contractor.tier || 'bronze'}</span>
+                            {contractor.isAvailable && <Badge variant="secondary" className="h-4">Available</Badge>}
+                          </div>
                         </div>
-                      </div>
-                    </SelectItem>
-                  ))}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <div className="px-2 py-1 text-sm text-muted-foreground">
+                      No contractors available
+                    </div>
+                  )}
                 </SelectContent>
               </Select>
             </div>

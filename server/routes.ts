@@ -6391,6 +6391,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Get drivers managed by a specific contractor (admin access)
+  app.get('/api/admin/contractors/:contractorId/drivers',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { contractorId } = req.params;
+        // For now, return empty array since driver management feature is not fully populated
+        const drivers = await storage.getContractorDrivers(contractorId);
+        res.json(drivers || []);
+      } catch (error) {
+        console.error('Error fetching contractor drivers:', error);
+        // Return empty array on error to avoid breaking UI
+        res.json([]);
+      }
+    }
+  );
+
   // Manage contractor approvals
   app.get('/api/admin/contractors',
     requireAuth,
