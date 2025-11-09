@@ -84,7 +84,7 @@ export default function Homepage() {
               <a href="/fleet" className="text-foreground hover:text-primary transition-colors" data-testid="link-fleet">
                 Fleet Solutions
               </a>
-              <a href="/contractor-apply" className="text-foreground hover:text-primary transition-colors" data-testid="link-become-contractor">
+              <a href="/contractor/apply" className="text-foreground hover:text-primary transition-colors" data-testid="link-become-contractor">
                 Become a Contractor
               </a>
             </nav>
@@ -126,7 +126,7 @@ export default function Homepage() {
               <a href="/fleet" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-fleet">
                 Fleet Solutions
               </a>
-              <a href="/contractor-apply" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-become-contractor">
+              <a href="/contractor/apply" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-become-contractor">
                 Become a Contractor
               </a>
               <div className="flex flex-col space-y-2 pt-4">
@@ -748,7 +748,7 @@ export default function Homepage() {
               <h4 className="font-semibold mb-4">Company</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li><a href="/about" className="hover:text-primary">About Us</a></li>
-                <li><a href="/contractor-apply" className="hover:text-primary">Become a Contractor</a></li>
+                <li><a href="/contractor/apply" className="hover:text-primary">Become a Contractor</a></li>
                 <li><a href="/pricing" className="hover:text-primary">Pricing</a></li>
                 <li><a href="/contact" className="hover:text-primary">Contact</a></li>
               </ul>

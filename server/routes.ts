@@ -6377,7 +6377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         const contractors = await storage.findContractors(filters);
         
-        res.json({ data: contractors });
+        res.json(contractors);
       } catch (error) {
         console.error('Get contractors error:', error);
         res.status(500).json({ message: 'Failed to get contractors' });
