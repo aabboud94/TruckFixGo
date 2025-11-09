@@ -106,15 +106,19 @@ export default function AdminContractors() {
     mutationFn: async (data: { contractorId: string; name: string; company: string; email: string; phone: string; status: string }) => {
       const url = `/api/admin/contractors/${data.contractorId}`;
       console.log('[updateContractorDetailsMutation] URL:', url);
-      return apiRequest(url, {
-        method: 'PUT',
-        body: JSON.stringify({
-          name: data.name,
-          company: data.company,
-          email: data.email,
-          phone: data.phone,
-          status: data.status
-        })
+      console.log('[updateContractorDetailsMutation] Payload:', {
+        name: data.name,
+        company: data.company,
+        email: data.email,
+        phone: data.phone,
+        status: data.status
+      });
+      return apiRequest('PUT', url, {
+        name: data.name,
+        company: data.company,
+        email: data.email,
+        phone: data.phone,
+        status: data.status
       });
     },
     onSuccess: (data) => {
@@ -428,7 +432,18 @@ export default function AdminContractors() {
                             size="icon"
                             variant="ghost"
                             onClick={() => {
-                              setSelectedContractor(contractor);
+                              // Transform contractor data to match the edit form expectations
+                              const contractorWithName = {
+                                ...contractor,
+                                name: `${contractor.firstName || ''} ${contractor.lastName || ''}`.trim() || contractor.name || '',
+                                company: contractor.company || contractor.companyName || '',
+                                email: contractor.email || '',
+                                phone: contractor.phone || '',
+                                status: contractor.status || 'pending'
+                              };
+                              setSelectedContractor(contractorWithName);
+                              setEditedContractor(contractorWithName);
+                              setShowContractorDetails(true);
                             }}
                             data-testid={`button-edit-${contractor.id}`}
                             className="relative z-10"
@@ -508,21 +523,21 @@ export default function AdminContractors() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Status</Label>
+                    <Label htmlFor="contractor-status">Status</Label>
                     <Select
-                      value={editedContractor.status}
+                      value={editedContractor.status || 'pending'}
                       onValueChange={(value) => {
                         setEditedContractor({ ...editedContractor, status: value });
                       }}
                       disabled={updateContractorDetailsMutation.isPending}
                     >
-                      <SelectTrigger>
-                        <SelectValue />
+                      <SelectTrigger id="contractor-status" data-testid="select-contractor-status">
+                        <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="suspended">Suspended</SelectItem>
+                        <SelectItem value="active" data-testid="option-status-active">Active</SelectItem>
+                        <SelectItem value="pending" data-testid="option-status-pending">Pending</SelectItem>
+                        <SelectItem value="suspended" data-testid="option-status-suspended">Suspended</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
