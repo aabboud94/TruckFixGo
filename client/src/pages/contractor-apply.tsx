@@ -664,23 +664,23 @@ export default function ContractorApply() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Years in Business</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder="5" 
-                      value={field.value ?? ''}
-                      onBlur={field.onBlur}
-                      name={field.name}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        field.onChange(value === '' ? undefined : Number(value));
-                      }}
-                      className="touch-manipulation"
-                      data-testid="input-yearsExperience"
-                    />
-                  </FormControl>
+                  <Select 
+                    onValueChange={(value) => field.onChange(Number(value))}
+                    value={field.value?.toString() || ""}
+                  >
+                    <FormControl>
+                      <SelectTrigger data-testid="select-years-in-business">
+                        <SelectValue placeholder="Select years" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {Array.from({ length: 51 }, (_, i) => (
+                        <SelectItem key={i} value={i.toString()}>
+                          {i === 0 ? "Just started" : i === 1 ? "1 year" : `${i} years`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -780,23 +780,23 @@ export default function ContractorApply() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Total Years of Experience</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder="10" 
-                      value={field.value ?? ''}
-                      onBlur={field.onBlur}
-                      name={field.name}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        field.onChange(value === '' ? undefined : Number(value));
-                      }}
-                      className="touch-manipulation"
-                      data-testid="input-total-experience"
-                    />
-                  </FormControl>
+                  <Select 
+                    onValueChange={(value) => field.onChange(Number(value))}
+                    value={field.value?.toString() || ""}
+                  >
+                    <FormControl>
+                      <SelectTrigger data-testid="select-total-experience">
+                        <SelectValue placeholder="Select years" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {Array.from({ length: 51 }, (_, i) => (
+                        <SelectItem key={i} value={i.toString()}>
+                          {i === 0 ? "Less than 1 year" : i === 1 ? "1 year" : `${i} years`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -806,31 +806,34 @@ export default function ContractorApply() {
               <FormLabel>Certifications</FormLabel>
               <div className="space-y-3 mt-2">
                 {["ASE Certified", "DOT Medical Certified", "HAZMAT Certified", "EPA 609 Certified", 
-                  "Welding Certified", "Diesel Engine Specialist"].map((cert) => (
-                  <div key={cert} className="flex items-start space-x-3">
-                    <input
-                      type="checkbox"
-                      id={`cert-${cert.toLowerCase().replace(/\s+/g, '-')}`}
-                      className="w-4 h-4 mt-1 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
-                      checked={(form.getValues("certifications") || []).includes(cert)}
-                      onChange={(e) => {
-                        const current = form.getValues("certifications") || [];
-                        if (e.target.checked) {
-                          form.setValue("certifications", [...current, cert]);
-                        } else {
-                          form.setValue("certifications", current.filter((c: string) => c !== cert));
-                        }
-                      }}
-                      data-testid={`checkbox-cert-${cert.toLowerCase().replace(/\s+/g, '-')}`}
-                    />
-                    <label 
-                      htmlFor={`cert-${cert.toLowerCase().replace(/\s+/g, '-')}`}
-                      className="text-sm font-normal cursor-pointer select-none flex-1"
-                    >
-                      {cert}
-                    </label>
-                  </div>
-                ))}
+                  "Welding Certified", "Diesel Engine Specialist"].map((cert) => {
+                  const watchedCertifications = form.watch("certifications") || [];
+                  return (
+                    <div key={cert} className="flex items-start space-x-3">
+                      <input
+                        type="checkbox"
+                        id={`cert-${cert.toLowerCase().replace(/\s+/g, '-')}`}
+                        className="w-4 h-4 mt-1 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                        checked={watchedCertifications.includes(cert)}
+                        onChange={(e) => {
+                          const current = form.getValues("certifications") || [];
+                          if (e.target.checked) {
+                            form.setValue("certifications", [...current, cert]);
+                          } else {
+                            form.setValue("certifications", current.filter((c: string) => c !== cert));
+                          }
+                        }}
+                        data-testid={`checkbox-cert-${cert.toLowerCase().replace(/\s+/g, '-')}`}
+                      />
+                      <label 
+                        htmlFor={`cert-${cert.toLowerCase().replace(/\s+/g, '-')}`}
+                        className="text-sm font-normal cursor-pointer select-none flex-1"
+                      >
+                        {cert}
+                      </label>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -838,31 +841,34 @@ export default function ContractorApply() {
               <FormLabel>Specializations</FormLabel>
               <div className="space-y-3 mt-2">
                 {["Engine Repair", "Transmission", "Brakes", "Electrical Systems", 
-                  "HVAC", "Suspension", "Tires", "Preventive Maintenance"].map((spec) => (
-                  <div key={spec} className="flex items-start space-x-3">
-                    <input
-                      type="checkbox"
-                      id={`spec-${spec.toLowerCase().replace(/\s+/g, '-')}`}
-                      className="w-4 h-4 mt-1 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
-                      checked={(form.getValues("specializations") || []).includes(spec)}
-                      onChange={(e) => {
-                        const current = form.getValues("specializations") || [];
-                        if (e.target.checked) {
-                          form.setValue("specializations", [...current, spec]);
-                        } else {
-                          form.setValue("specializations", current.filter((s: string) => s !== spec));
-                        }
-                      }}
-                      data-testid={`checkbox-spec-${spec.toLowerCase().replace(/\s+/g, '-')}`}
-                    />
-                    <label 
-                      htmlFor={`spec-${spec.toLowerCase().replace(/\s+/g, '-')}`}
-                      className="text-sm font-normal cursor-pointer select-none flex-1"
-                    >
-                      {spec}
-                    </label>
-                  </div>
-                ))}
+                  "HVAC", "Suspension", "Tires", "Preventive Maintenance"].map((spec) => {
+                  const watchedSpecializations = form.watch("specializations") || [];
+                  return (
+                    <div key={spec} className="flex items-start space-x-3">
+                      <input
+                        type="checkbox"
+                        id={`spec-${spec.toLowerCase().replace(/\s+/g, '-')}`}
+                        className="w-4 h-4 mt-1 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                        checked={watchedSpecializations.includes(spec)}
+                        onChange={(e) => {
+                          const current = form.getValues("specializations") || [];
+                          if (e.target.checked) {
+                            form.setValue("specializations", [...current, spec]);
+                          } else {
+                            form.setValue("specializations", current.filter((s: string) => s !== spec));
+                          }
+                        }}
+                        data-testid={`checkbox-spec-${spec.toLowerCase().replace(/\s+/g, '-')}`}
+                      />
+                      <label 
+                        htmlFor={`spec-${spec.toLowerCase().replace(/\s+/g, '-')}`}
+                        className="text-sm font-normal cursor-pointer select-none flex-1"
+                      >
+                        {spec}
+                      </label>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
