@@ -40,12 +40,10 @@ export default function Login() {
     
     try {
       // Make API call to generic login endpoint
-      const response = await apiRequest("POST", "/api/auth/login", {
+      const result = await apiRequest("POST", "/api/auth/login", {
         email: data.email,
         password: data.password
       });
-      
-      const result = await response.json();
       
       // Check if login was successful and user has a role
       if (result.user && result.user.role) {

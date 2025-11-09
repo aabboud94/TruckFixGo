@@ -847,10 +847,28 @@ export class PostgreSQLStorage implements IStorage {
   }
 
   async updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined> {
+    // Debug: Log the update details
+    console.log(`[updateUser] Updating user ${id} with:`, {
+      ...updates,
+      password: updates.password ? '[REDACTED]' : undefined
+    });
+    
     const result = await db.update(users)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(users.id, id))
       .returning();
+    
+    // Debug: Log the result
+    console.log(`[updateUser] Update result for user ${id}:`, result.length > 0 ? 'Success' : 'Failed');
+    if (result.length > 0) {
+      console.log(`[updateUser] Updated user data:`, {
+        id: result[0].id,
+        email: result[0].email,
+        hasPassword: !!result[0].password,
+        updatedAt: result[0].updatedAt
+      });
+    }
+    
     return result[0];
   }
 

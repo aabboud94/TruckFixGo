@@ -370,16 +370,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         let user: User | undefined;
         if (email) {
+          console.log(`[login] Looking for user with email: ${email}`);
           user = await storage.getUserByEmail(email);
         } else if (phone) {
+          console.log(`[login] Looking for user with phone: ${phone}`);
           user = await storage.getUserByPhone(phone);
         }
 
-        if (!user || !user.password) {
+        if (!user) {
+          console.log(`[login] No user found for email: ${email || 'N/A'}, phone: ${phone || 'N/A'}`);
           return res.status(401).json({ message: 'Invalid credentials' });
         }
-
+        
+        if (!user.password) {
+          console.log(`[login] User ${user.id} has no password set`);
+          return res.status(401).json({ message: 'Invalid credentials' });
+        }
+        
+        console.log(`[login] Found user ${user.id} with email ${user.email}, attempting password verification`);
         const isValid = await bcrypt.compare(password, user.password);
+        console.log(`[login] Password verification for user ${user.id}: ${isValid ? 'SUCCESS' : 'FAILED'}`);
+        
         if (!isValid) {
           return res.status(401).json({ message: 'Invalid credentials' });
         }
@@ -8466,6 +8477,171 @@ The TruckFixGo Team
       } catch (error) {
         console.error('Send communication error:', error);
         res.status(500).json({ message: 'Failed to send communication' });
+      }
+    }
+  );
+
+  // Admin: Resend credentials for approved contractor
+  app.post('/api/admin/applications/:id/resend-credentials',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const application = await storage.getContractorApplication(req.params.id);
+        
+        if (!application) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+
+        if (application.status !== 'approved') {
+          return res.status(400).json({ 
+            message: 'Can only resend credentials for approved applications' 
+          });
+        }
+
+        // Find the user account for this contractor
+        console.log(`[resend-credentials] Looking for user with email: ${application.email}`);
+        const user = await storage.getUserByEmail(application.email);
+        
+        if (!user) {
+          console.log(`[resend-credentials] No user found with email: ${application.email}`);
+          return res.status(404).json({ 
+            message: 'User account not found for this contractor' 
+          });
+        }
+        console.log(`[resend-credentials] Found user: ${user.id} with email: ${user.email}`);
+
+        // Generate new temporary password
+        const newTempPassword = `TFG-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Math.floor(Math.random() * 9000) + 1000}`;
+        console.log(`[resend-credentials] Generated new temp password for user ${user.id}`);
+        const hashedPassword = await bcrypt.hash(newTempPassword, 10);
+        
+        // Update user's password
+        console.log(`[resend-credentials] Updating password for user ${user.id}`);
+        const updatedUser = await storage.updateUser(user.id, { 
+          password: hashedPassword 
+        });
+        
+        if (!updatedUser) {
+          console.error(`[resend-credentials] Failed to update user ${user.id}`);
+          return res.status(500).json({ message: 'Failed to update password' });
+        }
+        console.log(`[resend-credentials] Successfully updated password for user ${user.id}`);
+
+        // Send email with new credentials
+        try {
+          const emailSubject = 'Your TruckFixGo Login Credentials (Resent)';
+          const emailHtml = `
+            <html>
+              <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2>Your TruckFixGo Login Credentials</h2>
+                
+                <p>Hello ${application.firstName} ${application.lastName},</p>
+                
+                <p>Your login credentials have been reset. Please use the following information to access your contractor account:</p>
+                
+                <div style="background-color: #f0f0f0; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                  <p><strong>Login URL:</strong> ${process.env.APP_URL || 'https://truck-fix-go-aabboud94.replit.app'}/contractor/auth</p>
+                  <p><strong>Email:</strong> ${application.email}</p>
+                  <p><strong>Temporary Password:</strong> <code style="background-color: #fff; padding: 2px 5px; border: 1px solid #ddd;">${newTempPassword}</code></p>
+                </div>
+                
+                <p><strong>Important:</strong> Please change your password after your first login for security purposes.</p>
+                
+                <p>If you have any questions or issues logging in, please contact our support team.</p>
+                
+                <p>Best regards,<br>
+                The TruckFixGo Team</p>
+              </body>
+            </html>
+          `;
+          
+          const emailText = `
+Hello ${application.firstName} ${application.lastName},
+
+Your login credentials have been reset. Please use the following information to access your contractor account:
+
+Login URL: ${process.env.APP_URL || 'https://truck-fix-go-aabboud94.replit.app'}/contractor/auth
+Email: ${application.email}
+Temporary Password: ${newTempPassword}
+
+Important: Please change your password after your first login for security purposes.
+
+If you have any questions or issues logging in, please contact our support team.
+
+Best regards,
+The TruckFixGo Team
+          `;
+          
+          const { reminderService } = await import('./reminder-service');
+          const emailResult = await reminderService.sendDirectEmail(
+            application.email,
+            emailSubject,
+            emailHtml,
+            emailText
+          );
+          
+          if (emailResult.success) {
+            console.log(`Credentials resent successfully to ${application.email}`);
+          } else {
+            console.error(`Failed to resend credentials email to ${application.email}:`, emailResult.error);
+          }
+
+          res.json({
+            message: 'Credentials resent successfully',
+            emailSent: emailResult.success,
+            userId: user.id
+          });
+        } catch (emailError) {
+          console.error('Error sending credentials email:', emailError);
+          // Still return success since password was updated
+          res.json({
+            message: 'Password reset successfully, but email failed to send',
+            emailSent: false,
+            userId: user.id,
+            tempPassword: newTempPassword // Include password in response if email fails
+          });
+        }
+      } catch (error) {
+        console.error('Resend credentials error:', error);
+        res.status(500).json({ 
+          message: 'Failed to resend credentials',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+  );
+
+  // Admin: Get communications for an application
+  app.get('/api/admin/applications/:id/communications',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const application = await storage.getContractorApplication(req.params.id);
+        
+        if (!application) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+
+        // For now, return an empty array since we're not tracking communications yet
+        // In the future, this would query a communications log table
+        const communications = [];
+        
+        // You could also include some metadata about the application
+        res.json({
+          applicationId: req.params.id,
+          applicantEmail: application.email,
+          applicantName: `${application.firstName} ${application.lastName}`,
+          communications: communications,
+          message: 'Communications history retrieved successfully'
+        });
+      } catch (error) {
+        console.error('Get communications error:', error);
+        res.status(500).json({ 
+          message: 'Failed to retrieve communications',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
     }
   );
