@@ -625,11 +625,7 @@ export default function ContractorApply() {
                       type="number" 
                       placeholder="5" 
                       {...field} 
-                      onChange={(e) => {
-                        const value = parseInt(e.target.value);
-                        field.onChange(isNaN(value) ? 0 : value);
-                      }}
-                      value={field.value || ''}
+                      onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : "")}
                       data-testid="input-yearsExperience"
                     />
                   </FormControl>
@@ -737,11 +733,7 @@ export default function ContractorApply() {
                       type="number" 
                       placeholder="10" 
                       {...field}
-                      onChange={(e) => {
-                        const value = parseInt(e.target.value);
-                        field.onChange(isNaN(value) ? 0 : value);
-                      }}
-                      value={field.value || ''}
+                      onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : "")}
                       data-testid="input-total-experience"
                     />
                   </FormControl>
@@ -859,11 +851,7 @@ export default function ContractorApply() {
                       type="number" 
                       placeholder="50" 
                       {...field}
-                      onChange={(e) => {
-                        const value = parseInt(e.target.value);
-                        field.onChange(isNaN(value) ? 0 : value);
-                      }}
-                      value={field.value || ''}
+                      onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : "")}
                       data-testid="input-serviceRadius"
                     />
                   </FormControl>
