@@ -70,6 +70,7 @@ import AdminReferrals from "@/pages/admin/referrals";
 import AdminSurge from "@/pages/admin/surge";
 import AdminSupport from "@/pages/admin/support";
 import AdminHealth from "@/pages/admin/health";
+import AdminLiveMap from "@/pages/admin/live-map";
 
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
@@ -154,6 +155,7 @@ function Router() {
       <Route path="/admin/surge" component={AdminSurge} />
       <Route path="/admin/support" component={AdminSupport} />
       <Route path="/admin/health" component={AdminHealth} />
+      <Route path="/admin/live-map" component={AdminLiveMap} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />

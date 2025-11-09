@@ -6995,6 +6995,183 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Get live jobs for admin map view
+  app.get('/api/admin/jobs/live',
+    requireAuth,
+    requireRole('admin', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        // Get all active jobs (not completed or cancelled)
+        const activeStatuses: (typeof jobStatusEnum.enumValues[number])[] = [
+          'new', 'assigned', 'en_route', 'on_site'
+        ];
+        
+        const jobs = await storage.findJobs({
+          limit: 500, // Higher limit for live map
+          offset: 0,
+          orderBy: 'createdAt',
+          orderDir: 'desc'
+        });
+        
+        // Filter for active jobs and add location data
+        const liveJobs = jobs.filter((job: Job) => 
+          activeStatuses.includes(job.status) && 
+          job.location && 
+          typeof job.location === 'object' &&
+          'lat' in job.location && 
+          'lng' in job.location
+        ).map((job: Job) => ({
+          id: job.id,
+          status: job.status,
+          type: job.jobType,
+          serviceType: job.service,
+          location: job.location,
+          locationAddress: job.locationAddress,
+          customer: {
+            name: job.customerName,
+            phone: job.customerPhone,
+            email: job.customerEmail
+          },
+          contractorId: job.contractorId,
+          contractorLocation: job.contractorLocation,
+          price: job.price,
+          createdAt: job.createdAt,
+          assignedAt: job.assignedAt,
+          enRouteAt: job.enRouteAt,
+          onSiteAt: job.onSiteAt,
+          estimatedArrival: job.estimatedArrival,
+          vin: job.vin,
+          unitNumber: job.unitNumber,
+          fleetAccountId: job.fleetAccountId
+        }));
+        
+        res.json({ 
+          jobs: liveJobs,
+          total: liveJobs.length 
+        });
+      } catch (error) {
+        console.error('Get live jobs error:', error);
+        res.status(500).json({ message: 'Failed to get live jobs' });
+      }
+    }
+  );
+
+  // Get online contractors for admin map view
+  app.get('/api/admin/contractors/online',
+    requireAuth,
+    requireRole('admin', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        // Get all active contractors
+        const contractors = await storage.findContractors({
+          limit: 200,
+          offset: 0,
+          orderBy: 'createdAt',
+          orderDir: 'desc'
+        });
+        
+        // Filter for online/available contractors with location data
+        const onlineContractors = contractors
+          .filter((contractor: ContractorProfile) => 
+            contractor.isAvailable &&
+            contractor.currentLocation &&
+            typeof contractor.currentLocation === 'object' &&
+            'lat' in contractor.currentLocation && 
+            'lng' in contractor.currentLocation
+          )
+          .map((contractor: ContractorProfile) => ({
+            id: contractor.id,
+            userId: contractor.userId,
+            name: `${contractor.firstName} ${contractor.lastName}`.trim() || contractor.companyName || 'Unknown',
+            companyName: contractor.companyName,
+            phone: contractor.phone,
+            email: contractor.email,
+            status: contractor.activeJobId ? 'on_job' : 
+                   contractor.isAvailable ? 'available' : 'offline',
+            location: contractor.currentLocation,
+            lastLocationUpdate: contractor.lastLocationUpdate,
+            activeJobId: contractor.activeJobId,
+            completedJobsCount: contractor.completedJobsCount || 0,
+            averageRating: contractor.averageRating || 0,
+            performanceTier: contractor.performanceTier,
+            servicesOffered: contractor.servicesOffered
+          }));
+        
+        res.json({ 
+          contractors: onlineContractors,
+          total: onlineContractors.length 
+        });
+      } catch (error) {
+        console.error('Get online contractors error:', error);
+        res.status(500).json({ message: 'Failed to get online contractors' });
+      }
+    }
+  );
+
+  // Assign contractor to job
+  app.post('/api/admin/jobs/:id/assign',
+    requireAuth,
+    requireRole('admin', 'dispatcher'),
+    validateRequest(z.object({
+      contractorId: z.string()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        const { contractorId } = req.body;
+        
+        // Get job to check current status
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        if (job.status !== 'new' && job.status !== 'assigned') {
+          return res.status(400).json({ 
+            message: `Cannot assign contractor to job with status: ${job.status}` 
+          });
+        }
+        
+        // Check contractor exists and is available
+        const contractor = await storage.getContractorProfile(contractorId);
+        if (!contractor) {
+          return res.status(404).json({ message: 'Contractor not found' });
+        }
+        
+        if (!contractor.isAvailable) {
+          return res.status(400).json({ 
+            message: 'Contractor is not available' 
+          });
+        }
+        
+        // Assign the contractor
+        await storage.updateJob(jobId, {
+          contractorId,
+          status: 'assigned',
+          assignedAt: new Date()
+        });
+        
+        // Update contractor's active job
+        await storage.updateContractorProfile(contractorId, {
+          activeJobId: jobId
+        });
+        
+        // Send notification to contractor (if WebSocket connected)
+        const { trackingWSServer } = await import('./websocket');
+        trackingWSServer.notifyJobAssignment(jobId, contractorId);
+        
+        res.json({ 
+          message: 'Contractor assigned successfully',
+          jobId,
+          contractorId
+        });
+      } catch (error) {
+        console.error('Assign contractor error:', error);
+        res.status(500).json({ message: 'Failed to assign contractor' });
+      }
+    }
+  );
+
   // ==================== PUBLIC ROUTES ====================
 
   // Get price estimate without login

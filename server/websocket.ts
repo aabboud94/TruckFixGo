@@ -673,6 +673,37 @@ class TrackingWebSocketServer {
     });
   }
 
+  // Notify job assignment (simple version for route integration)
+  public notifyJobAssignment(jobId: string, contractorId: string) {
+    console.log(`[WebSocket] Notifying job assignment to contractor ${contractorId}`);
+    
+    // Find contractor's WebSocket connection
+    const contractorWs = this.clients.get(contractorId);
+    
+    if (contractorWs && contractorWs.readyState === WebSocket.OPEN) {
+      this.sendMessage(contractorWs, {
+        type: 'JOB_ASSIGNED',
+        payload: {
+          jobId,
+          timestamp: new Date().toISOString()
+        }
+      });
+      console.log(`[WebSocket] Job assignment notification sent to contractor ${contractorId}`);
+    } else {
+      console.log(`[WebSocket] Contractor ${contractorId} not connected, will receive notification on next login`);
+    }
+    
+    // Also notify tracking room if exists
+    this.broadcastToRoom(jobId, {
+      type: 'JOB_ASSIGNED',
+      payload: {
+        jobId,
+        contractorId,
+        timestamp: new Date().toISOString()
+      }
+    });
+  }
+
   // Broadcast job assignment to contractor
   public async broadcastJobAssignment(jobId: string, contractorId: string, jobDetails: any) {
     console.log(`[WebSocket] Broadcasting job assignment to contractor ${contractorId}`);
