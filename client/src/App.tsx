@@ -30,6 +30,7 @@ import ContractorDocuments from "@/pages/contractor/documents";
 import ContractorActiveJob from "@/pages/contractor/active-job";
 import ContractorBidding from "@/pages/contractor/bidding";
 import ContractorJobAcceptance from "@/pages/contractor/job-acceptance";
+import ManageDrivers from "@/pages/contractor/manage-drivers";
 
 // Fleet Pages
 import FleetLanding from "@/pages/fleet";
@@ -109,6 +110,7 @@ function Router() {
       <Route path="/contractor/documents" component={ContractorDocuments} />
       <Route path="/contractor/active-job" component={ContractorActiveJob} />
       <Route path="/contractor/job/:jobId" component={ContractorJobAcceptance} />
+      <Route path="/contractor/manage-drivers" component={ManageDrivers} />
       
       {/* Fleet Pages */}
       <Route path="/fleet" component={FleetLanding} />
