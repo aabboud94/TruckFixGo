@@ -103,26 +103,40 @@ export default function AdminContractors() {
 
   // Mutation for updating contractor details
   const updateContractorDetailsMutation = useMutation({
-    mutationFn: async (data: { name: string; company: string; email: string; phone: string }) => {
-      return apiRequest(`/api/admin/contractors/${editedContractor?.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(data),
+    mutationFn: async (data: { contractorId: string; name: string; company: string; email: string; phone: string }) => {
+      const url = `/api/admin/contractors/${data.contractorId}`;
+      console.log('[updateContractorDetailsMutation] URL:', url);
+      return apiRequest('PUT', url, {
+        name: data.name,
+        company: data.company,
+        email: data.email,
+        phone: data.phone
       });
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/contractors'] });
-      setSelectedContractor({ ...selectedContractor, ...data });
-      setEditedContractor({ ...editedContractor, ...data });
+      
+      // Map backend response to frontend format
+      const mappedData = {
+        ...data,
+        name: data.name || `${data.firstName || ''} ${data.lastName || ''}`.trim(),
+        company: data.company || data.companyName || ''
+      };
+      
+      setSelectedContractor({ ...selectedContractor, ...mappedData });
+      setEditedContractor({ ...editedContractor, ...mappedData });
       toast({
         title: "Details updated",
         description: "Contractor details have been updated successfully",
       });
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('[updateContractorDetailsMutation] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update contractor details';
       toast({
         variant: "destructive",
         title: "Update failed",
-        description: "Failed to update contractor details",
+        description: errorMessage,
       });
     },
   });
@@ -383,7 +397,7 @@ export default function AdminContractors() {
                       <TableCell>${contractor.currentBalance.toLocaleString()}</TableCell>
                       <TableCell>{format(contractor.joinedAt, 'MMM d, yyyy')}</TableCell>
                       <TableCell>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 relative z-10">
                           <Button
                             size="icon"
                             variant="ghost"
@@ -401,6 +415,7 @@ export default function AdminContractors() {
                               setShowContractorDetails(true);
                             }}
                             data-testid={`button-view-${contractor.id}`}
+                            className="relative z-10"
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -411,6 +426,7 @@ export default function AdminContractors() {
                               setSelectedContractor(contractor);
                             }}
                             data-testid={`button-edit-${contractor.id}`}
+                            className="relative z-10"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -536,12 +552,30 @@ export default function AdminContractors() {
                 <div className="flex justify-end pt-4">
                   <Button
                     onClick={() => {
-                      updateContractorDetailsMutation.mutate({
+                      console.log('[Save Changes] Selected Contractor:', selectedContractor);
+                      console.log('[Save Changes] Edited Contractor:', editedContractor);
+                      console.log('[Save Changes] Contractor ID:', selectedContractor?.id);
+                      
+                      if (!selectedContractor?.id) {
+                        console.error('[Save Changes] No contractor ID found!');
+                        toast({
+                          variant: "destructive",
+                          title: "Error",
+                          description: "Unable to save: no contractor selected",
+                        });
+                        return;
+                      }
+                      
+                      const payload = {
+                        contractorId: selectedContractor.id,
                         name: editedContractor.name,
                         company: editedContractor.company,
                         email: editedContractor.email,
                         phone: editedContractor.phone,
-                      });
+                      };
+                      console.log('[Save Changes] Mutation payload:', payload);
+                      
+                      updateContractorDetailsMutation.mutate(payload);
                     }}
                     disabled={updateContractorDetailsMutation.isPending}
                     data-testid="button-save-contractor-details"

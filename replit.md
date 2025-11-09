@@ -13,6 +13,14 @@ Key features include live mechanic tracking with real-time ETA, multi-service su
 
 ## Recent Changes (November 2024)
 
+### Contractor Edit Feature Implementation
+- **Added full contractor profile editing**: Admin can now edit contractor name, company, email, and phone fields
+- **Created updateContractorDetails storage method**: Handles transactional updates to both users and contractor_profiles tables
+- **Implemented PUT /api/admin/contractors/:id endpoint**: Validates input and updates contractor details with proper error handling
+- **Fixed UI interaction issues**: Added z-index to action buttons to fix click-blocking overlay in table rows
+- **Fixed data structure mapping**: Resolved firstName/lastName to name conversion and companyName to company field mapping
+- **Fixed apiRequest call signature**: Corrected mutation to use proper (method, url, data) format
+
 ### Critical Database Query Fixes  
 - **Fixed SQL syntax error in search**: Changed `users.name` to search on `firstName` and `lastName` separately
 - **Fixed response parsing in contractors page**: Changed from `contractors?.data` to `contractors` (API returns array directly)
