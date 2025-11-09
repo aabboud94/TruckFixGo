@@ -8123,10 +8123,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // First check if user already exists
         let user = await storage.getUserByEmail(application.email);
         
+        // Generate a temporary password for new users
+        let tempPasswordPlain: string | undefined;
+        let isNewUser = false;
+        
         // Create user account if it doesn't exist
         if (!user) {
-          // Generate a temporary password - they will need to reset it
-          const tempPassword = await bcrypt.hash(`temp-${randomUUID()}`, 10);
+          // Generate a readable temporary password
+          tempPasswordPlain = `TFG-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Math.floor(Math.random() * 9000) + 1000}`;
+          const tempPasswordHash = await bcrypt.hash(tempPasswordPlain, 10);
           
           user = await storage.createUser({
             email: application.email,
@@ -8134,11 +8139,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             role: 'contractor',
             firstName: application.firstName,
             lastName: application.lastName,
-            password: tempPassword,
+            password: tempPasswordHash,
             isActive: true,
             isGuest: false
           });
           
+          isNewUser = true;
           console.log(`Created user account for contractor ${application.email} with ID: ${user.id}`);
         } else {
           // If user exists but is not a contractor, update their role
@@ -8146,6 +8152,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await storage.updateUser(user.id, { role: 'contractor' });
             console.log(`Updated user ${user.email} role to contractor`);
           }
+          // Generate new temp password for existing users too
+          tempPasswordPlain = `TFG-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Math.floor(Math.random() * 9000) + 1000}`;
+          const tempPasswordHash = await bcrypt.hash(tempPasswordPlain, 10);
+          await storage.updateUser(user.id, { password: tempPasswordHash });
         }
         
         // Check if contractor profile already exists
@@ -8192,10 +8202,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         );
 
+        // Send welcome email with credentials
+        if (tempPasswordPlain) {
+          try {
+            const { reminderService } = await import('./reminder-service');
+            
+            const emailSubject = 'Welcome to TruckFixGo - Your Application Has Been Approved!';
+            const emailHtml = `
+              <html>
+                <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                  <div style="background-color: #1e3a5f; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+                    <h1 style="margin: 0; font-size: 28px;">Welcome to TruckFixGo!</h1>
+                    <p style="margin: 10px 0 0 0; font-size: 16px;">Your Contractor Application Has Been Approved</p>
+                  </div>
+                  
+                  <div style="padding: 30px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-top: none;">
+                    <h2 style="color: #1e3a5f; margin-top: 0;">Congratulations, ${application.firstName}!</h2>
+                    
+                    <p style="color: #495057; line-height: 1.6;">
+                      We're excited to welcome you to the TruckFixGo contractor network. Your application has been 
+                      thoroughly reviewed and approved. You can now start accepting jobs and earning with us!
+                    </p>
+                    
+                    <div style="background: white; border-left: 4px solid #ff6b35; padding: 20px; margin: 25px 0; border-radius: 4px;">
+                      <h3 style="color: #1e3a5f; margin-top: 0; font-size: 18px;">Your Login Credentials</h3>
+                      <p style="color: #495057; margin: 10px 0;">
+                        <strong>Email:</strong> <span style="background: #f1f3f5; padding: 5px 10px; border-radius: 4px; font-family: monospace;">${application.email}</span>
+                      </p>
+                      <p style="color: #495057; margin: 10px 0;">
+                        <strong>Temporary Password:</strong> <span style="background: #f1f3f5; padding: 5px 10px; border-radius: 4px; font-family: monospace; font-weight: bold;">${tempPasswordPlain}</span>
+                      </p>
+                      <p style="color: #dc3545; font-size: 13px; margin-top: 15px;">
+                        ⚠️ <strong>Important:</strong> Please change your password after your first login for security purposes.
+                      </p>
+                    </div>
+                    
+                    <div style="background: #e7f5ff; border: 1px solid #74c0fc; padding: 20px; margin: 25px 0; border-radius: 4px;">
+                      <h3 style="color: #1e3a5f; margin-top: 0; font-size: 18px;">Next Steps</h3>
+                      <ol style="color: #495057; line-height: 1.8; margin: 10px 0; padding-left: 20px;">
+                        <li><strong>Log in to your dashboard:</strong> Visit <a href="${process.env.APP_URL || 'https://truckfixgo.com'}/contractor/auth" style="color: #4a90e2;">TruckFixGo Contractor Portal</a></li>
+                        <li><strong>Complete your profile:</strong> Add your service specializations and availability</li>
+                        <li><strong>Upload required documents:</strong> Ensure all certifications are up to date</li>
+                        <li><strong>Set your availability:</strong> Configure when you're available to accept jobs</li>
+                        <li><strong>Start accepting jobs:</strong> View and accept available jobs in your area</li>
+                      </ol>
+                    </div>
+                    
+                    <div style="text-align: center; margin: 30px 0;">
+                      <a href="${process.env.APP_URL || 'https://truckfixgo.com'}/contractor/auth" 
+                         style="display: inline-block; background-color: #ff6b35; color: white; padding: 14px 32px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">
+                        Access Your Dashboard
+                      </a>
+                    </div>
+                    
+                    <div style="background: #f8f9fa; padding: 20px; margin: 25px 0; border-radius: 4px; border: 1px solid #dee2e6;">
+                      <h4 style="color: #1e3a5f; margin-top: 0;">Important Information</h4>
+                      <ul style="color: #495057; line-height: 1.6; margin: 10px 0; padding-left: 20px;">
+                        <li>Your account is now active and ready to receive job assignments</li>
+                        <li>You'll receive notifications for new jobs matching your skills and location</li>
+                        <li>Maintain a high rating to access premium job opportunities</li>
+                        <li>Payment processing is handled securely through our platform</li>
+                      </ul>
+                    </div>
+                    
+                    <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
+                    
+                    <p style="color: #6c757d; font-size: 14px; line-height: 1.6;">
+                      If you have any questions or need assistance, our support team is here to help. 
+                      Contact us at <a href="mailto:Support@truckfixgo.com" style="color: #4a90e2;">Support@truckfixgo.com</a> 
+                      or call 1-800-TRUCK-FIX.
+                    </p>
+                  </div>
+                  
+                  <div style="background-color: #1e3a5f; color: white; padding: 20px; text-align: center; border-radius: 0 0 8px 8px;">
+                    <p style="margin: 0; font-size: 14px;">Welcome aboard!</p>
+                    <p style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;">The TruckFixGo Team</p>
+                  </div>
+                </body>
+              </html>
+            `;
+            
+            const emailText = `
+Welcome to TruckFixGo!
+
+Congratulations, ${application.firstName}!
+
+Your contractor application has been approved. You can now start accepting jobs and earning with us!
+
+Your Login Credentials:
+Email: ${application.email}
+Temporary Password: ${tempPasswordPlain}
+
+IMPORTANT: Please change your password after your first login.
+
+Next Steps:
+1. Log in at: ${process.env.APP_URL || 'https://truckfixgo.com'}/contractor/auth
+2. Complete your profile
+3. Upload required documents
+4. Set your availability
+5. Start accepting jobs
+
+Questions? Contact us at Support@truckfixgo.com or call 1-800-TRUCK-FIX.
+
+Welcome aboard!
+The TruckFixGo Team
+            `;
+            
+            const emailResult = await reminderService.sendDirectEmail(
+              application.email,
+              emailSubject,
+              emailHtml,
+              emailText
+            );
+            
+            if (emailResult.success) {
+              console.log(`Welcome email sent successfully to ${application.email}`);
+            } else {
+              console.error(`Failed to send welcome email to ${application.email}:`, emailResult.error);
+              // Don't fail the approval, just log the error
+            }
+          } catch (emailError) {
+            console.error('Error sending welcome email:', emailError);
+            // Don't fail the approval process if email fails
+          }
+        }
+
         res.json({
           message: 'Application approved successfully',
           application: updatedApplication,
-          userId: user.id
+          userId: user.id,
+          emailSent: tempPasswordPlain ? true : false
         });
       } catch (error) {
         console.error('Approve application error:', error);

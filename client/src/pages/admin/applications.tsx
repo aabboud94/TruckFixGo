@@ -525,17 +525,34 @@ export default function AdminApplications() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 bg-secondary rounded-full h-2">
-                            <div 
-                              className="bg-primary h-2 rounded-full"
-                              style={{ width: `${completionPercentage}%` }}
-                            />
+                        {app.status === 'approved' ? (
+                          <Badge variant="success" className="gap-1">
+                            <CheckCircle className="h-3 w-3" />
+                            Approved
+                          </Badge>
+                        ) : app.status === 'rejected' ? (
+                          <Badge variant="destructive" className="gap-1">
+                            <XCircle className="h-3 w-3" />
+                            Rejected  
+                          </Badge>
+                        ) : app.status === 'withdrawn' ? (
+                          <Badge variant="secondary" className="gap-1">
+                            <Ban className="h-3 w-3" />
+                            Withdrawn
+                          </Badge>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 bg-secondary rounded-full h-2">
+                              <div 
+                                className="bg-primary h-2 rounded-full"
+                                style={{ width: `${completionPercentage}%` }}
+                              />
+                            </div>
+                            <span className="text-sm text-muted-foreground">
+                              {completionPercentage}%
+                            </span>
                           </div>
-                          <span className="text-sm text-muted-foreground">
-                            {completionPercentage}%
-                          </span>
-                        </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">

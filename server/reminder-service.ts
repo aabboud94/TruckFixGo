@@ -798,6 +798,51 @@ class ReminderService {
 
     return { success: true };
   }
+
+  // Public method to send email directly (for contractor approval, etc.)
+  public async sendDirectEmail(
+    to: string,
+    subject: string,
+    htmlContent: string,
+    textContent?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    // STUB MODE - Log email to console if no email transporter configured
+    if (!this.emailTransporter || !this.emailConfig) {
+      console.log('📧 Email Service (Stub Mode): Logging email to console instead of sending');
+      console.log('------- EMAIL START -------');
+      console.log(`To: ${to}`);
+      console.log(`Subject: ${subject}`);
+      console.log(`Message: ${textContent || 'See HTML content'}`);
+      console.log('------- EMAIL END -------');
+      return { success: true };
+    }
+
+    try {
+      // Add email signature to HTML content
+      const htmlContentWithSignature = htmlContent + this.getEmailSignature();
+      
+      const mailOptions = {
+        from: `TruckFixGo <${this.emailConfig.from}>`,
+        to,
+        subject,
+        text: textContent || '',
+        html: htmlContentWithSignature
+      };
+
+      if (this.testMode) {
+        console.log('TEST MODE - Would send email:', mailOptions);
+        return { success: true };
+      }
+
+      const result = await this.emailTransporter.sendMail(mailOptions);
+      console.log(`Email sent successfully to ${to} with messageId: ${result.messageId}`);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to send email:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  }
 }
 
 // Export singleton instance
