@@ -1067,6 +1067,7 @@ export class PostgreSQLStorage implements IStorage {
     company: string;
     email: string;
     phone: string;
+    status?: string;
   }): Promise<any> {
     console.log('[updateContractorDetails] Called with:', { contractorId, details });
     
@@ -1081,20 +1082,34 @@ export class PostgreSQLStorage implements IStorage {
       // Start a transaction to update both tables
       const result = await db.transaction(async (tx) => {
         // Update users table
+        const userUpdates: any = {
+          firstName,
+          lastName,
+          email: details.email,
+          phone: details.phone
+        };
+        
+        // Only update status if provided
+        if (details.status) {
+          userUpdates.status = details.status;
+        }
+        
         await tx.update(users)
-          .set({
-            firstName,
-            lastName,
-            email: details.email,
-            phone: details.phone
-          })
+          .set(userUpdates)
           .where(eq(users.id, contractorId));
 
         // Update contractor_profiles table
+        const profileUpdates: any = {
+          companyName: details.company
+        };
+        
+        // If status is being set to active, update isActive flag
+        if (details.status) {
+          profileUpdates.isActive = details.status === 'active';
+        }
+        
         await tx.update(contractorProfiles)
-          .set({
-            companyName: details.company
-          })
+          .set(profileUpdates)
           .where(eq(contractorProfiles.userId, contractorId));
 
         // Fetch and return updated contractor

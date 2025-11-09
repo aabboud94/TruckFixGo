@@ -103,14 +103,15 @@ export default function AdminContractors() {
 
   // Mutation for updating contractor details
   const updateContractorDetailsMutation = useMutation({
-    mutationFn: async (data: { contractorId: string; name: string; company: string; email: string; phone: string }) => {
+    mutationFn: async (data: { contractorId: string; name: string; company: string; email: string; phone: string; status: string }) => {
       const url = `/api/admin/contractors/${data.contractorId}`;
       console.log('[updateContractorDetailsMutation] URL:', url);
       return apiRequest('PUT', url, {
         name: data.name,
         company: data.company,
         email: data.email,
-        phone: data.phone
+        phone: data.phone,
+        status: data.status
       });
     },
     onSuccess: (data) => {
@@ -408,7 +409,8 @@ export default function AdminContractors() {
                                 name: `${contractor.firstName || ''} ${contractor.lastName || ''}`.trim() || contractor.name || '',
                                 company: contractor.company || contractor.companyName || '',
                                 email: contractor.email || '',
-                                phone: contractor.phone || ''
+                                phone: contractor.phone || '',
+                                status: contractor.status || 'pending'
                               };
                               setSelectedContractor(contractorWithName);
                               setEditedContractor(contractorWithName);
@@ -505,14 +507,11 @@ export default function AdminContractors() {
                   <div className="space-y-2">
                     <Label>Status</Label>
                     <Select
-                      value={selectedContractor.status}
+                      value={editedContractor.status}
                       onValueChange={(value) => {
-                        updateStatusMutation.mutate({
-                          contractorId: selectedContractor.id,
-                          status: value,
-                        });
+                        setEditedContractor({ ...editedContractor, status: value });
                       }}
-                      disabled={updateStatusMutation.isPending || updateContractorDetailsMutation.isPending}
+                      disabled={updateContractorDetailsMutation.isPending}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -572,6 +571,7 @@ export default function AdminContractors() {
                         company: editedContractor.company,
                         email: editedContractor.email,
                         phone: editedContractor.phone,
+                        status: editedContractor.status,
                       };
                       console.log('[Save Changes] Mutation payload:', payload);
                       

@@ -6522,7 +6522,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
-        const { name, company, email, phone } = req.body;
+        const { name, company, email, phone, status } = req.body;
 
         // Validate input
         if (!name || !email) {
@@ -6540,12 +6540,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: 'Invalid phone number' });
         }
 
+        // Status validation
+        if (status && !['active', 'pending', 'suspended'].includes(status)) {
+          return res.status(400).json({ message: 'Invalid status value' });
+        }
+
         // Update contractor details
         const updatedContractor = await storage.updateContractorDetails(id, {
           name: name.trim(),
           company: (company || '').trim(),
           email: email.trim().toLowerCase(),
-          phone: (phone || '').trim()
+          phone: (phone || '').trim(),
+          status: status || undefined
         });
 
         if (!updatedContractor) {
