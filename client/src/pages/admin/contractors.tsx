@@ -106,12 +106,15 @@ export default function AdminContractors() {
     mutationFn: async (data: { contractorId: string; name: string; company: string; email: string; phone: string; status: string }) => {
       const url = `/api/admin/contractors/${data.contractorId}`;
       console.log('[updateContractorDetailsMutation] URL:', url);
-      return apiRequest('PUT', url, {
-        name: data.name,
-        company: data.company,
-        email: data.email,
-        phone: data.phone,
-        status: data.status
+      return apiRequest(url, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: data.name,
+          company: data.company,
+          email: data.email,
+          phone: data.phone,
+          status: data.status
+        })
       });
     },
     onSuccess: (data) => {

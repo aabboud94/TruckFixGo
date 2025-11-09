@@ -1120,9 +1120,11 @@ export class PostgreSQLStorage implements IStorage {
             lastName: users.lastName,
             email: users.email,
             phone: users.phone,
+            status: users.status,
             companyName: contractorProfiles.companyName,
             performanceTier: contractorProfiles.performanceTier,
-            averageRating: contractorProfiles.averageRating
+            averageRating: contractorProfiles.averageRating,
+            isActive: contractorProfiles.isActive
           })
           .from(users)
           .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
