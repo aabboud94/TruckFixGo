@@ -1062,6 +1062,68 @@ export class PostgreSQLStorage implements IStorage {
     return user.role === requiredRole;
   }
 
+  async updateContractorDetails(contractorId: string, details: {
+    name: string;
+    company: string;
+    email: string;
+    phone: string;
+  }): Promise<any> {
+    try {
+      // Parse name into first and last name
+      const nameParts = details.name.trim().split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      // Start a transaction to update both tables
+      const result = await db.transaction(async (tx) => {
+        // Update users table
+        await tx.update(users)
+          .set({
+            firstName,
+            lastName,
+            email: details.email,
+            phone: details.phone
+          })
+          .where(eq(users.id, contractorId));
+
+        // Update contractor_profiles table
+        await tx.update(contractorProfiles)
+          .set({
+            companyName: details.company
+          })
+          .where(eq(contractorProfiles.userId, contractorId));
+
+        // Fetch and return updated contractor
+        const updated = await tx
+          .select({
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            email: users.email,
+            phone: users.phone,
+            companyName: contractorProfiles.companyName,
+            performanceTier: contractorProfiles.performanceTier,
+            averageRating: contractorProfiles.averageRating
+          })
+          .from(users)
+          .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
+          .where(eq(users.id, contractorId))
+          .limit(1);
+
+        return updated[0];
+      });
+
+      return result;
+    } catch (error: any) {
+      // Check for unique constraint violations
+      if (error.message?.includes('unique') || error.code === '23505') {
+        throw new Error('Email address is already in use');
+      }
+      console.error('Error updating contractor details:', error);
+      throw error;
+    }
+  }
+
   async getContractorDrivers(contractorId: string): Promise<any[]> {
     try {
       // Get all drivers managed by this contractor

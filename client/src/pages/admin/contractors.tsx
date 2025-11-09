@@ -31,6 +31,7 @@ export default function AdminContractors() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [tierFilter, setTierFilter] = useState("all");
   const [selectedContractor, setSelectedContractor] = useState<any>(null);
+  const [editedContractor, setEditedContractor] = useState<any>(null);
   const [showContractorDetails, setShowContractorDetails] = useState(false);
   const [selectedContractors, setSelectedContractors] = useState<string[]>([]);
 
@@ -96,6 +97,32 @@ export default function AdminContractors() {
       toast({
         title: "Bulk action completed",
         description: "Selected contractors have been updated",
+      });
+    },
+  });
+
+  // Mutation for updating contractor details
+  const updateContractorDetailsMutation = useMutation({
+    mutationFn: async (data: { name: string; company: string; email: string; phone: string }) => {
+      return apiRequest(`/api/admin/contractors/${editedContractor?.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/contractors'] });
+      setSelectedContractor({ ...selectedContractor, ...data });
+      setEditedContractor({ ...editedContractor, ...data });
+      toast({
+        title: "Details updated",
+        description: "Contractor details have been updated successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Update failed",
+        description: "Failed to update contractor details",
       });
     },
   });
@@ -362,6 +389,7 @@ export default function AdminContractors() {
                             variant="ghost"
                             onClick={() => {
                               setSelectedContractor(contractor);
+                              setEditedContractor(contractor);
                               setShowContractorDetails(true);
                             }}
                             data-testid={`button-view-${contractor.id}`}
@@ -390,7 +418,15 @@ export default function AdminContractors() {
       </Card>
 
       {/* Contractor Details Dialog */}
-      <Dialog open={showContractorDetails} onOpenChange={setShowContractorDetails}>
+      <Dialog 
+        open={showContractorDetails} 
+        onOpenChange={(open) => {
+          setShowContractorDetails(open);
+          if (!open) {
+            setEditedContractor(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Contractor Details - {selectedContractor?.name}</DialogTitle>
@@ -399,7 +435,7 @@ export default function AdminContractors() {
             </DialogDescription>
           </DialogHeader>
           
-          {selectedContractor && (
+          {selectedContractor && editedContractor && (
             <Tabs defaultValue="info" className="mt-4">
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="info">Information</TabsTrigger>
@@ -412,19 +448,35 @@ export default function AdminContractors() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Name</Label>
-                    <Input value={selectedContractor.name} readOnly />
+                    <Input 
+                      value={editedContractor.name} 
+                      onChange={(e) => setEditedContractor({ ...editedContractor, name: e.target.value })}
+                      disabled={updateContractorDetailsMutation.isPending}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Company</Label>
-                    <Input value={selectedContractor.company} readOnly />
+                    <Input 
+                      value={editedContractor.company} 
+                      onChange={(e) => setEditedContractor({ ...editedContractor, company: e.target.value })}
+                      disabled={updateContractorDetailsMutation.isPending}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Email</Label>
-                    <Input value={selectedContractor.email} readOnly />
+                    <Input 
+                      value={editedContractor.email} 
+                      onChange={(e) => setEditedContractor({ ...editedContractor, email: e.target.value })}
+                      disabled={updateContractorDetailsMutation.isPending}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Phone</Label>
-                    <Input value={selectedContractor.phone} readOnly />
+                    <Input 
+                      value={editedContractor.phone} 
+                      onChange={(e) => setEditedContractor({ ...editedContractor, phone: e.target.value })}
+                      disabled={updateContractorDetailsMutation.isPending}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Status</Label>
@@ -436,6 +488,7 @@ export default function AdminContractors() {
                           status: value,
                         });
                       }}
+                      disabled={updateStatusMutation.isPending || updateContractorDetailsMutation.isPending}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -457,6 +510,7 @@ export default function AdminContractors() {
                           tier: value,
                         });
                       }}
+                      disabled={updateTierMutation.isPending || updateContractorDetailsMutation.isPending}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -468,6 +522,31 @@ export default function AdminContractors() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+                
+                {/* Save Changes Button */}
+                <div className="flex justify-end pt-4">
+                  <Button
+                    onClick={() => {
+                      updateContractorDetailsMutation.mutate({
+                        name: editedContractor.name,
+                        company: editedContractor.company,
+                        email: editedContractor.email,
+                        phone: editedContractor.phone,
+                      });
+                    }}
+                    disabled={updateContractorDetailsMutation.isPending}
+                    data-testid="button-save-contractor-details"
+                  >
+                    {updateContractorDetailsMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Changes'
+                    )}
+                  </Button>
                 </div>
               </TabsContent>
 
