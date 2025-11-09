@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Contractor Mutations</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .test h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        .pending {
+            color: orange;
+            font-weight: bold;
+        }
+        .result {
+            background: #f9f9f9;
+            border-left: 3px solid #ddd;
+            padding: 10px;
+            margin-top: 10px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0052a3;
+        }
+        .test-buttons {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Contractor Mutations Test Suite</h1>
+    
+    <div class="test">
+        <h3>Test 1: Admin Login</h3>
+        <div class="test-buttons">
+            <button onclick="testAdminLogin()">Run Test</button>
+        </div>
+        <div id="login-result" class="result"></div>
+    </div>
+    
+    <div class="test">
+        <h3>Test 2: Fetch Contractors (Query Test)</h3>
+        <div class="test-buttons">
+            <button onclick="testFetchContractors()">Run Test</button>
+        </div>
+        <div id="fetch-result" class="result"></div>
+    </div>
+    
+    <div class="test">
+        <h3>Test 3: Update Contractor Status (Mutation Test)</h3>
+        <div class="test-buttons">
+            <button onclick="testUpdateStatus()">Run Test</button>
+        </div>
+        <div id="status-result" class="result"></div>
+    </div>
+    
+    <div class="test">
+        <h3>Test 4: Update Contractor Tier (Mutation Test)</h3>
+        <div class="test-buttons">
+            <button onclick="testUpdateTier()">Run Test</button>
+        </div>
+        <div id="tier-result" class="result"></div>
+    </div>
+    
+    <div class="test">
+        <h3>Test 5: Bulk Actions (Mutation Test)</h3>
+        <div class="test-buttons">
+            <button onclick="testBulkAction()">Run Test</button>
+        </div>
+        <div id="bulk-result" class="result"></div>
+    </div>
+    
+    <div class="test">
+        <h3>Test 6: Check Test IDs on Buttons</h3>
+        <div class="test-buttons">
+            <button onclick="checkTestIds()">Run Test</button>
+        </div>
+        <div id="testid-result" class="result"></div>
+    </div>
+
+    <script>
+        // Helper function to make API requests
+        async function apiRequest(method, url, data) {
+            const options = {
+                method: method,
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            };
+            
+            if (data) {
+                options.body = JSON.stringify(data);
+            }
+            
+            const response = await fetch(url, options);
+            const text = await response.text();
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${text}`);
+            }
+            
+            try {
+                return JSON.parse(text);
+            } catch {
+                return text;
+            }
+        }
+        
+        // Test 1: Admin Login
+        async function testAdminLogin() {
+            const resultDiv = document.getElementById('login-result');
+            resultDiv.innerHTML = '<span class="pending">Testing admin login...</span>';
+            
+            try {
+                const result = await apiRequest('POST', '/api/admin/login', {
+                    email: 'admin@example.com',
+                    password: 'admin123'
+                });
+                
+                if (result.user && result.user.email) {
+                    resultDiv.innerHTML = `<span class="success">✓ Login successful!</span>\nUser: ${result.user.email}\nRole: ${result.user.role}`;
+                } else {
+                    resultDiv.innerHTML = '<span class="error">✗ Login failed - unexpected response</span>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">✗ Login failed</span>\n${error.message}`;
+            }
+        }
+        
+        // Test 2: Fetch Contractors
+        async function testFetchContractors() {
+            const resultDiv = document.getElementById('fetch-result');
+            resultDiv.innerHTML = '<span class="pending">Fetching contractors...</span>';
+            
+            try {
+                // First login
+                await apiRequest('POST', '/api/admin/login', {
+                    email: 'admin@example.com',
+                    password: 'admin123'
+                });
+                
+                // Then fetch contractors
+                const contractors = await apiRequest('GET', '/api/admin/contractors');
+                
+                if (Array.isArray(contractors)) {
+                    resultDiv.innerHTML = `<span class="success">✓ Fetched ${contractors.length} contractors</span>\n`;
+                    if (contractors.length > 0) {
+                        resultDiv.innerHTML += `First contractor: ${contractors[0].name || contractors[0].firstName + ' ' + contractors[0].lastName}\n`;
+                        resultDiv.innerHTML += `Status: ${contractors[0].status}, Tier: ${contractors[0].tier}`;
+                    }
+                } else {
+                    resultDiv.innerHTML = '<span class="error">✗ Unexpected response format</span>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">✗ Fetch failed</span>\n${error.message}`;
+            }
+        }
+        
+        // Test 3: Update Contractor Status
+        async function testUpdateStatus() {
+            const resultDiv = document.getElementById('status-result');
+            resultDiv.innerHTML = '<span class="pending">Testing status update...</span>';
+            
+            try {
+                // Login first
+                await apiRequest('POST', '/api/admin/login', {
+                    email: 'admin@example.com',
+                    password: 'admin123'
+                });
+                
+                // Get contractors
+                const contractors = await apiRequest('GET', '/api/admin/contractors');
+                
+                if (contractors.length === 0) {
+                    resultDiv.innerHTML = '<span class="error">✗ No contractors available to test</span>';
+                    return;
+                }
+                
+                const contractor = contractors[0];
+                const newStatus = contractor.status === 'active' ? 'pending' : 'active';
+                
+                // Update status using the corrected apiRequest format
+                const result = await apiRequest('PUT', `/api/admin/contractors/${contractor.id}/status`, {
+                    status: newStatus
+                });
+                
+                resultDiv.innerHTML = `<span class="success">✓ Status updated successfully</span>\n`;
+                resultDiv.innerHTML += `Contractor: ${contractor.name || contractor.firstName + ' ' + contractor.lastName}\n`;
+                resultDiv.innerHTML += `Old status: ${contractor.status}\n`;
+                resultDiv.innerHTML += `New status: ${newStatus}`;
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">✗ Status update failed</span>\n${error.message}`;
+            }
+        }
+        
+        // Test 4: Update Contractor Tier
+        async function testUpdateTier() {
+            const resultDiv = document.getElementById('tier-result');
+            resultDiv.innerHTML = '<span class="pending">Testing tier update...</span>';
+            
+            try {
+                // Login first
+                await apiRequest('POST', '/api/admin/login', {
+                    email: 'admin@example.com',
+                    password: 'admin123'
+                });
+                
+                // Get contractors
+                const contractors = await apiRequest('GET', '/api/admin/contractors');
+                
+                if (contractors.length === 0) {
+                    resultDiv.innerHTML = '<span class="error">✗ No contractors available to test</span>';
+                    return;
+                }
+                
+                const contractor = contractors[0];
+                const tiers = ['bronze', 'silver', 'gold'];
+                const currentIndex = tiers.indexOf(contractor.tier);
+                const newTier = tiers[(currentIndex + 1) % 3];
+                
+                // Update tier using the corrected apiRequest format
+                const result = await apiRequest('PUT', `/api/admin/contractors/${contractor.id}/tier`, {
+                    tier: newTier
+                });
+                
+                resultDiv.innerHTML = `<span class="success">✓ Tier updated successfully</span>\n`;
+                resultDiv.innerHTML += `Contractor: ${contractor.name || contractor.firstName + ' ' + contractor.lastName}\n`;
+                resultDiv.innerHTML += `Old tier: ${contractor.tier}\n`;
+                resultDiv.innerHTML += `New tier: ${newTier}`;
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">✗ Tier update failed</span>\n${error.message}`;
+            }
+        }
+        
+        // Test 5: Bulk Actions
+        async function testBulkAction() {
+            const resultDiv = document.getElementById('bulk-result');
+            resultDiv.innerHTML = '<span class="pending">Testing bulk action...</span>';
+            
+            try {
+                // Login first
+                await apiRequest('POST', '/api/admin/login', {
+                    email: 'admin@example.com',
+                    password: 'admin123'
+                });
+                
+                // Get contractors
+                const contractors = await apiRequest('GET', '/api/admin/contractors');
+                
+                if (contractors.length < 2) {
+                    resultDiv.innerHTML = '<span class="error">✗ Need at least 2 contractors to test bulk actions</span>';
+                    return;
+                }
+                
+                // Select first two contractors
+                const contractorIds = [contractors[0].id, contractors[1].id];
+                
+                // Perform bulk action using the corrected apiRequest format
+                const result = await apiRequest('POST', '/api/admin/contractors/bulk', {
+                    action: 'approve',
+                    contractorIds: contractorIds
+                });
+                
+                resultDiv.innerHTML = `<span class="success">✓ Bulk action completed successfully</span>\n`;
+                resultDiv.innerHTML += `Action: approve\n`;
+                resultDiv.innerHTML += `Affected contractors: ${contractorIds.length}\n`;
+                resultDiv.innerHTML += `IDs: ${contractorIds.join(', ')}`;
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">✗ Bulk action failed</span>\n${error.message}`;
+            }
+        }
+        
+        // Test 6: Check Test IDs
+        async function checkTestIds() {
+            const resultDiv = document.getElementById('testid-result');
+            resultDiv.innerHTML = '<span class="pending">Checking test IDs on admin contractors page...</span>';
+            
+            try {
+                // Login first
+                await apiRequest('POST', '/api/admin/login', {
+                    email: 'admin@example.com',
+                    password: 'admin123'
+                });
+                
+                // Open the contractors page in a new tab to check test IDs
+                const testWindow = window.open('/admin/contractors', '_blank');
+                
+                // Wait for the page to load
+                setTimeout(() => {
+                    try {
+                        // Check if the window loaded
+                        if (testWindow && testWindow.document) {
+                            const viewButtons = testWindow.document.querySelectorAll('[data-testid^="button-view-"]');
+                            const editButtons = testWindow.document.querySelectorAll('[data-testid^="button-edit-"]');
+                            
+                            let result = '<span class="success">✓ Test IDs verification complete</span>\n\n';
+                            result += `View buttons with test IDs found: ${viewButtons.length}\n`;
+                            result += `Edit buttons with test IDs found: ${editButtons.length}\n\n`;
+                            
+                            if (viewButtons.length > 0) {
+                                result += 'Sample View button test IDs:\n';
+                                Array.from(viewButtons).slice(0, 3).forEach(btn => {
+                                    result += `  - ${btn.getAttribute('data-testid')}\n`;
+                                });
+                            }
+                            
+                            if (editButtons.length > 0) {
+                                result += '\nSample Edit button test IDs:\n';
+                                Array.from(editButtons).slice(0, 3).forEach(btn => {
+                                    result += `  - ${btn.getAttribute('data-testid')}\n`;
+                                });
+                            }
+                            
+                            resultDiv.innerHTML = result;
+                            testWindow.close();
+                        } else {
+                            resultDiv.innerHTML = '<span class="error">✗ Could not access the contractors page</span>';
+                        }
+                    } catch (err) {
+                        resultDiv.innerHTML = `<span class="error">✗ Error checking test IDs</span>\n${err.message}\n\nNote: Test IDs are present in the code, but browser security may prevent checking them from this test page.`;
+                    }
+                }, 3000);
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">✗ Failed to check test IDs</span>\n${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { MapPin, Loader2, Navigation, Phone, Mail } from "lucide-react";
 import { EmergencyBookingData } from "./index";
+import LocationInput, { LocationData } from "@/components/location-input";
 
 const formSchema = z.object({
   phone: z.string()
@@ -16,7 +17,6 @@ const formSchema = z.object({
   email: z.string()
     .email("Please enter a valid email address")
     .min(1, "Email is required"),
-  manualLocation: z.string().optional(),
 });
 
 interface Step1Props {
@@ -25,17 +25,20 @@ interface Step1Props {
 }
 
 export default function Step1({ initialData, onComplete }: Step1Props) {
-  const [isGettingLocation, setIsGettingLocation] = useState(false);
-  const [locationError, setLocationError] = useState("");
-  const [location, setLocation] = useState(initialData.location);
-  const [locationAddress, setLocationAddress] = useState(initialData.location?.address || "");
+  const [location, setLocation] = useState<LocationData | null>(
+    initialData.location ? {
+      lat: initialData.location.lat,
+      lng: initialData.location.lng,
+      address: initialData.location.address || initialData.manualLocation || "",
+      formattedAddress: initialData.location.address
+    } : null
+  );
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       phone: initialData.phone || "",
       email: initialData.email || "",
-      manualLocation: initialData.manualLocation || "",
     },
   });
 
@@ -47,55 +50,21 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
     }
   }, []);
 
-  const handleGetLocation = async () => {
-    setIsGettingLocation(true);
-    setLocationError("");
-    
-    if (!navigator.geolocation) {
-      setLocationError("Geolocation is not supported by your browser");
-      setIsGettingLocation(false);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        setLocation({ lat: latitude, lng: longitude });
-        
-        // Try to get address from coordinates (simplified - in production would use a geocoding API)
-        setLocationAddress(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-        
-        // Clear manual location if GPS succeeds
-        form.setValue("manualLocation", "");
-        setIsGettingLocation(false);
-      },
-      (error) => {
-        console.error("Location error:", error);
-        setLocationError("Unable to get your location. Please enter it manually.");
-        setIsGettingLocation(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-      }
-    );
-  };
-
   const onSubmit = (values: z.infer<typeof formSchema>) => {
-    // Validate that we have either GPS location or manual location
-    if (!location && !values.manualLocation) {
-      form.setError("manualLocation", {
-        message: "Please provide your location or use GPS"
-      });
+    // Validate that we have location
+    if (!location) {
       return;
     }
 
     onComplete({
       phone: values.phone,
       email: values.email,
-      location: location,
-      manualLocation: values.manualLocation,
+      location: {
+        lat: location.lat,
+        lng: location.lng,
+        address: location.formattedAddress || location.address
+      },
+      manualLocation: location.address,
     });
   };
 
@@ -115,72 +84,13 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           {/* Location Card */}
           <Card className="border-2">
-            <CardContent className="p-6 space-y-4">
-              {/* GPS Location Button */}
-              <div>
-                <Button
-                  type="button"
-                  onClick={handleGetLocation}
-                  disabled={isGettingLocation}
-                  size="lg"
-                  variant={location ? "outline" : "default"}
-                  className="w-full h-16 text-lg font-semibold hover-elevate"
-                  data-testid="button-use-location"
-                >
-                  {isGettingLocation ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Getting Location...
-                    </>
-                  ) : location ? (
-                    <>
-                      <MapPin className="w-5 h-5 mr-2 text-green-600" />
-                      Location Captured
-                    </>
-                  ) : (
-                    <>
-                      <Navigation className="w-5 h-5 mr-2" />
-                      Use My Location
-                    </>
-                  )}
-                </Button>
-                {locationAddress && (
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {locationAddress}
-                  </p>
-                )}
-                {locationError && (
-                  <p className="text-sm text-destructive mt-2">
-                    {locationError}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex items-center gap-4">
-                <div className="flex-1 h-px bg-border" />
-                <span className="text-sm text-muted-foreground">OR</span>
-                <div className="flex-1 h-px bg-border" />
-              </div>
-
-              {/* Manual Location Entry */}
-              <FormField
-                control={form.control}
-                name="manualLocation"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-base font-medium">Enter Location Manually</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="Highway/Mile Marker/City or Address"
-                        className="h-14 text-base"
-                        disabled={!!location}
-                        data-testid="input-manual-location"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+            <CardContent className="p-6">
+              {/* Use the new LocationInput component */}
+              <LocationInput 
+                value={location}
+                onChange={setLocation}
+                defaultMode="gps"
+                placeholder="Enter your location or highway/mile marker"
               />
             </CardContent>
           </Card>

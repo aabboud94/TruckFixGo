@@ -13,6 +13,7 @@ import { reminderScheduler } from "./reminder-scheduler";
 import efsComdataService from "./efs-comdata-service";
 import stripeService from "./stripe-service";
 import { emailService } from "./services/email-service";
+import LocationService from "./services/location-service";
 import { trackingWSServer } from "./websocket";
 import multer from "multer";
 import sharp from "sharp";
@@ -505,6 +506,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message: 'Phone number and location are required' 
           });
         }
+
+        // Validate and enhance location data
+        let validatedLocation = location;
+        let finalLocationAddress = locationAddress;
+        
+        // Ensure location has lat/lng coordinates
+        if (typeof location === 'object' && location.lat && location.lng) {
+          // If we have coordinates, validate them
+          validatedLocation = {
+            lat: parseFloat(location.lat),
+            lng: parseFloat(location.lng)
+          };
+          
+          // If location has highwayInfo, enhance the address
+          if (location.highwayInfo) {
+            const highwayLocation = LocationService.getHighwayLocation(
+              location.highwayInfo.highway,
+              parseInt(location.highwayInfo.mileMarker),
+              location.highwayInfo.direction
+            );
+            if (highwayLocation) {
+              finalLocationAddress = highwayLocation.formattedAddress || locationAddress;
+            }
+          }
+        } else {
+          // If we only have an address string, try to geocode it
+          const geocoded = await LocationService.geocodeAddress(locationAddress);
+          if (geocoded) {
+            validatedLocation = { lat: geocoded.lat, lng: geocoded.lng };
+          } else {
+            return res.status(400).json({
+              message: 'Unable to validate location. Please provide valid coordinates or address.'
+            });
+          }
+        }
+        
+        // Check if location is in service area
+        const inServiceArea = await LocationService.isInServiceArea(validatedLocation);
+        if (!inServiceArea) {
+          return res.status(400).json({
+            message: 'Location is outside our service area. We currently serve the continental United States.'
+          });
+        }
         
         // Validate serviceTypeId - use emergency-repair only as last resort
         const resolvedServiceTypeId = serviceTypeId || 'emergency-repair';
@@ -544,8 +588,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           serviceTypeId: resolvedServiceTypeId, // Use the validated serviceTypeId
           customerId: guestUser.id,
           customerEmail: guestEmail || guestUser.email || undefined, // Store customer email for notifications
-          location: location, // This should be {lat: number, lng: number}
-          locationAddress: locationAddress,
+          location: validatedLocation, // Validated {lat: number, lng: number}
+          locationAddress: finalLocationAddress, // Enhanced location address
           description: description || 'Emergency roadside assistance needed',
           unitNumber: unitNumber || undefined,
           vehicleMake: vehicleMake || 'Unknown',

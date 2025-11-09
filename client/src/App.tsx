@@ -75,6 +75,7 @@ import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
 import InstallPrompt from "@/components/install-prompt";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import TestLocationInput from "@/pages/test-location-input";
 
 function Router() {
   return (
@@ -89,6 +90,9 @@ function Router() {
       <Route path="/about" component={About} />
       <Route path="/services" component={Services} />
       <Route path="/pricing" component={Pricing} />
+      
+      {/* Test Pages */}
+      <Route path="/test-location" component={TestLocationInput} />
       
       {/* Tracking Pages */}
       <Route path="/track/:jobId" component={TrackingPage} />

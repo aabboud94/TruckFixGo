@@ -52,13 +52,16 @@ export default function AdminContractors() {
   // Mutation for updating contractor status
   const updateStatusMutation = useMutation({
     mutationFn: async ({ contractorId, status }: { contractorId: string; status: string }) => {
-      return apiRequest(`/api/admin/contractors/${contractorId}/status`, {
-        method: 'PUT',
-        body: JSON.stringify({ status }),
-      });
+      return apiRequest('PUT', `/api/admin/contractors/${contractorId}/status`, { status });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/contractors'] });
+      // Invalidate all contractor queries including filtered ones
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0] as string;
+          return key && key.startsWith('/api/admin/contractors');
+        }
+      });
       toast({
         title: "Status updated",
         description: "Contractor status has been updated successfully",
@@ -69,13 +72,16 @@ export default function AdminContractors() {
   // Mutation for updating performance tier
   const updateTierMutation = useMutation({
     mutationFn: async ({ contractorId, tier }: { contractorId: string; tier: string }) => {
-      return apiRequest(`/api/admin/contractors/${contractorId}/tier`, {
-        method: 'PUT',
-        body: JSON.stringify({ tier }),
-      });
+      return apiRequest('PUT', `/api/admin/contractors/${contractorId}/tier`, { tier });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/contractors'] });
+      // Invalidate all contractor queries including filtered ones
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0] as string;
+          return key && key.startsWith('/api/admin/contractors');
+        }
+      });
       toast({
         title: "Tier updated",
         description: "Contractor performance tier has been updated",
@@ -86,13 +92,16 @@ export default function AdminContractors() {
   // Mutation for bulk actions
   const bulkActionMutation = useMutation({
     mutationFn: async ({ action, contractorIds }: { action: string; contractorIds: string[] }) => {
-      return apiRequest('/api/admin/contractors/bulk', {
-        method: 'POST',
-        body: JSON.stringify({ action, contractorIds }),
-      });
+      return apiRequest('POST', '/api/admin/contractors/bulk', { action, contractorIds });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/contractors'] });
+      // Invalidate all contractor queries including filtered ones
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0] as string;
+          return key && key.startsWith('/api/admin/contractors');
+        }
+      });
       setSelectedContractors([]);
       toast({
         title: "Bulk action completed",
@@ -122,7 +131,13 @@ export default function AdminContractors() {
       });
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/contractors'] });
+      // Invalidate all contractor queries including filtered ones
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0] as string;
+          return key && key.startsWith('/api/admin/contractors');
+        }
+      });
       
       // Map backend response to frontend format
       const mappedData = {
@@ -171,10 +186,7 @@ export default function AdminContractors() {
 
   const handleExport = async () => {
     try {
-      const response = await apiRequest('/api/admin/contractors/export', {
-        method: 'POST',
-        body: JSON.stringify({ format: 'csv' }),
-      });
+      const response = await apiRequest('POST', '/api/admin/contractors/export', { format: 'csv' });
       
       const blob = new Blob([response.data], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
