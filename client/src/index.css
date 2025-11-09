@@ -91,14 +91,14 @@
 
   --accent-foreground: 222 15% 15%;
 
-  --destructive: 24 95% 53%;
+  --destructive: 0 85% 50%;
 
   --destructive-foreground: 0 0% 98%;
 
   --input: 220 13% 75%;
   --ring: 221 64% 33%;
   --chart-1: 221 64% 33%;
-  --chart-2: 24 95% 53%;
+  --chart-2: 0 85% 50%;
   --chart-3: 160 60% 45%;
   --chart-4: 43 96% 56%;
   --chart-5: 271 81% 56%;
@@ -209,7 +209,7 @@
 
   --accent-foreground: 0 0% 95%;
 
-  --destructive: 24 95% 53%;
+  --destructive: 0 85% 50%;
 
   --destructive-foreground: 0 0% 98%;
 
