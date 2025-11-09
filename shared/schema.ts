@@ -94,12 +94,14 @@ export const driverProfiles = pgTable("driver_profiles", {
   carrierName: text("carrier_name"),
   dotNumber: varchar("dot_number", { length: 20 }),
   fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id),
+  managedByContractorId: varchar("managed_by_contractor_id").references(() => users.id), // Contractor who manages this driver
   preferredContactMethod: varchar("preferred_contact_method", { length: 20 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow()
 }, (table) => ({
   userIdx: uniqueIndex("idx_driver_profiles_user").on(table.userId),
-  fleetIdx: index("idx_driver_profiles_fleet").on(table.fleetAccountId)
+  fleetIdx: index("idx_driver_profiles_fleet").on(table.fleetAccountId),
+  contractorIdx: index("idx_driver_profiles_contractor").on(table.managedByContractorId)
 }));
 
 export const contractorProfiles = pgTable("contractor_profiles", {
@@ -436,6 +438,21 @@ export const jobStatusHistory = pgTable("job_status_history", {
 }, (table) => ({
   jobIdx: index("idx_job_status_history_job").on(table.jobId),
   createdIdx: index("idx_job_status_history_created").on(table.createdAt)
+}));
+
+export const jobReassignmentHistory = pgTable("job_reassignment_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  fromContractorId: varchar("from_contractor_id").references(() => users.id),
+  toContractorId: varchar("to_contractor_id").notNull().references(() => users.id),
+  reassignedBy: varchar("reassigned_by").notNull().references(() => users.id),
+  reason: text("reason"),
+  reassignmentType: varchar("reassignment_type", { length: 50 }), // 'admin_reassign', 'contractor_to_driver', 'emergency_transfer'
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  jobIdx: index("idx_job_reassignment_job").on(table.jobId),
+  fromIdx: index("idx_job_reassignment_from").on(table.fromContractorId),
+  toIdx: index("idx_job_reassignment_to").on(table.toContractorId)
 }));
 
 // ====================
