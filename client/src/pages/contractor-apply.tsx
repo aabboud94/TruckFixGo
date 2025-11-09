@@ -925,23 +925,25 @@ export default function ContractorApply() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Service Radius (miles)</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder="50" 
-                      value={field.value ?? ''}
-                      onBlur={field.onBlur}
-                      name={field.name}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        field.onChange(value === '' ? undefined : Number(value));
-                      }}
-                      className="touch-manipulation"
-                      data-testid="input-serviceRadius"
-                    />
-                  </FormControl>
+                  <Select 
+                    onValueChange={(value) => field.onChange(Number(value))}
+                    value={field.value?.toString() || ""}
+                  >
+                    <FormControl>
+                      <SelectTrigger data-testid="select-service-radius">
+                        <SelectValue placeholder="Select radius" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="25">25 miles</SelectItem>
+                      <SelectItem value="50">50 miles</SelectItem>
+                      <SelectItem value="100">100 miles</SelectItem>
+                      <SelectItem value="150">150 miles</SelectItem>
+                      <SelectItem value="200">200 miles</SelectItem>
+                      <SelectItem value="250">250 miles</SelectItem>
+                      <SelectItem value="300">300+ miles</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <FormDescription>
                     Maximum distance you're willing to travel for jobs
                   </FormDescription>
@@ -1049,19 +1051,26 @@ export default function ContractorApply() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Vehicle Year</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder="2020" 
-                          {...field}
-                          onChange={(e) => {
-                            const value = parseInt(e.target.value);
-                            field.onChange(isNaN(value) ? 0 : value);
-                          }}
-                          value={field.value || ''}
-                          data-testid="input-vehicle-year"
-                        />
-                      </FormControl>
+                      <Select 
+                        onValueChange={(value) => field.onChange(Number(value))}
+                        value={field.value?.toString() || ""}
+                      >
+                        <FormControl>
+                          <SelectTrigger data-testid="select-vehicle-year">
+                            <SelectValue placeholder="Select year" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {Array.from({ length: 31 }, (_, i) => {
+                            const year = 2025 - i;
+                            return (
+                              <SelectItem key={year} value={year.toString()}>
+                                {year}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
                     </FormItem>
                   )}
                 />
