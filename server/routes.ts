@@ -6568,26 +6568,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const { id } = req.params;
         const { name, company, email, phone, status } = req.body;
 
+        // Add detailed logging
+        console.log('[PUT /api/admin/contractors/:id] Request received:', {
+          id,
+          body: req.body,
+          name,
+          company,
+          email,
+          phone,
+          status
+        });
+
         // Validate input
         if (!name || !email) {
+          console.log('[PUT /api/admin/contractors/:id] Validation failed: missing name or email');
           return res.status(400).json({ message: 'Name and email are required' });
         }
 
         // Email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
+          console.log('[PUT /api/admin/contractors/:id] Validation failed: invalid email format');
           return res.status(400).json({ message: 'Invalid email address' });
         }
 
         // Phone validation (basic)
         if (phone && phone.length < 7) {
+          console.log('[PUT /api/admin/contractors/:id] Validation failed: invalid phone number');
           return res.status(400).json({ message: 'Invalid phone number' });
         }
 
         // Status validation
         if (status && !['active', 'pending', 'suspended'].includes(status)) {
+          console.log('[PUT /api/admin/contractors/:id] Validation failed: invalid status:', status);
           return res.status(400).json({ message: 'Invalid status value' });
         }
+
+        console.log('[PUT /api/admin/contractors/:id] Calling storage.updateContractorDetails with:', {
+          id,
+          name: name.trim(),
+          company: (company || '').trim(),
+          email: email.trim().toLowerCase(),
+          phone: (phone || '').trim(),
+          status: status || undefined
+        });
 
         // Update contractor details
         const updatedContractor = await storage.updateContractorDetails(id, {
@@ -6599,22 +6623,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         if (!updatedContractor) {
+          console.log('[PUT /api/admin/contractors/:id] Contractor not found with id:', id);
           return res.status(404).json({ message: 'Contractor not found' });
         }
 
+        console.log('[PUT /api/admin/contractors/:id] Successfully updated contractor:', updatedContractor);
+        
         res.json({
           message: 'Contractor details updated successfully',
           contractor: updatedContractor
         });
       } catch (error: any) {
-        console.error('Error updating contractor details:', error);
+        console.error('[PUT /api/admin/contractors/:id] Error updating contractor:', {
+          error: error.message,
+          stack: error.stack,
+          code: error.code,
+          detail: error.detail,
+          fullError: error
+        });
         
         // Handle unique constraint violations
         if (error.message?.includes('Email address is already in use')) {
           return res.status(409).json({ message: 'Email address is already in use' });
         }
         
-        res.status(500).json({ message: 'Failed to update contractor details' });
+        // Include error message in response for debugging
+        res.status(500).json({ 
+          message: 'Failed to update contractor details', 
+          debug: error.message 
+        });
       }
     }
   );

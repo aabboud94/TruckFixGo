@@ -1136,11 +1136,21 @@ export class PostgreSQLStorage implements IStorage {
 
       return result;
     } catch (error: any) {
+      console.error('[updateContractorDetails] Database error:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        constraint: error.constraint,
+        table: error.table,
+        column: error.column,
+        fullError: error
+      });
+      
       // Check for unique constraint violations
       if (error.message?.includes('unique') || error.code === '23505') {
         throw new Error('Email address is already in use');
       }
-      console.error('Error updating contractor details:', error);
+      
       throw error;
     }
   }
