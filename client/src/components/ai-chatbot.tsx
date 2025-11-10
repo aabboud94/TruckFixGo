@@ -134,37 +134,22 @@ export default function AIChatbot() {
     }
   }, [toast]);
   
-  // Only show AI assistant for contractors
-  const isContractorPage = location.startsWith("/contractor");
-  if (!isContractorPage) {
-    return null;
-  }
-
-  const startNewSession = () => {
-    setSession({
-      messages: [],
-      startedAt: new Date()
-    });
-  };
-
-  const getPageContext = () => {
-    const path = location;
-    if (path === "/") return "homepage";
-    if (path.startsWith("/emergency")) return "emergencyPage";
-    if (path.startsWith("/fleet")) return "fleetPage";
-    if (path.startsWith("/contractor")) return "contractorPage";
-    if (path.startsWith("/track")) return "trackingPage";
-    return "general";
-  };
-
+  // Define mutation hook before any conditional returns (React Rules of Hooks)
   const sendMessageMutation = useMutation({
     mutationFn: async (messageText: string) => {
+      const path = location;
+      const context = path === "/" ? "homepage" :
+                     path.startsWith("/emergency") ? "emergencyPage" :
+                     path.startsWith("/fleet") ? "fleetPage" :
+                     path.startsWith("/contractor") ? "contractorPage" :
+                     path.startsWith("/track") ? "trackingPage" : "general";
+                     
       return await apiRequest("/api/ai/chat", {
         method: "POST",
         body: JSON.stringify({
           message: messageText,
           context: {
-            page: getPageContext(),
+            page: context,
             sessionHistory: session?.messages.slice(-10).map(m => ({
               role: m.role,
               content: m.content
@@ -201,6 +186,29 @@ export default function AIChatbot() {
       });
     }
   });
+  
+  // Only show AI assistant for contractors
+  const isContractorPage = location.startsWith("/contractor");
+  if (!isContractorPage) {
+    return null;
+  }
+
+  const startNewSession = () => {
+    setSession({
+      messages: [],
+      startedAt: new Date()
+    });
+  };
+
+  const getPageContext = () => {
+    const path = location;
+    if (path === "/") return "homepage";
+    if (path.startsWith("/emergency")) return "emergencyPage";
+    if (path.startsWith("/fleet")) return "fleetPage";
+    if (path.startsWith("/contractor")) return "contractorPage";
+    if (path.startsWith("/track")) return "trackingPage";
+    return "general";
+  };
 
   const handleSend = () => {
     if (!message.trim()) return;
