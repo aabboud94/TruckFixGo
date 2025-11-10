@@ -1089,9 +1089,9 @@ export class PostgreSQLStorage implements IStorage {
           phone: details.phone
         };
         
-        // Only update status if provided
+        // Map status to isActive boolean
         if (details.status) {
-          userUpdates.status = details.status;
+          userUpdates.isActive = details.status === 'active';
         }
         
         await tx.update(users)
@@ -1113,25 +1113,51 @@ export class PostgreSQLStorage implements IStorage {
           .where(eq(contractorProfiles.userId, contractorId));
 
         // Fetch and return updated contractor
-        const updated = await tx
-          .select({
-            id: users.id,
-            firstName: users.firstName,
-            lastName: users.lastName,
-            email: users.email,
-            phone: users.phone,
-            status: users.status,
-            companyName: contractorProfiles.companyName,
-            performanceTier: contractorProfiles.performanceTier,
-            averageRating: contractorProfiles.averageRating,
-            isActive: contractorProfiles.isActive
-          })
-          .from(users)
-          .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
-          .where(eq(users.id, contractorId))
-          .limit(1);
+        // Directly query with raw SQL to avoid Drizzle query builder issues
+        const result = await tx.execute<any>(sql`
+          SELECT 
+            u.id,
+            u.first_name as "firstName",
+            u.last_name as "lastName",
+            u.email,
+            u.phone,
+            u.is_active as "userIsActive",
+            cp.company_name as "companyName",
+            cp.performance_tier as "performanceTier",
+            cp.average_rating as "averageRating",
+            cp.is_active as "profileIsActive"
+          FROM users u
+          LEFT JOIN contractor_profiles cp ON u.id = cp.user_id
+          WHERE u.id = ${contractorId}
+          LIMIT 1
+        `);
 
-        return updated[0];
+        if (!result || result.rows.length === 0) {
+          console.log('[updateContractorDetails] User not found after update');
+          return null;
+        }
+
+        const row = result.rows[0];
+        // Map isActive boolean to status string
+        const statusValue = row.userIsActive ? 'active' : 'suspended';
+        
+        const combinedResult = {
+          id: row.id,
+          firstName: row.firstName,
+          lastName: row.lastName,
+          name: `${row.firstName || ''} ${row.lastName || ''}`.trim(),
+          email: row.email,
+          phone: row.phone,
+          status: statusValue,
+          companyName: row.companyName || '',
+          company: row.companyName || '',
+          performanceTier: row.performanceTier || 'bronze',
+          averageRating: parseFloat(row.averageRating) || 0,
+          isActive: row.profileIsActive || false
+        };
+
+        console.log('[updateContractorDetails] Returning updated contractor:', combinedResult);
+        return combinedResult;
       });
 
       return result;
