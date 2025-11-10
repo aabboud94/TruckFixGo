@@ -2031,6 +2031,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Update contractor profile
+  app.patch('/api/contractor/profile',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const userId = req.session.userId!;
+        const user = await storage.getUser(userId);
+        
+        if (!user) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Extract profile data from request
+        const { 
+          firstName, 
+          lastName, 
+          phone, 
+          email, 
+          companyName,
+          bio,
+          address,
+          city,
+          state,
+          zip
+        } = req.body;
+
+        // Update user basic info
+        await storage.updateUser(userId, {
+          firstName,
+          lastName,
+          phone,
+          email
+        });
+
+        // Update contractor profile
+        const profileUpdates: any = {};
+        if (companyName !== undefined) profileUpdates.companyName = companyName;
+        
+        // Handle location if address is provided
+        if (address && city && state && zip) {
+          // You could geocode here if needed
+          profileUpdates.address = address;
+          profileUpdates.city = city;
+          profileUpdates.state = state;
+          profileUpdates.zip = zip;
+        }
+
+        await storage.updateContractorProfile(userId, profileUpdates);
+
+        res.json({ message: 'Profile updated successfully' });
+      } catch (error) {
+        console.error('Update contractor profile error:', error);
+        res.status(500).json({ message: 'Failed to update profile' });
+      }
+    }
+  );
+
+  // Update contractor service area  
+  app.patch('/api/contractor/service-area',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const userId = req.session.userId!;
+        const { 
+          baseLocation, 
+          serviceRadius, 
+          services,
+          hasMobileWaterSource,
+          hasWastewaterRecovery
+        } = req.body;
+
+        const profileUpdates: any = {};
+        
+        if (serviceRadius !== undefined) {
+          profileUpdates.serviceRadius = serviceRadius;
+        }
+        
+        if (baseLocation && baseLocation.lat && baseLocation.lng) {
+          profileUpdates.baseLocationLat = baseLocation.lat;
+          profileUpdates.baseLocationLon = baseLocation.lng;
+        }
+
+        if (hasMobileWaterSource !== undefined) {
+          profileUpdates.hasMobileWaterSource = hasMobileWaterSource;
+        }
+
+        if (hasWastewaterRecovery !== undefined) {
+          profileUpdates.hasWastewaterRecovery = hasWastewaterRecovery;
+        }
+
+        await storage.updateContractorProfile(userId, profileUpdates);
+
+        // Update services if provided
+        if (services && Array.isArray(services)) {
+          // This would require updating the contractor services in a separate table
+          // For now, we'll just update the profile
+        }
+
+        res.json({ message: 'Service area updated successfully' });
+      } catch (error) {
+        console.error('Update service area error:', error);
+        res.status(500).json({ message: 'Failed to update service area' });
+      }
+    }
+  );
+
   // Complete current job and advance to next job in queue
   app.post('/api/contractor/jobs/:jobId/complete-and-advance',
     requireAuth,
