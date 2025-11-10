@@ -87,6 +87,20 @@ export const sessions = pgTable("sessions", {
   tokenIdx: uniqueIndex("idx_sessions_token").on(table.token)
 }));
 
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  token: text("token").notNull().unique(),
+  email: text("email").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  userIdx: index("idx_password_reset_tokens_user").on(table.userId),
+  tokenIdx: uniqueIndex("idx_password_reset_tokens_token").on(table.token),
+  emailIdx: index("idx_password_reset_tokens_email").on(table.email)
+}));
+
 export const driverProfiles = pgTable("driver_profiles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id).unique(),
