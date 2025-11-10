@@ -274,28 +274,43 @@ class PDFInvoiceService {
     
     const lineItems: InvoiceLineItem[] = [];
     
-    // Add service charge
-    if (data.job.quotedPrice) {
-      lineItems.push({
-        description: `${data.job.jobType === "emergency" ? "Emergency" : "Scheduled"} Service - ${data.job.issueDescription || "Truck Repair"}`,
-        quantity: 1,
-        unitPrice: data.job.quotedPrice,
-        total: data.job.quotedPrice,
-      });
+    // Use line items from database if available
+    if (data.invoice.lineItems && data.invoice.lineItems.length > 0) {
+      // Sort by sortOrder if available
+      const sortedItems = [...data.invoice.lineItems].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      for (const item of sortedItems) {
+        lineItems.push({
+          description: item.description,
+          quantity: parseFloat(item.quantity?.toString() || '1'),
+          unitPrice: parseFloat(item.unitPrice?.toString() || '0'),
+          total: parseFloat(item.totalPrice?.toString() || '0'),
+        });
+      }
+    } else {
+      // Fallback to legacy behavior if no line items in database
+      // Add service charge
+      if (data.job.quotedPrice) {
+        lineItems.push({
+          description: `${data.job.jobType === "emergency" ? "Emergency" : "Scheduled"} Service - ${data.job.issueDescription || "Truck Repair"}`,
+          quantity: 1,
+          unitPrice: parseFloat(data.job.quotedPrice.toString()),
+          total: parseFloat(data.job.quotedPrice.toString()),
+        });
+      }
+      
+      // Add labor if specified
+      if (data.laborHours && data.laborHours > 0) {
+        const laborRate = 125; // Default hourly rate
+        lineItems.push({
+          description: "Labor",
+          quantity: data.laborHours,
+          unitPrice: laborRate,
+          total: data.laborHours * laborRate,
+        });
+      }
     }
     
-    // Add labor if specified
-    if (data.laborHours && data.laborHours > 0) {
-      const laborRate = 125; // Default hourly rate
-      lineItems.push({
-        description: "Labor",
-        quantity: data.laborHours,
-        unitPrice: laborRate,
-        total: data.laborHours * laborRate,
-      });
-    }
-    
-    // Add parts if specified
+    // Add parts if specified (legacy support)
     if (data.partsUsed && data.partsUsed.length > 0) {
       data.partsUsed.forEach(part => {
         lineItems.push({

@@ -6547,6 +6547,477 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Mark job as complete with notes
+  app.post('/api/jobs/:id/complete',
+    requireAuth,
+    validateRequest(z.object({
+      completionNotes: z.string().optional(),
+      completionPhotos: z.array(z.string()).optional(),
+      signature: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const job = await storage.getJob(req.params.id);
+        
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        // Check authorization
+        if (req.session.role !== 'admin' && req.session.role !== 'contractor' && job.customerId !== req.session.userId) {
+          return res.status(403).json({ message: 'Unauthorized to complete this job' });
+        }
+
+        // Mark job complete
+        const updatedJob = await storage.markJobComplete(req.params.id, {
+          completionNotes: req.body.completionNotes,
+          completionPhotos: req.body.completionPhotos,
+          contractorSignature: req.body.signature
+        });
+
+        if (!updatedJob) {
+          return res.status(404).json({ message: 'Failed to complete job' });
+        }
+
+        res.json({ 
+          message: 'Job marked as complete',
+          job: updatedJob
+        });
+      } catch (error) {
+        console.error('Error completing job:', error);
+        res.status(500).json({ message: 'Failed to complete job' });
+      }
+    }
+  );
+
+  // Create invoice from completed job
+  app.post('/api/invoices',
+    requireAuth,
+    validateRequest(z.object({
+      jobId: z.string()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { jobId } = req.body;
+        const job = await storage.getJob(jobId);
+        
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        if (job.status !== 'completed') {
+          return res.status(400).json({ message: 'Job must be completed before creating invoice' });
+        }
+
+        // Check if invoice already exists
+        const existingInvoice = await storage.getInvoiceByJobId(jobId);
+        if (existingInvoice) {
+          return res.status(400).json({ message: 'Invoice already exists for this job' });
+        }
+
+        // Calculate amounts
+        const subtotal = parseFloat(job.quotedPrice || '0');
+        const taxRate = 0.08; // 8% tax rate - could be configurable
+        const taxAmount = subtotal * taxRate;
+        const totalAmount = subtotal + taxAmount;
+
+        // Create invoice
+        const invoice = await storage.createInvoice({
+          jobId,
+          customerId: job.customerId,
+          fleetAccountId: job.fleetAccountId,
+          subtotal,
+          taxAmount,
+          totalAmount,
+          amountDue: totalAmount,
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+        });
+
+        // Get default charges to auto-add
+        const defaults = await storage.getInvoiceDefaults(true);
+        const defaultLineItems = [];
+
+        // Add service charge as first line item
+        await storage.createInvoiceLineItem({
+          invoiceId: invoice.id,
+          type: 'labor',
+          description: `${job.jobType === 'emergency' ? 'Emergency' : 'Scheduled'} Service - ${job.issueDescription || 'Truck Repair'}`,
+          quantity: 1,
+          unitPrice: subtotal,
+          totalPrice: subtotal,
+          sortOrder: 0
+        });
+
+        // Add default charges
+        let sortOrder = 1;
+        for (const defaultCharge of defaults) {
+          if (defaultCharge.applyByDefault) {
+            await storage.createInvoiceLineItem({
+              invoiceId: invoice.id,
+              type: defaultCharge.type === 'tax' ? 'tax' : defaultCharge.type === 'surcharge' ? 'fee' : 'fee',
+              description: defaultCharge.name,
+              quantity: 1,
+              unitPrice: parseFloat(defaultCharge.amount.toString()),
+              totalPrice: parseFloat(defaultCharge.amount.toString()),
+              sortOrder: sortOrder++
+            });
+            defaultLineItems.push(defaultCharge);
+          }
+        }
+
+        // Add tax line item
+        if (taxAmount > 0) {
+          await storage.createInvoiceLineItem({
+            invoiceId: invoice.id,
+            type: 'tax',
+            description: 'Tax (8%)',
+            quantity: 1,
+            unitPrice: taxAmount,
+            totalPrice: taxAmount,
+            sortOrder: sortOrder++
+          });
+        }
+
+        const invoiceWithLineItems = await storage.getInvoiceWithLineItems(invoice.id);
+        res.json(invoiceWithLineItems);
+      } catch (error) {
+        console.error('Error creating invoice:', error);
+        res.status(500).json({ message: 'Failed to create invoice' });
+      }
+    }
+  );
+
+  // Get invoice with line items
+  app.get('/api/invoices/:id',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const invoice = await storage.getInvoiceWithLineItems(req.params.id);
+        
+        if (!invoice) {
+          return res.status(404).json({ message: 'Invoice not found' });
+        }
+
+        // Check authorization
+        if (req.session.role !== 'admin' && invoice.customerId !== req.session.userId) {
+          return res.status(403).json({ message: 'Unauthorized to view this invoice' });
+        }
+
+        res.json(invoice);
+      } catch (error) {
+        console.error('Error fetching invoice:', error);
+        res.status(500).json({ message: 'Failed to fetch invoice' });
+      }
+    }
+  );
+
+  // Add line item to invoice
+  app.post('/api/invoices/:id/line-items',
+    requireAuth,
+    requireRole('admin', 'contractor'),
+    validateRequest(z.object({
+      type: z.enum(['part', 'labor', 'fee', 'tax', 'other']),
+      description: z.string().min(1).max(500),
+      quantity: z.number().positive(),
+      unitPrice: z.number().nonnegative()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const invoice = await storage.getInvoice(req.params.id);
+        
+        if (!invoice) {
+          return res.status(404).json({ message: 'Invoice not found' });
+        }
+
+        const { type, description, quantity, unitPrice } = req.body;
+        const totalPrice = quantity * unitPrice;
+
+        // Get existing line items to determine sort order
+        const existingItems = await storage.getInvoiceLineItems(req.params.id);
+        const maxSortOrder = existingItems.reduce((max, item) => Math.max(max, item.sortOrder), 0);
+
+        const lineItem = await storage.createInvoiceLineItem({
+          invoiceId: req.params.id,
+          type,
+          description,
+          quantity,
+          unitPrice,
+          totalPrice,
+          sortOrder: maxSortOrder + 1
+        });
+
+        // Update invoice totals
+        const newSubtotal = parseFloat(invoice.subtotal.toString()) + totalPrice;
+        const newTaxAmount = type === 'tax' ? parseFloat(invoice.taxAmount.toString()) + totalPrice : parseFloat(invoice.taxAmount.toString());
+        const newTotalAmount = newSubtotal + newTaxAmount;
+        
+        await storage.updateInvoice(req.params.id, {
+          subtotal: newSubtotal,
+          taxAmount: newTaxAmount,
+          totalAmount: newTotalAmount,
+          amountDue: newTotalAmount - parseFloat(invoice.paidAmount.toString())
+        });
+
+        res.json({ 
+          message: 'Line item added',
+          lineItem,
+          updatedInvoice: await storage.getInvoiceWithLineItems(req.params.id)
+        });
+      } catch (error) {
+        console.error('Error adding line item:', error);
+        res.status(500).json({ message: 'Failed to add line item' });
+      }
+    }
+  );
+
+  // Update line item
+  app.put('/api/invoices/:invoiceId/line-items/:itemId',
+    requireAuth,
+    requireRole('admin', 'contractor'),
+    validateRequest(z.object({
+      type: z.enum(['part', 'labor', 'fee', 'tax', 'other']).optional(),
+      description: z.string().min(1).max(500).optional(),
+      quantity: z.number().positive().optional(),
+      unitPrice: z.number().nonnegative().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const lineItem = await storage.getInvoiceLineItemById(req.params.itemId);
+        
+        if (!lineItem || lineItem.invoiceId !== req.params.invoiceId) {
+          return res.status(404).json({ message: 'Line item not found' });
+        }
+
+        const updates: any = {};
+        if (req.body.type !== undefined) updates.type = req.body.type;
+        if (req.body.description !== undefined) updates.description = req.body.description;
+        if (req.body.quantity !== undefined) updates.quantity = req.body.quantity;
+        if (req.body.unitPrice !== undefined) updates.unitPrice = req.body.unitPrice;
+        
+        // Recalculate total if quantity or price changed
+        if (req.body.quantity !== undefined || req.body.unitPrice !== undefined) {
+          const quantity = req.body.quantity ?? parseFloat(lineItem.quantity.toString());
+          const unitPrice = req.body.unitPrice ?? parseFloat(lineItem.unitPrice.toString());
+          updates.totalPrice = quantity * unitPrice;
+        }
+
+        await storage.updateInvoiceLineItem(req.params.itemId, updates);
+        
+        // Recalculate invoice totals
+        const allLineItems = await storage.getInvoiceLineItems(req.params.invoiceId);
+        const newSubtotal = allLineItems
+          .filter(item => item.type !== 'tax')
+          .reduce((sum, item) => sum + parseFloat(item.totalPrice.toString()), 0);
+        const newTaxAmount = allLineItems
+          .filter(item => item.type === 'tax')
+          .reduce((sum, item) => sum + parseFloat(item.totalPrice.toString()), 0);
+        const newTotalAmount = newSubtotal + newTaxAmount;
+        
+        const invoice = await storage.getInvoice(req.params.invoiceId);
+        await storage.updateInvoice(req.params.invoiceId, {
+          subtotal: newSubtotal,
+          taxAmount: newTaxAmount,
+          totalAmount: newTotalAmount,
+          amountDue: newTotalAmount - parseFloat(invoice?.paidAmount?.toString() || '0')
+        });
+
+        res.json({ 
+          message: 'Line item updated',
+          updatedInvoice: await storage.getInvoiceWithLineItems(req.params.invoiceId)
+        });
+      } catch (error) {
+        console.error('Error updating line item:', error);
+        res.status(500).json({ message: 'Failed to update line item' });
+      }
+    }
+  );
+
+  // Delete line item
+  app.delete('/api/invoices/:invoiceId/line-items/:itemId',
+    requireAuth,
+    requireRole('admin', 'contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const lineItem = await storage.getInvoiceLineItemById(req.params.itemId);
+        
+        if (!lineItem || lineItem.invoiceId !== req.params.invoiceId) {
+          return res.status(404).json({ message: 'Line item not found' });
+        }
+
+        await storage.deleteInvoiceLineItem(req.params.itemId);
+        
+        // Recalculate invoice totals
+        const allLineItems = await storage.getInvoiceLineItems(req.params.invoiceId);
+        const newSubtotal = allLineItems
+          .filter(item => item.type !== 'tax')
+          .reduce((sum, item) => sum + parseFloat(item.totalPrice.toString()), 0);
+        const newTaxAmount = allLineItems
+          .filter(item => item.type === 'tax')
+          .reduce((sum, item) => sum + parseFloat(item.totalPrice.toString()), 0);
+        const newTotalAmount = newSubtotal + newTaxAmount;
+        
+        const invoice = await storage.getInvoice(req.params.invoiceId);
+        await storage.updateInvoice(req.params.invoiceId, {
+          subtotal: newSubtotal,
+          taxAmount: newTaxAmount,
+          totalAmount: newTotalAmount,
+          amountDue: newTotalAmount - parseFloat(invoice?.paidAmount?.toString() || '0')
+        });
+
+        res.json({ 
+          message: 'Line item deleted',
+          updatedInvoice: await storage.getInvoiceWithLineItems(req.params.invoiceId)
+        });
+      } catch (error) {
+        console.error('Error deleting line item:', error);
+        res.status(500).json({ message: 'Failed to delete line item' });
+      }
+    }
+  );
+
+  // Send invoice to customer
+  app.post('/api/invoices/:id/send',
+    requireAuth,
+    requireRole('admin', 'contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const invoice = await storage.getInvoiceWithLineItems(req.params.id);
+        
+        if (!invoice) {
+          return res.status(404).json({ message: 'Invoice not found' });
+        }
+
+        const customer = await storage.getUser(invoice.customerId);
+        if (!customer) {
+          return res.status(404).json({ message: 'Customer not found' });
+        }
+
+        // TODO: Generate PDF and send via email/SMS
+        // For now, just update the status
+        await storage.updateInvoice(req.params.id, {
+          status: 'sent',
+          sentAt: new Date()
+        });
+
+        res.json({ 
+          message: 'Invoice sent successfully',
+          invoice: await storage.getInvoice(req.params.id)
+        });
+      } catch (error) {
+        console.error('Error sending invoice:', error);
+        res.status(500).json({ message: 'Failed to send invoice' });
+      }
+    }
+  );
+
+  // Admin: Get all invoices
+  app.get('/api/admin/invoices',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { status, fromDate, toDate, contractorId, limit = '50', offset = '0' } = req.query;
+        
+        const filters: any = { limit: parseInt(limit as string), offset: parseInt(offset as string) };
+        if (status) filters.status = status;
+        if (contractorId) filters.contractorId = contractorId;
+        if (fromDate) filters.fromDate = new Date(fromDate as string);
+        if (toDate) filters.toDate = new Date(toDate as string);
+
+        const invoiceList = await storage.getInvoices(filters);
+        
+        // Enhance with additional data
+        const enhancedInvoices = await Promise.all(invoiceList.map(async (invoice) => {
+          const lineItems = await storage.getInvoiceLineItems(invoice.id);
+          const job = invoice.jobId ? await storage.getJob(invoice.jobId) : null;
+          const customer = await storage.getUser(invoice.customerId);
+          
+          return {
+            ...invoice,
+            lineItems,
+            job: job ? {
+              id: job.id,
+              jobType: job.jobType,
+              issueDescription: job.issueDescription,
+              serviceLocation: job.serviceLocation
+            } : null,
+            customer: customer ? {
+              id: customer.id,
+              firstName: customer.firstName,
+              lastName: customer.lastName,
+              email: customer.email,
+              phone: customer.phone
+            } : null
+          };
+        }));
+
+        res.json(enhancedInvoices);
+      } catch (error) {
+        console.error('Error fetching invoices:', error);
+        res.status(500).json({ message: 'Failed to fetch invoices' });
+      }
+    }
+  );
+
+  // Admin: Configure invoice defaults
+  app.put('/api/admin/invoice-defaults',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      defaults: z.array(z.object({
+        id: z.string().optional(),
+        name: z.string().min(1).max(100),
+        amount: z.number().nonnegative(),
+        type: z.enum(['fee', 'tax', 'surcharge']),
+        isActive: z.boolean(),
+        applyByDefault: z.boolean(),
+        description: z.string().optional(),
+        sortOrder: z.number().optional()
+      }))
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { defaults } = req.body;
+        const updatedDefaults = [];
+
+        for (const defaultItem of defaults) {
+          if (defaultItem.id) {
+            // Update existing
+            const updated = await storage.updateInvoiceDefault(defaultItem.id, defaultItem);
+            if (updated) updatedDefaults.push(updated);
+          } else {
+            // Create new
+            const created = await storage.createInvoiceDefault(defaultItem);
+            updatedDefaults.push(created);
+          }
+        }
+
+        res.json({ 
+          message: 'Invoice defaults updated',
+          defaults: updatedDefaults
+        });
+      } catch (error) {
+        console.error('Error updating invoice defaults:', error);
+        res.status(500).json({ message: 'Failed to update invoice defaults' });
+      }
+    }
+  );
+
+  // Admin: Get invoice defaults
+  app.get('/api/admin/invoice-defaults',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const defaults = await storage.getInvoiceDefaults();
+        res.json(defaults);
+      } catch (error) {
+        console.error('Error fetching invoice defaults:', error);
+        res.status(500).json({ message: 'Failed to fetch invoice defaults' });
+      }
+    }
+  );
+
   // Download invoice as PDF
   app.get('/api/invoices/:id/download',
     requireAuth,

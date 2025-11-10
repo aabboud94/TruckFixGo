@@ -50,6 +50,11 @@ export const subscriptionStatusEnum = pgEnum('subscription_status', ['active', '
 export const billingHistoryStatusEnum = pgEnum('billing_history_status', ['success', 'failed', 'pending', 'processing', 'retrying']);
 export const planTypeEnum = pgEnum('plan_type', ['basic', 'standard', 'enterprise', 'custom']);
 
+// Invoice related enums
+export const invoiceStatusEnum = pgEnum('invoice_status', ['draft', 'pending', 'sent', 'paid', 'overdue', 'cancelled']);
+export const invoiceDefaultTypeEnum = pgEnum('invoice_default_type', ['fee', 'tax', 'surcharge']);
+export const invoiceLineItemTypeEnum = pgEnum('invoice_line_item_type', ['part', 'labor', 'fee', 'tax', 'other']);
+
 // ====================
 // USERS & AUTH
 // ====================
@@ -1028,13 +1033,31 @@ export const invoices = pgTable("invoices", {
   jobId: varchar("job_id").references(() => jobs.id),
   customerId: varchar("customer_id").notNull().references(() => users.id),
   fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id),
+  
+  // Financial details
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
   taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }).notNull().default('0'),
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
   paidAmount: decimal("paid_amount", { precision: 10, scale: 2 }).notNull().default('0'),
+  amountDue: decimal("amount_due", { precision: 10, scale: 2 }).notNull(),
+  
+  // Status and dates
+  status: invoiceStatusEnum("status").notNull().default('draft'),
+  issueDate: timestamp("issue_date").notNull().defaultNow(),
   dueDate: timestamp("due_date"),
   paidAt: timestamp("paid_at"),
-  lineItems: jsonb("line_items").notNull(),
+  sentAt: timestamp("sent_at"),
+  
+  // Legacy field for backward compatibility
+  lineItems: jsonb("line_items").notNull().default('[]'),
+  
+  // Completion details
+  completionNotes: text("completion_notes"),
+  completionPhotos: text("completion_photos").array(),
+  completedAt: timestamp("completed_at"),
+  contractorSignature: text("contractor_signature"), // base64 signature
+  
+  // Additional fields
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow()
@@ -1042,7 +1065,41 @@ export const invoices = pgTable("invoices", {
   invoiceNumberIdx: uniqueIndex("idx_invoices_number").on(table.invoiceNumber),
   jobIdx: index("idx_invoices_job").on(table.jobId),
   customerIdx: index("idx_invoices_customer").on(table.customerId),
-  fleetIdx: index("idx_invoices_fleet").on(table.fleetAccountId)
+  fleetIdx: index("idx_invoices_fleet").on(table.fleetAccountId),
+  statusIdx: index("idx_invoices_status").on(table.status)
+}));
+
+// Invoice default charges configuration
+export const invoiceDefaults = pgTable("invoice_defaults", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  type: invoiceDefaultTypeEnum("type").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  applyByDefault: boolean("apply_by_default").notNull().default(false),
+  description: text("description"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  typeIdx: index("idx_invoice_defaults_type").on(table.type),
+  activeIdx: index("idx_invoice_defaults_active").on(table.isActive)
+}));
+
+// Invoice line items for detailed billing
+export const invoiceLineItems = pgTable("invoice_line_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").notNull().references(() => invoices.id, { onDelete: 'cascade' }),
+  type: invoiceLineItemTypeEnum("type").notNull(),
+  description: varchar("description", { length: 500 }).notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull().default('1'),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  totalPrice: decimal("total_price", { precision: 10, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  invoiceIdx: index("idx_invoice_line_items_invoice").on(table.invoiceId),
+  typeIdx: index("idx_invoice_line_items_type").on(table.type)
 }));
 
 export const refunds = pgTable("refunds", {
@@ -1902,11 +1959,31 @@ export const insertInvoiceSchema = createInsertSchema(invoices).omit({
   invoiceNumber: true,
   paidAmount: true,
   taxAmount: true,
+  status: true,
+  issueDate: true,
+  sentAt: true,
+  paidAt: true,
+  lineItems: true,
   createdAt: true, 
   updatedAt: true 
 });
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 export type Invoice = typeof invoices.$inferSelect;
+
+export const insertInvoiceDefaultSchema = createInsertSchema(invoiceDefaults).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertInvoiceDefault = z.infer<typeof insertInvoiceDefaultSchema>;
+export type InvoiceDefault = typeof invoiceDefaults.$inferSelect;
+
+export const insertInvoiceLineItemSchema = createInsertSchema(invoiceLineItems).omit({
+  id: true,
+  createdAt: true
+});
+export type InsertInvoiceLineItem = z.infer<typeof insertInvoiceLineItemSchema>;
+export type InvoiceLineItem = typeof invoiceLineItems.$inferSelect;
 
 export const insertRefundSchema = createInsertSchema(refunds).omit({ 
   id: true, 

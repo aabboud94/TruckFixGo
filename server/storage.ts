@@ -25,6 +25,8 @@ import {
   paymentMethods,
   transactions,
   invoices,
+  invoiceDefaults,
+  invoiceLineItems,
   refunds,
   fleetChecks,
   adminSettings,
@@ -106,6 +108,10 @@ import {
   type InsertTransaction,
   type Invoice,
   type InsertInvoice,
+  type InvoiceDefault,
+  type InsertInvoiceDefault,
+  type InvoiceLineItem,
+  type InsertInvoiceLineItem,
   type Refund,
   type InsertRefund,
   type FleetCheck,
@@ -639,6 +645,7 @@ export interface IStorage {
   getTransaction(id: string): Promise<Transaction | undefined>;
   findTransactions(filters: TransactionFilterOptions): Promise<Transaction[]>;
   
+  // Invoice management
   createInvoice(invoice: InsertInvoice): Promise<Invoice>;
   updateInvoice(id: string, updates: Partial<InsertInvoice>): Promise<Invoice | undefined>;
   getInvoice(id: string): Promise<Invoice | undefined>;
@@ -646,6 +653,28 @@ export interface IStorage {
   getInvoiceByJobId(jobId: string): Promise<Invoice | undefined>;
   getUnpaidInvoices(customerId: string): Promise<Invoice[]>;
   markInvoiceAsPaid(invoiceId: string, paidAt: Date): Promise<boolean>;
+  
+  // Invoice defaults management
+  createInvoiceDefault(data: InsertInvoiceDefault): Promise<InvoiceDefault>;
+  updateInvoiceDefault(id: string, updates: Partial<InsertInvoiceDefault>): Promise<InvoiceDefault | undefined>;
+  deleteInvoiceDefault(id: string): Promise<boolean>;
+  getInvoiceDefaults(onlyActive?: boolean): Promise<InvoiceDefault[]>;
+  getInvoiceDefaultById(id: string): Promise<InvoiceDefault | undefined>;
+  
+  // Invoice line items management
+  createInvoiceLineItem(data: InsertInvoiceLineItem): Promise<InvoiceLineItem>;
+  updateInvoiceLineItem(id: string, updates: Partial<InsertInvoiceLineItem>): Promise<InvoiceLineItem | undefined>;
+  deleteInvoiceLineItem(id: string): Promise<boolean>;
+  getInvoiceLineItems(invoiceId: string): Promise<InvoiceLineItem[]>;
+  getInvoiceLineItemById(id: string): Promise<InvoiceLineItem | undefined>;
+  getInvoiceWithLineItems(invoiceId: string): Promise<Invoice & { lineItems: InvoiceLineItem[] } | undefined>;
+  
+  // Job completion with invoice support
+  markJobComplete(jobId: string, data: {
+    completionNotes?: string;
+    completionPhotos?: string[];
+    contractorSignature?: string;
+  }): Promise<Job | undefined>;
   
   createRefund(refund: InsertRefund): Promise<Refund>;
   updateRefundStatus(id: string, status: typeof refundStatusEnum.enumValues[number]): Promise<Refund | undefined>;
@@ -3581,12 +3610,128 @@ export class PostgreSQLStorage implements IStorage {
       .set({ 
         paidAt,
         paidAmount: invoice.totalAmount,
+        status: 'paid',
         updatedAt: new Date()
       })
       .where(eq(invoices.id, invoiceId))
       .returning();
     
     return result.length > 0;
+  }
+  
+  // Invoice defaults management
+  async createInvoiceDefault(data: InsertInvoiceDefault): Promise<InvoiceDefault> {
+    const result = await db.insert(invoiceDefaults).values(data).returning();
+    return result[0];
+  }
+
+  async updateInvoiceDefault(id: string, updates: Partial<InsertInvoiceDefault>): Promise<InvoiceDefault | undefined> {
+    const result = await db.update(invoiceDefaults)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(invoiceDefaults.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteInvoiceDefault(id: string): Promise<boolean> {
+    const result = await db.delete(invoiceDefaults)
+      .where(eq(invoiceDefaults.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  async getInvoiceDefaults(onlyActive: boolean = false): Promise<InvoiceDefault[]> {
+    let query = db.select().from(invoiceDefaults);
+    
+    if (onlyActive) {
+      query = query.where(eq(invoiceDefaults.isActive, true)) as any;
+    }
+    
+    return await query.orderBy(asc(invoiceDefaults.sortOrder));
+  }
+
+  async getInvoiceDefaultById(id: string): Promise<InvoiceDefault | undefined> {
+    const result = await db.select().from(invoiceDefaults)
+      .where(eq(invoiceDefaults.id, id))
+      .limit(1);
+    return result[0];
+  }
+  
+  // Invoice line items management
+  async createInvoiceLineItem(data: InsertInvoiceLineItem): Promise<InvoiceLineItem> {
+    const result = await db.insert(invoiceLineItems).values(data).returning();
+    return result[0];
+  }
+
+  async updateInvoiceLineItem(id: string, updates: Partial<InsertInvoiceLineItem>): Promise<InvoiceLineItem | undefined> {
+    const result = await db.update(invoiceLineItems)
+      .set(updates)
+      .where(eq(invoiceLineItems.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteInvoiceLineItem(id: string): Promise<boolean> {
+    const result = await db.delete(invoiceLineItems)
+      .where(eq(invoiceLineItems.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  async getInvoiceLineItems(invoiceId: string): Promise<InvoiceLineItem[]> {
+    return await db.select().from(invoiceLineItems)
+      .where(eq(invoiceLineItems.invoiceId, invoiceId))
+      .orderBy(asc(invoiceLineItems.sortOrder));
+  }
+
+  async getInvoiceLineItemById(id: string): Promise<InvoiceLineItem | undefined> {
+    const result = await db.select().from(invoiceLineItems)
+      .where(eq(invoiceLineItems.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getInvoiceWithLineItems(invoiceId: string): Promise<Invoice & { lineItems: InvoiceLineItem[] } | undefined> {
+    const invoice = await this.getInvoice(invoiceId);
+    if (!invoice) return undefined;
+    
+    const lineItems = await this.getInvoiceLineItems(invoiceId);
+    return { ...invoice, lineItems };
+  }
+  
+  // Job completion with invoice support
+  async markJobComplete(jobId: string, data: {
+    completionNotes?: string;
+    completionPhotos?: string[];
+    contractorSignature?: string;
+  }): Promise<Job | undefined> {
+    // Update job status to completed
+    const result = await db.update(jobs)
+      .set({
+        status: 'completed',
+        completedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(jobs.id, jobId))
+      .returning();
+    
+    if (result.length === 0) return undefined;
+    
+    // Update invoice if exists with completion details
+    const invoice = await this.getInvoiceByJobId(jobId);
+    if (invoice) {
+      await db.update(invoices)
+        .set({
+          completionNotes: data.completionNotes,
+          completionPhotos: data.completionPhotos,
+          contractorSignature: data.contractorSignature,
+          completedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(invoices.id, invoice.id));
+    }
+    
+    return result[0];
   }
 
   async createRefund(refund: InsertRefund): Promise<Refund> {
