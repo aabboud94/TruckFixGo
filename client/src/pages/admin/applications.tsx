@@ -108,6 +108,7 @@ export default function AdminApplications() {
   // Query for driver applications
   const { data: driverApplications = [], isLoading: isLoadingDrivers, refetch: refetchDrivers } = useQuery({
     queryKey: ['/api/admin/driver-applications'],
+    queryFn: async () => apiRequest('GET', '/api/admin/driver-applications'),
     enabled: activeTab === 'drivers'
   });
 
