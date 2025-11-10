@@ -1288,16 +1288,14 @@ export class PostgreSQLStorage implements IStorage {
     try {
       console.log('[AssignJob] Getting available contractors for assignment - Round Robin Logic');
       
-      // Get all available contractors with their profiles
+      // Get ALL contractors with their profiles (for job queuing support)
+      // No longer filtering by isAvailable - contractors can have multiple jobs queued
       const contractors = await db
         .select()
         .from(users)
         .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
         .where(
-          and(
-            eq(users.role, 'contractor'),
-            eq(contractorProfiles.isAvailable, true)
-          )
+          eq(users.role, 'contractor')  // Only filter by role, not availability
         )
         .orderBy(
           // Order by tier (gold first, then silver, then bronze)
