@@ -218,7 +218,11 @@ export default function TrackingPage() {
     }
   });
 
-  const customerLocation = jobData?.job?.location || null;
+  // Use US center as fallback if location is invalid (0,0) or missing
+  let customerLocation = jobData?.job?.location || null;
+  if (customerLocation && customerLocation.lat === 0 && customerLocation.lng === 0) {
+    customerLocation = { lat: 39.8283, lng: -98.5795 }; // US center coordinates
+  }
   const contractor = jobData?.contractor || null;
   const statusHistory = jobData?.statusHistory || [];
 
