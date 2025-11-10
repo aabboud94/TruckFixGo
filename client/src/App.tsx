@@ -118,6 +118,7 @@ function Router() {
       <Route path="/payment/split/:token" component={SplitPaymentPage} />
       
       {/* Contractor Pages */}
+      <Route path="/contractor" component={ContractorDashboard} />
       <Route path="/contractor/auth" component={ContractorAuth} />
       <Route path="/contractor/apply" component={ContractorApply} />
       <Route path="/contractor-signup" component={ContractorSignup} />
