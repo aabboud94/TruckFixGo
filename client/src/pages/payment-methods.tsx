@@ -29,6 +29,7 @@ import {
 import { SiVisa, SiMastercard, SiAmericanexpress, SiDiscover } from "react-icons/si";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import MockCardForm from "@/components/MockCardForm";
 
 interface PaymentMethod {
   id: string;
@@ -44,6 +45,10 @@ interface PaymentMethod {
   efsCompanyCode?: string;
   comdataCustomerId?: string;
   createdAt: string;
+  metadata?: {
+    isMockPayment?: boolean;
+    [key: string]: any;
+  };
 }
 
 // Initialize Stripe (Optional - works without keys)
@@ -65,7 +70,7 @@ const getStripe = () => {
   return stripePromise;
 };
 
-// Add Card Form Component
+// Add Card Form Component with Stripe
 function AddCardForm({ onSuccess, onCancel }: { onSuccess: () => void; onCancel: () => void }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -102,12 +107,9 @@ function AddCardForm({ onSuccess, onCancel }: { onSuccess: () => void; onCancel:
 
     // Save payment method to backend
     try {
-      await apiRequest("/api/payment-methods", {
-        method: "POST",
-        body: JSON.stringify({
-          stripePaymentMethodId: paymentMethod.id,
-          nickname
-        })
+      await apiRequest("/api/payment-methods", "POST", {
+        stripePaymentMethodId: paymentMethod.id,
+        nickname
       });
 
       toast({
@@ -362,12 +364,12 @@ export default function PaymentMethodsPage() {
         </p>
       </div>
 
-      {/* Stripe Configuration Warning */}
+      {/* Stripe Configuration Notice */}
       {!stripeConfig?.hasKeys && (
         <Alert className="mb-6">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Credit card payments are not available. Contact support to enable card payments.
+            Test mode: You can add test cards for development. Real card processing requires Stripe configuration.
           </AlertDescription>
         </Alert>
       )}
@@ -402,6 +404,11 @@ export default function PaymentMethodsPage() {
                           <Badge variant="secondary" className="text-xs">
                             <Star className="h-3 w-3 mr-1" />
                             Default
+                          </Badge>
+                        )}
+                        {method.metadata?.isMockPayment && (
+                          <Badge variant="outline" className="text-xs">
+                            Test
                           </Badge>
                         )}
                       </div>
@@ -466,16 +473,14 @@ export default function PaymentMethodsPage() {
 
       {/* Add Payment Method Buttons */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {stripeConfig?.hasKeys && (
-          <Button
-            onClick={() => setShowAddCard(true)}
-            className="hover-elevate"
-            data-testid="button-add-card"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Card
-          </Button>
-        )}
+        <Button
+          onClick={() => setShowAddCard(true)}
+          className="hover-elevate"
+          data-testid="button-add-card"
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Add Card
+        </Button>
         <Button
           variant="outline"
           onClick={() => setShowAddEFS(true)}
@@ -514,10 +519,12 @@ export default function PaymentMethodsPage() {
           <DialogHeader>
             <DialogTitle>Add Credit/Debit Card</DialogTitle>
             <DialogDesc>
-              Add a new card for faster checkout
+              {stripeConfig?.hasKeys && import.meta.env.VITE_STRIPE_PUBLIC_KEY
+                ? "Add a new card for faster checkout"
+                : "Add a test card for development (Test mode)"}
             </DialogDesc>
           </DialogHeader>
-          {stripePromise && (
+          {stripeConfig?.hasKeys && import.meta.env.VITE_STRIPE_PUBLIC_KEY ? (
             <Elements stripe={getStripe()}>
               <AddCardForm
                 onSuccess={() => {
@@ -527,6 +534,14 @@ export default function PaymentMethodsPage() {
                 onCancel={() => setShowAddCard(false)}
               />
             </Elements>
+          ) : (
+            <MockCardForm
+              onSuccess={() => {
+                setShowAddCard(false);
+                queryClient.invalidateQueries({ queryKey: ["/api/payment-methods"] });
+              }}
+              onCancel={() => setShowAddCard(false)}
+            />
           )}
         </DialogContent>
       </Dialog>

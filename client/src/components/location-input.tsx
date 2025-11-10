@@ -341,6 +341,30 @@ export default function LocationInput({
             )}
           </div>
           
+          {/* Add confirm button for manual address entry */}
+          {addressInput && !value?.formattedAddress && (
+            <Button
+              onClick={() => {
+                // For testing/demo: Use mock coordinates when manually entering address
+                const mockLat = 25.7617 + (Math.random() - 0.5) * 0.1;
+                const mockLng = -80.1918 + (Math.random() - 0.5) * 0.1;
+                onChange({
+                  lat: mockLat,
+                  lng: mockLng,
+                  address: addressInput,
+                  formattedAddress: addressInput
+                });
+                setShowSuggestions(false);
+              }}
+              className="w-full"
+              variant="secondary"
+              data-testid="button-confirm-address"
+            >
+              <MapPin className="w-4 h-4 mr-2" />
+              Confirm This Address
+            </Button>
+          )}
+          
           {value?.formattedAddress && (
             <Alert>
               <MapPin className="h-4 w-4" />

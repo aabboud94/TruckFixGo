@@ -326,9 +326,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Create profile based on role
         if (user.role === 'driver') {
-          await storage.createDriverProfile({
-            userId: user.id
-          });
+          // Create driver profile with explicit null values to avoid schema issues
+          try {
+            await storage.createDriverProfile({
+              userId: user.id,
+              vehicleType: null,
+              vehicleMake: null,
+              vehicleModel: null,
+              vehicleYear: null,
+              licensePlate: null,
+              driverLicenseNumber: null,
+              fleetAccountId: null,
+              preferredContactMethod: null
+            });
+          } catch (profileError) {
+            console.error('Failed to create driver profile:', profileError);
+            // Continue anyway - profile can be created later
+          }
         } else if (user.role === 'contractor') {
           await storage.createContractorProfile({
             userId: user.id
@@ -3415,7 +3429,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       stripePaymentMethodId: z.string().optional(),
       type: z.enum(['credit_card', 'efs_check', 'comdata_check', 'fleet_account']).optional(),
       nickname: z.string().optional(),
-      metadata: z.any().optional()
+      metadata: z.any().optional(),
+      // Mock payment support
+      isMockPayment: z.boolean().optional(),
+      last4: z.string().optional(),
+      brand: z.string().optional()
     })),
     async (req: Request, res: Response) => {
       try {
@@ -3427,8 +3445,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           metadata: req.body.metadata || {}
         };
 
+        // Handle mock payment methods for testing
+        if (req.body.isMockPayment) {
+          const mockId = `mock_pm_${randomUUID().replace(/-/g, '').substring(0, 16)}`;
+          paymentMethodData = {
+            ...paymentMethodData,
+            type: 'credit_card',
+            stripePaymentMethodId: mockId,
+            last4: req.body.last4 || '4242',
+            brand: req.body.brand || 'test',
+            expiryMonth: 12,
+            expiryYear: new Date().getFullYear() + 2,
+            metadata: {
+              ...paymentMethodData.metadata,
+              isMockPayment: true
+            }
+          };
+        }
         // If Stripe payment method, get details from Stripe
-        if (req.body.stripePaymentMethodId && process.env.STRIPE_SECRET_KEY) {
+        else if (req.body.stripePaymentMethodId && process.env.STRIPE_SECRET_KEY) {
           const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
           const paymentMethod = await stripe.paymentMethods.retrieve(req.body.stripePaymentMethodId);
           
@@ -3507,6 +3542,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Add Comdata method error:', error);
         res.status(500).json({ message: 'Failed to add Comdata account' });
+      }
+    }
+  );
+
+  // Add mock payment method (for testing without Stripe)
+  app.post('/api/payment-methods/mock',
+    requireAuth,
+    validateRequest(z.object({
+      cardNumber: z.string(),
+      expiry: z.string(),
+      cvv: z.string(),
+      nickname: z.string().optional(),
+      type: z.literal('credit_card')
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        // Extract card details for mock
+        const last4 = req.body.cardNumber.slice(-4);
+        const brand = req.body.cardNumber.startsWith('4') ? 'visa' : 
+                     req.body.cardNumber.startsWith('5') ? 'mastercard' :
+                     req.body.cardNumber.startsWith('3') ? 'amex' : 'unknown';
+
+        const method = await storage.createPaymentMethod({
+          userId: req.session.userId!,
+          type: 'credit_card',
+          nickname: req.body.nickname,
+          isMockPayment: true,
+          last4,
+          brand,
+          isDefault: false,
+          metadata: {
+            expiry: req.body.expiry,
+            isTestCard: true
+          }
+        });
+        
+        res.status(201).json(method);
+      } catch (error) {
+        console.error('Add mock payment method error:', error);
+        res.status(500).json({ message: 'Failed to add mock payment method' });
       }
     }
   );
