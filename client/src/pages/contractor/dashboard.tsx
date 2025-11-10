@@ -49,6 +49,29 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
+interface QueuedJob {
+  id: string;
+  jobNumber: string;
+  queuePosition: number;
+  customerName: string;
+  customerPhone?: string;
+  location: { lat: number; lng: number };
+  locationAddress: string;
+  serviceType: string;
+  jobType: string;
+  status: string;
+  urgencyLevel: string;
+  scheduledFor?: string;
+  estimatedDuration?: number;
+  description: string;
+}
+
+interface ActiveJob extends QueuedJob {
+  customerEmail?: string;
+  totalAmount: number;
+  estimatedArrival?: string;
+}
+
 interface DashboardData {
   contractor: {
     id: string;
@@ -82,12 +105,18 @@ interface DashboardData {
     totalJobs: number;
     pendingPayout: number;
   };
-  activeJob?: any;
+  activeJob?: ActiveJob;
+  queuedJobs: QueuedJob[];
   availableJobs: any[];
   scheduledJobs: any[];
   recentReviews?: any[];
   ratingDistribution?: Record<string, number>;
   ratingTrend?: Array<{ date: string; rating: number }>;
+  queueInfo?: {
+    currentPosition: number | null;
+    totalInQueue: number;
+    queuedCount: number;
+  };
 }
 
 const tierColors = {
@@ -258,8 +287,10 @@ export default function ContractorDashboard() {
   const contractor = dashboardData?.contractor;
   const metrics = dashboardData?.metrics;
   const activeJob = dashboardData?.activeJob;
+  const queuedJobs = dashboardData?.queuedJobs || [];
   const availableJobs = dashboardData?.availableJobs || [];
   const scheduledJobs = dashboardData?.scheduledJobs || [];
+  const queueInfo = dashboardData?.queueInfo;
 
   return (
     <div className="min-h-screen bg-background">
@@ -416,11 +447,17 @@ export default function ContractorDashboard() {
           <Card className="border-l-4 border-l-green-600">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse" />
-                  Active Job
-                </CardTitle>
-                <Badge variant="default">
+                <div className="flex items-center gap-3">
+                  <CardTitle className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse" />
+                    Current Active Job
+                  </CardTitle>
+                  <Badge variant="default" className="bg-green-600">
+                    <Truck className="w-3 h-3 mr-1" />
+                    Job #{activeJob.jobNumber}
+                  </Badge>
+                </div>
+                <Badge variant="outline">
                   {activeJob.status?.toUpperCase()}
                 </Badge>
               </div>
@@ -429,23 +466,25 @@ export default function ContractorDashboard() {
               <div className="flex items-start justify-between">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-muted-foreground" />
+                    <Users className="w-4 h-4 text-muted-foreground" />
                     <span className="font-medium">{activeJob.customerName}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">{activeJob.location?.address}</span>
+                    <span className="text-sm text-muted-foreground">{activeJob.locationAddress}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm">{activeJob.issueDescription}</span>
+                    <span className="text-sm">{activeJob.serviceType} - {activeJob.description}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Timer className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                      Started {formatDistanceToNow(new Date(activeJob.startedAt))} ago
-                    </span>
-                  </div>
+                  {activeJob.estimatedArrival && (
+                    <div className="flex items-center gap-2">
+                      <Timer className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        ETA: {format(new Date(activeJob.estimatedArrival), 'h:mm a')}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-col gap-2">
                   <Button 
@@ -483,6 +522,110 @@ export default function ContractorDashboard() {
             </CardContent>
           </Card>
         )}
+
+        {/* Queued Jobs Section */}
+        <Card className="border-l-4 border-l-blue-600">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CardTitle>Job Queue</CardTitle>
+                {queueInfo && queueInfo.queuedCount > 0 && (
+                  <Badge variant="secondary">
+                    {queueInfo.queuedCount} {queueInfo.queuedCount === 1 ? 'job' : 'jobs'} in queue
+                  </Badge>
+                )}
+              </div>
+              {queuedJobs.length > 0 && (
+                <Badge variant="outline" className="gap-1">
+                  <Clock className="w-3 h-3" />
+                  Next up
+                </Badge>
+              )}
+            </div>
+            <CardDescription>
+              Jobs assigned to you that are waiting to be started
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {queuedJobs.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="rounded-full bg-muted p-3">
+                    <Clock className="w-8 h-8" />
+                  </div>
+                  <p className="font-medium">No jobs in queue</p>
+                  <p className="text-sm">New jobs will appear here when assigned to you</p>
+                </div>
+              </div>
+            ) : (
+              <ScrollArea className="h-[300px] pr-4">
+                <div className="space-y-3">
+                  {queuedJobs.map((job, index) => (
+                    <Card key={job.id} className="border-l-2 border-l-muted">
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-2 flex-1">
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
+                                #{job.queuePosition}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">Job #{job.jobNumber}</span>
+                                <Badge variant={job.jobType === 'emergency' ? 'destructive' : 'default'} className="text-xs">
+                                  {job.jobType?.toUpperCase()}
+                                </Badge>
+                                {job.urgencyLevel === 'high' && (
+                                  <Badge variant="outline" className="text-xs gap-1">
+                                    <AlertCircle className="w-3 h-3" />
+                                    High Priority
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                              <div className="flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                                <span>{job.customerName}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                                <span className="text-muted-foreground truncate">{job.locationAddress}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Truck className="w-3.5 h-3.5 text-muted-foreground" />
+                                <span>{job.serviceType}</span>
+                              </div>
+                              {job.estimatedDuration && (
+                                <div className="flex items-center gap-1.5">
+                                  <Timer className="w-3.5 h-3.5 text-muted-foreground" />
+                                  <span className="text-muted-foreground">Est. {job.estimatedDuration} mins</span>
+                                </div>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground line-clamp-1">{job.description}</p>
+                          </div>
+                          {currentLocation && job.location && (
+                            <div className="ml-4">
+                              <Badge variant="outline" className="whitespace-nowrap">
+                                <MapPin className="w-3 h-3 mr-1" />
+                                {calculateDistance(
+                                  currentLocation.coords.latitude,
+                                  currentLocation.coords.longitude,
+                                  job.location.lat,
+                                  job.location.lng
+                                )} mi
+                              </Badge>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Available Jobs Section */}
         <Card>

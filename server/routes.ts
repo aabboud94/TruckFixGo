@@ -1622,6 +1622,248 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get contractor dashboard data
+  app.get('/api/contractor/dashboard',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        
+        // Get contractor profile
+        const contractorProfile = await storage.getContractorProfile(contractorId);
+        if (!contractorProfile) {
+          return res.status(404).json({ message: 'Contractor profile not found' });
+        }
+
+        // Get user info
+        const user = await storage.getUser(contractorId);
+        if (!user) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Get current job and queue entry using the new queue methods
+        const { job: currentJob, queueEntry: currentQueueEntry } = await storage.getContractorCurrentJob(contractorId);
+        
+        // Get all queue entries (includes current + queued)
+        const allQueueEntries = await storage.getContractorQueue(contractorId);
+        
+        // Separate queued jobs from current job
+        const queuedEntries = allQueueEntries.filter(entry => entry.status === 'queued');
+        
+        // Fetch job details for queued entries
+        const queuedJobs = await Promise.all(
+          queuedEntries.map(async (queueEntry) => {
+            const job = await storage.getJob(queueEntry.jobId);
+            if (!job) return null;
+            
+            // Get customer info
+            let customer = null;
+            if (job.customerId) {
+              const customerUser = await storage.getUser(job.customerId);
+              if (customerUser) {
+                customer = {
+                  firstName: customerUser.firstName,
+                  lastName: customerUser.lastName,
+                  phone: customerUser.phone
+                };
+              }
+            }
+            
+            // Get service type name
+            const serviceType = await storage.getServiceType(job.serviceTypeId);
+            
+            return {
+              id: job.id,
+              jobNumber: job.jobNumber,
+              queuePosition: queueEntry.position,
+              customerName: customer ? `${customer.firstName} ${customer.lastName}` : job.customerName || 'Guest',
+              customerPhone: customer?.phone || job.customerPhone,
+              location: job.location,
+              locationAddress: job.locationAddress,
+              serviceType: serviceType?.name || 'Service',
+              jobType: job.jobType,
+              status: job.status,
+              urgencyLevel: job.urgencyLevel,
+              scheduledFor: job.scheduledFor,
+              estimatedDuration: job.estimatedDuration,
+              description: job.description
+            };
+          })
+        );
+        
+        // Filter out null entries
+        const validQueuedJobs = queuedJobs.filter(job => job !== null);
+        
+        // Format current job if it exists
+        let formattedCurrentJob = null;
+        if (currentJob) {
+          // Get customer info for current job
+          let customer = null;
+          if (currentJob.customerId) {
+            const customerUser = await storage.getUser(currentJob.customerId);
+            if (customerUser) {
+              customer = {
+                firstName: customerUser.firstName,
+                lastName: customerUser.lastName,
+                phone: customerUser.phone,
+                email: customerUser.email
+              };
+            }
+          }
+          
+          // Get service type name
+          const serviceType = await storage.getServiceType(currentJob.serviceTypeId);
+          
+          formattedCurrentJob = {
+            id: currentJob.id,
+            jobNumber: currentJob.jobNumber,
+            queuePosition: currentQueueEntry?.position || 0,
+            customerName: customer ? `${customer.firstName} ${customer.lastName}` : currentJob.customerName || 'Guest',
+            customerPhone: customer?.phone || currentJob.customerPhone,
+            customerEmail: customer?.email,
+            location: currentJob.location,
+            locationAddress: currentJob.locationAddress,
+            serviceType: serviceType?.name || 'Service',
+            jobType: currentJob.jobType,
+            status: currentJob.status,
+            urgencyLevel: currentJob.urgencyLevel,
+            scheduledFor: currentJob.scheduledFor,
+            estimatedDuration: currentJob.estimatedDuration,
+            description: currentJob.description,
+            totalAmount: currentJob.totalAmount,
+            estimatedArrival: currentJob.estimatedArrival
+          };
+        }
+        
+        // Get available jobs (new jobs that contractor can accept)
+        const availableJobs = await storage.findJobs({
+          status: 'new',
+          limit: 10,
+          offset: 0,
+          orderBy: 'createdAt',
+          orderDir: 'desc'
+        });
+        
+        // Get scheduled jobs
+        const scheduledJobs = await storage.findJobs({
+          contractorId,
+          status: 'scheduled',
+          limit: 10,
+          offset: 0,
+          orderBy: 'scheduledFor',
+          orderDir: 'asc'
+        });
+
+        // Get contractor metrics
+        const earnings = await storage.getContractorEarnings(contractorId);
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - 7);
+        const monthStart = new Date();
+        monthStart.setDate(1);
+
+        const todayEarnings = earnings
+          .filter(e => new Date(e.createdAt) >= todayStart)
+          .reduce((sum, e) => sum + Number(e.amount), 0);
+
+        const weekEarnings = earnings
+          .filter(e => new Date(e.createdAt) >= weekStart)
+          .reduce((sum, e) => sum + Number(e.amount), 0);
+
+        const monthEarnings = earnings
+          .filter(e => new Date(e.createdAt) >= monthStart)
+          .reduce((sum, e) => sum + Number(e.amount), 0);
+
+        // Get job counts
+        const completedJobs = await storage.findJobs({
+          contractorId,
+          status: 'completed',
+          fromDate: todayStart
+        });
+
+        const todayJobs = completedJobs.length;
+        
+        const weekJobs = await storage.findJobs({
+          contractorId,
+          status: 'completed',
+          fromDate: weekStart
+        });
+
+        const totalJobs = await storage.findJobs({
+          contractorId,
+          status: 'completed'
+        });
+
+        // Get reviews for rating data
+        const reviews = await storage.getContractorReviews(contractorId);
+        const averageRating = reviews.length > 0
+          ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+          : 0;
+
+        // Calculate performance metrics
+        const totalReviews = reviews.length;
+        const onTimeRate = 95; // TODO: Calculate from actual data
+        const satisfactionScore = averageRating * 20; // Convert 5-star to 100%
+        const responseRate = 98; // TODO: Calculate from actual data
+        const completionRate = 99; // TODO: Calculate from actual data
+
+        // Calculate category ratings
+        const categoryRatings = {
+          timeliness: 4.8,
+          professionalism: 4.9,
+          quality: 4.7,
+          value: 4.8
+        };
+
+        // Prepare response
+        res.json({
+          contractor: {
+            id: contractorId,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            companyName: contractorProfile.companyName,
+            performanceTier: contractorProfile.performanceTier || 'bronze',
+            isAvailable: contractorProfile.isAvailable,
+            averageRating,
+            totalJobsCompleted: totalJobs.length,
+            averageResponseTime: 15, // TODO: Calculate from actual data
+            currentLocation: contractorProfile.currentLocation,
+            totalReviews,
+            onTimeRate,
+            satisfactionScore,
+            responseRate,
+            completionRate,
+            categoryRatings
+          },
+          metrics: {
+            todayEarnings,
+            weekEarnings,
+            monthEarnings,
+            todayJobs,
+            weekJobs: weekJobs.length,
+            totalJobs: totalJobs.length,
+            pendingPayout: 0 // TODO: Calculate from transactions
+          },
+          activeJob: formattedCurrentJob,
+          queuedJobs: validQueuedJobs,
+          availableJobs,
+          scheduledJobs,
+          recentReviews: reviews.slice(0, 5),
+          queueInfo: {
+            currentPosition: currentQueueEntry?.position || null,
+            totalInQueue: allQueueEntries.length,
+            queuedCount: queuedEntries.length
+          }
+        });
+      } catch (error) {
+        console.error('Get contractor dashboard error:', error);
+        res.status(500).json({ message: 'Failed to get dashboard data' });
+      }
+    }
+  );
+
   // Get contractor's active job
   app.get('/api/contractor/active-job', 
     requireAuth,
