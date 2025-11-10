@@ -32,6 +32,8 @@ import ContractorActiveJob from "@/pages/contractor/active-job";
 import ContractorBidding from "@/pages/contractor/bidding";
 import ContractorJobAcceptance from "@/pages/contractor/job-acceptance";
 import ManageDrivers from "@/pages/contractor/manage-drivers";
+import ContractorJobCompletion from "@/pages/contractor/job-completion";
+import ContractorInvoicePreview from "@/pages/contractor/invoice-preview";
 
 // Fleet Pages
 import FleetLanding from "@/pages/fleet";
@@ -75,6 +77,7 @@ import AdminSurge from "@/pages/admin/surge";
 import AdminSupport from "@/pages/admin/support";
 import AdminHealth from "@/pages/admin/health";
 import AdminLiveMap from "@/pages/admin/live-map";
+import AdminInvoiceDefaults from "@/pages/admin/invoice-defaults";
 
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
@@ -129,6 +132,8 @@ function Router() {
       <Route path="/contractor/active-job" component={ContractorActiveJob} />
       <Route path="/contractor/job/:jobId" component={ContractorJobAcceptance} />
       <Route path="/contractor/manage-drivers" component={ManageDrivers} />
+      <Route path="/contractor/jobs/:id/complete" component={ContractorJobCompletion} />
+      <Route path="/contractor/invoices/:id" component={ContractorInvoicePreview} />
       
       {/* Fleet Pages */}
       <Route path="/fleet" component={FleetLanding} />
@@ -164,6 +169,7 @@ function Router() {
       <Route path="/admin/analytics" component={AdminAnalytics} />
       <Route path="/admin/fleets" component={AdminFleets} />
       <Route path="/admin/invoices" component={AdminInvoices} />
+      <Route path="/admin/invoice-defaults" component={AdminInvoiceDefaults} />
       <Route path="/admin/review-moderation" component={AdminReviewModeration} />
       <Route path="/admin/areas" component={AdminAreas} />
       <Route path="/admin/content" component={AdminContent} />
