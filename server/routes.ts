@@ -594,11 +594,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const { token } = req.params;
         const { password } = req.body;
 
-        // Hash the new password
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Use the token to validate and update password
-        const success = await storage.usePasswordResetToken(token, hashedPassword);
+        // Pass plain password - usePasswordResetToken handles hashing internally
+        const success = await storage.usePasswordResetToken(token, password);
 
         if (success) {
           res.json({ message: 'Password reset successful' });
