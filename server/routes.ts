@@ -524,6 +524,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Request password reset - public endpoint (no auth required)
+  app.post('/api/auth/forgot-password',
+    rateLimiter(3, 60000), // 3 requests per minute to prevent abuse
+    validateRequest(z.object({
+      email: z.string().email('Invalid email format')
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { email } = req.body;
+        
+        // Always return the same message for security (don't reveal if email exists)
+        const successMessage = 'If an account exists with that email, a reset link has been sent';
+        
+        // Look up the user by email
+        const user = await storage.getUserByEmail(email);
+        
+        if (user) {
+          try {
+            // Generate reset token
+            const token = await storage.createPasswordResetToken(user.id, user.email);
+            
+            if (token) {
+              // Get user's name for the email
+              const userName = user.firstName && user.lastName 
+                ? `${user.firstName} ${user.lastName}`
+                : user.firstName || user.email;
+              
+              // Send password reset email
+              try {
+                await reminderService.sendPasswordResetEmail(
+                  user.email,
+                  token,
+                  userName
+                );
+              } catch (emailError) {
+                // Log error internally but don't expose to client
+                console.error(`Failed to send password reset email to ${email}:`, emailError);
+              }
+            } else {
+              // Log internally if token creation failed
+              console.error(`Failed to create password reset token for user ${user.id}`);
+            }
+          } catch (error) {
+            // Log any errors internally but don't expose to client
+            console.error(`Error processing password reset for ${email}:`, error);
+          }
+        }
+        
+        // Always return success message (security best practice)
+        res.json({ message: successMessage });
+        
+      } catch (error) {
+        // Log error but return generic message for security
+        console.error('Forgot password endpoint error:', error);
+        res.json({ message: 'If an account exists with that email, a reset link has been sent' });
+      }
+    }
+  );
+
   // Reset password - submit new password with token
   app.post('/api/auth/reset-password/:token',
     rateLimiter(5, 60000), // 5 requests per minute
