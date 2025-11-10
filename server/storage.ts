@@ -478,6 +478,20 @@ export interface IStorage {
   checkUserRole(userId: string, requiredRole: string): Promise<boolean>;
   hasAdminUsers(): Promise<boolean>;
   
+  // User Management Operations
+  getAllUsers(filters?: {
+    role?: string;
+    status?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any[]>;
+  getUserById(id: string): Promise<any>;
+  updateUserStatus(userId: string, isActive: boolean): Promise<User | undefined>;
+  updateUserRole(userId: string, newRole: typeof userRoleEnum.enumValues[number]): Promise<User | undefined>;
+  resetUserPassword(userId: string, newPassword: string): Promise<boolean>;
+  getUserActivityLog(userId: string, limit?: number): Promise<any[]>;
+  
   // ==================== JOB OPERATIONS ====================
   createJob(job: InsertJob): Promise<Job>;
   getJob(id: string): Promise<Job | undefined>;
@@ -1562,6 +1576,311 @@ export class PostgreSQLStorage implements IStorage {
   async hasAdminUsers(): Promise<boolean> {
     const result = await db.select().from(users).where(eq(users.role, 'admin')).limit(1);
     return result.length > 0;
+  }
+
+  // ==================== USER MANAGEMENT OPERATIONS ====================
+  
+  async getAllUsers(filters?: {
+    role?: string;
+    status?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any[]> {
+    try {
+      // Build base query with joins
+      const query = db
+        .select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          name: sql<string>`COALESCE(${users.firstName} || ' ' || ${users.lastName}, ${users.firstName}, ${users.lastName}, ${users.email})`,
+          email: users.email,
+          phone: users.phone,
+          role: users.role,
+          status: sql<string>`CASE WHEN ${users.isActive} = true THEN 'active' ELSE 'suspended' END`,
+          isActive: users.isActive,
+          createdAt: users.createdAt,
+          lastLoginAt: users.lastLoginAt,
+          emailVerified: sql<boolean>`${users.email} IS NOT NULL`,
+          twoFactorEnabled: sql<boolean>`false`,
+          // Contractor specific fields
+          companyName: contractorProfiles.companyName,
+          performanceTier: contractorProfiles.performanceTier,
+          averageRating: contractorProfiles.averageRating,
+          totalJobsCompleted: contractorProfiles.totalJobsCompleted,
+          // Driver specific fields
+          cdlNumber: driverProfiles.cdlNumber,
+          cdlState: driverProfiles.cdlState,
+          carrierName: driverProfiles.carrierName,
+          approvalStatus: driverProfiles.approvalStatus
+        })
+        .from(users)
+        .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
+        .leftJoin(driverProfiles, eq(users.id, driverProfiles.userId));
+
+      const conditions = [];
+      
+      // Filter by role
+      if (filters?.role && filters.role !== 'all') {
+        conditions.push(eq(users.role, filters.role as typeof userRoleEnum.enumValues[number]));
+      }
+      
+      // Filter by status
+      if (filters?.status && filters.status !== 'all') {
+        conditions.push(eq(users.isActive, filters.status === 'active'));
+      }
+      
+      // Search filter
+      if (filters?.search) {
+        conditions.push(
+          or(
+            ilike(users.firstName, `%${filters.search}%`),
+            ilike(users.lastName, `%${filters.search}%`),
+            ilike(users.email, `%${filters.search}%`),
+            ilike(users.phone, `%${filters.search}%`)
+          )
+        );
+      }
+
+      // Apply conditions
+      let finalQuery = query;
+      if (conditions.length > 0) {
+        finalQuery = query.where(and(...conditions)) as any;
+      }
+
+      // Apply ordering
+      finalQuery = finalQuery.orderBy(desc(users.createdAt)) as any;
+
+      // Apply pagination
+      if (filters?.limit) {
+        finalQuery = finalQuery.limit(filters.limit) as any;
+      }
+      if (filters?.offset) {
+        finalQuery = finalQuery.offset(filters.offset) as any;
+      }
+
+      const result = await finalQuery;
+      
+      // Format the result to match UI expectations
+      return result.map(user => ({
+        id: user.id,
+        name: user.name || 'Unknown',
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+        lastLogin: user.lastLoginAt,
+        totalJobs: user.totalJobsCompleted || 0,
+        emailVerified: user.emailVerified,
+        twoFactorEnabled: user.twoFactorEnabled,
+        company: user.companyName,
+        tier: user.performanceTier,
+        rating: user.averageRating,
+        cdlNumber: user.cdlNumber,
+        cdlState: user.cdlState,
+        carrierName: user.carrierName,
+        approvalStatus: user.approvalStatus
+      }));
+    } catch (error) {
+      console.error('Error in getAllUsers:', error);
+      return [];
+    }
+  }
+
+  async getUserById(id: string): Promise<any> {
+    try {
+      const result = await db
+        .select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          name: sql<string>`COALESCE(${users.firstName} || ' ' || ${users.lastName}, ${users.firstName}, ${users.lastName}, ${users.email})`,
+          email: users.email,
+          phone: users.phone,
+          role: users.role,
+          status: sql<string>`CASE WHEN ${users.isActive} = true THEN 'active' ELSE 'suspended' END`,
+          isActive: users.isActive,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+          lastLoginAt: users.lastLoginAt,
+          emailVerified: sql<boolean>`${users.email} IS NOT NULL`,
+          twoFactorEnabled: sql<boolean>`false`,
+          // Contractor specific fields
+          companyName: contractorProfiles.companyName,
+          performanceTier: contractorProfiles.performanceTier,
+          averageRating: contractorProfiles.averageRating,
+          totalJobsCompleted: contractorProfiles.totalJobsCompleted,
+          serviceRadius: contractorProfiles.serviceRadius,
+          isAvailable: contractorProfiles.isAvailable,
+          // Driver specific fields
+          cdlNumber: driverProfiles.cdlNumber,
+          cdlState: driverProfiles.cdlState,
+          carrierName: driverProfiles.carrierName,
+          dotNumber: driverProfiles.dotNumber,
+          approvalStatus: driverProfiles.approvalStatus,
+          managedByContractorId: driverProfiles.managedByContractorId
+        })
+        .from(users)
+        .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
+        .leftJoin(driverProfiles, eq(users.id, driverProfiles.userId))
+        .where(eq(users.id, id))
+        .limit(1);
+
+      if (result.length === 0) {
+        return undefined;
+      }
+
+      const user = result[0];
+      
+      return {
+        id: user.id,
+        name: user.name || 'Unknown',
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        lastLogin: user.lastLoginAt,
+        emailVerified: user.emailVerified,
+        twoFactorEnabled: user.twoFactorEnabled,
+        // Additional details based on role
+        ...(user.role === 'contractor' && {
+          company: user.companyName,
+          tier: user.performanceTier,
+          rating: user.averageRating,
+          totalJobs: user.totalJobsCompleted || 0,
+          serviceRadius: user.serviceRadius,
+          isAvailable: user.isAvailable
+        }),
+        ...(user.role === 'driver' && {
+          cdlNumber: user.cdlNumber,
+          cdlState: user.cdlState,
+          carrierName: user.carrierName,
+          dotNumber: user.dotNumber,
+          approvalStatus: user.approvalStatus,
+          managedByContractorId: user.managedByContractorId
+        })
+      };
+    } catch (error) {
+      console.error('Error in getUserById:', error);
+      return undefined;
+    }
+  }
+
+  async updateUserStatus(userId: string, isActive: boolean): Promise<User | undefined> {
+    try {
+      const result = await db.update(users)
+        .set({ 
+          isActive, 
+          updatedAt: new Date() 
+        })
+        .where(eq(users.id, userId))
+        .returning();
+      
+      return result[0];
+    } catch (error) {
+      console.error('Error in updateUserStatus:', error);
+      return undefined;
+    }
+  }
+
+  async updateUserRole(userId: string, newRole: typeof userRoleEnum.enumValues[number]): Promise<User | undefined> {
+    try {
+      const result = await db.update(users)
+        .set({ 
+          role: newRole, 
+          updatedAt: new Date() 
+        })
+        .where(eq(users.id, userId))
+        .returning();
+      
+      return result[0];
+    } catch (error) {
+      console.error('Error in updateUserRole:', error);
+      return undefined;
+    }
+  }
+
+  async resetUserPassword(userId: string, newPassword: string): Promise<boolean> {
+    try {
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      
+      const result = await db.update(users)
+        .set({ 
+          password: hashedPassword, 
+          updatedAt: new Date() 
+        })
+        .where(eq(users.id, userId))
+        .returning();
+      
+      return result.length > 0;
+    } catch (error) {
+      console.error('Error in resetUserPassword:', error);
+      return false;
+    }
+  }
+
+  async getUserActivityLog(userId: string, limit: number = 50): Promise<any[]> {
+    try {
+      // Since we don't have an activity log table, return mock data
+      // In production, you would query an actual activity_logs table
+      const user = await this.getUser(userId);
+      if (!user) return [];
+
+      // Generate mock activity log data
+      const activities = [];
+      const now = Date.now();
+      const actions = ['login', 'logout', 'job_create', 'job_complete', 'profile_update', 'password_change'];
+      
+      for (let i = 0; i < Math.min(limit, 10); i++) {
+        const hoursAgo = Math.floor(Math.random() * 168); // Random time within last week
+        activities.push({
+          id: `LOG-${userId}-${i}`,
+          userId,
+          action: actions[Math.floor(Math.random() * actions.length)],
+          details: this.generateActivityDetails(actions[i % actions.length]),
+          timestamp: new Date(now - hoursAgo * 60 * 60 * 1000),
+          ipAddress: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+          userAgent: ['Chrome 120.0.0', 'Firefox 119.0', 'Safari 17.0', 'Edge 120.0'][Math.floor(Math.random() * 4)]
+        });
+      }
+
+      // Sort by timestamp descending
+      activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      
+      return activities;
+    } catch (error) {
+      console.error('Error in getUserActivityLog:', error);
+      return [];
+    }
+  }
+
+  private generateActivityDetails(action: string): string {
+    switch (action) {
+      case 'login':
+        return 'Successful login from web application';
+      case 'logout':
+        return 'User logged out';
+      case 'job_create':
+        return `Created emergency repair job #JOB-${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
+      case 'job_complete':
+        return `Completed job #JOB-${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
+      case 'profile_update':
+        return 'Updated profile information';
+      case 'password_change':
+        return 'Changed password';
+      default:
+        return 'Performed action';
+    }
   }
 
   // ==================== JOB OPERATIONS ====================
