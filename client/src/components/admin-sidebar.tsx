@@ -63,7 +63,10 @@ const menuItems = [
     group: "Configuration",
     items: [
       { title: "Platform Settings", url: "/admin/settings", icon: Settings, badge: null },
-      { title: "Pricing Rules", url: "/admin/pricing-rules", icon: DollarSign, badge: "new" },
+      { title: "Bidding Config", url: "/admin/bidding-config", icon: Briefcase, badge: "new" },
+      { title: "Pricing Rules", url: "/admin/pricing-rules", icon: DollarSign, badge: null },
+      { title: "Surge Pricing", url: "/admin/surge", icon: Zap, badge: null },
+      { title: "Job Monitor", url: "/admin/job-monitor", icon: BarChart3, badge: null },
       { title: "Service Areas", url: "/admin/areas", icon: MapPin, badge: null },
       { title: "Templates", url: "/admin/templates", icon: Mail, badge: null },
       { title: "Content", url: "/admin/content", icon: FileText, badge: null },
@@ -73,7 +76,6 @@ const menuItems = [
     group: "Marketing",
     items: [
       { title: "Referral Program", url: "/admin/referrals", icon: Gift, badge: null },
-      { title: "Surge Pricing", url: "/admin/surge", icon: Zap, badge: null },
     ]
   },
   {
