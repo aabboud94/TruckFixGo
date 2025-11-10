@@ -95,8 +95,15 @@ export default function AdminUsers() {
     onSuccess: () => {
       setShowPasswordReset(false);
       toast({
-        title: "Password reset",
-        description: "Password reset link has been sent to the user",
+        title: "Success",
+        description: "Password reset email sent successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to send password reset email",
       });
     },
   });
@@ -406,6 +413,17 @@ export default function AdminUsers() {
                             data-testid={`button-view-${user.id}`}
                           >
                             <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setShowPasswordReset(true);
+                            }}
+                            data-testid={`button-reset-password-${user.id}`}
+                          >
+                            <Key className="h-4 w-4" />
                           </Button>
                           <Button
                             size="icon"
