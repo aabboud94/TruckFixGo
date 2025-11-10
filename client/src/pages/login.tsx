@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -192,13 +192,13 @@ export default function Login() {
                 )}
 
                 <div className="flex items-center justify-between text-sm">
-                  <a 
-                    href="#" 
+                  <Link 
+                    href="/forgot-password" 
                     className="text-primary hover:underline" 
                     data-testid="link-forgot-password"
                   >
                     Forgot password?
-                  </a>
+                  </Link>
                 </div>
 
                 <Button 
