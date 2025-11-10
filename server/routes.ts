@@ -1916,6 +1916,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Complete current job and advance to next job in queue
+  app.post('/api/contractor/jobs/:jobId/complete-and-advance',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.jobId;
+        const contractorId = req.session.userId!;
+
+        // Verify this is the contractor's current job
+        const currentJobs = await storage.findJobs({
+          id: jobId,
+          contractorId,
+          status: ['assigned', 'en_route', 'on_site'],
+          limit: 1
+        });
+
+        if (currentJobs.length === 0) {
+          return res.status(403).json({ 
+            message: 'This is not your current active job' 
+          });
+        }
+
+        // Advance to the next job in queue
+        const result = await storage.advanceContractorQueue(contractorId);
+
+        if (!result.nextJob) {
+          return res.json({
+            message: 'Current job completed. No more jobs in queue.',
+            nextJob: null,
+            hasNextJob: false
+          });
+        }
+
+        // Get customer info for the next job
+        let customer = null;
+        if (result.nextJob.customerId) {
+          const customerUser = await storage.getUser(result.nextJob.customerId);
+          if (customerUser) {
+            customer = {
+              id: customerUser.id,
+              firstName: customerUser.firstName,
+              lastName: customerUser.lastName,
+              phone: customerUser.phone,
+              email: customerUser.email
+            };
+          }
+        }
+
+        res.json({
+          message: 'Advanced to next job successfully',
+          nextJob: result.nextJob,
+          customer,
+          queueEntry: result.queueEntry,
+          hasNextJob: true
+        });
+      } catch (error) {
+        console.error('Complete and advance job error:', error);
+        res.status(500).json({ 
+          message: 'Failed to complete and advance to next job' 
+        });
+      }
+    }
+  );
+
   // Get contractor jobs by status (available, active, scheduled, completed)
   app.get('/api/contractor/jobs/:status',
     requireAuth,
