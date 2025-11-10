@@ -524,6 +524,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Reset password - submit new password with token
+  app.post('/api/auth/reset-password/:token',
+    rateLimiter(5, 60000), // 5 requests per minute
+    validateRequest(z.object({
+      password: z.string().min(8, 'Password must be at least 8 characters')
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { token } = req.params;
+        const { password } = req.body;
+
+        // Hash the new password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Use the token to validate and update password
+        const success = await storage.usePasswordResetToken(token, hashedPassword);
+
+        if (success) {
+          res.json({ message: 'Password reset successful' });
+        } else {
+          res.status(400).json({ message: 'Invalid or expired reset token' });
+        }
+      } catch (error) {
+        console.error('Password reset error:', error);
+        res.status(500).json({ message: 'Failed to reset password' });
+      }
+    }
+  );
+
+  // Validate password reset token
+  app.get('/api/auth/reset-password/:token',
+    rateLimiter(10, 60000), // 10 requests per minute
+    async (req: Request, res: Response) => {
+      try {
+        const { token } = req.params;
+
+        // Validate the token
+        const result = await storage.validatePasswordResetToken(token);
+
+        if (result) {
+          res.json({ 
+            valid: true, 
+            email: result.email 
+          });
+        } else {
+          res.json({ 
+            valid: false 
+          });
+        }
+      } catch (error) {
+        console.error('Token validation error:', error);
+        res.status(500).json({ message: 'Failed to validate token' });
+      }
+    }
+  );
+
   // Guest booking
   app.post('/api/auth/guest-booking',
     rateLimiter(20, 60000), // Increased to 20 requests per minute for emergency situations
