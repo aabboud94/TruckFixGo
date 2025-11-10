@@ -181,6 +181,14 @@ export default function LocationInput({
   const handleGetGPSLocation = () => {
     if (!navigator.geolocation) {
       setLocationError("Geolocation is not supported by your browser");
+      // Fallback to US center when geolocation not supported
+      const usCenter = { lat: 39.8283, lng: -98.5795 };
+      onChange({
+        lat: usCenter.lat,
+        lng: usCenter.lng,
+        address: "United States (Center)",
+        formattedAddress: "United States (Center) - Please enter your specific location"
+      });
       return;
     }
 
@@ -191,15 +199,28 @@ export default function LocationInput({
       async (position) => {
         const { latitude, longitude } = position.coords;
         
-        // In production, would reverse geocode to get address
-        const address = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-        
-        onChange({
-          lat: latitude,
-          lng: longitude,
-          address: address,
-          formattedAddress: `GPS Location: ${address}`
-        });
+        // Check if coordinates are invalid (0,0 is in the Atlantic Ocean)
+        if (latitude === 0 && longitude === 0) {
+          // Use US center coordinates as fallback
+          const usCenter = { lat: 39.8283, lng: -98.5795 };
+          onChange({
+            lat: usCenter.lat,
+            lng: usCenter.lng,
+            address: "United States (Center)",
+            formattedAddress: "United States (Center) - GPS unavailable, please enter your specific location"
+          });
+          setLocationError("GPS returned invalid location. Defaulting to US center. Please enter your specific location.");
+        } else {
+          // Valid GPS coordinates
+          const address = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+          
+          onChange({
+            lat: latitude,
+            lng: longitude,
+            address: address,
+            formattedAddress: `GPS Location: ${address}`
+          });
+        }
         
         setIsGettingLocation(false);
       },
@@ -222,6 +243,16 @@ export default function LocationInput({
         }
         
         setLocationError(errorMessage);
+        
+        // Fallback to US center on error
+        const usCenter = { lat: 39.8283, lng: -98.5795 };
+        onChange({
+          lat: usCenter.lat,
+          lng: usCenter.lng,
+          address: "United States (Center)",
+          formattedAddress: "United States (Center) - Please enter your specific location"
+        });
+        
         setIsGettingLocation(false);
       },
       {

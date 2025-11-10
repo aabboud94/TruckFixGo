@@ -70,9 +70,14 @@ export default function ManageDrivers() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Fetch drivers managed by this contractor
-  const { data: drivers, isLoading } = useQuery<Driver[]>({
+  const { data: driversResponse, isLoading } = useQuery<{approved: Driver[], pending: Driver[]} | Driver[]>({
     queryKey: ["/api/contractor/drivers"],
   });
+  
+  // Handle both array and object response structures
+  const drivers = Array.isArray(driversResponse) 
+    ? driversResponse 
+    : [...(driversResponse?.approved || []), ...(driversResponse?.pending || [])];
 
   const form = useForm<AddDriverFormData>({
     resolver: zodResolver(addDriverSchema),
