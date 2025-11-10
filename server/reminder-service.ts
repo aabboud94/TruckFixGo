@@ -843,6 +843,174 @@ class ReminderService {
       return { success: false, error: (error as Error).message };
     }
   }
+
+  // Public method to send password reset email
+  public async sendPasswordResetEmail(
+    email: string,
+    resetToken: string,
+    userName?: string
+  ): Promise<boolean> {
+    try {
+      // Get the domain from environment variable or use fallback
+      const domain = process.env.REPLIT_DOMAINS ? 
+        `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : 
+        process.env.APP_URL || 'https://truckfixgo.com';
+      
+      // Generate the reset link URL
+      const resetLink = `${domain}/reset-password/${resetToken}`;
+      
+      // Prepare user greeting
+      const greeting = userName ? `Dear ${userName}` : 'Dear valued customer';
+      
+      // Create professional HTML email template
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Password Reset Request - TruckFixGo</title>
+        </head>
+        <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; background-color: #f5f5f5;">
+          <div style="max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <!-- Header with branding -->
+            <div style="background: linear-gradient(135deg, #ff6b35 0%, #e85320 100%); padding: 30px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 32px; font-weight: bold;">TruckFixGo</h1>
+              <p style="color: #ffffff; margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">Your Mobile Mechanics Solution</p>
+            </div>
+            
+            <!-- Main content -->
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e3a5f; font-size: 24px; margin-bottom: 20px; text-align: center;">Password Reset Request</h2>
+              
+              <p style="color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+                ${greeting},
+              </p>
+              
+              <p style="color: #555555; font-size: 15px; line-height: 1.6; margin-bottom: 30px;">
+                We received a request to reset your password for your TruckFixGo account. If you made this request, please click the button below to create a new password:
+              </p>
+              
+              <!-- Reset button -->
+              <div style="text-align: center; margin: 35px 0;">
+                <a href="${resetLink}" 
+                   style="display: inline-block; background: linear-gradient(135deg, #ff6b35 0%, #e85320 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 5px; font-size: 16px; font-weight: bold; box-shadow: 0 3px 6px rgba(255, 107, 53, 0.3); transition: all 0.3s;"
+                   onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 5px 12px rgba(255, 107, 53, 0.4)';"
+                   onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 3px 6px rgba(255, 107, 53, 0.3)';">
+                  Reset My Password
+                </a>
+              </div>
+              
+              <!-- Alternative link text -->
+              <div style="margin: 25px 0; padding: 20px; background-color: #f8f9fa; border-left: 4px solid #ff6b35; border-radius: 4px;">
+                <p style="color: #666666; font-size: 13px; line-height: 1.5; margin: 0 0 10px 0;">
+                  <strong>Having trouble with the button?</strong> Copy and paste this link into your browser:
+                </p>
+                <p style="color: #4a90e2; font-size: 12px; word-break: break-all; margin: 0;">
+                  ${resetLink}
+                </p>
+              </div>
+              
+              <!-- Important notices -->
+              <div style="margin-top: 30px; padding: 20px; background-color: #fff9e6; border: 1px solid #ffd666; border-radius: 6px;">
+                <p style="color: #d48806; font-size: 14px; margin: 0 0 10px 0; font-weight: bold;">
+                  ⏰ Important Information:
+                </p>
+                <ul style="color: #666666; font-size: 14px; line-height: 1.6; margin: 10px 0; padding-left: 20px;">
+                  <li>This password reset link will expire in <strong>24 hours</strong></li>
+                  <li>For security reasons, this link can only be used once</li>
+                  <li>Please do not share this link with anyone</li>
+                </ul>
+              </div>
+              
+              <!-- Security notice -->
+              <div style="margin-top: 30px; padding: 15px; background-color: #f0f8ff; border: 1px solid #b3d9ff; border-radius: 6px;">
+                <p style="color: #0066cc; font-size: 14px; line-height: 1.5; margin: 0;">
+                  <strong>🔒 Didn't request this?</strong><br>
+                  If you didn't request a password reset, please ignore this email. Your password will remain unchanged and your account is secure. No further action is needed.
+                </p>
+              </div>
+              
+              <!-- Support information -->
+              <div style="margin-top: 30px; text-align: center; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                <p style="color: #888888; font-size: 13px; margin-bottom: 10px;">
+                  Need help? Contact our support team:
+                </p>
+                <p style="color: #666666; font-size: 14px; margin: 5px 0;">
+                  📧 support@truckfixgo.com | 📞 1-800-TRUCK-FIX
+                </p>
+              </div>
+            </div>
+            
+            <!-- Footer -->
+            <div style="background-color: #1e3a5f; padding: 20px; text-align: center;">
+              <p style="color: #ffffff; font-size: 12px; margin: 0 0 5px 0;">
+                © 2024 TruckFixGo - Your Trusted Mobile Mechanics
+              </p>
+              <p style="color: #b0c4de; font-size: 11px; margin: 0;">
+                Available 24/7 Nationwide | Emergency Roadside Repair | Fleet Management
+              </p>
+            </div>
+          </div>
+          
+          <!-- Privacy footer -->
+          <div style="text-align: center; margin-top: 20px; padding: 0 20px;">
+            <p style="color: #999999; font-size: 11px; line-height: 1.4;">
+              This email was sent to ${email} because a password reset was requested for this account.<br>
+              This is an automated message. Please do not reply to this email.
+            </p>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      // Create plain text version
+      const textContent = `
+Password Reset Request - TruckFixGo
+
+${greeting},
+
+We received a request to reset your password for your TruckFixGo account.
+
+To reset your password, please visit the following link:
+${resetLink}
+
+This password reset link will expire in 24 hours and can only be used once.
+
+If you didn't request this password reset, please ignore this email. Your password will remain unchanged and your account is secure.
+
+Need help? Contact our support team:
+Email: support@truckfixgo.com
+Phone: 1-800-TRUCK-FIX
+
+Thank you,
+The TruckFixGo Team
+
+---
+This email was sent to ${email} because a password reset was requested for this account.
+      `.trim();
+      
+      // Send the email using the existing sendDirectEmail method
+      const result = await this.sendDirectEmail(
+        email,
+        'Password Reset Request - TruckFixGo',
+        htmlContent,
+        textContent
+      );
+      
+      // Log the attempt
+      if (result.success) {
+        console.log(`Password reset email sent successfully to ${email}`);
+      } else {
+        console.error(`Failed to send password reset email to ${email}: ${result.error}`);
+      }
+      
+      return result.success;
+    } catch (error) {
+      console.error('Error in sendPasswordResetEmail:', error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance
