@@ -43,7 +43,7 @@ export default function AdminUsers() {
 
   // Query for users
   const { data: users, isLoading, refetch } = useQuery({
-    queryKey: ['/api/admin/users', { role: roleFilter, status: statusFilter, search: searchQuery }],
+    queryKey: ['/api/admin/users', roleFilter, statusFilter, searchQuery],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (roleFilter !== 'all') params.append('role', roleFilter);
@@ -130,66 +130,9 @@ export default function AdminUsers() {
     },
   });
 
-  const usersData = users?.users || users?.data || [
-    {
-      id: "USR-001",
-      name: "John Smith",
-      email: "john@example.com",
-      phone: "(555) 123-4567",
-      role: "driver",
-      status: "active",
-      createdAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
-      lastLogin: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      totalJobs: 45,
-      emailVerified: true,
-      twoFactorEnabled: false,
-    },
-    {
-      id: "USR-002",
-      name: "Mike Johnson",
-      email: "mike@contractor.com",
-      phone: "(555) 987-6543",
-      role: "contractor",
-      status: "active",
-      createdAt: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
-      lastLogin: new Date(Date.now() - 24 * 60 * 60 * 1000),
-      totalJobs: 342,
-      emailVerified: true,
-      twoFactorEnabled: true,
-    },
-    {
-      id: "USR-003",
-      name: "Sarah Admin",
-      email: "sarah@admin.com",
-      phone: "(555) 555-5555",
-      role: "admin",
-      status: "active",
-      createdAt: new Date(Date.now() - 730 * 24 * 60 * 60 * 1000),
-      lastLogin: new Date(Date.now() - 5 * 60 * 1000),
-      totalJobs: 0,
-      emailVerified: true,
-      twoFactorEnabled: true,
-    },
-  ];
+  const usersData = users || [];
 
-  const activityData = activityLogs?.data || [
-    {
-      id: "LOG-001",
-      action: "login",
-      details: "Successful login from IP 192.168.1.1",
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      ipAddress: "192.168.1.1",
-      userAgent: "Chrome 120.0.0",
-    },
-    {
-      id: "LOG-002",
-      action: "job_create",
-      details: "Created emergency repair job #JOB-12345",
-      timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000),
-      ipAddress: "192.168.1.1",
-      userAgent: "Chrome 120.0.0",
-    },
-  ];
+  const activityData = activityLogs?.data || [];
 
   const getRoleBadge = (role: string) => {
     const colors: any = {
