@@ -8058,6 +8058,223 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== USER MANAGEMENT ENDPOINTS ====================
+
+  // Get all users with filters
+  app.get('/api/admin/users',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const filters = {
+          role: req.query.role as string,
+          status: req.query.status as string,
+          search: req.query.search as string,
+          limit: parseInt(req.query.limit as string) || 100,
+          offset: parseInt(req.query.offset as string) || 0
+        };
+
+        const users = await storage.getAllUsers(filters);
+        
+        // Return users array directly for compatibility with UI
+        res.json(users);
+      } catch (error) {
+        console.error('Get all users error:', error);
+        res.status(500).json({ message: 'Failed to get users' });
+      }
+    }
+  );
+
+  // Get single user details
+  app.get('/api/admin/users/:id',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const user = await storage.getUserById(req.params.id);
+        
+        if (!user) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+        
+        res.json(user);
+      } catch (error) {
+        console.error('Get user by ID error:', error);
+        res.status(500).json({ message: 'Failed to get user details' });
+      }
+    }
+  );
+
+  // Update user status (active/suspended)
+  app.put('/api/admin/users/:id/status',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      status: z.enum(['active', 'suspended'])
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { status } = req.body;
+        const isActive = status === 'active';
+        
+        const user = await storage.updateUserStatus(req.params.id, isActive);
+        
+        if (!user) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+        
+        res.json({ 
+          message: `User ${status === 'active' ? 'activated' : 'suspended'} successfully`,
+          user 
+        });
+      } catch (error) {
+        console.error('Update user status error:', error);
+        res.status(500).json({ message: 'Failed to update user status' });
+      }
+    }
+  );
+
+  // Change user role
+  app.put('/api/admin/users/:id/role',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      role: z.enum(['driver', 'contractor', 'admin', 'dispatcher', 'fleet_manager'])
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { role } = req.body;
+        
+        const user = await storage.updateUserRole(req.params.id, role);
+        
+        if (!user) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+        
+        res.json({ 
+          message: 'User role updated successfully',
+          user 
+        });
+      } catch (error) {
+        console.error('Update user role error:', error);
+        res.status(500).json({ message: 'Failed to update user role' });
+      }
+    }
+  );
+
+  // Reset user password
+  app.post('/api/admin/users/:id/reset-password',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      newPassword: z.string().min(6).optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        // Generate a random password if not provided
+        const newPassword = req.body.newPassword || Math.random().toString(36).slice(2, 12);
+        
+        const success = await storage.resetUserPassword(req.params.id, newPassword);
+        
+        if (!success) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+        
+        // In production, you would send this via email
+        res.json({ 
+          message: 'Password reset successfully',
+          temporaryPassword: newPassword // Only for testing; remove in production
+        });
+      } catch (error) {
+        console.error('Reset user password error:', error);
+        res.status(500).json({ message: 'Failed to reset password' });
+      }
+    }
+  );
+
+  // Get user activity log
+  app.get('/api/admin/users/activity/:userId',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+        const activities = await storage.getUserActivityLog(req.params.userId, limit);
+        
+        // Return activities array directly for compatibility with UI
+        res.json(activities);
+      } catch (error) {
+        console.error('Get user activity log error:', error);
+        res.status(500).json({ message: 'Failed to get activity log' });
+      }
+    }
+  );
+
+  // Bulk operations (e.g., suspend multiple users)
+  app.post('/api/admin/users/bulk',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      userIds: z.array(z.string()),
+      operation: z.enum(['suspend', 'activate', 'delete'])
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { userIds, operation } = req.body;
+        const results = [];
+        
+        for (const userId of userIds) {
+          try {
+            if (operation === 'suspend') {
+              await storage.updateUserStatus(userId, false);
+              results.push({ userId, success: true });
+            } else if (operation === 'activate') {
+              await storage.updateUserStatus(userId, true);
+              results.push({ userId, success: true });
+            } else if (operation === 'delete') {
+              await storage.updateUserStatus(userId, false); // Soft delete
+              results.push({ userId, success: true });
+            }
+          } catch (error) {
+            results.push({ userId, success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+          }
+        }
+        
+        const successCount = results.filter(r => r.success).length;
+        const failureCount = results.filter(r => !r.success).length;
+        
+        res.json({ 
+          message: `Bulk operation completed: ${successCount} succeeded, ${failureCount} failed`,
+          results 
+        });
+      } catch (error) {
+        console.error('Bulk user operation error:', error);
+        res.status(500).json({ message: 'Failed to perform bulk operation' });
+      }
+    }
+  );
+
+  // Delete user (soft delete)
+  app.delete('/api/admin/users/:id',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        // Soft delete by setting isActive to false
+        const user = await storage.updateUserStatus(req.params.id, false);
+        
+        if (!user) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+        
+        res.json({ message: 'User deleted successfully' });
+      } catch (error) {
+        console.error('Delete user error:', error);
+        res.status(500).json({ message: 'Failed to delete user' });
+      }
+    }
+  );
+
   // View all jobs with admin filters
   app.get('/api/admin/jobs',
     requireAuth,
