@@ -208,6 +208,7 @@ import {
 import { db } from "./db";
 import { eq, and, or, gte, lte, isNull, isNotNull, desc, asc, sql, inArray, ne, gt, lt, ilike } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import bcrypt from "bcrypt";
 import memoize from "memoizee";
 
 // Pagination options
@@ -451,6 +452,13 @@ export interface IStorage {
   getDriverProfile(userId: string): Promise<DriverProfile | undefined>;
   createDriverProfile(profile: InsertDriverProfile): Promise<DriverProfile>;
   updateDriverProfile(userId: string, updates: Partial<InsertDriverProfile>): Promise<DriverProfile | undefined>;
+  
+  // Driver approval methods
+  addDriver(contractorId: string, driverData: any): Promise<DriverProfile>;
+  getContractorDrivers(contractorId: string): Promise<any[]>;
+  getPendingDriverApplications(): Promise<any[]>;
+  approveDriver(driverId: string, approvedBy: string): Promise<boolean>;
+  rejectDriver(driverId: string, rejectedBy: string): Promise<boolean>;
   
   getContractorProfile(userId: string): Promise<ContractorProfile | undefined>;
   createContractorProfile(profile: InsertContractorProfile): Promise<ContractorProfile>;
@@ -1218,30 +1226,143 @@ export class PostgreSQLStorage implements IStorage {
 
   async getContractorDrivers(contractorId: string): Promise<any[]> {
     try {
-      // Get all drivers managed by this contractor
+      // Get only approved drivers managed by this contractor
       const drivers = await db
         .select({
           id: users.id,
           firstName: users.firstName,
           lastName: users.lastName,
           email: users.email,
-          phoneNumber: driverProfiles.phoneNumber,
+          phone: users.phone,
           cdlNumber: driverProfiles.cdlNumber,
-          isAvailable: driverProfiles.isAvailable
+          cdlState: driverProfiles.cdlState,
+          carrierName: driverProfiles.carrierName,
+          approvalStatus: driverProfiles.approvalStatus,
+          isActive: users.isActive,
+          createdAt: driverProfiles.createdAt
         })
         .from(users)
         .leftJoin(driverProfiles, eq(users.id, driverProfiles.userId))
         .where(
           and(
             eq(users.role, 'driver'),
-            eq(driverProfiles.managedByContractorId, contractorId)
+            eq(driverProfiles.managedByContractorId, contractorId),
+            eq(driverProfiles.approvalStatus, 'approved') // Only return approved drivers
           )
         );
       
-      return drivers;
+      // Return formatted driver data
+      return drivers.map(driver => ({
+        ...driver,
+        activeJobs: 0, // TODO: Calculate from jobs table
+        completedJobs: 0 // TODO: Calculate from jobs table
+      }));
     } catch (error) {
       console.error('Error fetching contractor drivers:', error);
       return [];
+    }
+  }
+
+  async addDriver(contractorId: string, driverData: any): Promise<DriverProfile> {
+    try {
+      // First create the user account for the driver
+      const user = await db.insert(users).values({
+        email: driverData.email,
+        phone: driverData.phone,
+        firstName: driverData.firstName,
+        lastName: driverData.lastName,
+        role: 'driver',
+        password: await bcrypt.hash(driverData.phone, 10), // Temporary password using phone
+        isActive: true
+      }).returning();
+
+      // Then create the driver profile with pending approval status
+      const driverProfile = await db.insert(driverProfiles).values({
+        userId: user[0].id,
+        cdlNumber: driverData.cdlNumber,
+        cdlState: driverData.cdlState,
+        carrierName: driverData.carrierName,
+        dotNumber: driverData.dotNumber,
+        managedByContractorId: contractorId,
+        approvalStatus: 'pending' // Always set to pending for admin approval
+      }).returning();
+
+      return driverProfile[0];
+    } catch (error) {
+      console.error('Error adding driver:', error);
+      throw error;
+    }
+  }
+
+  async getPendingDriverApplications(): Promise<any[]> {
+    try {
+      const pendingDrivers = await db
+        .select({
+          id: driverProfiles.id,
+          userId: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          email: users.email,
+          phone: users.phone,
+          cdlNumber: driverProfiles.cdlNumber,
+          cdlState: driverProfiles.cdlState,
+          carrierName: driverProfiles.carrierName,
+          dotNumber: driverProfiles.dotNumber,
+          managedByContractorId: driverProfiles.managedByContractorId,
+          contractorName: contractorProfiles.companyName,
+          approvalStatus: driverProfiles.approvalStatus,
+          createdAt: driverProfiles.createdAt
+        })
+        .from(driverProfiles)
+        .innerJoin(users, eq(users.id, driverProfiles.userId))
+        .leftJoin(contractorProfiles, eq(contractorProfiles.userId, driverProfiles.managedByContractorId))
+        .where(eq(driverProfiles.approvalStatus, 'pending'))
+        .orderBy(desc(driverProfiles.createdAt));
+
+      return pendingDrivers;
+    } catch (error) {
+      console.error('Error fetching pending driver applications:', error);
+      return [];
+    }
+  }
+
+  async approveDriver(driverId: string, approvedBy: string): Promise<boolean> {
+    try {
+      const result = await db
+        .update(driverProfiles)
+        .set({
+          approvalStatus: 'approved',
+          approvedAt: new Date(),
+          approvedBy: approvedBy,
+          updatedAt: new Date()
+        })
+        .where(eq(driverProfiles.id, driverId))
+        .returning();
+
+      return result.length > 0;
+    } catch (error) {
+      console.error('Error approving driver:', error);
+      return false;
+    }
+  }
+
+  async rejectDriver(driverId: string, rejectedBy: string): Promise<boolean> {
+    try {
+      const result = await db
+        .update(driverProfiles)
+        .set({
+          approvalStatus: 'rejected',
+          rejectedAt: new Date(),
+          approvedBy: rejectedBy, // Store who rejected it in approvedBy field
+          updatedAt: new Date()
+        })
+        .where(eq(driverProfiles.id, driverId))
+        .returning();
+
+      return result.length > 0;
+    } catch (error) {
+      console.error('Error rejecting driver:', error);
+      return false;
     }
   }
 

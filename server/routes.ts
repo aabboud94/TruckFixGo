@@ -10336,6 +10336,162 @@ The TruckFixGo Team
     }
   );
 
+  // ==================== DRIVER APPROVAL ROUTES ====================
+
+  // Contractor: Get their drivers (approved and pending)
+  app.get('/api/contractor/drivers',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId;
+        
+        // Get both approved and pending drivers
+        const approvedDrivers = await storage.getContractorDrivers(contractorId!);
+        
+        // Also get pending drivers for this contractor
+        const allPendingDrivers = await storage.getPendingDriverApplications();
+        const pendingDrivers = allPendingDrivers.filter(
+          (driver: any) => driver.managedByContractorId === contractorId
+        );
+        
+        res.json({
+          approved: approvedDrivers,
+          pending: pendingDrivers
+        });
+      } catch (error) {
+        console.error('Error fetching contractor drivers:', error);
+        res.status(500).json({ message: 'Failed to fetch drivers' });
+      }
+    }
+  );
+
+  // Contractor: Add a new driver
+  app.post('/api/contractor/drivers',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId;
+        const driverData = req.body;
+        
+        // Validate required fields
+        if (!driverData.firstName || !driverData.lastName || !driverData.email || !driverData.phone) {
+          return res.status(400).json({ message: 'Required fields: firstName, lastName, email, phone' });
+        }
+        
+        // Add the driver with pending approval status
+        const newDriver = await storage.addDriver(contractorId!, driverData);
+        
+        res.json({
+          message: 'Driver added successfully and pending admin approval',
+          driver: newDriver
+        });
+      } catch (error: any) {
+        console.error('Error adding driver:', error);
+        
+        if (error.message?.includes('unique') || error.code === '23505') {
+          return res.status(400).json({ message: 'Email or phone number already exists' });
+        }
+        
+        res.status(500).json({ message: 'Failed to add driver' });
+      }
+    }
+  );
+
+  // Contractor: Remove a driver
+  app.delete('/api/contractor/drivers/:driverId',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId;
+        const { driverId } = req.params;
+        
+        // Verify the driver belongs to this contractor
+        const drivers = await storage.getContractorDrivers(contractorId!);
+        const driver = drivers.find((d: any) => d.id === driverId);
+        
+        if (!driver) {
+          return res.status(404).json({ message: 'Driver not found or not managed by you' });
+        }
+        
+        // Delete the driver user account
+        const deleted = await storage.deleteUser(driverId);
+        
+        if (deleted) {
+          res.json({ message: 'Driver removed successfully' });
+        } else {
+          res.status(500).json({ message: 'Failed to remove driver' });
+        }
+      } catch (error) {
+        console.error('Error removing driver:', error);
+        res.status(500).json({ message: 'Failed to remove driver' });
+      }
+    }
+  );
+
+  // Admin: Get pending driver applications
+  app.get('/api/admin/driver-applications',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const pendingDrivers = await storage.getPendingDriverApplications();
+        res.json(pendingDrivers);
+      } catch (error) {
+        console.error('Error fetching pending driver applications:', error);
+        res.status(500).json({ message: 'Failed to fetch driver applications' });
+      }
+    }
+  );
+
+  // Admin: Approve driver
+  app.post('/api/admin/driver-applications/:driverId/approve',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { driverId } = req.params;
+        const adminId = req.session.userId;
+        
+        const approved = await storage.approveDriver(driverId, adminId!);
+        
+        if (approved) {
+          res.json({ message: 'Driver approved successfully' });
+        } else {
+          res.status(404).json({ message: 'Driver application not found' });
+        }
+      } catch (error) {
+        console.error('Error approving driver:', error);
+        res.status(500).json({ message: 'Failed to approve driver' });
+      }
+    }
+  );
+
+  // Admin: Reject driver
+  app.post('/api/admin/driver-applications/:driverId/reject',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { driverId } = req.params;
+        const adminId = req.session.userId;
+        
+        const rejected = await storage.rejectDriver(driverId, adminId!);
+        
+        if (rejected) {
+          res.json({ message: 'Driver rejected successfully' });
+        } else {
+          res.status(404).json({ message: 'Driver application not found' });
+        }
+      } catch (error) {
+        console.error('Error rejecting driver:', error);
+        res.status(500).json({ message: 'Failed to reject driver' });
+      }
+    }
+  );
+
   // ==================== BILLING SUBSCRIPTION ROUTES ====================
 
   // Create new subscription for fleet

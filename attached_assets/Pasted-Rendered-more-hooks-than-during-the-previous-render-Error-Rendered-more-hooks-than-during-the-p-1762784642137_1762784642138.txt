@@ -1,0 +1,15 @@
+Rendered more hooks than during the previous render.
+
+Error: Rendered more hooks than during the previous render.
+    at updateWorkInProgressHook (https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-RPCDYKBN.js?v=83822d2b:11678:21)
+    at updateEffectImpl (https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-RPCDYKBN.js?v=83822d2b:12074:22)
+    at updateEffect (https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-RPCDYKBN.js?v=83822d2b:12099:18)
+    at Object.useEffect (https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-RPCDYKBN.js?v=83822d2b:12703:22)
+    at useEffect (https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-QCHXOAYK.js?v=83822d2b:1078:29)
+    at AIChatbot (https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/src/components/ai-chatbot.tsx:55:3)
+    at renderWithHooks (https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-RPCDYKBN.js?v=83822d2b:11548:26)
+    at updateFunctionComponent (https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-RPCDYKBN.js?v=83822d2b:14582:28)
+    at beginWork (https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-RPCDYKBN.js?v=83822d2b:15924:22)
+    at beginWork$1 (https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-RPCDYKBN.js?v=83822d2b:19753:22)
+Try Again
+Reload Page

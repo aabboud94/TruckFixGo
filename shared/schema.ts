@@ -23,6 +23,7 @@ import { z } from "zod";
 export const userRoleEnum = pgEnum('user_role', ['driver', 'contractor', 'admin', 'dispatcher', 'fleet_manager']);
 export const performanceTierEnum = pgEnum('performance_tier', ['bronze', 'silver', 'gold']);
 export const fleetPricingTierEnum = pgEnum('fleet_pricing_tier', ['standard', 'silver', 'gold', 'platinum']);
+export const driverApprovalStatusEnum = pgEnum('driver_approval_status', ['pending', 'approved', 'rejected']);
 export const jobTypeEnum = pgEnum('job_type', ['emergency', 'scheduled']);
 export const jobStatusEnum = pgEnum('job_status', ['new', 'assigned', 'en_route', 'on_site', 'completed', 'cancelled']);
 export const paymentMethodTypeEnum = pgEnum('payment_method_type', ['credit_card', 'efs_check', 'comdata_check', 'fleet_account', 'cash']);
@@ -96,12 +97,20 @@ export const driverProfiles = pgTable("driver_profiles", {
   fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id),
   managedByContractorId: varchar("managed_by_contractor_id").references(() => users.id), // Contractor who manages this driver
   preferredContactMethod: varchar("preferred_contact_method", { length: 20 }),
+  
+  // Driver approval fields
+  approvalStatus: driverApprovalStatusEnum("approval_status").notNull().default('pending'),
+  approvedAt: timestamp("approved_at"),
+  rejectedAt: timestamp("rejected_at"),
+  approvedBy: varchar("approved_by", { length: 255 }),
+  
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow()
 }, (table) => ({
   userIdx: uniqueIndex("idx_driver_profiles_user").on(table.userId),
   fleetIdx: index("idx_driver_profiles_fleet").on(table.fleetAccountId),
-  contractorIdx: index("idx_driver_profiles_contractor").on(table.managedByContractorId)
+  contractorIdx: index("idx_driver_profiles_contractor").on(table.managedByContractorId),
+  approvalStatusIdx: index("idx_driver_profiles_approval_status").on(table.approvalStatus)
 }));
 
 export const contractorProfiles = pgTable("contractor_profiles", {

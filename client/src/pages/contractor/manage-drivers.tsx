@@ -57,6 +57,7 @@ interface Driver {
   cdlState?: string;
   carrierName?: string;
   isActive: boolean;
+  approvalStatus?: 'pending' | 'approved' | 'rejected';
   createdAt: string;
   activeJobs: number;
   completedJobs: number;
@@ -142,6 +143,10 @@ export default function ManageDrivers() {
       removeDriverMutation.mutate(selectedDriver.id);
     }
   };
+  
+  // Separate drivers by approval status
+  const approvedDrivers = drivers?.filter(d => d.approvalStatus === 'approved') || [];
+  const pendingDrivers = drivers?.filter(d => d.approvalStatus === 'pending') || [];
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -152,6 +157,91 @@ export default function ManageDrivers() {
         </p>
       </div>
 
+      {/* Pending Drivers Card - Only show if there are pending drivers */}
+      {pendingDrivers.length > 0 && (
+        <Card className="mb-6 border-amber-200 bg-amber-50 dark:bg-amber-950/10 dark:border-amber-900">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+              <CardTitle>Pending Admin Approval</CardTitle>
+            </div>
+            <CardDescription>
+              These drivers are awaiting admin approval before they can be assigned to jobs
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>CDL Info</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingDrivers.map((driver) => (
+                  <TableRow key={driver.id} data-testid={`row-pending-driver-${driver.id}`}>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">
+                          {driver.firstName} {driver.lastName}
+                        </div>
+                        {driver.carrierName && (
+                          <div className="text-sm text-muted-foreground">
+                            {driver.carrierName}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <div className="flex items-center text-sm">
+                          <Mail className="mr-2 h-3 w-3 text-muted-foreground" />
+                          {driver.email}
+                        </div>
+                        <div className="flex items-center text-sm">
+                          <Phone className="mr-2 h-3 w-3 text-muted-foreground" />
+                          {driver.phone}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {driver.cdlNumber ? (
+                        <div className="text-sm">
+                          <div>CDL: {driver.cdlNumber}</div>
+                          {driver.cdlState && <div>State: {driver.cdlState}</div>}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">Not provided</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800">Pending Admin Approval</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedDriver(driver);
+                          setShowDeleteDialog(true);
+                        }}
+                        data-testid={`button-remove-pending-driver-${driver.id}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Approved Drivers Card */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
@@ -171,7 +261,7 @@ export default function ManageDrivers() {
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
               <p className="mt-4 text-muted-foreground">Loading drivers...</p>
             </div>
-          ) : drivers && drivers.length > 0 ? (
+          ) : approvedDrivers.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -185,7 +275,7 @@ export default function ManageDrivers() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {drivers.map((driver) => (
+                {approvedDrivers.map((driver) => (
                   <TableRow key={driver.id} data-testid={`row-driver-${driver.id}`}>
                     <TableCell>
                       <div>
@@ -222,7 +312,10 @@ export default function ManageDrivers() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={driver.isActive ? "success" : "secondary"}>
+                      <Badge 
+                        variant={driver.isActive ? "default" : "secondary"}
+                        className={driver.isActive ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800" : ""}
+                      >
                         {driver.isActive ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>

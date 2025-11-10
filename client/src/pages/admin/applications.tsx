@@ -78,6 +78,7 @@ const REVIEW_CHECKLIST = [
 
 export default function AdminApplications() {
   const [selectedApplication, setSelectedApplication] = useState<ContractorApplication | null>(null);
+  const [selectedDriverApplication, setSelectedDriverApplication] = useState<any>(null);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
@@ -85,12 +86,14 @@ export default function AdminApplications() {
   const [checkedItems, setCheckedItems] = useState<string[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
   const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false);
+  const [isDriverReviewDialogOpen, setIsDriverReviewDialogOpen] = useState(false);
   const [isDocumentViewerOpen, setIsDocumentViewerOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<ApplicationDocument | null>(null);
   const [bulkAction, setBulkAction] = useState<"approve" | "reject" | null>(null);
+  const [activeTab, setActiveTab] = useState<"contractors" | "drivers">("contractors");
   const { toast } = useToast();
 
-  // Query for applications
+  // Query for contractor applications
   const { data: applications = [], isLoading, refetch } = useQuery<ContractorApplication[]>({
     queryKey: ['/api/admin/applications', filterStatus, searchQuery],
     queryFn: async () => {
@@ -98,7 +101,14 @@ export default function AdminApplications() {
       if (filterStatus !== 'all') params.append('status', filterStatus);
       if (searchQuery) params.append('search', searchQuery);
       return apiRequest('GET', `/api/admin/applications?${params}`);
-    }
+    },
+    enabled: activeTab === 'contractors'
+  });
+  
+  // Query for driver applications
+  const { data: driverApplications = [], isLoading: isLoadingDrivers, refetch: refetchDrivers } = useQuery({
+    queryKey: ['/api/admin/driver-applications'],
+    enabled: activeTab === 'drivers'
   });
 
   // Query for selected application details
@@ -191,6 +201,37 @@ export default function AdminApplications() {
         title: "Communication sent",
         description: "The message has been sent to the applicant."
       });
+    }
+  });
+  
+  // Mutations for driver approvals
+  const approveDriverMutation = useMutation({
+    mutationFn: async (driverId: string) => {
+      return apiRequest('POST', `/api/admin/driver-applications/${driverId}/approve`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/driver-applications'] });
+      toast({
+        title: "Driver approved",
+        description: "The driver has been approved successfully."
+      });
+      setSelectedDriverApplication(null);
+      setIsDriverReviewDialogOpen(false);
+    }
+  });
+  
+  const rejectDriverMutation = useMutation({
+    mutationFn: async (driverId: string) => {
+      return apiRequest('POST', `/api/admin/driver-applications/${driverId}/reject`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/driver-applications'] });
+      toast({
+        title: "Driver rejected",
+        description: "The driver application has been rejected."
+      });
+      setSelectedDriverApplication(null);
+      setIsDriverReviewDialogOpen(false);
     }
   });
 
@@ -330,17 +371,30 @@ export default function AdminApplications() {
         </Button>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid gap-4 md:grid-cols-4 mb-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Applications</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{applications.length}</div>
-            <p className="text-xs text-muted-foreground">All time</p>
-          </CardContent>
+      {/* Tabs for Contractor and Driver Applications */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "contractors" | "drivers")}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="contractors" data-testid="tab-contractors">
+            Contractor Applications
+          </TabsTrigger>
+          <TabsTrigger value="drivers" data-testid="tab-drivers">
+            Driver Applications
+          </TabsTrigger>
+        </TabsList>
+        
+        {/* Contractor Applications Tab */}
+        <TabsContent value="contractors">
+          {/* Statistics Cards */}
+          <div className="grid gap-4 md:grid-cols-4 mb-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Applications</CardTitle>
+                <FileText className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{applications.length}</div>
+                <p className="text-xs text-muted-foreground">All time</p>
+              </CardContent>
         </Card>
 
         <Card>
@@ -1055,6 +1109,207 @@ export default function AdminApplications() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Driver Review Dialog */}
+      <Dialog open={isDriverReviewDialogOpen} onOpenChange={setIsDriverReviewDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Review Driver Application</DialogTitle>
+            <DialogDescription>
+              Review and approve or reject this driver application.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedDriverApplication && (
+            <div className="space-y-4 my-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Driver Name</p>
+                  <p className="font-medium">
+                    {selectedDriverApplication.firstName} {selectedDriverApplication.lastName}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">CDL Number</p>
+                  <p className="font-medium">{selectedDriverApplication.cdlNumber || 'Not provided'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">CDL State</p>
+                  <p className="font-medium">{selectedDriverApplication.cdlState || 'Not provided'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Managing Contractor</p>
+                  <p className="font-medium">{selectedDriverApplication.contractorName || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Phone</p>
+                  <p className="font-medium">{selectedDriverApplication.phone}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Email</p>
+                  <p className="font-medium">{selectedDriverApplication.email}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="driver-review-notes">Review Notes</Label>
+                <Textarea
+                  id="driver-review-notes"
+                  placeholder="Add any notes about this driver application..."
+                  value={reviewNotes}
+                  onChange={(e) => setReviewNotes(e.target.value)}
+                  className="mt-2"
+                  data-testid="textarea-driver-review-notes"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDriverReviewDialogOpen(false)}
+              data-testid="button-cancel-driver-review"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => selectedDriverApplication && rejectDriverMutation.mutate(selectedDriverApplication.id)}
+              disabled={rejectDriverMutation.isPending}
+              data-testid="button-reject-driver"
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              Reject Driver
+            </Button>
+            <Button
+              onClick={() => selectedDriverApplication && approveDriverMutation.mutate(selectedDriverApplication.id)}
+              disabled={approveDriverMutation.isPending}
+              data-testid="button-approve-driver"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Approve Driver
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+        </TabsContent>
+        
+        {/* Driver Applications Tab */}
+        <TabsContent value="drivers">
+          <div className="grid gap-4 md:grid-cols-4 mb-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Pending Drivers</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{driverApplications.length}</div>
+                <p className="text-xs text-muted-foreground">Awaiting approval</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Driver Applications Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Driver Applications</CardTitle>
+              <CardDescription>
+                Review and approve drivers added by contractors
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Driver Name</TableHead>
+                    <TableHead>CDL Number</TableHead>
+                    <TableHead>Managing Contractor</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Date Applied</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoadingDrivers ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        Loading driver applications...
+                      </TableCell>
+                    </TableRow>
+                  ) : driverApplications.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        No pending driver applications
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    driverApplications.map((driver: any) => (
+                      <TableRow key={driver.id} data-testid={`row-driver-${driver.id}`}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarFallback>
+                                {driver.firstName?.[0]}{driver.lastName?.[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium">{driver.firstName} {driver.lastName}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>{driver.cdlNumber || 'Not provided'}</TableCell>
+                        <TableCell>{driver.contractorName || 'N/A'}</TableCell>
+                        <TableCell>{driver.phone}</TableCell>
+                        <TableCell>{driver.email}</TableCell>
+                        <TableCell>{format(new Date(driver.createdAt), 'MMM d, yyyy')}</TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSelectedDriverApplication(driver);
+                                  setIsDriverReviewDialogOpen(true);
+                                }}
+                                data-testid={`menu-review-driver-${driver.id}`}
+                              >
+                                <Eye className="mr-2 h-4 w-4" />
+                                Review
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => approveDriverMutation.mutate(driver.id)}
+                                data-testid={`menu-approve-driver-${driver.id}`}
+                              >
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                Quick Approve
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => rejectDriverMutation.mutate(driver.id)}
+                                className="text-red-600"
+                                data-testid={`menu-reject-driver-${driver.id}`}
+                              >
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Quick Reject
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </AdminLayout>
   );
 }

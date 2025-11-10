@@ -57,6 +57,7 @@ const QUICK_ACTIONS = [
 ];
 
 export default function AIChatbot() {
+  // All hooks must be declared before any conditional returns
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [message, setMessage] = useState("");
@@ -68,12 +69,6 @@ export default function AIChatbot() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
-  
-  // Only show AI assistant for contractors
-  const isContractorPage = location.startsWith("/contractor");
-  if (!isContractorPage) {
-    return null;
-  }
 
   // Load session from localStorage on mount
   useEffect(() => {
@@ -137,7 +132,13 @@ export default function AIChatbot() {
         setIsListening(false);
       };
     }
-  }, []);
+  }, [toast]);
+  
+  // Only show AI assistant for contractors
+  const isContractorPage = location.startsWith("/contractor");
+  if (!isContractorPage) {
+    return null;
+  }
 
   const startNewSession = () => {
     setSession({
