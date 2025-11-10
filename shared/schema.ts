@@ -417,6 +417,28 @@ export const jobs = pgTable("jobs", {
   createdIdx: index("idx_jobs_created").on(table.createdAt)
 }));
 
+// Job Queue Management
+export const queueStatusEnum = pgEnum('queue_status', ['current', 'queued', 'completed', 'cancelled']);
+
+export const contractorJobQueue = pgTable("contractor_job_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  position: integer("position").notNull(), // Queue position (1 = current/next, 2+ = queued)
+  status: queueStatusEnum("status").notNull().default('queued'),
+  queuedAt: timestamp("queued_at").notNull().defaultNow(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  jobIdx: uniqueIndex("idx_queue_job").on(table.jobId), // Each job can only be in queue once
+  contractorPositionIdx: index("idx_queue_contractor_position").on(table.contractorId, table.position),
+  contractorStatusIdx: index("idx_queue_contractor_status").on(table.contractorId, table.status),
+  statusIdx: index("idx_queue_status").on(table.status)
+}));
+
 export const jobPhotos = pgTable("job_photos", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").notNull().references(() => jobs.id),
@@ -1663,6 +1685,15 @@ export const insertJobSchema = createInsertSchema(jobs).omit({
 });
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type Job = typeof jobs.$inferSelect;
+
+// Job Queue schemas
+export const insertContractorJobQueueSchema = createInsertSchema(contractorJobQueue).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+export type InsertContractorJobQueue = z.infer<typeof insertContractorJobQueueSchema>;
+export type ContractorJobQueue = typeof contractorJobQueue.$inferSelect;
 
 export const insertJobPhotoSchema = createInsertSchema(jobPhotos).omit({ 
   id: true, 
