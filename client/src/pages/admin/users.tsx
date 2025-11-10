@@ -383,12 +383,14 @@ export default function AdminUsers() {
                         )}
                       </TableCell>
                       <TableCell>{user.totalJobs}</TableCell>
-                      <TableCell>{format(user.createdAt, 'MMM d, yyyy')}</TableCell>
+                      <TableCell>
+                        {user.createdAt ? format(new Date(user.createdAt), 'MMM d, yyyy') : 'Never'}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Clock className="h-3 w-3 text-muted-foreground" />
                           <span className="text-sm">
-                            {format(user.lastLogin, 'h:mm a')}
+                            {user.lastLogin ? format(new Date(user.lastLogin), 'h:mm a') : 'Never'}
                           </span>
                         </div>
                       </TableCell>
@@ -505,7 +507,7 @@ export default function AdminUsers() {
                   </div>
                   <div className="space-y-2">
                     <Label>Member Since</Label>
-                    <Input value={format(selectedUser.createdAt, 'PPP')} readOnly />
+                    <Input value={selectedUser.createdAt ? format(new Date(selectedUser.createdAt), 'PPP') : 'Never'} readOnly />
                   </div>
                 </div>
               </TabsContent>
@@ -565,7 +567,7 @@ export default function AdminUsers() {
                     <div>
                       <p className="font-medium">Last Login</p>
                       <p className="text-sm text-muted-foreground">
-                        {format(selectedUser.lastLogin, 'PPpp')}
+                        {selectedUser.lastLogin ? format(new Date(selectedUser.lastLogin), 'PPpp') : 'Never logged in'}
                       </p>
                     </div>
                     <Clock className="h-5 w-5 text-muted-foreground" />
@@ -586,7 +588,7 @@ export default function AdminUsers() {
                           <div className="flex-1">
                             <p className="font-medium">{log.details}</p>
                             <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                              <span>{format(log.timestamp, 'PPp')}</span>
+                              <span>{log.timestamp ? format(new Date(log.timestamp), 'PPp') : 'Unknown time'}</span>
                               <span>IP: {log.ipAddress}</span>
                               <span>{log.userAgent}</span>
                             </div>
@@ -693,7 +695,7 @@ export default function AdminUsers() {
                     <div className="flex-1">
                       <p className="font-medium">{log.details}</p>
                       <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                        <span>{format(log.timestamp, 'PPp')}</span>
+                        <span>{log.timestamp ? format(new Date(log.timestamp), 'PPp') : 'Unknown time'}</span>
                         <span>IP: {log.ipAddress}</span>
                         <span>{log.userAgent}</span>
                       </div>
