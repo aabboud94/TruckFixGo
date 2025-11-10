@@ -480,7 +480,7 @@ export interface IStorage {
   hasAdminUsers(): Promise<boolean>;
   
   // Password Reset Operations
-  createPasswordResetToken(userId: string, email: string): Promise<string>;
+  createPasswordResetToken(userId: string, email: string): Promise<string | null>;
   validatePasswordResetToken(token: string): Promise<{ userId: string; email: string } | null>;
   usePasswordResetToken(token: string, newPassword: string): Promise<boolean>;
   revokePasswordResetToken(token: string): Promise<boolean>;
@@ -1943,6 +1943,45 @@ export class PostgreSQLStorage implements IStorage {
     } catch (error) {
       console.error('Error in resetUserPassword:', error);
       return false;
+    }
+  }
+
+  async createPasswordResetToken(userId: string, email: string): Promise<string | null> {
+    try {
+      // Generate a secure random token
+      const token = randomBytes(32).toString('hex');
+      
+      // Mark any existing tokens for this user as used
+      await db.update(passwordResetTokens)
+        .set({ usedAt: new Date() })
+        .where(
+          and(
+            eq(passwordResetTokens.userId, userId),
+            isNull(passwordResetTokens.usedAt)
+          )
+        );
+      
+      // Create new token that expires in 24 hours
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24);
+      
+      const result = await db.insert(passwordResetTokens)
+        .values({
+          userId,
+          token,
+          email,
+          expiresAt
+        })
+        .returning();
+      
+      if (result.length > 0) {
+        return token;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error in createPasswordResetToken:', error);
+      return null;
     }
   }
 

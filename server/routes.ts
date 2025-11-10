@@ -8166,24 +8166,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/users/:id/reset-password',
     requireAuth,
     requireRole('admin'),
-    validateRequest(z.object({
-      newPassword: z.string().min(6).optional()
-    })),
     async (req: Request, res: Response) => {
       try {
-        // Generate a random password if not provided
-        const newPassword = req.body.newPassword || Math.random().toString(36).slice(2, 12);
+        const userId = req.params.id;
         
-        const success = await storage.resetUserPassword(req.params.id, newPassword);
-        
-        if (!success) {
+        // Get user information first to obtain their email and name
+        const user = await storage.getUser(userId);
+        if (!user) {
           return res.status(404).json({ message: 'User not found' });
         }
         
-        // In production, you would send this via email
+        // Check if user has an email address
+        if (!user.email) {
+          console.error(`User ${userId} does not have an email address`);
+          return res.status(400).json({ message: 'User does not have an email address configured' });
+        }
+        
+        // Generate a secure token
+        const token = await storage.createPasswordResetToken(userId, user.email);
+        if (!token) {
+          console.error(`Failed to create password reset token for user ${userId}`);
+          return res.status(500).json({ message: 'Failed to create password reset token' });
+        }
+        
+        // Build user name for the email
+        const userName = user.firstName && user.lastName 
+          ? `${user.firstName} ${user.lastName}`
+          : user.firstName || user.email;
+        
+        // Send password reset email
+        try {
+          const emailSent = await reminderService.sendPasswordResetEmail(
+            user.email,
+            token,
+            userName
+          );
+          
+          if (!emailSent) {
+            // Log the error but still return success to not leak information
+            console.error(`Failed to send password reset email to ${user.email} for user ${userId}`);
+          }
+        } catch (emailError) {
+          // Log the error but still return success to not leak information
+          console.error(`Error sending password reset email to ${user.email}:`, emailError);
+        }
+        
+        // Always return success message without exposing any password or token information
         res.json({ 
-          message: 'Password reset successfully',
-          temporaryPassword: newPassword // Only for testing; remove in production
+          message: 'Password reset email sent successfully'
         });
       } catch (error) {
         console.error('Reset user password error:', error);
