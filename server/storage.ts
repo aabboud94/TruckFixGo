@@ -1,6 +1,7 @@
 import { 
   users, 
   sessions,
+  passwordResetTokens,
   driverProfiles,
   contractorProfiles,
   fleetAccounts,
@@ -207,7 +208,7 @@ import {
 
 import { db } from "./db";
 import { eq, and, or, gte, lte, isNull, isNotNull, desc, asc, sql, inArray, ne, gt, lt, ilike } from "drizzle-orm";
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes } from "crypto";
 import bcrypt from "bcrypt";
 import memoize from "memoizee";
 
@@ -477,6 +478,12 @@ export interface IStorage {
   
   checkUserRole(userId: string, requiredRole: string): Promise<boolean>;
   hasAdminUsers(): Promise<boolean>;
+  
+  // Password Reset Operations
+  createPasswordResetToken(userId: string, email: string): Promise<string>;
+  validatePasswordResetToken(token: string): Promise<{ userId: string; email: string } | null>;
+  usePasswordResetToken(token: string, newPassword: string): Promise<boolean>;
+  revokePasswordResetToken(token: string): Promise<boolean>;
   
   // User Management Operations
   getAllUsers(filters?: {
@@ -1576,6 +1583,116 @@ export class PostgreSQLStorage implements IStorage {
   async hasAdminUsers(): Promise<boolean> {
     const result = await db.select().from(users).where(eq(users.role, 'admin')).limit(1);
     return result.length > 0;
+  }
+
+  async createPasswordResetToken(userId: string, email: string): Promise<string> {
+    // Generate a secure random token
+    const token = randomBytes(32).toString('hex');
+    
+    // Calculate expiration time (24 hours from now)
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
+    
+    // Insert into passwordResetTokens table
+    await db.insert(passwordResetTokens).values({
+      userId,
+      token,
+      email,
+      expiresAt
+    });
+    
+    // Return the token
+    return token;
+  }
+
+  async validatePasswordResetToken(token: string): Promise<{ userId: string; email: string } | null> {
+    // Query passwordResetTokens table by token
+    const results = await db
+      .select({
+        userId: passwordResetTokens.userId,
+        email: passwordResetTokens.email,
+        expiresAt: passwordResetTokens.expiresAt,
+        usedAt: passwordResetTokens.usedAt
+      })
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.token, token))
+      .limit(1);
+    
+    if (results.length === 0) {
+      return null;
+    }
+    
+    const resetToken = results[0];
+    
+    // Check if token hasn't expired
+    if (new Date() > new Date(resetToken.expiresAt)) {
+      return null;
+    }
+    
+    // Check if token hasn't been used (usedAt is null)
+    if (resetToken.usedAt !== null) {
+      return null;
+    }
+    
+    // Return userId and email if valid
+    return {
+      userId: resetToken.userId,
+      email: resetToken.email
+    };
+  }
+
+  async usePasswordResetToken(token: string, newPassword: string): Promise<boolean> {
+    // First validate the token
+    const tokenData = await this.validatePasswordResetToken(token);
+    
+    if (!tokenData) {
+      return false;
+    }
+    
+    try {
+      // Hash the new password using bcrypt
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      
+      // Start a database transaction
+      await db.transaction(async (tx) => {
+        // Update the user's password in users table
+        await tx
+          .update(users)
+          .set({ 
+            password: hashedPassword,
+            updatedAt: new Date()
+          })
+          .where(eq(users.id, tokenData.userId));
+        
+        // Mark the token as used (set usedAt to current timestamp)
+        await tx
+          .update(passwordResetTokens)
+          .set({ 
+            usedAt: new Date()
+          })
+          .where(eq(passwordResetTokens.token, token));
+      });
+      
+      // Return true if successful
+      return true;
+    } catch (error) {
+      console.error('Error using password reset token:', error);
+      return false;
+    }
+  }
+
+  async revokePasswordResetToken(token: string): Promise<boolean> {
+    // Update passwordResetTokens to set usedAt to current timestamp
+    const result = await db
+      .update(passwordResetTokens)
+      .set({ 
+        usedAt: new Date()
+      })
+      .where(eq(passwordResetTokens.token, token));
+    
+    // Return true if a row was updated
+    // Drizzle ORM returns an object with rowCount property
+    return (result as any).rowCount > 0;
   }
 
   // ==================== USER MANAGEMENT OPERATIONS ====================
