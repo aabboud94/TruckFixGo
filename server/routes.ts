@@ -637,42 +637,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  // TEST ONLY - Get latest password reset token for testing
-  if (process.env.NODE_ENV !== 'production') {
-    app.get('/api/test/latest-reset-token/:email', async (req: Request, res: Response) => {
-      try {
-        const { email } = req.params;
-        const user = await storage.getUserByEmail(email);
-        if (!user) {
-          return res.status(404).json({ message: 'User not found' });
-        }
-        
-        // Get the latest unused token for this user
-        const result = await db.select({
-          token: passwordResetTokens.token,
-          expiresAt: passwordResetTokens.expiresAt
-        })
-        .from(passwordResetTokens)
-        .where(
-          and(
-            eq(passwordResetTokens.userId, user.id),
-            isNull(passwordResetTokens.usedAt)
-          )
-        )
-        .orderBy(desc(passwordResetTokens.createdAt))
-        .limit(1);
-        
-        if (result.length > 0) {
-          res.json({ token: result[0].token });
-        } else {
-          res.status(404).json({ message: 'No active reset token found' });
-        }
-      } catch (error) {
-        console.error('Error fetching test token:', error);
-        res.status(500).json({ message: 'Failed to fetch token' });
-      }
-    });
-  }
+  // REMOVED: Test endpoint for security - tokens should never be exposed via API
 
   // Guest booking
   app.post('/api/auth/guest-booking',
