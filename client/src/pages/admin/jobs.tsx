@@ -22,7 +22,8 @@ import JobPhotoGallery from "@/components/job-photo-gallery";
 import {
   Search, Filter, Download, RefreshCw, MapPin, Clock, DollarSign,
   User, Truck, AlertCircle, CheckCircle, XCircle, Edit, Eye,
-  MessageSquare, Camera, Ban, CreditCard, Loader2, Save, ChevronDown
+  MessageSquare, Camera, Ban, CreditCard, Loader2, Save, ChevronDown,
+  FileText, Receipt, ChevronUp, Package
 } from "lucide-react";
 
 export default function AdminJobs() {
@@ -37,6 +38,8 @@ export default function AdminJobs() {
   const [selectedContractorId, setSelectedContractorId] = useState<string>('');
   const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>('');
   const [assigneeType, setAssigneeType] = useState<'contractor' | 'driver'>('contractor');
+  const [showInvoiceDetails, setShowInvoiceDetails] = useState(false);
+  const [expandedLineItems, setExpandedLineItems] = useState<string | null>(null);
   
   // State for editable job details
   const [editedJob, setEditedJob] = useState<any>(null);
@@ -79,6 +82,13 @@ export default function AdminJobs() {
   const { data: serviceTypes } = useQuery({
     queryKey: ['/api/service-types'],
     queryFn: async () => apiRequest('GET', '/api/service-types'),
+  });
+
+  // Query for invoice data when job is completed
+  const { data: invoiceData } = useQuery({
+    queryKey: [`/api/admin/jobs/${selectedJob?.id}/invoice`],
+    queryFn: async () => apiRequest('GET', `/api/admin/jobs/${selectedJob?.id}/invoice`),
+    enabled: !!selectedJob?.id && selectedJob?.status === 'completed',
   });
 
   // Mutation for updating job status
@@ -457,6 +467,19 @@ export default function AdminJobs() {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
+                            {job.status === 'completed' && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => {
+                                  setSelectedJob(job);
+                                  setShowInvoiceDetails(true);
+                                }}
+                                data-testid={`button-invoice-${job.id}`}
+                              >
+                                <Receipt className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button
                               size="icon"
                               variant="ghost"
@@ -492,8 +515,11 @@ export default function AdminJobs() {
           
           {editedJob && (
             <Tabs defaultValue="details" className="mt-4">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="details">Details</TabsTrigger>
+                {editedJob?.status === 'completed' && (
+                  <TabsTrigger value="invoice">Invoice</TabsTrigger>
+                )}
                 <TabsTrigger value="timeline">Timeline</TabsTrigger>
                 <TabsTrigger value="messages">Messages</TabsTrigger>
                 <TabsTrigger value="photos">Photos</TabsTrigger>
@@ -692,6 +718,156 @@ export default function AdminJobs() {
                   </Button>
                 </div>
               </TabsContent>
+
+              {/* Invoice Tab - Only for completed jobs */}
+              {editedJob?.status === 'completed' && (
+                <TabsContent value="invoice" className="space-y-4">
+                  {invoiceData ? (
+                    <>
+                      {/* Completion Notes */}
+                      {invoiceData.completionNotes && (
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
+                              <FileText className="h-4 w-4" />
+                              Completion Notes
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm whitespace-pre-wrap">{invoiceData.completionNotes}</p>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* Line Items */}
+                      <Card>
+                        <CardHeader>
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
+                              <Package className="h-4 w-4" />
+                              Invoice Line Items
+                            </CardTitle>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setExpandedLineItems(
+                                expandedLineItems === editedJob.id ? null : editedJob.id
+                              )}
+                              data-testid="button-toggle-line-items"
+                            >
+                              {expandedLineItems === editedJob.id ? (
+                                <>
+                                  <ChevronUp className="h-4 w-4 mr-1" />
+                                  Collapse
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="h-4 w-4 mr-1" />
+                                  Expand
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          {expandedLineItems === editedJob.id ? (
+                            <div className="space-y-4">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Type</TableHead>
+                                    <TableHead>Description</TableHead>
+                                    <TableHead className="text-right">Qty</TableHead>
+                                    <TableHead className="text-right">Unit Price</TableHead>
+                                    <TableHead className="text-right">Total</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {invoiceData.lineItems?.map((item: any) => (
+                                    <TableRow key={item.id}>
+                                      <TableCell>
+                                        <Badge variant="outline">{item.type}</Badge>
+                                      </TableCell>
+                                      <TableCell>{item.description}</TableCell>
+                                      <TableCell className="text-right">{item.quantity}</TableCell>
+                                      <TableCell className="text-right">${item.unitPrice?.toFixed(2)}</TableCell>
+                                      <TableCell className="text-right font-medium">${item.total?.toFixed(2)}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                              
+                              {/* Totals */}
+                              <div className="flex justify-end">
+                                <div className="w-full max-w-xs space-y-2">
+                                  <div className="flex justify-between text-sm">
+                                    <span>Subtotal</span>
+                                    <span>${invoiceData.subtotal?.toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span>Tax</span>
+                                    <span>${invoiceData.tax?.toFixed(2)}</span>
+                                  </div>
+                                  <Separator />
+                                  <div className="flex justify-between font-bold">
+                                    <span>Total</span>
+                                    <span>${invoiceData.total?.toFixed(2)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex justify-between items-center py-2">
+                              <span className="text-sm text-muted-foreground">
+                                {invoiceData.lineItems?.length || 0} line items
+                              </span>
+                              <span className="font-bold">
+                                Total: ${invoiceData.total?.toFixed(2)}
+                              </span>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* Payment Status */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm font-medium flex items-center gap-2">
+                            <CreditCard className="h-4 w-4" />
+                            Payment Information
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-sm">Payment Status</span>
+                            <Badge variant={invoiceData.paymentStatus === 'paid' ? 'default' : 'secondary'}>
+                              {invoiceData.paymentStatus || 'Pending'}
+                            </Badge>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm">Invoice Number</span>
+                            <span className="text-sm font-mono">{invoiceData.invoiceNumber}</span>
+                          </div>
+                          {invoiceData.paidAt && (
+                            <div className="flex justify-between">
+                              <span className="text-sm">Paid At</span>
+                              <span className="text-sm">{format(new Date(invoiceData.paidAt), 'PPp')}</span>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </>
+                  ) : (
+                    <Card>
+                      <CardContent className="py-8">
+                        <p className="text-center text-muted-foreground">
+                          No invoice data available for this job
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+              )}
 
               <TabsContent value="timeline">
                 <ScrollArea className="h-[400px]">

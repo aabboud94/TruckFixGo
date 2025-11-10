@@ -856,6 +856,122 @@ export default function ContractorDashboard() {
           </CardContent>
         </Card>
 
+        {/* Completed Jobs Section */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  Completed Jobs
+                </CardTitle>
+                <CardDescription>
+                  Jobs completed today and recent invoices
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/contractor/jobs?status=completed")}
+                data-testid="button-view-all-completed"
+              >
+                View All
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Completed Jobs Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div>
+                  <p className="text-sm text-muted-foreground">Today</p>
+                  <p className="text-2xl font-bold">
+                    {dashboardData?.completedToday || 0}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Jobs</p>
+                </div>
+                <CheckCircle className="h-8 w-8 text-green-500 opacity-20" />
+              </div>
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div>
+                  <p className="text-sm text-muted-foreground">Revenue Today</p>
+                  <p className="text-2xl font-bold">
+                    ${metrics?.todayEarnings?.toFixed(2) || "0.00"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Earned</p>
+                </div>
+                <DollarSign className="h-8 w-8 text-green-500 opacity-20" />
+              </div>
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div>
+                  <p className="text-sm text-muted-foreground">This Week</p>
+                  <p className="text-2xl font-bold">
+                    ${metrics?.weekEarnings?.toFixed(2) || "0.00"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Revenue</p>
+                </div>
+                <TrendingUp className="h-8 w-8 text-green-500 opacity-20" />
+              </div>
+            </div>
+
+            {/* Recent Completed Jobs List */}
+            {dashboardData?.recentCompletedJobs && dashboardData.recentCompletedJobs.length > 0 ? (
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-muted-foreground">Recent Completions</h4>
+                {dashboardData.recentCompletedJobs.slice(0, 3).map((job: any) => (
+                  <div 
+                    key={job.id} 
+                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant="outline" className="text-xs">
+                          #{job.jobNumber}
+                        </Badge>
+                        <span className="text-sm font-medium">{job.customerName}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{job.serviceType}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Completed {job.completedAt && formatDistanceToNow(new Date(job.completedAt), { addSuffix: true })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="default" className="bg-green-500">
+                        ${job.totalAmount?.toFixed(2) || "0.00"}
+                      </Badge>
+                      <div className="flex gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => navigate(`/contractor/invoices/${job.id}`)}
+                          data-testid={`button-view-invoice-${job.id}`}
+                        >
+                          <Receipt className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => navigate(`/contractor/jobs/${job.id}`)}
+                          data-testid={`button-view-job-${job.id}`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                <p>No completed jobs today</p>
+                <p className="text-sm mt-1">Complete jobs to see them here</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Rating and Reviews Section */}
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
