@@ -82,6 +82,7 @@ import InstallPrompt from "@/components/install-prompt";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import TestLocationInput from "@/pages/test-location-input";
 import SplitPaymentPage from "@/pages/split-payment";
+import ResetPassword from "@/pages/reset-password";
 
 function Router() {
   return (
@@ -89,6 +90,7 @@ function Router() {
       {/* Main Pages */}
       <Route path="/" component={Homepage} />
       <Route path="/login" component={Login} />
+      <Route path="/reset-password/:token" component={ResetPassword} />
       <Route path="/emergency" component={EmergencyBooking} />
       <Route path="/scheduled-booking" component={ScheduledBooking} />
       <Route path="/jobs" component={JobsDashboard} />
