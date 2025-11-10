@@ -403,7 +403,7 @@ export default function AdminJobs() {
                     const StatusIcon = getStatusIcon(job.status);
                     return (
                       <TableRow key={job.id}>
-                        <TableCell className="font-mono">{job.id}</TableCell>
+                        <TableCell className="font-mono">{job.jobNumber || job.id}</TableCell>
                         <TableCell>
                           <Badge variant={job.type === 'emergency' ? 'destructive' : 'default'}>
                             {job.type}
@@ -507,7 +507,7 @@ export default function AdminJobs() {
       <Dialog open={showJobDetails} onOpenChange={setShowJobDetails}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto z-[200]" style={{ pointerEvents: 'auto' }}>
           <DialogHeader>
-            <DialogTitle>Job Details - {editedJob?.id}</DialogTitle>
+            <DialogTitle>Job Details - {editedJob?.jobNumber || editedJob?.id}</DialogTitle>
             <DialogDescription>
               Complete job information and management options
             </DialogDescription>
@@ -872,10 +872,11 @@ export default function AdminJobs() {
               <TabsContent value="timeline">
                 <ScrollArea className="h-[400px]">
                   <div className="space-y-4">
+                    {/* Job Created Event */}
                     <div className="flex gap-4">
                       <div className="flex flex-col items-center">
                         <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <AlertCircle className="h-4 w-4 text-green-600" />
                         </div>
                         <div className="h-full w-0.5 bg-border" />
                       </div>
@@ -884,13 +885,75 @@ export default function AdminJobs() {
                         <p className="text-sm text-muted-foreground">
                           {format(editedJob.createdAt, 'PPpp')}
                         </p>
+                        <p className="text-sm mt-1">Job {editedJob.jobNumber || editedJob.id} was created</p>
                       </div>
                     </div>
-                    {editedJob.startedAt && (
+                    
+                    {/* Job Assigned Event */}
+                    {editedJob.assignedAt && (
                       <div className="flex gap-4">
                         <div className="flex flex-col items-center">
                           <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
-                            <Truck className="h-4 w-4 text-blue-600" />
+                            <User className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div className="h-full w-0.5 bg-border" />
+                        </div>
+                        <div className="flex-1 pb-4">
+                          <p className="font-medium">Job Assigned</p>
+                          <p className="text-sm text-muted-foreground">
+                            {format(editedJob.assignedAt, 'PPpp')}
+                          </p>
+                          <p className="text-sm mt-1">
+                            Assigned to {editedJob.contractor?.name || 'contractor'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* En Route Event */}
+                    {editedJob.enRouteAt && (
+                      <div className="flex gap-4">
+                        <div className="flex flex-col items-center">
+                          <div className="h-8 w-8 rounded-full bg-yellow-100 dark:bg-yellow-900/20 flex items-center justify-center">
+                            <Truck className="h-4 w-4 text-yellow-600" />
+                          </div>
+                          <div className="h-full w-0.5 bg-border" />
+                        </div>
+                        <div className="flex-1 pb-4">
+                          <p className="font-medium">En Route</p>
+                          <p className="text-sm text-muted-foreground">
+                            {format(editedJob.enRouteAt, 'PPpp')}
+                          </p>
+                          <p className="text-sm mt-1">Contractor is on the way</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* On Site Event */}
+                    {editedJob.onSiteAt && (
+                      <div className="flex gap-4">
+                        <div className="flex flex-col items-center">
+                          <div className="h-8 w-8 rounded-full bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
+                            <MapPin className="h-4 w-4 text-purple-600" />
+                          </div>
+                          <div className="h-full w-0.5 bg-border" />
+                        </div>
+                        <div className="flex-1 pb-4">
+                          <p className="font-medium">Arrived On Site</p>
+                          <p className="text-sm text-muted-foreground">
+                            {format(editedJob.onSiteAt, 'PPpp')}
+                          </p>
+                          <p className="text-sm mt-1">Contractor arrived at location</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Job Started (if different from on site) */}
+                    {editedJob.startedAt && editedJob.startedAt !== editedJob.onSiteAt && (
+                      <div className="flex gap-4">
+                        <div className="flex flex-col items-center">
+                          <div className="h-8 w-8 rounded-full bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center">
+                            <Wrench className="h-4 w-4 text-orange-600" />
                           </div>
                           <div className="h-full w-0.5 bg-border" />
                         </div>
@@ -899,7 +962,53 @@ export default function AdminJobs() {
                           <p className="text-sm text-muted-foreground">
                             {format(editedJob.startedAt, 'PPpp')}
                           </p>
+                          <p className="text-sm mt-1">Work in progress</p>
                         </div>
+                      </div>
+                    )}
+                    
+                    {/* Job Completed Event */}
+                    {editedJob.completedAt && (
+                      <div className="flex gap-4">
+                        <div className="flex flex-col items-center">
+                          <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                          </div>
+                          {editedJob.status !== 'completed' && <div className="h-full w-0.5 bg-border" />}
+                        </div>
+                        <div className="flex-1 pb-4">
+                          <p className="font-medium">Job Completed</p>
+                          <p className="text-sm text-muted-foreground">
+                            {format(editedJob.completedAt, 'PPpp')}
+                          </p>
+                          <p className="text-sm mt-1">Job successfully completed</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Job Cancelled Event */}
+                    {editedJob.status === 'cancelled' && editedJob.cancelledAt && (
+                      <div className="flex gap-4">
+                        <div className="flex flex-col items-center">
+                          <div className="h-8 w-8 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
+                            <XCircle className="h-4 w-4 text-red-600" />
+                          </div>
+                        </div>
+                        <div className="flex-1 pb-4">
+                          <p className="font-medium">Job Cancelled</p>
+                          <p className="text-sm text-muted-foreground">
+                            {format(editedJob.cancelledAt, 'PPpp')}
+                          </p>
+                          <p className="text-sm mt-1">Job was cancelled</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* No Events Message */}
+                    {!editedJob.assignedAt && !editedJob.enRouteAt && !editedJob.onSiteAt && !editedJob.startedAt && !editedJob.completedAt && editedJob.status !== 'cancelled' && (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <p>No additional timeline events yet</p>
+                        <p className="text-sm mt-1">Events will appear as the job progresses</p>
                       </div>
                     )}
                   </div>

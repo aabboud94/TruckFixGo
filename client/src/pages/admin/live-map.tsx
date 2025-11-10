@@ -685,10 +685,10 @@ export default function AdminLiveMap() {
 
         {/* Job Details Sheet */}
         <Sheet open={!!selectedJob} onOpenChange={(open) => !open && setSelectedJob(null)}>
-          <SheetContent className="w-[400px] sm:w-[540px]">
+          <SheetContent className="w-[400px] sm:w-[540px] z-[2000]" style={{ zIndex: 2000 }}>
             <SheetHeader>
               <SheetTitle>Job Details</SheetTitle>
-              <SheetDescription>Job #{selectedJob?.id}</SheetDescription>
+              <SheetDescription>Job #{selectedJob?.jobNumber || selectedJob?.id}</SheetDescription>
             </SheetHeader>
             
             {selectedJob && (
