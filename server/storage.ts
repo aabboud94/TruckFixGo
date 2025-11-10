@@ -962,7 +962,7 @@ export class PostgreSQLStorage implements IStorage {
         email: users.email,
         phone: users.phone,
         company: contractorProfiles.companyName,
-        status: users.role,
+        status: sql<string>`CASE WHEN ${users.isActive} = true THEN 'active' ELSE 'suspended' END`,
         tier: contractorProfiles.performanceTier,
         rating: contractorProfiles.averageRating,
         totalJobs: contractorProfiles.totalJobsCompleted,
@@ -1103,14 +1103,12 @@ export class PostgreSQLStorage implements IStorage {
           companyName: details.company
         };
         
-        // If status is being set to active, update isActive flag
-        if (details.status) {
-          profileUpdates.isActive = details.status === 'active';
+        // Only update if there are actual profile updates
+        if (Object.keys(profileUpdates).length > 0) {
+          await tx.update(contractorProfiles)
+            .set(profileUpdates)
+            .where(eq(contractorProfiles.userId, contractorId));
         }
-        
-        await tx.update(contractorProfiles)
-          .set(profileUpdates)
-          .where(eq(contractorProfiles.userId, contractorId));
 
         // Fetch and return updated contractor
         // Directly query with raw SQL to avoid Drizzle query builder issues
@@ -1124,8 +1122,7 @@ export class PostgreSQLStorage implements IStorage {
             u.is_active as "userIsActive",
             cp.company_name as "companyName",
             cp.performance_tier as "performanceTier",
-            cp.average_rating as "averageRating",
-            cp.is_active as "profileIsActive"
+            cp.average_rating as "averageRating"
           FROM users u
           LEFT JOIN contractor_profiles cp ON u.id = cp.user_id
           WHERE u.id = ${contractorId}
@@ -1153,7 +1150,7 @@ export class PostgreSQLStorage implements IStorage {
           company: row.companyName || '',
           performanceTier: row.performanceTier || 'bronze',
           averageRating: parseFloat(row.averageRating) || 0,
-          isActive: row.profileIsActive || false
+          isActive: row.userIsActive || false
         };
 
         console.log('[updateContractorDetails] Returning updated contractor:', combinedResult);

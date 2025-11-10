@@ -26,6 +26,9 @@ Key features include live mechanic tracking with real-time ETA, multi-service su
 - **Fixed response parsing in contractors page**: Changed from `contractors?.data` to `contractors` (API returns array directly)
 - **Fixed isAvailable filter logic**: Now only applies when explicitly provided in query, not defaulting to false
 - **Fixed column name mappings**: Updated all contractor queries to use correct schema column names
+- **Fixed contractor status mapping**: Users table has `is_active` boolean, not `status` column - properly map between UI status values and database boolean
+- **Fixed updateContractorDetails**: Now uses raw SQL to avoid Drizzle query builder issues, correctly maps status to is_active
+- **Fixed findContractors query**: Added CASE statement to map is_active boolean to 'active'/'suspended' status strings
 
 ### Database Column Mappings (Critical Reference)
 Correct column names to use in queries:
