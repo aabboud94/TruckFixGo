@@ -113,26 +113,20 @@ export default function ContractorDashboard() {
   const { data: dashboardData, isLoading, refetch } = useQuery<DashboardData>({
     queryKey: ["/api/contractor/dashboard"],
     refetchInterval: 10000, // Refresh every 10 seconds for faster updates
-    onSuccess: (data) => {
+  });
+
+  // Handle dashboard data updates
+  useEffect(() => {
+    if (dashboardData) {
       // Log for debugging
       console.log('[ContractorDashboard] Dashboard data loaded:', {
-        contractorId: data?.contractor?.id,
-        activeJob: data?.activeJob,
-        availableJobs: data?.availableJobs?.length,
-        scheduledJobs: data?.scheduledJobs?.length
+        contractorId: dashboardData?.contractor?.id,
+        activeJob: dashboardData?.activeJob,
+        availableJobs: dashboardData?.availableJobs?.length,
+        scheduledJobs: dashboardData?.scheduledJobs?.length
       });
-      
-      // Play notification for new assigned jobs
-      if (data?.activeJob && !dashboardData?.activeJob) {
-        const audio = new Audio("/notification.mp3");
-        audio.play().catch(() => {});
-        toast({
-          title: "New Job Assigned!",
-          description: "You have a new job assignment",
-        });
-      }
     }
-  });
+  }, [dashboardData]);
 
   // WebSocket for real-time updates
   const {
@@ -141,17 +135,13 @@ export default function ContractorDashboard() {
   } = useTrackingWebSocket({
     jobId: dashboardData?.activeJob?.id || "",
     userId: dashboardData?.contractor?.id || "",
-    role: "contractor",
-    enabled: !!dashboardData?.activeJob?.id && isSharingLocation
+    role: "contractor"
   });
 
   // Toggle online status
   const toggleOnlineMutation = useMutation({
     mutationFn: async (status: boolean) => {
-      return await apiRequest("/api/contractor/status", {
-        method: "PATCH",
-        body: JSON.stringify({ isAvailable: status })
-      });
+      return await apiRequest("/api/contractor/status", "PATCH", { isAvailable: status });
     },
     onSuccess: (_, status) => {
       toast({
@@ -165,9 +155,7 @@ export default function ContractorDashboard() {
   // Accept job mutation
   const acceptJobMutation = useMutation({
     mutationFn: async (jobId: string) => {
-      return await apiRequest(`/api/jobs/${jobId}/accept`, {
-        method: "POST"
-      });
+      return await apiRequest(`/api/jobs/${jobId}/accept`, "POST");
     },
     onSuccess: () => {
       toast({
@@ -191,9 +179,7 @@ export default function ContractorDashboard() {
   // Decline job mutation
   const declineJobMutation = useMutation({
     mutationFn: async (jobId: string) => {
-      return await apiRequest(`/api/jobs/${jobId}/decline`, {
-        method: "POST"
-      });
+      return await apiRequest(`/api/jobs/${jobId}/decline`, "POST");
     },
     onSuccess: () => {
       toast({
