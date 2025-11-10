@@ -22,6 +22,16 @@ import {
 } from "@/components/rating-display";
 import { ReviewItem } from "@/components/review-item";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DollarSign,
   TrendingUp,
   Star,
@@ -45,7 +55,8 @@ import {
   ArrowUp,
   ArrowDown,
   Sparkles,
-  Upload
+  Upload,
+  FastForward
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -137,6 +148,7 @@ export default function ContractorDashboard() {
   const [isOnline, setIsOnline] = useState(true);
   const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<GeolocationPosition | null>(null);
+  const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
 
   // Fetch dashboard data
   const { data: dashboardData, isLoading, refetch } = useQuery<DashboardData>({
@@ -216,6 +228,40 @@ export default function ContractorDashboard() {
         description: "Job has been removed from your list"
       });
       refetch();
+    }
+  });
+
+  // Complete and advance to next job mutation
+  const advanceToNextJobMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      return await apiRequest(`/api/contractor/jobs/${jobId}/complete-and-advance`, "POST");
+    },
+    onSuccess: (data) => {
+      if (data.hasNextJob && data.nextJob) {
+        toast({
+          title: "Job Completed!",
+          description: `Advanced to next job: ${data.nextJob.jobNumber}`,
+        });
+        // Invalidate and refetch dashboard data
+        queryClient.invalidateQueries({ queryKey: ["/api/contractor/dashboard"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/contractor/active-job"] });
+        refetch();
+      } else {
+        toast({
+          title: "Job Completed!",
+          description: "No more jobs in queue. Great work!",
+        });
+        refetch();
+      }
+      setShowAdvanceDialog(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to complete and advance to next job",
+        variant: "destructive"
+      });
+      setShowAdvanceDialog(false);
     }
   });
 
@@ -519,6 +565,50 @@ export default function ContractorDashboard() {
                   </Button>
                 </div>
               </div>
+              
+              {/* Next Job Button - Only show if there are queued jobs */}
+              {queuedJobs.length > 0 && (
+                <div className="mt-4 pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="gap-1">
+                        <Bell className="w-3 h-3" />
+                        {queuedJobs.length} job{queuedJobs.length > 1 ? 's' : ''} in queue
+                      </Badge>
+                      <span className="text-sm text-muted-foreground">
+                        Next: {queuedJobs[0]?.customerName}
+                      </span>
+                    </div>
+                    <Button
+                      variant="default"
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={() => setShowAdvanceDialog(true)}
+                      disabled={advanceToNextJobMutation.isPending}
+                      data-testid="button-next-job"
+                    >
+                      {advanceToNextJobMutation.isPending ? (
+                        <>
+                          <Timer className="w-4 h-4 mr-2 animate-spin" />
+                          Advancing...
+                        </>
+                      ) : (
+                        <>
+                          <FastForward className="w-4 h-4 mr-2" />
+                          Next Job
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {/* Preview of next job */}
+                  <div className="mt-3 p-3 bg-muted/50 rounded-md">
+                    <div className="text-sm space-y-1">
+                      <div className="font-medium">Next Job: #{queuedJobs[0]?.jobNumber}</div>
+                      <div className="text-muted-foreground">{queuedJobs[0]?.serviceType}</div>
+                      <div className="text-muted-foreground">{queuedJobs[0]?.locationAddress}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -1131,6 +1221,53 @@ export default function ContractorDashboard() {
           </Button>
         </div>
       </div>
+
+      {/* Confirmation Dialog for Advancing to Next Job */}
+      <AlertDialog open={showAdvanceDialog} onOpenChange={setShowAdvanceDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Complete Current Job and Start Next?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will mark your current job as completed and automatically advance you to the next job in your queue.
+              {queuedJobs.length > 0 && (
+                <div className="mt-4 p-3 bg-muted/50 rounded-md">
+                  <div className="text-sm space-y-1">
+                    <div className="font-medium">Next Job Details:</div>
+                    <div>Job #{queuedJobs[0]?.jobNumber} - {queuedJobs[0]?.customerName}</div>
+                    <div>{queuedJobs[0]?.serviceType}</div>
+                    <div>{queuedJobs[0]?.locationAddress}</div>
+                  </div>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={advanceToNextJobMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (activeJob?.id) {
+                  advanceToNextJobMutation.mutate(activeJob.id);
+                }
+              }}
+              disabled={advanceToNextJobMutation.isPending}
+            >
+              {advanceToNextJobMutation.isPending ? (
+                <>
+                  <Timer className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Complete & Start Next
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
