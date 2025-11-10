@@ -7588,7 +7588,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  // Get available contractors for job assignment
+  // Get available contractors for job assignment with queue information
   app.get('/api/admin/contractors/available',
     requireAuth,
     requireRole('admin'),
@@ -7598,11 +7598,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const jobLat = lat ? parseFloat(lat as string) : undefined;
         const jobLon = lon ? parseFloat(lon as string) : undefined;
         
-        const contractors = await storage.getAvailableContractors(jobLat, jobLon);
+        // Use the enhanced method that includes queue information
+        const contractors = await storage.getAvailableContractorsForAssignment(jobLat, jobLon);
         res.json(contractors);
       } catch (error) {
         console.error('Error fetching available contractors:', error);
         res.status(500).json({ message: 'Failed to fetch available contractors' });
+      }
+    }
+  );
+
+  // Get contractor queue summary - shows queue status for all contractors
+  app.get('/api/admin/contractors/queue-summary',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractors = await storage.getAvailableContractorsForAssignment();
+        
+        // Map to queue summary format
+        const queueSummary = contractors.map(contractor => ({
+          contractorId: contractor.id,
+          contractorName: contractor.name,
+          performanceTier: contractor.performanceTier,
+          queueLength: contractor.queueLength,
+          isCurrentlyBusy: contractor.isCurrentlyBusy,
+          currentJob: contractor.currentJob,
+          currentJobNumber: contractor.currentJobNumber,
+          totalQueuedJobs: contractor.totalQueuedJobs,
+          queueStatus: contractor.totalQueuedJobs === 0 ? 'available' : 
+                       contractor.totalQueuedJobs <= 2 ? 'moderate' : 'busy',
+          nextPositionInQueue: contractor.totalQueuedJobs + 1
+        }));
+        
+        res.json({
+          summary: queueSummary,
+          totalContractors: queueSummary.length,
+          availableContractors: queueSummary.filter(c => c.totalQueuedJobs === 0).length,
+          busyContractors: queueSummary.filter(c => c.totalQueuedJobs > 0).length
+        });
+      } catch (error) {
+        console.error('Error fetching contractor queue summary:', error);
+        res.status(500).json({ message: 'Failed to fetch queue summary' });
       }
     }
   );
@@ -8211,7 +8248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  // Assign contractor to job
+  // Assign contractor to job (POST) - legacy support
   app.post('/api/admin/jobs/:id/assign',
     requireAuth,
     requireRole('admin', 'dispatcher'),
@@ -8235,39 +8272,161 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
-        // Check contractor exists and is available
+        // Check contractor exists
         const contractor = await storage.getContractorProfile(contractorId);
         if (!contractor) {
           return res.status(404).json({ message: 'Contractor not found' });
         }
         
-        if (!contractor.isAvailable) {
+        // Get contractor current job to check if busy
+        const currentJobInfo = await storage.getContractorCurrentJob(contractorId);
+        const isContractorBusy = currentJobInfo.job !== null;
+        
+        if (isContractorBusy) {
+          // Contractor is busy, enqueue the job
+          console.log(`[AssignJob] Contractor ${contractorId} is busy, enqueueing job ${jobId}`);
+          
+          // Enqueue the job for later
+          const queueEntry = await storage.enqueueJob(contractorId, jobId);
+          
+          // Update job status to 'assigned' but contractor will handle it when ready
+          await storage.updateJob(jobId, {
+            contractorId,
+            status: 'assigned',
+            assignedAt: new Date()
+          });
+          
+          res.json({ 
+            message: 'Job queued for contractor',
+            jobId,
+            contractorId,
+            queuePosition: queueEntry.position,
+            isQueued: true
+          });
+        } else {
+          // Contractor is available, assign immediately
+          console.log(`[AssignJob] Contractor ${contractorId} is available, assigning job ${jobId} immediately`);
+          
+          // Assign the contractor
+          await storage.updateJob(jobId, {
+            contractorId,
+            status: 'assigned',
+            assignedAt: new Date()
+          });
+          
+          // Update contractor's active job
+          await storage.updateContractorProfile(contractorId, {
+            activeJobId: jobId
+          });
+          
+          // Send notification to contractor (if WebSocket connected)
+          const { trackingWSServer } = await import('./websocket');
+          trackingWSServer.notifyJobAssignment(jobId, contractorId);
+          
+          res.json({ 
+            message: 'Contractor assigned successfully',
+            jobId,
+            contractorId,
+            isQueued: false
+          });
+        }
+      } catch (error) {
+        console.error('Assign contractor error:', error);
+        res.status(500).json({ message: 'Failed to assign contractor' });
+      }
+    }
+  );
+
+  // Assign contractor to job (PUT) - used by admin UI
+  app.put('/api/admin/jobs/:id/assign',
+    requireAuth,
+    requireRole('admin', 'dispatcher'),
+    validateRequest(z.object({
+      contractorId: z.string(),
+      driverId: z.string().optional(),
+      forceQueue: z.boolean().optional() // Allow forcing enqueue even if available
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        const { contractorId, driverId, forceQueue } = req.body;
+        
+        // Get job to check current status
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        if (job.status !== 'new' && job.status !== 'assigned') {
           return res.status(400).json({ 
-            message: 'Contractor is not available' 
+            message: `Cannot assign contractor to job with status: ${job.status}` 
           });
         }
         
-        // Assign the contractor
-        await storage.updateJob(jobId, {
-          contractorId,
-          status: 'assigned',
-          assignedAt: new Date()
-        });
+        // Check contractor exists
+        const contractor = await storage.getContractorProfile(contractorId);
+        if (!contractor) {
+          return res.status(404).json({ message: 'Contractor not found' });
+        }
         
-        // Update contractor's active job
-        await storage.updateContractorProfile(contractorId, {
-          activeJobId: jobId
-        });
+        // Get contractor current job and queue info
+        const currentJobInfo = await storage.getContractorCurrentJob(contractorId);
+        const contractorQueue = await storage.getContractorQueue(contractorId);
+        const isContractorBusy = currentJobInfo.job !== null;
+        const queueLength = contractorQueue.filter(q => q.status === 'pending').length;
         
-        // Send notification to contractor (if WebSocket connected)
-        const { trackingWSServer } = await import('./websocket');
-        trackingWSServer.notifyJobAssignment(jobId, contractorId);
-        
-        res.json({ 
-          message: 'Contractor assigned successfully',
-          jobId,
-          contractorId
-        });
+        if (isContractorBusy || forceQueue) {
+          // Contractor is busy or force queue requested, enqueue the job
+          console.log(`[AssignJob] Contractor ${contractorId} is busy or force queue, enqueueing job ${jobId}`);
+          
+          // Enqueue the job for later
+          const queueEntry = await storage.enqueueJob(contractorId, jobId);
+          
+          // Update job status to 'assigned' but contractor will handle it when ready
+          await storage.updateJob(jobId, {
+            contractorId,
+            status: 'assigned',
+            assignedAt: new Date()
+          });
+          
+          // Get position info for response
+          const positionInfo = await storage.getQueuePositionForJob(jobId);
+          
+          res.json({ 
+            message: `Job queued for contractor (position #${positionInfo?.position || queueLength + 1} in queue)`,
+            jobId,
+            contractorId,
+            queuePosition: positionInfo?.position || queueLength + 1,
+            totalInQueue: positionInfo?.totalInQueue || queueLength + 1,
+            isQueued: true
+          });
+        } else {
+          // Contractor is available, assign immediately
+          console.log(`[AssignJob] Contractor ${contractorId} is available, assigning job ${jobId} immediately`);
+          
+          // Assign the contractor
+          await storage.updateJob(jobId, {
+            contractorId,
+            status: 'assigned',
+            assignedAt: new Date()
+          });
+          
+          // Update contractor's active job
+          await storage.updateContractorProfile(contractorId, {
+            activeJobId: jobId
+          });
+          
+          // Send notification to contractor (if WebSocket connected)
+          const { trackingWSServer } = await import('./websocket');
+          trackingWSServer.notifyJobAssignment(jobId, contractorId);
+          
+          res.json({ 
+            message: 'Contractor assigned successfully',
+            jobId,
+            contractorId,
+            isQueued: false
+          });
+        }
       } catch (error) {
         console.error('Assign contractor error:', error);
         res.status(500).json({ message: 'Failed to assign contractor' });

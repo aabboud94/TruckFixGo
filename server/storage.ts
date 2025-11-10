@@ -1299,7 +1299,7 @@ export class PostgreSQLStorage implements IStorage {
 
   async getAvailableContractorsForAssignment(jobLat?: number, jobLon?: number): Promise<any[]> {
     try {
-      console.log('[AssignJob] Getting available contractors for assignment - Round Robin Logic');
+      console.log('[AssignJob] Getting available contractors for assignment with queue info');
       
       // Get ALL contractors with their profiles (for job queuing support)
       // No longer filtering by isAvailable - contractors can have multiple jobs queued
@@ -1317,10 +1317,10 @@ export class PostgreSQLStorage implements IStorage {
           asc(contractorProfiles.lastAssignedAt)
         );
 
-      console.log(`[AssignJob] Found ${contractors.length} available contractors`);
+      console.log(`[AssignJob] Found ${contractors.length} contractors`);
 
       // Process and calculate distance for each contractor
-      const processedContractors = contractors.map(row => {
+      const processedContractors = await Promise.all(contractors.map(async row => {
         const fullName = `${row.users.firstName || ''} ${row.users.lastName || ''}`.trim() || row.users.email || 'Unknown';
         let distance = 0;
         
@@ -1343,6 +1343,30 @@ export class PostgreSQLStorage implements IStorage {
           distance = R * c;
         }
 
+        // Get queue information for this contractor
+        const queue = await this.getContractorQueue(row.users.id);
+        const currentJobInfo = await this.getContractorCurrentJob(row.users.id);
+        
+        // Count jobs in different statuses in the queue
+        const queueLength = queue.filter(q => q.status === 'pending').length;
+        const activeJobCount = queue.filter(q => q.status === 'active').length;
+        
+        // Get current job details if the contractor is busy
+        let currentJob = null;
+        let currentJobNumber = null;
+        if (currentJobInfo.job) {
+          currentJob = {
+            id: currentJobInfo.job.id,
+            jobNumber: currentJobInfo.job.jobNumber,
+            serviceType: currentJobInfo.job.serviceTypeId || 'Service',
+            customerName: currentJobInfo.job.customerName || 'Customer',
+            status: currentJobInfo.job.status
+          };
+          currentJobNumber = `#${activeJobCount + 1} of ${activeJobCount + queueLength + 1}`;
+        }
+
+        const isCurrentlyBusy = activeJobCount > 0;
+
         const contractor = {
           id: row.users.id,
           email: row.users.email,
@@ -1355,16 +1379,23 @@ export class PostgreSQLStorage implements IStorage {
           totalJobsCompleted: row.contractor_profiles?.totalJobsCompleted || 0,
           serviceRadius: row.contractor_profiles?.serviceRadius || 50,
           isOnline: row.contractor_profiles?.isOnline || false,
+          isAvailable: row.contractor_profiles?.isAvailable || false,
           lastAssignedAt: row.contractor_profiles?.lastAssignedAt,
           lastHeartbeatAt: row.contractor_profiles?.lastHeartbeatAt,
           distance: Math.round(distance * 10) / 10,
-          withinServiceRadius: distance <= (row.contractor_profiles?.serviceRadius || 50)
+          withinServiceRadius: distance <= (row.contractor_profiles?.serviceRadius || 50),
+          // Add queue information
+          queueLength,
+          isCurrentlyBusy,
+          currentJob,
+          currentJobNumber,
+          totalQueuedJobs: activeJobCount + queueLength
         };
         
-        console.log(`[AssignJob] Contractor: ${contractor.name}, Tier: ${contractor.performanceTier}, Last Assigned: ${contractor.lastAssignedAt || 'Never'}, Distance: ${contractor.distance} miles`);
+        console.log(`[AssignJob] Contractor: ${contractor.name}, Tier: ${contractor.performanceTier}, Queue: ${contractor.queueLength}, Busy: ${contractor.isCurrentlyBusy}`);
         
         return contractor;
-      });
+      }));
 
       // Filter contractors within service radius if location provided
       const eligibleContractors = jobLat && jobLon 
@@ -1373,15 +1404,34 @@ export class PostgreSQLStorage implements IStorage {
 
       console.log(`[AssignJob] ${eligibleContractors.length} contractors within service radius`);
 
-      // Sort by tier groups and round-robin within each tier
-      const goldContractors = eligibleContractors.filter(c => c.performanceTier === 'gold');
-      const silverContractors = eligibleContractors.filter(c => c.performanceTier === 'silver');
-      const bronzeContractors = eligibleContractors.filter(c => c.performanceTier === 'bronze');
+      // Sort contractors: first by queue length (less busy first), then by tier and round-robin
+      const sortedContractors = eligibleContractors.sort((a, b) => {
+        // First priority: Available contractors (no queue) come first
+        if (a.totalQueuedJobs === 0 && b.totalQueuedJobs > 0) return -1;
+        if (b.totalQueuedJobs === 0 && a.totalQueuedJobs > 0) return 1;
+        
+        // Second priority: Tier (gold > silver > bronze)
+        const tierOrder = { gold: 3, silver: 2, bronze: 1 };
+        const tierA = tierOrder[a.performanceTier as keyof typeof tierOrder] || 1;
+        const tierB = tierOrder[b.performanceTier as keyof typeof tierOrder] || 1;
+        if (tierA !== tierB) return tierB - tierA;
+        
+        // Third priority: Less queued jobs
+        if (a.totalQueuedJobs !== b.totalQueuedJobs) {
+          return a.totalQueuedJobs - b.totalQueuedJobs;
+        }
+        
+        // Fourth priority: Round-robin (least recently assigned)
+        if (!a.lastAssignedAt && b.lastAssignedAt) return -1;
+        if (a.lastAssignedAt && !b.lastAssignedAt) return 1;
+        if (a.lastAssignedAt && b.lastAssignedAt) {
+          return new Date(a.lastAssignedAt).getTime() - new Date(b.lastAssignedAt).getTime();
+        }
+        
+        return 0;
+      });
 
-      console.log(`[AssignJob] By tier - Gold: ${goldContractors.length}, Silver: ${silverContractors.length}, Bronze: ${bronzeContractors.length}`);
-
-      // Return sorted list: gold tier first (round-robin), then silver, then bronze
-      return [...goldContractors, ...silverContractors, ...bronzeContractors];
+      return sortedContractors;
     } catch (error) {
       console.error('[AssignJob] Error in getAvailableContractorsForAssignment:', error);
       throw error;

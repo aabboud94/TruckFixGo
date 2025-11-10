@@ -778,19 +778,72 @@ export default function AdminJobs() {
                 </SelectTrigger>
                 <SelectContent>
                   {Array.isArray(contractors) && contractors.length > 0 ? (
-                    contractors.map((contractor: any) => (
-                      <SelectItem key={contractor.id} value={contractor.id}>
-                        <div className="flex flex-col">
-                          <span>{contractor.name}</span>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            {contractor.distance > 0 && <span>{contractor.distance} mi</span>}
-                            <span>{contractor.rating || 0} ⭐</span>
-                            <span className="capitalize">{contractor.tier || 'bronze'}</span>
-                            {contractor.isAvailable && <Badge variant="secondary" className="h-4">Available</Badge>}
+                    contractors.map((contractor: any) => {
+                      // Determine queue status and colors
+                      const queueLength = contractor.queueLength || 0;
+                      const isCurrentlyBusy = contractor.isCurrentlyBusy || false;
+                      const totalQueuedJobs = contractor.totalQueuedJobs || 0;
+                      
+                      let queueBadgeVariant: "default" | "secondary" | "destructive" = "default";
+                      let queueBadgeText = "Available";
+                      let queueBadgeClass = "";
+                      
+                      if (totalQueuedJobs === 0) {
+                        queueBadgeVariant = "secondary";
+                        queueBadgeText = "Available";
+                        queueBadgeClass = "bg-green-500 hover:bg-green-600 text-white";
+                      } else if (totalQueuedJobs <= 2) {
+                        queueBadgeVariant = "secondary";
+                        queueBadgeText = `${totalQueuedJobs} job${totalQueuedJobs > 1 ? 's' : ''} queued`;
+                        queueBadgeClass = "bg-yellow-500 hover:bg-yellow-600 text-white";
+                      } else {
+                        queueBadgeVariant = "destructive";
+                        queueBadgeText = `${totalQueuedJobs} jobs queued`;
+                        queueBadgeClass = "bg-red-500 hover:bg-red-600 text-white";
+                      }
+                      
+                      return (
+                        <SelectItem key={contractor.id} value={contractor.id}>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{contractor.name}</span>
+                              <Badge 
+                                variant={queueBadgeVariant}
+                                className={`h-5 px-1.5 text-xs ${queueBadgeClass}`}
+                              >
+                                {queueBadgeText}
+                              </Badge>
+                            </div>
+                            
+                            {/* Current job information if contractor is busy */}
+                            {contractor.currentJob && (
+                              <div className="text-xs text-muted-foreground ml-2">
+                                <span className="font-medium">Current: </span>
+                                Job {contractor.currentJobNumber} - {contractor.currentJob.jobNumber}
+                                {contractor.currentJob.serviceType && (
+                                  <span> ({contractor.currentJob.serviceType})</span>
+                                )}
+                                {contractor.currentJob.customerName && (
+                                  <span> - {contractor.currentJob.customerName}</span>
+                                )}
+                              </div>
+                            )}
+                            
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              {contractor.distance > 0 && <span>{contractor.distance} mi</span>}
+                              <span>{contractor.averageRating || contractor.rating || 0} ⭐</span>
+                              <span className="capitalize">{contractor.performanceTier || contractor.tier || 'bronze'} tier</span>
+                              {/* Next position in queue */}
+                              {totalQueuedJobs > 0 && (
+                                <span className="text-muted-foreground">
+                                  • This job will be #{totalQueuedJobs + 1} in queue
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </SelectItem>
-                    ))
+                        </SelectItem>
+                      );
+                    })
                   ) : (
                     <div className="px-2 py-1 text-sm text-muted-foreground">
                       No contractors available
@@ -833,21 +886,56 @@ export default function AdminJobs() {
               </div>
             )}
 
-            {/* Assignment Summary */}
+            {/* Assignment Summary with Queue Warning */}
             {selectedContractorId && (
               <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm">
-                  <span className="font-medium">Assignment:</span> Job will be assigned to{' '}
-                  <span className="font-medium">
-                    {assigneeType === 'contractor' 
-                      ? contractors?.find((c: any) => c.id === selectedContractorId)?.name
-                      : managedDrivers?.find((d: any) => d.id === selectedAssigneeId)?.firstName + ' ' + 
-                        managedDrivers?.find((d: any) => d.id === selectedAssigneeId)?.lastName}
-                  </span>
-                  {assigneeType === 'driver' && (
-                    <span className="text-muted-foreground"> (Driver managed by contractor)</span>
-                  )}
-                </p>
+                {(() => {
+                  const selectedContractor = contractors?.find((c: any) => c.id === selectedContractorId);
+                  const totalQueuedJobs = selectedContractor?.totalQueuedJobs || 0;
+                  const isCurrentlyBusy = selectedContractor?.isCurrentlyBusy || false;
+                  
+                  if (totalQueuedJobs > 0) {
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4 text-yellow-600" />
+                          <p className="text-sm font-medium text-yellow-600">
+                            Queue Notice
+                          </p>
+                        </div>
+                        <p className="text-sm">
+                          This contractor has <span className="font-medium">{totalQueuedJobs} job{totalQueuedJobs > 1 ? 's' : ''}</span> in queue.
+                          This job will be <span className="font-medium">#{totalQueuedJobs + 1}</span> in their queue.
+                        </p>
+                        {selectedContractor?.currentJob && (
+                          <p className="text-sm text-muted-foreground">
+                            Currently working on: {selectedContractor.currentJob.jobNumber}
+                            {selectedContractor.currentJob.serviceType && ` (${selectedContractor.currentJob.serviceType})`}
+                          </p>
+                        )}
+                        <p className="text-sm text-muted-foreground">
+                          The job will be automatically assigned when the contractor becomes available.
+                        </p>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <p className="text-sm">
+                      <span className="font-medium">Assignment:</span> Job will be assigned to{' '}
+                      <span className="font-medium">
+                        {assigneeType === 'contractor' 
+                          ? selectedContractor?.name
+                          : managedDrivers?.find((d: any) => d.id === selectedAssigneeId)?.firstName + ' ' + 
+                            managedDrivers?.find((d: any) => d.id === selectedAssigneeId)?.lastName}
+                      </span>
+                      {assigneeType === 'driver' && (
+                        <span className="text-muted-foreground"> (Driver managed by contractor)</span>
+                      )}
+                      <span className="text-green-600 ml-2">(Available immediately)</span>
+                    </p>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -863,6 +951,22 @@ export default function AdminJobs() {
             </Button>
             <Button 
               onClick={() => {
+                const selectedContractor = contractors?.find((c: any) => c.id === selectedContractorId);
+                const totalQueuedJobs = selectedContractor?.totalQueuedJobs || 0;
+                
+                // Show confirmation for busy contractors
+                if (totalQueuedJobs > 0) {
+                  const confirmed = window.confirm(
+                    `This contractor has ${totalQueuedJobs} job${totalQueuedJobs > 1 ? 's' : ''} in queue.\n` +
+                    `This job will be #${totalQueuedJobs + 1} in their queue.\n\n` +
+                    `Do you want to proceed with queuing this job?`
+                  );
+                  
+                  if (!confirmed) {
+                    return;
+                  }
+                }
+                
                 assignContractorMutation.mutate({
                   jobId: selectedJob?.id,
                   contractorId: selectedContractorId,
@@ -870,14 +974,32 @@ export default function AdminJobs() {
                 });
               }}
               disabled={!selectedContractorId || assignContractorMutation.isPending}
+              variant={(() => {
+                const selectedContractor = contractors?.find((c: any) => c.id === selectedContractorId);
+                const totalQueuedJobs = selectedContractor?.totalQueuedJobs || 0;
+                return totalQueuedJobs > 0 ? 'secondary' : 'default';
+              })()}
             >
               {assignContractorMutation.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Assigning...
+                  {(() => {
+                    const selectedContractor = contractors?.find((c: any) => c.id === selectedContractorId);
+                    const totalQueuedJobs = selectedContractor?.totalQueuedJobs || 0;
+                    return totalQueuedJobs > 0 ? 'Queuing...' : 'Assigning...';
+                  })()}
                 </>
               ) : (
-                'Assign'
+                <>
+                  {(() => {
+                    const selectedContractor = contractors?.find((c: any) => c.id === selectedContractorId);
+                    const totalQueuedJobs = selectedContractor?.totalQueuedJobs || 0;
+                    if (totalQueuedJobs > 0) {
+                      return `Add to Queue (Position #${totalQueuedJobs + 1})`;
+                    }
+                    return 'Assign Now';
+                  })()}
+                </>
               )}
             </Button>
           </DialogFooter>
