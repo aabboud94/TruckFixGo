@@ -12,9 +12,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Loader2, Save, TestTube, Plus, Trash2, Edit, MapPin, DollarSign, Settings2, Zap } from "lucide-react";
+import { 
+  Loader2, Save, TestTube, Plus, Trash2, Edit, MapPin, DollarSign, 
+  Settings2, Zap, Users, Bell, Building, Key, Shield, TrendingUp,
+  MessageSquare, CreditCard, Clock, Award, AlertTriangle, ChevronRight
+} from "lucide-react";
 
 export default function AdminSettings() {
   const { toast } = useToast();
@@ -237,14 +243,21 @@ export default function AdminSettings() {
       breadcrumbs={[{ label: "Settings" }]}
     >
       <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="pricing">Pricing</TabsTrigger>
-          <TabsTrigger value="integrations">Integrations</TabsTrigger>
-          <TabsTrigger value="features">Features</TabsTrigger>
-          <TabsTrigger value="areas">Service Areas</TabsTrigger>
-          <TabsTrigger value="auto-assignment">Auto-Assignment</TabsTrigger>
-        </TabsList>
+        <ScrollArea className="w-full">
+          <TabsList className="grid w-full grid-cols-11">
+            <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="pricing">Pricing</TabsTrigger>
+            <TabsTrigger value="surge">Surge Rules</TabsTrigger>
+            <TabsTrigger value="integrations">Integrations</TabsTrigger>
+            <TabsTrigger value="contractors">Contractors</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="fleet">Fleet Policies</TabsTrigger>
+            <TabsTrigger value="features">Features</TabsTrigger>
+            <TabsTrigger value="areas">Service Areas</TabsTrigger>
+            <TabsTrigger value="auto-assignment">Assignment</TabsTrigger>
+            <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+          </TabsList>
+        </ScrollArea>
 
         {/* General Settings */}
         <TabsContent value="general">
@@ -1232,6 +1245,1036 @@ export default function AdminSettings() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Surge Rules Configuration */}
+        <TabsContent value="surge">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Dynamic Pricing & Surge Configuration</CardTitle>
+                <CardDescription>Configure surge pricing rules and demand-based multipliers</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label>Enable Surge Pricing</Label>
+                    <Switch
+                      defaultChecked={true}
+                      data-testid="switch-surge-enabled"
+                    />
+                  </div>
+                </div>
+
+                {/* Time-Based Surge Rules */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Time-Based Surge Rules</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Time Period</TableHead>
+                        <TableHead>Days</TableHead>
+                        <TableHead>Multiplier</TableHead>
+                        <TableHead>Active</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell>Rush Hour Morning</TableCell>
+                        <TableCell>Mon-Fri</TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="1.3" className="w-20" step="0.1" />
+                        </TableCell>
+                        <TableCell>
+                          <Switch defaultChecked={true} />
+                        </TableCell>
+                        <TableCell>
+                          <Button size="icon" variant="ghost">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Rush Hour Evening</TableCell>
+                        <TableCell>Mon-Fri</TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="1.5" className="w-20" step="0.1" />
+                        </TableCell>
+                        <TableCell>
+                          <Switch defaultChecked={true} />
+                        </TableCell>
+                        <TableCell>
+                          <Button size="icon" variant="ghost">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Weekend Peak</TableCell>
+                        <TableCell>Sat-Sun</TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="1.2" className="w-20" step="0.1" />
+                        </TableCell>
+                        <TableCell>
+                          <Switch defaultChecked={true} />
+                        </TableCell>
+                        <TableCell>
+                          <Button size="icon" variant="ghost">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                  <Button variant="outline" className="w-full">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Time-Based Rule
+                  </Button>
+                </div>
+
+                {/* Demand-Based Surge */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Demand-Based Surge</h3>
+                  <div className="space-y-2">
+                    <Label>Auto-Surge Threshold (active jobs per contractor): 3</Label>
+                    <Slider
+                      defaultValue={[3]}
+                      min={1}
+                      max={10}
+                      step={1}
+                      className="w-full"
+                      data-testid="slider-surge-threshold"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Maximum Surge Multiplier: 2.5x</Label>
+                    <Slider
+                      defaultValue={[2.5]}
+                      min={1}
+                      max={5}
+                      step={0.1}
+                      className="w-full"
+                      data-testid="slider-max-surge"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Surge Ramp-Up Speed</Label>
+                    <Select defaultValue="moderate">
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="slow">Slow (5% per 10 min)</SelectItem>
+                        <SelectItem value="moderate">Moderate (10% per 10 min)</SelectItem>
+                        <SelectItem value="fast">Fast (20% per 10 min)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Service-Specific Overrides */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Service-Specific Surge Limits</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Service Type</TableHead>
+                        <TableHead>Max Surge</TableHead>
+                        <TableHead>Surge Exempt</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell>Emergency Repair</TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="3.0" className="w-20" step="0.1" />
+                        </TableCell>
+                        <TableCell>
+                          <Switch defaultChecked={false} />
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>PM Service</TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="1.5" className="w-20" step="0.1" />
+                        </TableCell>
+                        <TableCell>
+                          <Switch defaultChecked={true} />
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Truck Wash</TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="1.0" className="w-20" step="0.1" />
+                        </TableCell>
+                        <TableCell>
+                          <Switch defaultChecked={true} />
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button 
+                    onClick={() => handleSaveSettings('surge', {})}
+                    disabled={saveMutation.isPending}
+                    data-testid="button-save-surge"
+                  >
+                    {saveMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    Save Surge Rules
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Contractor Management Configuration */}
+        <TabsContent value="contractors">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Contractor Management Configuration</CardTitle>
+                <CardDescription>Configure contractor tiers, rating criteria, and availability rules</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Performance Tiers */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Performance Tiers</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tier Name</TableHead>
+                        <TableHead>Min Rating</TableHead>
+                        <TableHead>Min Jobs</TableHead>
+                        <TableHead>Commission Rate</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Badge className="bg-yellow-500">Gold</Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="4.8" className="w-20" step="0.1" />
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="100" className="w-20" />
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="75" className="w-20" />%
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="default">Highest</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button size="icon" variant="ghost">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Badge className="bg-gray-400">Silver</Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="4.5" className="w-20" step="0.1" />
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="50" className="w-20" />
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="70" className="w-20" />%
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">High</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button size="icon" variant="ghost">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Badge className="bg-orange-600">Bronze</Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="4.0" className="w-20" step="0.1" />
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="10" className="w-20" />
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="65" className="w-20" />%
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">Standard</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button size="icon" variant="ghost">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                  <Button variant="outline" className="w-full">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Performance Tier
+                  </Button>
+                </div>
+
+                {/* Rating Criteria */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Rating Criteria Weights</h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Customer Rating Weight: 40%</Label>
+                      <Slider
+                        defaultValue={[40]}
+                        max={100}
+                        step={5}
+                        className="w-full"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>On-Time Arrival Weight: 25%</Label>
+                      <Slider
+                        defaultValue={[25]}
+                        max={100}
+                        step={5}
+                        className="w-full"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Job Completion Rate: 20%</Label>
+                      <Slider
+                        defaultValue={[20]}
+                        max={100}
+                        step={5}
+                        className="w-full"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Response Time Weight: 15%</Label>
+                      <Slider
+                        defaultValue={[15]}
+                        max={100}
+                        step={5}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Availability Rules */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Availability Rules</h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Maximum Simultaneous Jobs</Label>
+                      <Input type="number" defaultValue="3" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Minimum Break Between Jobs (minutes)</Label>
+                      <Input type="number" defaultValue="15" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Maximum Daily Hours</Label>
+                      <Input type="number" defaultValue="12" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Maximum Weekly Hours</Label>
+                      <Input type="number" defaultValue="60" />
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch defaultChecked={true} />
+                    <Label>Enforce Department of Transportation (DOT) Hours of Service Rules</Label>
+                  </div>
+                </div>
+
+                {/* Contractor Penalties */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Penalty Configuration</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Violation Type</TableHead>
+                        <TableHead>Penalty Points</TableHead>
+                        <TableHead>Suspension Threshold</TableHead>
+                        <TableHead>Active</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell>No-Show</TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="10" className="w-20" />
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="30" className="w-20" />
+                        </TableCell>
+                        <TableCell>
+                          <Switch defaultChecked={true} />
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Late Arrival (&gt;15 min)</TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="5" className="w-20" />
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="50" className="w-20" />
+                        </TableCell>
+                        <TableCell>
+                          <Switch defaultChecked={true} />
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Customer Complaint</TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="7" className="w-20" />
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="40" className="w-20" />
+                        </TableCell>
+                        <TableCell>
+                          <Switch defaultChecked={true} />
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button 
+                    onClick={() => handleSaveSettings('contractors', {})}
+                    disabled={saveMutation.isPending}
+                    data-testid="button-save-contractors"
+                  >
+                    {saveMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    Save Contractor Settings
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Notification Templates */}
+        <TabsContent value="notifications">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Notification Templates</CardTitle>
+                <CardDescription>Customize SMS and Email notification templates</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Template Categories */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <Label>Template Category:</Label>
+                    <Select defaultValue="job-assignment">
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="job-assignment">Job Assignment</SelectItem>
+                        <SelectItem value="customer-updates">Customer Updates</SelectItem>
+                        <SelectItem value="payment">Payment Notifications</SelectItem>
+                        <SelectItem value="contractor">Contractor Alerts</SelectItem>
+                        <SelectItem value="fleet">Fleet Communications</SelectItem>
+                        <SelectItem value="emergency">Emergency Alerts</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* SMS Templates */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">SMS Templates</h3>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Job Assignment - Customer</Label>
+                      <Textarea
+                        defaultValue="Your TruckFixGo technician {{contractor_name}} is on the way! ETA: {{eta_time}}. Track: {{tracking_link}}"
+                        className="min-h-[80px]"
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Variables: {'{{contractor_name}}'}, {'{{eta_time}}'}, {'{{tracking_link}}'}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Job Assignment - Contractor</Label>
+                      <Textarea
+                        defaultValue="New job assigned! {{service_type}} at {{location}}. Customer: {{customer_name}}. Accept: {{accept_link}}"
+                        className="min-h-[80px]"
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Variables: {'{{service_type}}'}, {'{{location}}'}, {'{{customer_name}}'}, {'{{accept_link}}'}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Payment Confirmation</Label>
+                      <Textarea
+                        defaultValue="Payment of ${{amount}} received for job #{{job_id}}. Thank you for using TruckFixGo!"
+                        className="min-h-[80px]"
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Variables: {'{{amount}}'}, {'{{job_id}}'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Email Templates */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Email Templates</h3>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Email Subject - Job Completion</Label>
+                      <Input
+                        defaultValue="Your TruckFixGo Service is Complete - Job #{{job_id}}"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Email Body - Job Completion</Label>
+                      <Textarea
+                        defaultValue={`Dear {{customer_name}},
+
+Your {{service_type}} service has been completed successfully.
+
+Job Details:
+- Service: {{service_type}}
+- Date: {{job_date}}
+- Technician: {{contractor_name}}
+- Total Cost: ${{total_amount}}
+
+View your invoice: {{invoice_link}}
+
+Thank you for choosing TruckFixGo!
+
+Best regards,
+The TruckFixGo Team`}
+                        className="min-h-[200px]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notification Timing */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Notification Timing</h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Send contractor arrival notification (minutes before)</Label>
+                      <Input type="number" defaultValue="15" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Send job reminder (hours before)</Label>
+                      <Input type="number" defaultValue="2" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Send review request (hours after)</Label>
+                      <Input type="number" defaultValue="24" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Send payment reminder (days after)</Label>
+                      <Input type="number" defaultValue="3" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline">
+                    <TestTube className="mr-2 h-4 w-4" />
+                    Test Templates
+                  </Button>
+                  <Button 
+                    onClick={() => handleSaveSettings('notifications', {})}
+                    disabled={saveMutation.isPending}
+                    data-testid="button-save-notifications"
+                  >
+                    {saveMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    Save Templates
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Fleet Account Policies */}
+        <TabsContent value="fleet">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Fleet Account Policies</CardTitle>
+                <CardDescription>Configure commercial account billing and credit policies</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Account Tiers */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Fleet Account Tiers</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tier</TableHead>
+                        <TableHead>Monthly Volume</TableHead>
+                        <TableHead>Credit Limit</TableHead>
+                        <TableHead>Payment Terms</TableHead>
+                        <TableHead>Discount</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell>
+                          <Badge className="bg-purple-500">Enterprise</Badge>
+                        </TableCell>
+                        <TableCell>$50,000+</TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="100000" className="w-24" />
+                        </TableCell>
+                        <TableCell>
+                          <Select defaultValue="net-60">
+                            <SelectTrigger className="w-24">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="net-15">NET 15</SelectItem>
+                              <SelectItem value="net-30">NET 30</SelectItem>
+                              <SelectItem value="net-45">NET 45</SelectItem>
+                              <SelectItem value="net-60">NET 60</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="15" className="w-16" />%
+                        </TableCell>
+                        <TableCell>
+                          <Button size="icon" variant="ghost">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>
+                          <Badge className="bg-blue-500">Corporate</Badge>
+                        </TableCell>
+                        <TableCell>$20,000-$50,000</TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="50000" className="w-24" />
+                        </TableCell>
+                        <TableCell>
+                          <Select defaultValue="net-30">
+                            <SelectTrigger className="w-24">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="net-15">NET 15</SelectItem>
+                              <SelectItem value="net-30">NET 30</SelectItem>
+                              <SelectItem value="net-45">NET 45</SelectItem>
+                              <SelectItem value="net-60">NET 60</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="10" className="w-16" />%
+                        </TableCell>
+                        <TableCell>
+                          <Button size="icon" variant="ghost">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>
+                          <Badge>Standard</Badge>
+                        </TableCell>
+                        <TableCell>Up to $20,000</TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="20000" className="w-24" />
+                        </TableCell>
+                        <TableCell>
+                          <Select defaultValue="net-15">
+                            <SelectTrigger className="w-24">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="net-15">NET 15</SelectItem>
+                              <SelectItem value="net-30">NET 30</SelectItem>
+                              <SelectItem value="net-45">NET 45</SelectItem>
+                              <SelectItem value="net-60">NET 60</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" defaultValue="5" className="w-16" />%
+                        </TableCell>
+                        <TableCell>
+                          <Button size="icon" variant="ghost">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* EFS/Comdata Integration */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Fuel Card Integration</h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-4">
+                      <h4 className="font-medium">EFS Configuration</h4>
+                      <div className="space-y-2">
+                        <Label>EFS Merchant ID</Label>
+                        <Input type="password" placeholder="Enter merchant ID" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>EFS API Key</Label>
+                        <Input type="password" placeholder="Enter API key" />
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch defaultChecked={false} />
+                        <Label>Enable EFS Payments</Label>
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <h4 className="font-medium">Comdata Configuration</h4>
+                      <div className="space-y-2">
+                        <Label>Comdata Customer ID</Label>
+                        <Input type="password" placeholder="Enter customer ID" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Comdata API Secret</Label>
+                        <Input type="password" placeholder="Enter API secret" />
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch defaultChecked={false} />
+                        <Label>Enable Comdata Payments</Label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Billing Cycles */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Billing Cycle Configuration</h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Default Billing Cycle</Label>
+                      <Select defaultValue="monthly">
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                          <SelectItem value="bi-weekly">Bi-Weekly</SelectItem>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value="quarterly">Quarterly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Invoice Generation Day</Label>
+                      <Select defaultValue="1">
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1st of Month</SelectItem>
+                          <SelectItem value="15">15th of Month</SelectItem>
+                          <SelectItem value="last">Last Day of Month</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Late Payment Fee (%)</Label>
+                      <Input type="number" defaultValue="1.5" step="0.1" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Grace Period (days)</Label>
+                      <Input type="number" defaultValue="5" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Credit Policies */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Credit Policies</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Switch defaultChecked={true} />
+                      <Label>Require Credit Check for New Fleet Accounts</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch defaultChecked={true} />
+                      <Label>Auto-Suspend on Credit Limit Exceed</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch defaultChecked={false} />
+                      <Label>Allow Temporary Credit Limit Increase</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch defaultChecked={true} />
+                      <Label>Send Credit Limit Warnings at 80%</Label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button 
+                    onClick={() => handleSaveSettings('fleet', {})}
+                    disabled={saveMutation.isPending}
+                    data-testid="button-save-fleet"
+                  >
+                    {saveMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    Save Fleet Policies
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Monitoring & Compliance */}
+        <TabsContent value="monitoring">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Monitoring & Compliance Settings</CardTitle>
+                <CardDescription>Configure system monitoring, audit logs, and compliance reporting</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* System Monitoring */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">System Monitoring</h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="flex items-center space-x-2">
+                      <Switch defaultChecked={true} />
+                      <Label>Enable Performance Monitoring</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch defaultChecked={true} />
+                      <Label>Enable Error Tracking</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch defaultChecked={true} />
+                      <Label>Enable API Usage Monitoring</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch defaultChecked={true} />
+                      <Label>Enable Database Performance Monitoring</Label>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Alert Threshold - Response Time (ms)</Label>
+                    <Input type="number" defaultValue="1000" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Alert Threshold - Error Rate (%)</Label>
+                    <Input type="number" defaultValue="5" />
+                  </div>
+                </div>
+
+                {/* Audit Logs */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Audit Log Configuration</h3>
+                  <div className="space-y-2">
+                    <Label>Log Retention Period</Label>
+                    <Select defaultValue="90">
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="30">30 Days</SelectItem>
+                        <SelectItem value="60">60 Days</SelectItem>
+                        <SelectItem value="90">90 Days</SelectItem>
+                        <SelectItem value="180">180 Days</SelectItem>
+                        <SelectItem value="365">1 Year</SelectItem>
+                        <SelectItem value="730">2 Years</SelectItem>
+                        <SelectItem value="indefinite">Indefinite</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Events to Log</Label>
+                    <div className="grid gap-2">
+                      <div className="flex items-center space-x-2">
+                        <Switch defaultChecked={true} />
+                        <Label>User Login/Logout</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch defaultChecked={true} />
+                        <Label>Payment Transactions</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch defaultChecked={true} />
+                        <Label>Settings Changes</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch defaultChecked={true} />
+                        <Label>User Profile Changes</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch defaultChecked={true} />
+                        <Label>Job Status Changes</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch defaultChecked={true} />
+                        <Label>Contractor Actions</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch defaultChecked={false} />
+                        <Label>API Calls (Verbose)</Label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Compliance Reporting */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Compliance Reporting</h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Report Generation Schedule</Label>
+                      <Select defaultValue="monthly">
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value="quarterly">Quarterly</SelectItem>
+                          <SelectItem value="annually">Annually</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Report Recipients</Label>
+                      <Input placeholder="compliance@company.com, admin@company.com" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Compliance Standards</Label>
+                    <div className="grid gap-2">
+                      <div className="flex items-center space-x-2">
+                        <Switch defaultChecked={true} />
+                        <Label>DOT Compliance</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch defaultChecked={true} />
+                        <Label>PCI DSS (Payment Card Industry)</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch defaultChecked={true} />
+                        <Label>GDPR (General Data Protection)</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch defaultChecked={false} />
+                        <Label>HIPAA (Health Information)</Label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Data Privacy */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Data Privacy & Security</h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Data Encryption Standard</Label>
+                      <Select defaultValue="aes-256">
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="aes-128">AES-128</SelectItem>
+                          <SelectItem value="aes-256">AES-256</SelectItem>
+                          <SelectItem value="rsa-2048">RSA-2048</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Session Timeout (minutes)</Label>
+                      <Input type="number" defaultValue="30" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Password Expiry (days)</Label>
+                      <Input type="number" defaultValue="90" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Max Login Attempts</Label>
+                      <Input type="number" defaultValue="5" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Switch defaultChecked={true} />
+                      <Label>Enforce Two-Factor Authentication</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch defaultChecked={true} />
+                      <Label>Anonymize User Data in Logs</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch defaultChecked={true} />
+                      <Label>Enable Data Export Restrictions</Label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline">
+                    <Shield className="mr-2 h-4 w-4" />
+                    Run Security Audit
+                  </Button>
+                  <Button 
+                    onClick={() => handleSaveSettings('monitoring', {})}
+                    disabled={saveMutation.isPending}
+                    data-testid="button-save-monitoring"
+                  >
+                    {saveMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    Save Monitoring Settings
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </AdminLayout>

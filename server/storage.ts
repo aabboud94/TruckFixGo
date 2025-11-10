@@ -53,6 +53,8 @@ import {
   contractPenalties,
   contractAmendments,
   contractPerformanceMetrics,
+  bookingSettings,
+  bookingBlacklist,
   type User,
   type InsertUser,
   type Session,
@@ -170,6 +172,10 @@ import {
   type InsertContractAmendment,
   type ContractPerformanceMetric,
   type InsertContractPerformanceMetric,
+  type BookingSettings,
+  type InsertBookingSettings,
+  type BookingBlacklist,
+  type InsertBookingBlacklist,
   contractStatusEnum,
   slaMetricTypeEnum,
   penaltyStatusEnum,
@@ -652,6 +658,25 @@ export interface IStorage {
     fromDate?: Date;
     toDate?: Date;
   }): Promise<BidAnalytics[]>;
+
+  // ==================== BOOKING OPERATIONS ====================
+  getBookingSettings(serviceTypeId?: string): Promise<BookingSettings[]>;
+  createBookingSettings(settings: InsertBookingSettings): Promise<BookingSettings>;
+  updateBookingSettings(id: string, updates: Partial<InsertBookingSettings>): Promise<BookingSettings | undefined>;
+  deleteBookingSettings(id: string): Promise<boolean>;
+  
+  getBookingBlacklist(date?: string, serviceTypeId?: string): Promise<BookingBlacklist[]>;
+  createBookingBlacklist(blacklist: InsertBookingBlacklist): Promise<BookingBlacklist>;
+  deleteBookingBlacklist(id: string): Promise<boolean>;
+  
+  getAvailableTimeSlots(date: string, serviceTypeId: string): Promise<Array<{
+    time: string;
+    available: boolean;
+    maxCapacity: number;
+    currentBookings: number;
+  }>>;
+  
+  checkTimeSlotAvailability(date: string, timeSlot: string, serviceTypeId: string): Promise<boolean>;
 
   // ==================== ADMIN OPERATIONS ====================
   getSetting(key: string): Promise<AdminSetting | undefined>;
@@ -3206,6 +3231,145 @@ export class PostgreSQLStorage implements IStorage {
     return await db.select().from(bidAnalytics)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(bidAnalytics.periodDate));
+  }
+
+  // ==================== BOOKING OPERATIONS ====================
+  
+  async getBookingSettings(serviceTypeId?: string): Promise<BookingSettings[]> {
+    const conditions = [];
+    if (serviceTypeId) {
+      conditions.push(eq(bookingSettings.serviceTypeId, serviceTypeId));
+    }
+    conditions.push(eq(bookingSettings.isActive, true));
+    
+    const result = await db.select()
+      .from(bookingSettings)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(bookingSettings.dayOfWeek);
+    
+    return result;
+  }
+  
+  async createBookingSettings(settings: InsertBookingSettings): Promise<BookingSettings> {
+    const [result] = await db.insert(bookingSettings).values(settings).returning();
+    return result;
+  }
+  
+  async updateBookingSettings(id: string, updates: Partial<InsertBookingSettings>): Promise<BookingSettings | undefined> {
+    const [result] = await db.update(bookingSettings)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(bookingSettings.id, id))
+      .returning();
+    return result;
+  }
+  
+  async deleteBookingSettings(id: string): Promise<boolean> {
+    const result = await db.delete(bookingSettings).where(eq(bookingSettings.id, id));
+    return true;
+  }
+  
+  async getBookingBlacklist(date?: string, serviceTypeId?: string): Promise<BookingBlacklist[]> {
+    const conditions = [];
+    if (date) {
+      conditions.push(eq(bookingBlacklist.date, date));
+    }
+    if (serviceTypeId) {
+      conditions.push(eq(bookingBlacklist.serviceTypeId, serviceTypeId));
+    }
+    
+    const result = await db.select()
+      .from(bookingBlacklist)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(bookingBlacklist.date);
+    
+    return result;
+  }
+  
+  async createBookingBlacklist(blacklist: InsertBookingBlacklist): Promise<BookingBlacklist> {
+    const [result] = await db.insert(bookingBlacklist).values(blacklist).returning();
+    return result;
+  }
+  
+  async deleteBookingBlacklist(id: string): Promise<boolean> {
+    const result = await db.delete(bookingBlacklist).where(eq(bookingBlacklist.id, id));
+    return true;
+  }
+  
+  async getAvailableTimeSlots(date: string, serviceTypeId: string): Promise<Array<{
+    time: string;
+    available: boolean;
+    maxCapacity: number;
+    currentBookings: number;
+  }>> {
+    // Get day of week from date
+    const dayOfWeek = new Date(date).getDay();
+    
+    // Get booking settings for this service and day
+    const settings = await this.getBookingSettings(serviceTypeId);
+    const daySettings = settings.find(s => s.dayOfWeek === dayOfWeek);
+    
+    if (!daySettings || !daySettings.isActive) {
+      return [];
+    }
+    
+    // Check for blacklisted dates
+    const blacklisted = await this.getBookingBlacklist(date, serviceTypeId);
+    if (blacklisted.some(b => !b.startTime && !b.endTime)) {
+      // Entire day is blocked
+      return [];
+    }
+    
+    // Generate time slots
+    const slots = [];
+    const start = new Date(`${date} ${daySettings.startTime}`);
+    const end = new Date(`${date} ${daySettings.endTime}`);
+    const slotDuration = daySettings.slotDuration;
+    const bufferTime = daySettings.bufferTime || 0;
+    
+    while (start < end) {
+      const timeSlot = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}`;
+      const endSlot = new Date(start.getTime() + slotDuration * 60000);
+      const endTimeSlot = `${endSlot.getHours().toString().padStart(2, '0')}:${endSlot.getMinutes().toString().padStart(2, '0')}`;
+      
+      // Check if this slot is blacklisted
+      const isBlacklisted = blacklisted.some(b => {
+        if (!b.startTime || !b.endTime) return false;
+        return timeSlot >= b.startTime && timeSlot < b.endTime;
+      });
+      
+      if (!isBlacklisted) {
+        // Count current bookings for this slot
+        const currentBookings = await db.select({
+          count: sql<number>`COUNT(*)`
+        })
+        .from(jobs)
+        .where(and(
+          sql`DATE(${jobs.scheduledAt}) = ${date}`,
+          sql`TO_CHAR(${jobs.scheduledAt}, 'HH24:MI') >= ${timeSlot}`,
+          sql`TO_CHAR(${jobs.scheduledAt}, 'HH24:MI') < ${endTimeSlot}`,
+          eq(jobs.serviceTypeId, serviceTypeId),
+          ne(jobs.status, 'cancelled')
+        ));
+        
+        slots.push({
+          time: `${timeSlot}-${endTimeSlot}`,
+          available: currentBookings[0]?.count < daySettings.maxBookingsPerSlot,
+          maxCapacity: daySettings.maxBookingsPerSlot,
+          currentBookings: currentBookings[0]?.count || 0
+        });
+      }
+      
+      // Move to next slot
+      start.setMinutes(start.getMinutes() + slotDuration + bufferTime);
+    }
+    
+    return slots;
+  }
+  
+  async checkTimeSlotAvailability(date: string, timeSlot: string, serviceTypeId: string): Promise<boolean> {
+    const slots = await this.getAvailableTimeSlots(date, serviceTypeId);
+    const slot = slots.find(s => s.time === timeSlot);
+    return slot ? slot.available : false;
   }
 
   // ==================== ADMIN OPERATIONS ====================

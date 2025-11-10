@@ -24,7 +24,9 @@ import {
   CheckCircle,
   Wifi,
   WifiOff,
-  Star
+  Star,
+  Users,
+  DollarSign
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -186,6 +188,12 @@ export default function TrackingPage() {
     queryKey: [`/api/jobs/${jobId}/tracking`],
     enabled: !!jobId,
     refetchInterval: 30000 // Refetch every 30 seconds
+  });
+
+  // Fetch split payment details
+  const { data: splitPaymentData } = useQuery({
+    queryKey: [`/api/payments/split/${jobId}`],
+    enabled: !!jobId
   });
 
   // WebSocket connection for real-time updates
@@ -510,6 +518,97 @@ export default function TrackingPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Split Payment Status */}
+        {splitPaymentData?.splitPayment && (
+          <Card className="border-primary">
+            <CardHeader>
+              <h3 className="font-semibold text-lg flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                Split Payment Status
+              </h3>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Amount</p>
+                  <p className="text-2xl font-bold">
+                    ${(parseFloat(splitPaymentData.splitPayment.totalAmount) / 100).toFixed(2)}
+                  </p>
+                </div>
+                <Badge 
+                  variant={splitPaymentData.splitPayment.status === 'completed' ? 'default' : 
+                          splitPaymentData.splitPayment.status === 'partial' ? 'secondary' : 'outline'}
+                >
+                  {splitPaymentData.splitPayment.status === 'completed' ? 'Fully Paid' :
+                   splitPaymentData.splitPayment.status === 'partial' ? 'Partially Paid' : 'Pending'}
+                </Badge>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <p className="text-sm font-medium">Payment Breakdown:</p>
+                {splitPaymentData.paymentSplits?.map((split: any) => (
+                  <div key={split.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full ${
+                        split.status === 'paid' ? 'bg-green-100' :
+                        split.status === 'pending' ? 'bg-yellow-100' : 'bg-red-100'
+                      } flex items-center justify-center`}>
+                        {split.status === 'paid' ? (
+                          <CheckCircle className="w-5 h-5 text-green-600" />
+                        ) : split.status === 'pending' ? (
+                          <Clock className="w-5 h-5 text-yellow-600" />
+                        ) : (
+                          <AlertCircle className="w-5 h-5 text-red-600" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="capitalize text-xs">
+                            {split.payerType}
+                          </Badge>
+                          <span className="font-medium">{split.payerName}</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{split.description}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">
+                        ${(parseFloat(split.amountAssigned) / 100).toFixed(2)}
+                      </p>
+                      {split.paidAmount && parseFloat(split.paidAmount) > 0 && (
+                        <p className="text-xs text-green-600">
+                          Paid: ${(parseFloat(split.paidAmount) / 100).toFixed(2)}
+                        </p>
+                      )}
+                      {split.status === 'paid' && split.paidAt && (
+                        <p className="text-xs text-muted-foreground">
+                          {format(new Date(split.paidAt), "MMM d, h:mm a")}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {splitPaymentData.splitPayment.status !== 'completed' && (
+                <>
+                  <Separator />
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5" />
+                      <p className="text-sm text-blue-900">
+                        Payment links have been sent to all parties. The job will be marked as paid once all parties complete their payments.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Actions based on status */}
         {status === "completed" && (

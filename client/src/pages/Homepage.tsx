@@ -188,6 +188,17 @@ export default function Homepage() {
                 Get Help Now - 15 Min Response
               </Button>
               
+              <Button 
+                size="lg" 
+                variant="secondary"
+                className="px-8 py-6 text-lg font-semibold hover-elevate w-full sm:w-auto"
+                onClick={() => setLocation("/scheduled-booking")}
+                data-testid="button-hero-scheduled"
+              >
+                <Calendar className="w-5 h-5 mr-2" />
+                Schedule Service
+              </Button>
+              
               <div className="flex flex-col text-white">
                 <span className="text-3xl font-bold">1-800-TRUCK-FIX</span>
                 <span className="text-sm opacity-90">24/7 Emergency Hotline</span>

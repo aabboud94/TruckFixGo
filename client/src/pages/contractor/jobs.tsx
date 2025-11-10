@@ -49,8 +49,7 @@ interface Job {
     lng: number;
   };
   issueDescription: string;
-  scheduledDate?: string;
-  scheduledTime?: string;
+  scheduledAt?: string;
   assignedAt?: string;
   completedAt?: string;
   cancelledAt?: string;
@@ -171,7 +170,7 @@ export default function ContractorJobs() {
       }
 
       filtered = filtered.filter(job => {
-        const jobDate = new Date(job.assignedAt || job.scheduledDate || job.completedAt || "");
+        const jobDate = new Date(job.assignedAt || job.scheduledAt || job.completedAt || "");
         return jobDate >= fromDate && jobDate <= toDate;
       });
     }
@@ -179,7 +178,7 @@ export default function ContractorJobs() {
     // Custom date range
     if (filterDateRange === "custom" && (customDateRange.from || customDateRange.to)) {
       filtered = filtered.filter(job => {
-        const jobDate = new Date(job.assignedAt || job.scheduledDate || job.completedAt || "");
+        const jobDate = new Date(job.assignedAt || job.scheduledAt || job.completedAt || "");
         if (customDateRange.from && jobDate < customDateRange.from) return false;
         if (customDateRange.to && jobDate > customDateRange.to) return false;
         return true;
@@ -310,11 +309,11 @@ export default function ContractorJobs() {
                 </div>
               )}
 
-              {job.scheduledDate && (
+              {job.scheduledAt && (
                 <div className="flex items-center gap-1 text-sm text-muted-foreground">
                   <CalendarIcon className="w-3 h-3" />
                   <span>
-                    {format(new Date(job.scheduledDate), 'MMM d, yyyy')} at {job.scheduledTime}
+                    {format(new Date(job.scheduledAt), 'MMM d, yyyy \'at\' h:mm a')}
                   </span>
                 </div>
               )}

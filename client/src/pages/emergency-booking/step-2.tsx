@@ -117,10 +117,10 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
     },
   });
 
-  // Submit job mutation
+  // Submit job mutation - using unauthenticated emergency endpoint
   const submitJobMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('POST', '/api/auth/guest-booking', data);
+      return apiRequest('POST', '/api/jobs/emergency', data);
     },
     onSuccess: (response) => {
       // Store job info in localStorage for tracking
@@ -173,8 +173,10 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
   };
 
   const handleIssueSelect = (issueId: string) => {
+    console.log("[Step2] Issue selected:", issueId);
     setSelectedIssue(issueId);
     form.setValue("issue", issueId);
+    form.clearErrors("issue"); // Clear any validation errors when an issue is selected
     setShowOtherInput(issueId === "other");
   };
 
@@ -245,6 +247,9 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
   };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    console.log("[Step2] onSubmit called with values:", values);
+    console.log("[Step2] Form is valid, proceeding with submission");
+    
     // Upload photo if present
     const photoUrl = await uploadPhoto();
     
@@ -262,28 +267,44 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
       }
     }
 
-    // Prepare job data with correct structure
+    // Prepare job data with correct structure for emergency endpoint
     const jobData = {
+      // Mark as emergency for the backend
+      type: 'emergency',
+      jobType: "emergency",
+      
+      // Customer info
       guestPhone: bookingData.phone,
       guestEmail: bookingData.email,
-      customerName: bookingData.name || 'Guest', // Store guest name directly on job
-      customerPhone: bookingData.phone, // Store guest phone directly on job
-      jobType: "emergency",
+      customerName: bookingData.name || 'Guest',
+      customerPhone: bookingData.phone,
+      email: bookingData.email,
+      
+      // Service details
+      serviceType: mapIssueToServiceType(values.issue),
       serviceTypeId: mapIssueToServiceType(values.issue),
+      
+      // Location
       location: bookingData.location || {
         lat: 0,
         lng: 0
       },
       locationAddress: bookingData.manualLocation || bookingData.location?.address || "Location provided",
+      
+      // Issue details
       description: issueText,
       unitNumber: values.unitNumber || undefined,
       carrierName: values.carrierName || undefined,
-      vehicleMake: "Unknown",
-      vehicleModel: "Semi Truck",
+      vehicleMake: values.unitNumber ? "Semi Truck" : "Unknown",
+      vehicleModel: values.unitNumber ? "Commercial Vehicle" : "Unknown",
       urgencyLevel: 5, // Max urgency for emergency
       photoUrl: photoUrl || undefined,
+      
+      // AI analysis if available
+      aiAnalysis: photoAnalysis || undefined
     };
 
+    console.log("[Step2] Submitting job data:", jobData);
     submitJobMutation.mutate(jobData);
   };
 
@@ -300,7 +321,26 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <form 
+          onSubmit={(e) => {
+            console.log("[Step2] Form submission triggered");
+            console.log("[Step2] Form errors before submit:", form.formState.errors);
+            console.log("[Step2] Form values before submit:", form.getValues());
+            form.handleSubmit(onSubmit)(e);
+          }}
+          className="space-y-4"
+        >
+          {/* Validation Error Alert */}
+          {form.formState.errors.issue && (
+            <Alert variant="destructive" className="animate-in fade-in slide-in-from-top">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Required Field Missing</AlertTitle>
+              <AlertDescription>
+                Please select an issue type before submitting. Click on one of the buttons below to describe what's wrong with your vehicle.
+              </AlertDescription>
+            </Alert>
+          )}
+          
           {/* Issue Selection */}
           <Card className="border-2">
             <CardContent className="p-6 space-y-4">
@@ -332,7 +372,7 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
                         })}
                       </div>
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-base font-medium text-destructive mt-2" />
                   </FormItem>
                 )}
               />
@@ -618,6 +658,15 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
               disabled={submitJobMutation.isPending || isUploading}
               className="flex-[2] h-16 text-lg font-semibold hover-elevate"
               data-testid="button-get-help"
+              onClick={() => {
+                console.log("[Step2] GET HELP NOW button clicked");
+                console.log("[Step2] Current form state:", {
+                  values: form.getValues(),
+                  errors: form.formState.errors,
+                  isValid: form.formState.isValid,
+                  selectedIssue: selectedIssue
+                });
+              }}
             >
               {submitJobMutation.isPending ? (
                 <>

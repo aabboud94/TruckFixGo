@@ -594,7 +594,9 @@ export default function ContractorDashboard() {
                           <div className="flex items-center gap-2">
                             <Calendar className="w-4 h-4 text-muted-foreground" />
                             <span className="font-medium">
-                              {format(new Date(job.scheduledDate), 'MMM d, yyyy')} at {job.scheduledTime}
+                              {job.scheduledAt 
+                                ? format(new Date(job.scheduledAt), 'MMM d, yyyy \'at\' h:mm a')
+                                : 'Not scheduled'}
                             </span>
                           </div>
                           <p className="text-sm text-muted-foreground">{job.serviceType}</p>

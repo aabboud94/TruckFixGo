@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Homepage from "@/pages/Homepage";
 import Login from "@/pages/login";
 import EmergencyBooking from "@/pages/emergency-booking";
+import ScheduledBooking from "@/pages/scheduled-booking";
 import TrackingPage from "@/pages/tracking";
 import PaymentMethodsPage from "@/pages/payment-methods";
 import BiddingJobsPage from "@/pages/bidding-jobs";
@@ -50,6 +51,7 @@ import AdminLogin from "@/pages/admin/login";
 import AdminSetup from "@/pages/admin-setup";
 import AdminDashboard from "@/pages/admin";
 import AdminSettings from "@/pages/admin/settings";
+import AdminBookingSettings from "@/pages/admin/booking-settings";
 import AdminJobs from "@/pages/admin/jobs";
 import AdminContractors from "@/pages/admin/contractors";
 import AdminApplications from "@/pages/admin/applications";
@@ -79,6 +81,7 @@ import AIChatbot from "@/components/ai-chatbot";
 import InstallPrompt from "@/components/install-prompt";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import TestLocationInput from "@/pages/test-location-input";
+import SplitPaymentPage from "@/pages/split-payment";
 
 function Router() {
   return (
@@ -87,6 +90,9 @@ function Router() {
       <Route path="/" component={Homepage} />
       <Route path="/login" component={Login} />
       <Route path="/emergency" component={EmergencyBooking} />
+      <Route path="/scheduled-booking" component={ScheduledBooking} />
+      <Route path="/jobs" component={JobsDashboard} />
+      <Route path="/jobs/:jobId" component={TrackingPage} />
       
       {/* Public Pages */}
       <Route path="/contact" component={Contact} />
@@ -102,6 +108,7 @@ function Router() {
       
       {/* Payment Pages */}
       <Route path="/payment-methods" component={PaymentMethodsPage} />
+      <Route path="/payment/split/:token" component={SplitPaymentPage} />
       
       {/* Contractor Pages */}
       <Route path="/contractor/auth" component={ContractorAuth} />
@@ -137,6 +144,7 @@ function Router() {
       <Route path="/admin/setup" component={AdminSetup} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/admin/settings" component={AdminSettings} />
+      <Route path="/admin/booking-settings" component={AdminBookingSettings} />
       <Route path="/admin/jobs" component={AdminJobs} />
       <Route path="/admin/contractors" component={AdminContractors} />
       <Route path="/admin/applications" component={AdminApplications} />

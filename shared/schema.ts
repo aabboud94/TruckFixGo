@@ -1313,6 +1313,42 @@ export const integrationsConfig = pgTable("integrations_config", {
   serviceIdx: uniqueIndex("idx_integrations_config_service").on(table.service)
 }));
 
+// Booking Settings for scheduled services
+export const bookingSettings = pgTable("booking_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  dayOfWeek: integer("day_of_week").notNull(), // 0-6 (Sun-Sat)
+  startTime: varchar("start_time", { length: 5 }).notNull(), // HH:MM format
+  endTime: varchar("end_time", { length: 5 }).notNull(), // HH:MM format
+  slotDuration: integer("slot_duration").notNull().default(60), // in minutes
+  maxBookingsPerSlot: integer("max_bookings_per_slot").notNull().default(1),
+  bufferTime: integer("buffer_time").notNull().default(0), // minutes between bookings
+  isActive: boolean("is_active").notNull().default(true),
+  serviceTypeId: varchar("service_type_id").references(() => serviceTypes.id),
+  advanceBookingDays: integer("advance_booking_days").notNull().default(30),
+  minAdvanceHours: integer("min_advance_hours").notNull().default(24),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  dayServiceIdx: index("idx_booking_settings_day_service").on(table.dayOfWeek, table.serviceTypeId)
+}));
+
+// Blocked dates/times for scheduled services
+export const bookingBlacklist = pgTable("booking_blacklist", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD
+  startTime: varchar("start_time", { length: 5 }), // HH:MM, null = all day
+  endTime: varchar("end_time", { length: 5 }), // HH:MM, null = all day
+  reason: text("reason"),
+  isRecurring: boolean("is_recurring").notNull().default(false),
+  recurringPattern: varchar("recurring_pattern", { length: 50 }), // weekly, monthly, yearly
+  serviceTypeId: varchar("service_type_id").references(() => serviceTypes.id), // null = all services
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  dateIdx: index("idx_booking_blacklist_date").on(table.date),
+  serviceIdx: index("idx_booking_blacklist_service").on(table.serviceTypeId)
+}));
+
 export const referralPrograms = pgTable("referral_programs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -2610,3 +2646,20 @@ export const insertContractPerformanceMetricSchema = createInsertSchema(contract
 });
 export type InsertContractPerformanceMetric = z.infer<typeof insertContractPerformanceMetricSchema>;
 export type ContractPerformanceMetric = typeof contractPerformanceMetrics.$inferSelect;
+
+// Booking Settings schemas and types
+export const insertBookingSettingsSchema = createInsertSchema(bookingSettings).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+export type InsertBookingSettings = z.infer<typeof insertBookingSettingsSchema>;
+export type BookingSettings = typeof bookingSettings.$inferSelect;
+
+export const insertBookingBlacklistSchema = createInsertSchema(bookingBlacklist).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+export type InsertBookingBlacklist = z.infer<typeof insertBookingBlacklistSchema>;
+export type BookingBlacklist = typeof bookingBlacklist.$inferSelect;
