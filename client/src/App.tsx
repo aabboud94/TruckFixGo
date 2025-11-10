@@ -56,6 +56,8 @@ import AdminApplications from "@/pages/admin/applications";
 import AdminTemplates from "@/pages/admin/templates";
 import AdminPricingRules from "@/pages/admin/pricing-rules";
 import AdminBidding from "@/pages/admin/bidding";
+import AdminBiddingConfig from "@/pages/admin/bidding-config";
+import AdminJobMonitor from "@/pages/admin/job-monitor";
 import AdminFleetChecks from "@/pages/admin-fleet-checks";
 import AdminBilling from "@/pages/admin/billing";
 import AdminContracts from "@/pages/admin/contracts";
@@ -141,6 +143,8 @@ function Router() {
       <Route path="/admin/templates" component={AdminTemplates} />
       <Route path="/admin/pricing-rules" component={AdminPricingRules} />
       <Route path="/admin/bidding" component={AdminBidding} />
+      <Route path="/admin/bidding-config" component={AdminBiddingConfig} />
+      <Route path="/admin/job-monitor" component={AdminJobMonitor} />
       <Route path="/admin/fleet-checks" component={AdminFleetChecks} />
       <Route path="/admin/billing" component={AdminBilling} />
       <Route path="/admin/contracts" component={AdminContracts} />

@@ -237,12 +237,13 @@ export default function AdminSettings() {
       breadcrumbs={[{ label: "Settings" }]}
     >
       <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="pricing">Pricing</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
           <TabsTrigger value="features">Features</TabsTrigger>
           <TabsTrigger value="areas">Service Areas</TabsTrigger>
+          <TabsTrigger value="auto-assignment">Auto-Assignment</TabsTrigger>
         </TabsList>
 
         {/* General Settings */}
@@ -1050,6 +1051,184 @@ export default function AdminSettings() {
                     Add Service Zone
                   </Button>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Auto-Assignment Rules */}
+        <TabsContent value="auto-assignment">
+          <Card>
+            <CardHeader>
+              <CardTitle>Auto-Assignment Rules</CardTitle>
+              <CardDescription>Configure automatic job assignment escalation and timeouts</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label>Enable Auto-Assignment</Label>
+                  <Switch
+                    defaultChecked={currentSettings.features.autoAssignContractors}
+                    data-testid="switch-auto-assign-enabled"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Escalation Timeouts</h3>
+                
+                <div className="space-y-2">
+                  <Label>Admin Alert Time (minutes): 5</Label>
+                  <Slider
+                    defaultValue={[5]}
+                    min={1}
+                    max={30}
+                    step={1}
+                    className="w-full"
+                    data-testid="slider-admin-alert-time"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Time to wait before alerting admins about unassigned jobs
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Customer Notice Time (minutes): 7</Label>
+                  <Slider
+                    defaultValue={[7]}
+                    min={1}
+                    max={30}
+                    step={1}
+                    className="w-full"
+                    data-testid="slider-customer-notice-time"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Time to wait before notifying customer about assignment delays
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Auto-Assignment Time (minutes): 10</Label>
+                  <Slider
+                    defaultValue={[10]}
+                    min={5}
+                    max={60}
+                    step={5}
+                    className="w-full"
+                    data-testid="slider-auto-assign-time"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Time to wait before automatically assigning to next available contractor
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Assignment Priority</h3>
+                
+                <div className="space-y-2">
+                  <Label>Assignment Algorithm</Label>
+                  <Select defaultValue="rating_distance">
+                    <SelectTrigger data-testid="select-assignment-algorithm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nearest">Nearest Contractor</SelectItem>
+                      <SelectItem value="highest_rating">Highest Rating</SelectItem>
+                      <SelectItem value="rating_distance">Rating + Distance Balance</SelectItem>
+                      <SelectItem value="least_busy">Least Busy</SelectItem>
+                      <SelectItem value="round_robin">Round Robin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Maximum Distance (miles): 50</Label>
+                  <Slider
+                    defaultValue={[50]}
+                    min={10}
+                    max={200}
+                    step={10}
+                    className="w-full"
+                    data-testid="slider-max-distance"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Minimum Contractor Rating: 4.0</Label>
+                  <Slider
+                    defaultValue={[4.0]}
+                    min={3.0}
+                    max={5.0}
+                    step={0.1}
+                    className="w-full"
+                    data-testid="slider-min-rating"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Cooldown Periods</h3>
+                
+                <div className="space-y-2">
+                  <Label>Admin Alert Cooldown (minutes): 30</Label>
+                  <Slider
+                    defaultValue={[30]}
+                    min={10}
+                    max={120}
+                    step={10}
+                    className="w-full"
+                    data-testid="slider-admin-cooldown"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Minimum time between sending admin alerts for the same job
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Customer Notification Cooldown (minutes): 15</Label>
+                  <Slider
+                    defaultValue={[15]}
+                    min={5}
+                    max={60}
+                    step={5}
+                    className="w-full"
+                    data-testid="slider-customer-cooldown"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Minimum time between sending customer notifications
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Contractor Rejection Cooldown (minutes): 60</Label>
+                  <Slider
+                    defaultValue={[60]}
+                    min={15}
+                    max={240}
+                    step={15}
+                    className="w-full"
+                    data-testid="slider-rejection-cooldown"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Time before re-offering job to contractor who rejected it
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button 
+                  onClick={() => handleSaveSettings('auto-assignment', {})}
+                  disabled={saveMutation.isPending}
+                  data-testid="button-save-auto-assignment"
+                >
+                  {saveMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Save Auto-Assignment Rules
+                </Button>
               </div>
             </CardContent>
           </Card>
