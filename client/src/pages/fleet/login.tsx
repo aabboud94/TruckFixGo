@@ -36,12 +36,10 @@ export default function FleetLogin() {
     setIsLoading(true);
     try {
       // Make actual API call to login endpoint
-      const response = await apiRequest("POST", "/api/auth/login", {
+      const result = await apiRequest("POST", "/api/auth/login", {
         email: data.email,
         password: data.password
       });
-      
-      const result = await response.json();
       
       // Check user role and redirect accordingly
       if (result.user && result.user.role) {
