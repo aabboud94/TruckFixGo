@@ -228,6 +228,16 @@ import {
 } from "@shared/schema";
 
 export interface IStorage {
+  // ==================== JOB REASSIGNMENT ====================
+  
+  // Check and reassign staled jobs that haven't been accepted
+  checkAndReassignStaledJobs(): Promise<Array<{
+    jobId: string;
+    oldContractorId: string;
+    newContractorId: string;
+    attemptNumber: number;
+  }>>;
+  
   // ==================== LOCATION TRACKING ====================
   
   // Update contractor's current location
@@ -2389,11 +2399,17 @@ export class PostgreSQLStorage implements IStorage {
   async assignContractorToJob(jobId: string, contractorId: string): Promise<Job | undefined> {
     console.log(`[AssignJob] Assigning job ${jobId} to contractor ${contractorId}`);
     
+    // Get current job to retrieve assignment attempts
+    const currentJob = await this.getJob(jobId);
+    const currentAttempts = currentJob?.assignmentAttempts || 0;
+    
     const result = await db.update(jobs)
       .set({ 
         contractorId, 
         status: 'assigned',
         assignedAt: new Date(),
+        assignmentAttempts: currentAttempts + 1,
+        lastAssignmentAttemptAt: new Date(),
         updatedAt: new Date() 
       })
       .where(eq(jobs.id, jobId))
@@ -2408,14 +2424,15 @@ export class PostgreSQLStorage implements IStorage {
         })
         .where(eq(contractorProfiles.userId, contractorId));
       
-      console.log(`[AssignJob] Updated lastAssignedAt for contractor ${contractorId}`);
+      console.log(`[AssignJob] Updated lastAssignedAt for contractor ${contractorId}, attempt #${currentAttempts + 1}`);
       
       // Add to job status history
       await db.insert(jobStatusHistory).values({
         jobId,
-        fromStatus: 'new',
+        fromStatus: currentJob?.status || 'new',
         toStatus: 'assigned',
-        changedBy: contractorId
+        changedBy: contractorId,
+        notes: `Assignment attempt #${currentAttempts + 1}`
       });
     }
     
@@ -8218,6 +8235,145 @@ export class PostgreSQLStorage implements IStorage {
       polyline,
       points: routePoints
     };
+  }
+  
+  // Check and reassign staled jobs that haven't been accepted
+  async checkAndReassignStaledJobs(): Promise<Array<{
+    jobId: string;
+    oldContractorId: string;
+    newContractorId: string;
+    attemptNumber: number;
+  }>> {
+    const reassignments: Array<{
+      jobId: string;
+      oldContractorId: string;
+      newContractorId: string;
+      attemptNumber: number;
+    }> = [];
+
+    try {
+      // Find jobs that:
+      // 1. Are in 'assigned' status
+      // 2. Were last assigned more than 15 minutes ago
+      // 3. Haven't exceeded max attempts (3)
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+      
+      const staledJobs = await db.select()
+        .from(jobs)
+        .where(
+          and(
+            eq(jobs.status, 'assigned'),
+            lte(jobs.lastAssignmentAttemptAt, fifteenMinutesAgo),
+            lt(jobs.assignmentAttempts, 3)
+          )
+        )
+        .limit(20); // Process up to 20 jobs at a time to avoid overload
+
+      console.log(`[Reassignment] Found ${staledJobs.length} staled jobs to reassign`);
+
+      for (const job of staledJobs) {
+        if (!job.contractorId) continue;
+
+        try {
+          console.log(`[Reassignment] Processing job ${job.id}, attempt #${job.assignmentAttempts + 1}/3`);
+          
+          // Get job location for finding available contractors
+          let jobLat, jobLon;
+          if (job.location && typeof job.location === 'object') {
+            const location = job.location as any;
+            jobLat = location.lat || location.latitude;
+            jobLon = location.lon || location.lng || location.longitude;
+          }
+
+          // Get available contractors, excluding the current one
+          const availableContractors = await this.getAvailableContractorsForAssignment(jobLat, jobLon);
+          
+          // Filter out the current contractor
+          const alternativeContractors = availableContractors.filter(
+            c => c.id !== job.contractorId
+          );
+
+          console.log(`[Reassignment] Found ${alternativeContractors.length} alternative contractors for job ${job.id}`);
+
+          if (alternativeContractors.length === 0) {
+            // No alternative contractors available
+            console.log(`[Reassignment] No alternative contractors available for job ${job.id}`);
+            
+            // If this is the 3rd attempt, cancel the job
+            if (job.assignmentAttempts >= 2) {
+              console.log(`[Reassignment] Job ${job.id} exceeded max attempts, cancelling`);
+              await db.update(jobs)
+                .set({
+                  status: 'cancelled',
+                  cancelledAt: new Date(),
+                  completionNotes: 'Cancelled: No contractor accepted after 3 assignment attempts',
+                  updatedAt: new Date()
+                })
+                .where(eq(jobs.id, job.id));
+              
+              // Add to job status history
+              await db.insert(jobStatusHistory).values({
+                jobId: job.id,
+                fromStatus: 'assigned',
+                toStatus: 'cancelled',
+                notes: 'Auto-cancelled after 3 failed assignment attempts'
+              });
+            }
+            continue;
+          }
+
+          // Select the next contractor (already sorted by round-robin logic)
+          const newContractor = alternativeContractors[0];
+          const oldContractorId = job.contractorId;
+
+          console.log(`[Reassignment] Reassigning job ${job.id} from contractor ${oldContractorId} to ${newContractor.id}`);
+          console.log(`[Reassignment] New contractor: ${newContractor.name}, Tier: ${newContractor.performanceTier}, Last assigned: ${newContractor.lastAssignedAt}`);
+
+          // First, record in job status history that we're unassigning
+          await db.insert(jobStatusHistory).values({
+            jobId: job.id,
+            fromStatus: 'assigned',
+            toStatus: 'new',
+            notes: `Unassigned from contractor ${oldContractorId} due to non-response (attempt #${job.assignmentAttempts})`
+          });
+
+          // Reset job status temporarily
+          await db.update(jobs)
+            .set({
+              status: 'new',
+              contractorId: null,
+              updatedAt: new Date()
+            })
+            .where(eq(jobs.id, job.id));
+
+          // Reassign to new contractor using the existing function
+          const updatedJob = await this.assignContractorToJob(job.id, newContractor.id);
+
+          if (updatedJob) {
+            reassignments.push({
+              jobId: job.id,
+              oldContractorId: oldContractorId,
+              newContractorId: newContractor.id,
+              attemptNumber: job.assignmentAttempts + 1
+            });
+
+            // Log successful reassignment
+            console.log(`[Reassignment] Successfully reassigned job ${job.id} to contractor ${newContractor.id}`);
+          }
+        } catch (error) {
+          console.error(`[Reassignment] Error processing job ${job.id}:`, error);
+        }
+      }
+
+      if (reassignments.length > 0) {
+        console.log(`[Reassignment] Completed ${reassignments.length} reassignments`);
+      }
+
+    } catch (error) {
+      console.error('[Reassignment] Error in checkAndReassignStaledJobs:', error);
+    }
+
+    return reassignments;
   }
   
   // Helper function for distance calculation

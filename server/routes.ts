@@ -3146,6 +3146,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // If no contractor specified or autoAssign is true, use smart assignment
         if (!contractorId || req.body.autoAssign) {
           console.log('[AssignJob] Auto-assigning using round-robin logic');
+          console.log(`[AssignJob] Job details: ID=${jobId}, Type=${job.jobType}, Service=${job.serviceTypeId}`);
+          console.log(`[AssignJob] Current assignment attempts: ${job.assignmentAttempts || 0}`);
           
           // Extract coordinates from job location if available
           let jobLat, jobLon;
@@ -3153,31 +3155,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const location = job.location as any;
             jobLat = location.lat || location.latitude;
             jobLon = location.lon || location.lng || location.longitude;
+            console.log(`[AssignJob] Job location: lat=${jobLat}, lon=${jobLon}`);
           }
           
           // Get available contractors using round-robin logic
           const availableContractors = await storage.getAvailableContractorsForAssignment(jobLat, jobLon);
           
-          console.log('[AssignJob] Available contractors:', availableContractors.map(c => ({ 
-            id: c.id, 
-            name: c.name, 
-            tier: c.performanceTier, 
-            lastAssigned: c.lastAssignedAt,
-            distance: c.distance 
-          })));
+          console.log('[AssignJob] ============ ROUND-ROBIN DECISION PROCESS ============');
+          console.log(`[AssignJob] Total available contractors: ${availableContractors.length}`);
+          
+          // Log detailed contractor information for round-robin analysis
+          availableContractors.slice(0, 5).forEach((c, index) => {
+            console.log(`[AssignJob] Rank #${index + 1}:`);
+            console.log(`[AssignJob]   - Contractor: ${c.name} (ID: ${c.id})`);
+            console.log(`[AssignJob]   - Performance Tier: ${c.performanceTier}`);
+            console.log(`[AssignJob]   - Last Assigned: ${c.lastAssignedAt ? new Date(c.lastAssignedAt).toISOString() : 'Never'}`);
+            console.log(`[AssignJob]   - Jobs Completed: ${c.totalJobsCompleted || 0}`);
+            console.log(`[AssignJob]   - Average Rating: ${c.averageRating || 'N/A'}`);
+            console.log(`[AssignJob]   - Distance: ${c.distance ? c.distance + ' miles' : 'N/A'}`);
+            console.log(`[AssignJob]   - Available: ${c.isAvailable ? 'Yes' : 'No'}`);
+            console.log(`[AssignJob]   - Online: ${c.isOnline ? 'Yes' : 'No'}`);
+          });
           
           if (availableContractors.length === 0) {
-            console.log('[AssignJob] No available contractors found');
+            console.log('[AssignJob] ❌ No available contractors found');
+            console.log('[AssignJob] This job requires manual assignment by admin');
             return res.status(400).json({ 
               message: 'No available contractors found',
-              needsManualAssignment: true
+              needsManualAssignment: true,
+              attemptNumber: (job.assignmentAttempts || 0) + 1
             });
           }
           
           // Select the first contractor (already sorted by tier and round-robin)
           const selectedContractor = availableContractors[0];
           contractorId = selectedContractor.id;
-          console.log(`[AssignJob] Selected contractor: ${selectedContractor.name} (${selectedContractor.id}), Tier: ${selectedContractor.performanceTier}`);
+          
+          console.log('[AssignJob] ============ SELECTED CONTRACTOR ============');
+          console.log(`[AssignJob] ✅ Selected: ${selectedContractor.name} (ID: ${selectedContractor.id})`);
+          console.log(`[AssignJob] Reason: Best available based on tier (${selectedContractor.performanceTier}) and round-robin (last assigned: ${selectedContractor.lastAssignedAt ? new Date(selectedContractor.lastAssignedAt).toISOString() : 'Never'})`);
+          console.log(`[AssignJob] This is assignment attempt #${(job.assignmentAttempts || 0) + 1} for this job`);
+          console.log('[AssignJob] ===========================================');
+        } else {
+          console.log(`[AssignJob] Manual assignment to contractor ${contractorId}`);
         }
         
         // Assign the contractor

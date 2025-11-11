@@ -507,6 +507,10 @@ export const jobs = pgTable("jobs", {
   rating: integer("rating"),
   reviewText: text("review_text"),
   
+  // Assignment tracking
+  assignmentAttempts: integer("assignment_attempts").notNull().default(0),
+  lastAssignmentAttemptAt: timestamp("last_assignment_attempt_at"),
+  
   // Assignment tracking - commented out until migration is run
   // assignmentAttemptedAt: timestamp("assignment_attempted_at"),
   // assignmentNotificationSent: boolean("assignment_notification_sent").notNull().default(false),

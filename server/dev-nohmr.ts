@@ -4,6 +4,7 @@ import { serveStatic, log } from "./vite";
 import { trackingWSServer } from "./websocket";
 import { reminderScheduler } from "./reminder-scheduler";
 import billingScheduler from "./billing-scheduler";
+import { jobReassignmentScheduler } from "./job-reassignment-scheduler";
 import { createServer as createViteServer, createLogger } from "vite";
 import path from "path";
 import fs from "fs";
@@ -122,6 +123,10 @@ async function setupViteNoHMR(app: express.Express, server: Server) {
   // Start the billing scheduler
   billingScheduler.initialize();
   log(`Billing scheduler initialized`);
+
+  // Start the job reassignment scheduler
+  jobReassignmentScheduler.start();
+  log(`Job reassignment scheduler started - checking for staled jobs every 5 minutes`);
 
   server.listen({
     port: PORT,
