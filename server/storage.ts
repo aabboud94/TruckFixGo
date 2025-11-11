@@ -1162,6 +1162,87 @@ export class PostgreSQLStorage implements IStorage {
     return result[0];
   }
 
+  // Initialize profiles for all contractors that don't have one
+  async ensureAllContractorsHaveProfiles(): Promise<{created: number, existing: number}> {
+    try {
+      console.log('[InitProfiles] Starting to ensure all contractors have profiles...');
+      
+      // Get all users with contractor role
+      const contractors = await db
+        .select()
+        .from(users)
+        .where(eq(users.role, 'contractor'));
+      
+      console.log(`[InitProfiles] Found ${contractors.length} total contractors`);
+      
+      // Get existing contractor profiles
+      const existingProfiles = await db
+        .select({ userId: contractorProfiles.userId })
+        .from(contractorProfiles);
+      
+      const existingProfileUserIds = new Set(existingProfiles.map(p => p.userId));
+      console.log(`[InitProfiles] Found ${existingProfiles.length} existing profiles`);
+      
+      // Find contractors without profiles
+      const contractorsWithoutProfiles = contractors.filter(c => !existingProfileUserIds.has(c.id));
+      console.log(`[InitProfiles] Found ${contractorsWithoutProfiles.length} contractors without profiles`);
+      
+      // Create profiles for contractors that don't have one
+      let created = 0;
+      for (const contractor of contractorsWithoutProfiles) {
+        try {
+          const companyName = contractor.firstName && contractor.lastName 
+            ? `${contractor.firstName} ${contractor.lastName} Services`
+            : contractor.email?.split('@')[0] + ' Services' || 'Contractor Services';
+          
+          await db.insert(contractorProfiles).values({
+            userId: contractor.id,
+            companyName,
+            performanceTier: 'bronze',  // Default to bronze tier
+            serviceRadius: 50,           // Default 50 mile radius
+            averageResponseTime: null,
+            totalJobsCompleted: 0,
+            averageRating: null,
+            totalReviews: 0,
+            fiveStarCount: 0,
+            fourStarCount: 0,
+            threeStarCount: 0,
+            twoStarCount: 0,
+            oneStarCount: 0,
+            isVerifiedContractor: false,
+            isFeaturedContractor: false,
+            profileCompleteness: 20,    // Basic profile only
+            isFleetCapable: false,
+            hasMobileWaterSource: false,
+            hasWastewaterRecovery: false,
+            isAvailable: true,           // Default to available
+            isOnline: false,
+            lastAssignedAt: null,
+            lastHeartbeatAt: null,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+          
+          created++;
+          console.log(`[InitProfiles] Created profile for contractor: ${contractor.email || contractor.id}`);
+        } catch (error) {
+          console.error(`[InitProfiles] Error creating profile for contractor ${contractor.id}:`, error);
+          // Continue with other contractors even if one fails
+        }
+      }
+      
+      console.log(`[InitProfiles] Profile initialization complete. Created: ${created}, Existing: ${existingProfiles.length}`);
+      
+      return {
+        created,
+        existing: existingProfiles.length
+      };
+    } catch (error) {
+      console.error('[InitProfiles] Error ensuring contractor profiles:', error);
+      throw error;
+    }
+  }
+
   async updateContractorProfile(userId: string, updates: Partial<InsertContractorProfile>): Promise<ContractorProfile | undefined> {
     const result = await db.update(contractorProfiles)
       .set({ ...updates, updatedAt: new Date() })
@@ -1609,26 +1690,23 @@ export class PostgreSQLStorage implements IStorage {
     try {
       console.log('[AssignJob] Getting available contractors for assignment with queue info');
       
-      // Get ALL contractors with their profiles (for job queuing support)
-      // No longer filtering by isAvailable - contractors can have multiple jobs queued
+      // Get ALL contractors with their profiles (LEFT JOIN ensures we get all contractors)
+      // Even if they don't have a profile entry
       const contractors = await db
         .select()
         .from(users)
         .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
         .where(
-          eq(users.role, 'contractor')  // Only filter by role, not availability
-        )
-        .orderBy(
-          // Order by tier (gold first, then silver, then bronze)
-          desc(contractorProfiles.performanceTier),
-          // Then by least recently assigned (null values first, then oldest)
-          asc(contractorProfiles.lastAssignedAt)
+          eq(users.role, 'contractor')  // Only filter by role
         );
 
-      console.log(`[AssignJob] Found ${contractors.length} contractors`);
+      console.log(`[AssignJob] Found ${contractors.length} contractors (including those without profiles)`);
 
       // Process and calculate distance for each contractor
       const processedContractors = await Promise.all(contractors.map(async row => {
+        // Log contractor details for debugging
+        console.log(`[AssignJob] Processing contractor: ID=${row.users.id}, Email=${row.users.email}, HasProfile=${!!row.contractor_profiles}`);
+        
         const fullName = `${row.users.firstName || ''} ${row.users.lastName || ''}`.trim() || row.users.email || 'Unknown';
         let distance = 0;
         
@@ -1675,6 +1753,11 @@ export class PostgreSQLStorage implements IStorage {
 
         const isCurrentlyBusy = activeJobCount > 0;
 
+        // Default values for contractors without profiles
+        const defaultServiceRadius = 50;
+        const defaultPerformanceTier = 'bronze';
+        const defaultIsAvailable = true;  // Assume available if no profile
+
         const contractor = {
           id: row.users.id,
           email: row.users.email,
@@ -1682,25 +1765,28 @@ export class PostgreSQLStorage implements IStorage {
           lastName: row.users.lastName,
           phone: row.users.phone,
           name: fullName,
-          performanceTier: row.contractor_profiles?.performanceTier || 'bronze',
-          averageRating: Number(row.contractor_profiles?.averageRating) || 0,
+          // Use defaults if no profile exists
+          performanceTier: row.contractor_profiles?.performanceTier || defaultPerformanceTier,
+          averageRating: row.contractor_profiles?.averageRating ? Number(row.contractor_profiles.averageRating) : 0,
           totalJobsCompleted: row.contractor_profiles?.totalJobsCompleted || 0,
-          serviceRadius: row.contractor_profiles?.serviceRadius || 50,
+          serviceRadius: row.contractor_profiles?.serviceRadius || defaultServiceRadius,
           isOnline: row.contractor_profiles?.isOnline || false,
-          isAvailable: row.contractor_profiles?.isAvailable || false,
-          lastAssignedAt: row.contractor_profiles?.lastAssignedAt,
-          lastHeartbeatAt: row.contractor_profiles?.lastHeartbeatAt,
+          isAvailable: row.contractor_profiles?.isAvailable !== undefined ? row.contractor_profiles.isAvailable : defaultIsAvailable,
+          lastAssignedAt: row.contractor_profiles?.lastAssignedAt || null,
+          lastHeartbeatAt: row.contractor_profiles?.lastHeartbeatAt || null,
           distance: Math.round(distance * 10) / 10,
-          withinServiceRadius: distance <= (row.contractor_profiles?.serviceRadius || 50),
+          withinServiceRadius: !jobLat || !jobLon || distance <= (row.contractor_profiles?.serviceRadius || defaultServiceRadius),
           // Add queue information
           queueLength,
           isCurrentlyBusy,
           currentJob,
           currentJobNumber,
-          totalQueuedJobs: activeJobCount + queueLength
+          totalQueuedJobs: activeJobCount + queueLength,
+          // Debug field to track contractors without profiles
+          hasProfile: !!row.contractor_profiles
         };
         
-        console.log(`[AssignJob] Contractor: ${contractor.name}, Tier: ${contractor.performanceTier}, Queue: ${contractor.queueLength}, Busy: ${contractor.isCurrentlyBusy}`);
+        console.log(`[AssignJob] Contractor: ${contractor.name}, Tier: ${contractor.performanceTier}, Queue: ${contractor.queueLength}, Busy: ${contractor.isCurrentlyBusy}, HasProfile: ${contractor.hasProfile}`);
         
         return contractor;
       }));
