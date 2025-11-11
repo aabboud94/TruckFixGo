@@ -15323,6 +15323,224 @@ The TruckFixGo Team
     }
   );
 
+  // ==================== FLEET APPLICATION ENDPOINTS ====================
+  
+  // Submit fleet application (public endpoint)
+  app.post('/api/fleet/apply',
+    rateLimiter(3, 60000), // 3 requests per minute
+    validateRequest(z.object({
+      companyName: z.string().min(2),
+      dotNumber: z.string().optional(),
+      mcNumber: z.string().optional(),
+      fleetSize: z.number().min(1),
+      primaryContactName: z.string().min(2),
+      primaryContactPhone: z.string().min(10),
+      primaryContactEmail: z.string().email(),
+      address: z.string().min(5),
+      city: z.string().min(2),
+      state: z.string().length(2),
+      zip: z.string().min(5),
+      billingContactEmail: z.string().email().optional(),
+      paymentTerms: z.string().optional(),
+      primaryServiceNeeds: z.array(z.string()).optional(),
+      additionalRequirements: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        // Check if application already exists for this email
+        const existingApplication = await storage.getFleetApplicationByEmail(req.body.primaryContactEmail);
+        if (existingApplication && existingApplication.status !== 'rejected') {
+          return res.status(400).json({ 
+            message: 'An application already exists for this email address' 
+          });
+        }
+
+        // Create the fleet application
+        const application = await storage.createFleetApplication({
+          ...req.body,
+          status: 'pending',
+          submittedAt: new Date()
+        });
+
+        // Send confirmation email
+        if (emailService.isReady()) {
+          await emailService.sendEmail(
+            req.body.primaryContactEmail, 
+            'FLEET_APPLICATION_RECEIVED',
+            {
+              companyName: req.body.companyName,
+              contactName: req.body.primaryContactName
+            }
+          ).catch((err: any) => console.error('Fleet application email error:', err));
+        }
+
+        res.status(201).json({
+          message: 'Fleet application submitted successfully',
+          applicationId: application.id
+        });
+      } catch (error) {
+        console.error('Fleet application submission error:', error);
+        res.status(500).json({ 
+          message: 'Failed to submit fleet application' 
+        });
+      }
+    }
+  );
+
+  // Admin: Get all fleet applications
+  app.get('/api/admin/fleet-applications',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const filters: any = {};
+        if (req.query.status) filters.status = req.query.status as string;
+        if (req.query.search) filters.search = req.query.search as string;
+        if (req.query.companyName) filters.companyName = req.query.companyName as string;
+        
+        const applications = await storage.findFleetApplications(filters);
+        
+        res.json({
+          applications,
+          total: applications.length
+        });
+      } catch (error) {
+        console.error('Get fleet applications error:', error);
+        res.status(500).json({ 
+          message: 'Failed to get fleet applications' 
+        });
+      }
+    }
+  );
+
+  // Admin: Approve fleet application
+  app.put('/api/admin/fleet-applications/:id/approve',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const applicationId = req.params.id;
+        
+        // Get the application
+        const application = await storage.getFleetApplication(applicationId);
+        if (!application) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+
+        if (application.status !== 'pending') {
+          return res.status(400).json({ 
+            message: `Cannot approve application with status ${application.status}` 
+          });
+        }
+
+        // Update application status
+        await storage.updateFleetApplication(applicationId, {
+          status: 'approved',
+          approvedBy: req.session.userId,
+          approvedAt: new Date()
+        });
+
+        // Create fleet account
+        const fleetAccount = await storage.createFleetAccount({
+          companyName: application.companyName,
+          dotNumber: application.dotNumber || '',
+          mcNumber: application.mcNumber || '',
+          primaryContactName: application.primaryContactName,
+          primaryContactEmail: application.primaryContactEmail,
+          primaryContactPhone: application.primaryContactPhone,
+          billingAddress: application.address,
+          billingCity: application.city,
+          billingState: application.state,
+          billingZip: application.zip,
+          billingEmail: application.billingContactEmail || application.primaryContactEmail,
+          pricingTier: 'standard',
+          creditLimit: 5000, // Default credit limit
+          paymentTerms: application.paymentTerms || 'net_30',
+          isActive: true
+        });
+
+        // Send approval email
+        if (emailService.isReady()) {
+          await emailService.sendEmail(
+            application.primaryContactEmail, 
+            'FLEET_APPLICATION_APPROVED',
+            {
+              companyName: application.companyName,
+              contactName: application.primaryContactName,
+              fleetAccountId: fleetAccount.id
+            }
+          ).catch((err: any) => console.error('Fleet approval email error:', err));
+        }
+
+        res.json({
+          message: 'Fleet application approved successfully',
+          fleetAccountId: fleetAccount.id
+        });
+      } catch (error) {
+        console.error('Approve fleet application error:', error);
+        res.status(500).json({ 
+          message: 'Failed to approve fleet application' 
+        });
+      }
+    }
+  );
+
+  // Admin: Reject fleet application
+  app.put('/api/admin/fleet-applications/:id/reject',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      reason: z.string().min(1)
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const applicationId = req.params.id;
+        
+        // Get the application
+        const application = await storage.getFleetApplication(applicationId);
+        if (!application) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+
+        if (application.status !== 'pending') {
+          return res.status(400).json({ 
+            message: `Cannot reject application with status ${application.status}` 
+          });
+        }
+
+        // Update application status
+        await storage.updateFleetApplication(applicationId, {
+          status: 'rejected',
+          rejectionReason: req.body.reason,
+          approvedBy: req.session.userId,
+          approvedAt: new Date()
+        });
+
+        // Send rejection email
+        if (emailService.isReady()) {
+          await emailService.sendEmail(
+            application.primaryContactEmail, 
+            'FLEET_APPLICATION_REJECTED',
+            {
+              companyName: application.companyName,
+              contactName: application.primaryContactName,
+              reason: req.body.reason
+            }
+          ).catch((err: any) => console.error('Fleet rejection email error:', err));
+        }
+
+        res.json({
+          message: 'Fleet application rejected'
+        });
+      } catch (error) {
+        console.error('Reject fleet application error:', error);
+        res.status(500).json({ 
+          message: 'Failed to reject fleet application' 
+        });
+      }
+    }
+  );
+
   // Create and return the HTTP server
   const server = createServer(app);
   return server;

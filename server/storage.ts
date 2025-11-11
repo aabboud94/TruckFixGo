@@ -39,6 +39,7 @@ import {
   reminderBlacklist,
   reminderMetrics,
   contractorApplications,
+  fleetApplications,
   applicationDocuments,
   backgroundChecks,
   jobBids,
@@ -5953,6 +5954,80 @@ export class PostgreSQLStorage implements IStorage {
     return await db.select().from(contractorApplications)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(contractorApplications.createdAt));
+  }
+  
+  // ==================== FLEET APPLICATION OPERATIONS ====================
+  
+  async createFleetApplication(data: InsertFleetApplication): Promise<FleetApplication> {
+    const result = await db.insert(fleetApplications).values(data).returning();
+    return result[0];
+  }
+
+  async getFleetApplication(id: string): Promise<FleetApplication | undefined> {
+    const result = await db.select().from(fleetApplications).where(eq(fleetApplications.id, id)).limit(1);
+    return result[0];
+  }
+
+  async updateFleetApplication(id: string, updates: Partial<InsertFleetApplication>): Promise<FleetApplication | undefined> {
+    const result = await db.update(fleetApplications)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(fleetApplications.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async findFleetApplications(filters: {
+    status?: string;
+    email?: string;
+    companyName?: string;
+    search?: string;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<FleetApplication[]> {
+    const conditions = [];
+    
+    if (filters.status) {
+      conditions.push(eq(fleetApplications.status, filters.status as any));
+    }
+    
+    if (filters.email) {
+      conditions.push(eq(fleetApplications.primaryContactEmail, filters.email));
+    }
+    
+    if (filters.companyName) {
+      conditions.push(eq(fleetApplications.companyName, filters.companyName));
+    }
+    
+    if (filters.search) {
+      conditions.push(
+        or(
+          ilike(fleetApplications.companyName, `%${filters.search}%`),
+          ilike(fleetApplications.primaryContactName, `%${filters.search}%`),
+          ilike(fleetApplications.primaryContactEmail, `%${filters.search}%`),
+          ilike(fleetApplications.primaryContactPhone, `%${filters.search}%`),
+          ilike(fleetApplications.city, `%${filters.search}%`)
+        )
+      );
+    }
+    
+    if (filters.fromDate) {
+      conditions.push(gte(fleetApplications.createdAt, filters.fromDate));
+    }
+    
+    if (filters.toDate) {
+      conditions.push(lte(fleetApplications.createdAt, filters.toDate));
+    }
+    
+    return await db.select().from(fleetApplications)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(fleetApplications.createdAt));
+  }
+  
+  async getFleetApplicationByEmail(email: string): Promise<FleetApplication | undefined> {
+    const result = await db.select().from(fleetApplications)
+      .where(eq(fleetApplications.primaryContactEmail, email))
+      .limit(1);
+    return result[0];
   }
   
   async createApplicationDocument(data: InsertApplicationDocument): Promise<ApplicationDocument> {

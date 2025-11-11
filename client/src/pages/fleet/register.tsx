@@ -13,6 +13,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, ArrowRight, Building, MapPin, CreditCard } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
 
 const fleetRegistrationSchema = z.object({
   // Company Information
@@ -75,25 +77,50 @@ export default function FleetRegister() {
     }
   });
 
-  const onSubmit = async (data: FleetRegistrationForm) => {
-    try {
-      // TODO: Submit to backend
-      console.log("Fleet registration data:", data);
+  // Mutation to submit fleet application
+  const submitApplicationMutation = useMutation({
+    mutationFn: async (data: FleetRegistrationForm) => {
+      // Transform data to match backend schema
+      const applicationData = {
+        companyName: data.companyName,
+        dotNumber: data.dotNumber || undefined,
+        mcNumber: data.mcNumber || undefined,
+        fleetSize: parseInt(data.fleetSize.split('-')[0]) || 1, // Extract number from range
+        primaryContactName: data.primaryContactName,
+        primaryContactPhone: data.primaryContactPhone,
+        primaryContactEmail: data.primaryContactEmail,
+        address: data.billingAddress,
+        city: data.city,
+        state: data.state,
+        zip: data.zip,
+        billingContactEmail: data.billingEmail,
+        paymentTerms: data.preferredPaymentMethod === 'net30' ? 'net_30' : 'prepaid',
+        primaryServiceNeeds: [data.pmSchedulePreference],
+        additionalRequirements: `Service Location: ${data.preferredServiceLocation}, Service Radius: ${data.serviceRadius} miles`
+      };
       
+      return apiRequest('POST', '/api/fleet/apply', applicationData);
+    },
+    onSuccess: () => {
       toast({
         title: "Application Submitted",
         description: "Your fleet account application has been submitted for approval. We'll contact you within 24 hours."
       });
       
-      // Redirect to dashboard or confirmation page
-      setLocation("/fleet/dashboard");
-    } catch (error) {
+      // Redirect to home page after successful submission
+      setLocation("/");
+    },
+    onError: (error: any) => {
       toast({
         title: "Registration Failed",
-        description: "An error occurred while submitting your application. Please try again.",
+        description: error.message || "An error occurred while submitting your application. Please try again.",
         variant: "destructive"
       });
     }
+  });
+
+  const onSubmit = async (data: FleetRegistrationForm) => {
+    submitApplicationMutation.mutate(data);
   };
 
   const nextStep = () => {

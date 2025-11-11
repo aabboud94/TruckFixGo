@@ -18,7 +18,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import {
   Search, Filter, Building2, DollarSign, TrendingUp, Award,
-  FileText, Clock, Users, Truck, AlertCircle, CheckCircle,
+  FileText, Clock, Users, Truck, AlertCircle, CheckCircle, XCircle,
   Download, RefreshCw, CreditCard, Loader2, Edit, Eye,
   Receipt, Calendar, Shield
 } from "lucide-react";
@@ -33,6 +33,8 @@ export default function AdminFleets() {
   const [showApprovalQueue, setShowApprovalQueue] = useState(false);
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
   const [selectedFleets, setSelectedFleets] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<"fleets" | "applications">("fleets");
+  const [selectedApplication, setSelectedApplication] = useState<any>(null);
 
   // Query for fleets
   const { data: fleets, isLoading, refetch } = useQuery({
@@ -46,10 +48,17 @@ export default function AdminFleets() {
     }
   });
 
-  // Query for pending approvals
+  // Query for pending approvals (deprecated - for backward compatibility)
   const { data: pendingApprovals } = useQuery({
     queryKey: ['/api/admin/fleets/pending'],
     queryFn: async () => apiRequest('GET', '/api/admin/fleets/pending')
+  });
+
+  // Query for fleet applications
+  const { data: fleetApplications, isLoading: isLoadingApplications, refetch: refetchApplications } = useQuery({
+    queryKey: ['/api/admin/fleet-applications'],
+    queryFn: async () => apiRequest('GET', '/api/admin/fleet-applications'),
+    enabled: activeTab === 'applications'
   });
 
   // Mutation for updating fleet tier
@@ -98,6 +107,37 @@ export default function AdminFleets() {
         title: "Invoices generated",
         description: "Fleet invoices have been generated successfully",
       });
+    },
+  });
+
+  // Mutation for approving fleet application
+  const approveApplicationMutation = useMutation({
+    mutationFn: async (applicationId: string) => {
+      return apiRequest('PUT', `/api/admin/fleet-applications/${applicationId}/approve`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/fleet-applications'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/fleets'] });
+      toast({
+        title: "Application approved",
+        description: "Fleet application has been approved and account created",
+      });
+      setSelectedApplication(null);
+    },
+  });
+
+  // Mutation for rejecting fleet application
+  const rejectApplicationMutation = useMutation({
+    mutationFn: async ({ applicationId, reason }: { applicationId: string; reason: string }) => {
+      return apiRequest('PUT', `/api/admin/fleet-applications/${applicationId}/reject`, { reason });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/fleet-applications'] });
+      toast({
+        title: "Application rejected",
+        description: "Fleet application has been rejected",
+      });
+      setSelectedApplication(null);
     },
   });
 
@@ -189,37 +229,34 @@ export default function AdminFleets() {
       title="Fleet Management"
       breadcrumbs={[{ label: "Fleets" }]}
     >
-      {/* Pending Approvals Alert */}
-      {pendingData.length > 0 && (
-        <Card className="mb-6 border-orange-200 bg-orange-50/50 dark:bg-orange-950/20">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-orange-600" />
-                <CardTitle className="text-lg">Pending Fleet Applications</CardTitle>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowApprovalQueue(true)}
-                data-testid="button-view-pending"
-              >
-                Review ({pendingData.length})
-              </Button>
-            </div>
-          </CardHeader>
-        </Card>
-      )}
+      {/* Tabs for Active Fleets and Applications */}
+      <Tabs value={activeTab} onValueChange={(value: any) => setActiveTab(value)} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="fleets" data-testid="tab-fleets">
+            <Building2 className="mr-2 h-4 w-4" />
+            Active Fleets
+          </TabsTrigger>
+          <TabsTrigger value="applications" data-testid="tab-applications">
+            <FileText className="mr-2 h-4 w-4" />
+            Applications
+            {fleetApplications?.length > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                {fleetApplications.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Main Fleets Card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Fleet Accounts</CardTitle>
-              <CardDescription>Manage fleet accounts, tiers, and credit limits</CardDescription>
-            </div>
-            <div className="flex gap-2">
+        {/* Active Fleets Tab */}
+        <TabsContent value="fleets">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Fleet Accounts</CardTitle>
+                  <CardDescription>Manage fleet accounts, tiers, and credit limits</CardDescription>
+                </div>
+                <div className="flex gap-2">
               <Button
                 variant="outline"
                 onClick={() => refetch()}
@@ -407,7 +444,123 @@ export default function AdminFleets() {
             </Table>
           </div>
         </CardContent>
-      </Card>
+          </Card>
+        </TabsContent>
+
+        {/* Applications Tab */}
+        <TabsContent value="applications">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Fleet Applications</CardTitle>
+                  <CardDescription>Review and manage pending fleet applications</CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => refetchApplications()}
+                  data-testid="button-refresh-applications"
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Company Name</TableHead>
+                    <TableHead>Contact Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Fleet Size</TableHead>
+                    <TableHead>Submitted</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoadingApplications ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ) : (!fleetApplications || fleetApplications.length === 0) ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        No fleet applications found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    fleetApplications.map((application: any) => (
+                      <TableRow key={application.id} data-testid={`application-row-${application.id}`}>
+                        <TableCell className="font-medium">{application.companyName}</TableCell>
+                        <TableCell>{application.contactName}</TableCell>
+                        <TableCell>{application.email}</TableCell>
+                        <TableCell>{application.phone}</TableCell>
+                        <TableCell>{application.fleetSize} vehicles</TableCell>
+                        <TableCell>{new Date(application.createdAt).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <Badge variant={application.status === 'pending' ? 'secondary' : 'default'}>
+                            {application.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setSelectedApplication(application)}
+                              data-testid={`button-view-application-${application.id}`}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View
+                            </Button>
+                            {application.status === 'pending' && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => approveApplicationMutation.mutate(application.id)}
+                                  disabled={approveApplicationMutation.isPending}
+                                  data-testid={`button-approve-${application.id}`}
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-1" />
+                                  Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => {
+                                    const reason = prompt('Please enter rejection reason:');
+                                    if (reason) {
+                                      rejectApplicationMutation.mutate({
+                                        applicationId: application.id,
+                                        reason
+                                      });
+                                    }
+                                  }}
+                                  disabled={rejectApplicationMutation.isPending}
+                                  data-testid={`button-reject-${application.id}`}
+                                >
+                                  <XCircle className="h-4 w-4 mr-1" />
+                                  Reject
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Fleet Details Dialog */}
       <Dialog open={showFleetDetails} onOpenChange={setShowFleetDetails}>

@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { apiRequest } from "@/lib/queryClient";
 import {
   Truck,
   Calendar as CalendarIcon,
@@ -20,77 +24,122 @@ import {
   ChevronRight,
   Clock,
   Wrench,
-  TrendingUp
+  TrendingUp,
+  AlertTriangle
 } from "lucide-react";
 
 export default function FleetDashboard() {
   const [, setLocation] = useLocation();
   const [date, setDate] = useState<Date | undefined>(new Date());
 
-  // Mock data - would come from API
-  const stats = {
-    activeVehicles: 24,
-    scheduledServices: 8,
-    monthlySpend: "$12,450",
-    complianceRate: "98%"
+  // Check authentication and fetch user session
+  const { data: session, isLoading: sessionLoading } = useQuery({
+    queryKey: ['/api/auth/session'],
+    queryFn: async () => {
+      try {
+        return await apiRequest('GET', '/api/auth/session');
+      } catch (error) {
+        return null;
+      }
+    }
+  });
+
+  // Fetch fleet account data
+  const { data: fleetData, isLoading: fleetLoading } = useQuery({
+    queryKey: ['/api/fleet/account'],
+    enabled: !!session?.user?.id && session?.user?.role === 'fleet_manager',
+    queryFn: async () => apiRequest('GET', '/api/fleet/account')
+  });
+
+  // Fetch fleet vehicles
+  const { data: vehicles, isLoading: vehiclesLoading } = useQuery({
+    queryKey: ['/api/fleet/vehicles'],
+    enabled: !!session?.user?.id && session?.user?.role === 'fleet_manager',
+    queryFn: async () => apiRequest('GET', '/api/fleet/vehicles')
+  });
+
+  // Fetch scheduled services
+  const { data: scheduledServices, isLoading: servicesLoading } = useQuery({
+    queryKey: ['/api/fleet/scheduled-services'],
+    enabled: !!session?.user?.id && session?.user?.role === 'fleet_manager',
+    queryFn: async () => apiRequest('GET', '/api/fleet/scheduled-services')
+  });
+
+  // Fetch fleet statistics
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ['/api/fleet/statistics'],
+    enabled: !!session?.user?.id && session?.user?.role === 'fleet_manager',
+    queryFn: async () => apiRequest('GET', '/api/fleet/statistics')
+  });
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!sessionLoading && (!session?.user || session?.user?.role !== 'fleet_manager')) {
+      setLocation('/fleet/login');
+    }
+  }, [session, sessionLoading, setLocation]);
+
+  // Show loading state
+  if (sessionLoading || fleetLoading || vehiclesLoading || servicesLoading || statsLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Skeleton className="h-12 w-64 mb-8" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {[1, 2, 3, 4].map(i => (
+              <Card key={i}>
+                <CardHeader>
+                  <Skeleton className="h-4 w-24 mb-2" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-16" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if user is authenticated with fleet_manager role
+  if (!session?.user || session?.user?.role !== 'fleet_manager') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle>Access Denied</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                You must be logged in as a fleet manager to access this dashboard.
+              </AlertDescription>
+            </Alert>
+            <Button 
+              className="w-full mt-4" 
+              onClick={() => setLocation('/fleet/login')}
+              data-testid="button-go-to-login"
+            >
+              Go to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Use real data or defaults
+  const fleetAccount = fleetData?.fleet || {};
+  const vehiclesList = vehicles?.vehicles || [];
+  const servicesList = scheduledServices?.services || [];
+  const statistics = stats || {
+    activeVehicles: vehiclesList.filter((v: any) => v.status === 'active').length,
+    scheduledServices: servicesList.length,
+    monthlySpend: fleetAccount.currentBalance || 0,
+    complianceRate: fleetAccount.complianceRate || 0
   };
-
-  const vehicles = [
-    {
-      id: "1",
-      unitNumber: "T-101",
-      vin: "1HGCM82633A123456",
-      make: "Freightliner",
-      model: "Cascadia",
-      lastService: "2024-01-15",
-      nextPMDue: "2024-02-15",
-      status: "active",
-      location: "Los Angeles, CA"
-    },
-    {
-      id: "2",
-      unitNumber: "T-102",
-      vin: "1HGCM82633A123457",
-      make: "Peterbilt",
-      model: "579",
-      lastService: "2024-01-10",
-      nextPMDue: "2024-02-10",
-      status: "in_service",
-      location: "Phoenix, AZ"
-    },
-    {
-      id: "3",
-      unitNumber: "T-103",
-      vin: "1HGCM82633A123458",
-      make: "Kenworth",
-      model: "T680",
-      lastService: "2024-01-20",
-      nextPMDue: "2024-02-20",
-      status: "active",
-      location: "Las Vegas, NV"
-    }
-  ];
-
-  const scheduledServices = [
-    {
-      id: "1",
-      date: "2024-02-10",
-      time: "09:00 AM",
-      vehicle: "T-102",
-      service: "B-Service PM",
-      location: "On-site",
-      status: "confirmed"
-    },
-    {
-      id: "2",
-      date: "2024-02-15",
-      time: "10:00 AM",
-      vehicle: "T-101",
-      service: "A-Service PM",
-      location: "Service Center",
-      status: "pending"
-    }
-  ];
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -133,7 +182,9 @@ export default function FleetDashboard() {
         {/* Welcome Section */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold">Fleet Dashboard</h1>
-          <p className="text-muted-foreground">Welcome back, ABC Trucking Inc.</p>
+          <p className="text-muted-foreground">
+            Welcome back, {fleetAccount.companyName || 'Fleet Manager'}
+          </p>
         </div>
 
         {/* Stats Overview */}
@@ -144,8 +195,10 @@ export default function FleetDashboard() {
               <Truck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.activeVehicles}</div>
-              <p className="text-xs text-muted-foreground">2 in service</p>
+              <div className="text-2xl font-bold">{statistics.activeVehicles}</div>
+              <p className="text-xs text-muted-foreground">
+                {vehiclesList.filter((v: any) => v.status === 'in_service').length} in service
+              </p>
             </CardContent>
           </Card>
 
@@ -155,8 +208,10 @@ export default function FleetDashboard() {
               <CalendarIcon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.scheduledServices}</div>
-              <p className="text-xs text-muted-foreground">Next: Tomorrow 9AM</p>
+              <div className="text-2xl font-bold">{statistics.scheduledServices}</div>
+              <p className="text-xs text-muted-foreground">
+                {servicesList.length > 0 ? `Next: ${servicesList[0].date}` : 'None scheduled'}
+              </p>
             </CardContent>
           </Card>
 
@@ -166,8 +221,10 @@ export default function FleetDashboard() {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.monthlySpend}</div>
-              <p className="text-xs text-green-600">-12% from last month</p>
+              <div className="text-2xl font-bold">
+                ${typeof statistics.monthlySpend === 'number' ? statistics.monthlySpend.toFixed(2) : '0.00'}
+              </div>
+              <p className="text-xs text-muted-foreground">Current balance</p>
             </CardContent>
           </Card>
 
@@ -177,8 +234,10 @@ export default function FleetDashboard() {
               <CheckCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.complianceRate}</div>
-              <p className="text-xs text-muted-foreground">3 inspections due</p>
+              <div className="text-2xl font-bold">
+                {typeof statistics.complianceRate === 'number' ? `${statistics.complianceRate}%` : '0%'}
+              </div>
+              <p className="text-xs text-muted-foreground">Fleet compliance</p>
             </CardContent>
           </Card>
         </div>
@@ -259,33 +318,41 @@ export default function FleetDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {vehicles.map((vehicle) => (
-                      <TableRow key={vehicle.id} data-testid={`vehicle-row-${vehicle.id}`}>
-                        <TableCell className="font-medium">{vehicle.unitNumber}</TableCell>
-                        <TableCell>{vehicle.make} {vehicle.model}</TableCell>
-                        <TableCell>{vehicle.lastService}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            {new Date(vehicle.nextPMDue) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) && (
-                              <AlertCircle className="h-4 w-4 text-yellow-500" />
-                            )}
-                            {vehicle.nextPMDue}
-                          </div>
-                        </TableCell>
-                        <TableCell>{getStatusBadge(vehicle.status)}</TableCell>
-                        <TableCell>{vehicle.location}</TableCell>
-                        <TableCell>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={() => setLocation(`/fleet/vehicles/${vehicle.id}`)}
-                            data-testid={`button-view-vehicle-${vehicle.id}`}
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </Button>
+                    {vehiclesList.length > 0 ? (
+                      vehiclesList.map((vehicle: any) => (
+                        <TableRow key={vehicle.id} data-testid={`vehicle-row-${vehicle.id}`}>
+                          <TableCell className="font-medium">{vehicle.unitNumber}</TableCell>
+                          <TableCell>{vehicle.make} {vehicle.model}</TableCell>
+                          <TableCell>{vehicle.lastService || 'N/A'}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              {vehicle.nextPMDue && new Date(vehicle.nextPMDue) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) && (
+                                <AlertCircle className="h-4 w-4 text-yellow-500" />
+                              )}
+                              {vehicle.nextPMDue || 'Not scheduled'}
+                            </div>
+                          </TableCell>
+                          <TableCell>{getStatusBadge(vehicle.status)}</TableCell>
+                          <TableCell>{vehicle.location || 'Unknown'}</TableCell>
+                          <TableCell>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => setLocation(`/fleet/vehicles/${vehicle.id}`)}
+                              data-testid={`button-view-vehicle-${vehicle.id}`}
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground">
+                          No vehicles registered yet
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -302,28 +369,34 @@ export default function FleetDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {scheduledServices.map((service) => (
-                      <div key={service.id} className="flex items-center justify-between p-4 border rounded-lg" data-testid={`service-item-${service.id}`}>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{service.date} at {service.time}</span>
+                    {servicesList.length > 0 ? (
+                      servicesList.map((service: any) => (
+                        <div key={service.id} className="flex items-center justify-between p-4 border rounded-lg" data-testid={`service-item-${service.id}`}>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">{service.date} at {service.time || '9:00 AM'}</span>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {service.vehicle || 'Unassigned'} - {service.service || 'Service'}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Location: {service.location || 'TBD'}
+                            </p>
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            {service.vehicle} - {service.service}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Location: {service.location}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            {getStatusBadge(service.status || 'pending')}
+                            <Button variant="ghost" size="icon" data-testid={`button-view-service-${service.id}`}>
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {getStatusBadge(service.status)}
-                          <Button variant="ghost" size="icon" data-testid={`button-view-service-${service.id}`}>
-                            <ChevronRight className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    ) : (
+                      <p className="text-center text-muted-foreground py-4">
+                        No scheduled services
+                      </p>
+                    )}
                   </div>
                   <Button className="w-full mt-4" onClick={() => setLocation("/fleet/schedule-pm")} data-testid="button-schedule-more">
                     Schedule More Services

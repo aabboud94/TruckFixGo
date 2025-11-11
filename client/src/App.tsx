@@ -47,6 +47,7 @@ import FleetBatchJobs from "@/pages/fleet/batch-jobs";
 import FleetInvoices from "@/pages/fleet/invoices";
 import FleetBillingPortal from "@/pages/fleet/billing-portal";
 import FleetContracts from "@/pages/fleet/contracts";
+import FleetApplicationPending from "@/pages/fleet/application-pending";
 
 // Admin Pages
 import AdminLogin from "@/pages/admin/login";
@@ -141,6 +142,7 @@ function Router() {
       <Route path="/fleet" component={FleetLanding} />
       <Route path="/fleet/register" component={FleetRegister} />
       <Route path="/fleet/login" component={FleetLogin} />
+      <Route path="/fleet/application-pending" component={FleetApplicationPending} />
       <Route path="/fleet/dashboard" component={FleetDashboard} />
       <Route path="/fleet/schedule-pm" component={FleetSchedulePM} />
       <Route path="/fleet/vehicles" component={FleetVehicles} />
