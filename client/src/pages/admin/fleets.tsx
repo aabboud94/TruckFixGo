@@ -55,11 +55,14 @@ export default function AdminFleets() {
   });
 
   // Query for fleet applications
-  const { data: fleetApplications, isLoading: isLoadingApplications, refetch: refetchApplications } = useQuery({
+  const { data: fleetApplicationsResponse, isLoading: isLoadingApplications, refetch: refetchApplications } = useQuery({
     queryKey: ['/api/admin/fleet-applications'],
     queryFn: async () => apiRequest('GET', '/api/admin/fleet-applications'),
     enabled: activeTab === 'applications'
   });
+  
+  // Extract the applications array from the response
+  const fleetApplications = fleetApplicationsResponse?.applications || [];
 
   // Mutation for updating fleet tier
   const updateTierMutation = useMutation({
@@ -497,11 +500,11 @@ export default function AdminFleets() {
                     fleetApplications.map((application: any) => (
                       <TableRow key={application.id} data-testid={`application-row-${application.id}`}>
                         <TableCell className="font-medium">{application.companyName}</TableCell>
-                        <TableCell>{application.contactName}</TableCell>
-                        <TableCell>{application.email}</TableCell>
-                        <TableCell>{application.phone}</TableCell>
+                        <TableCell>{application.primaryContactName}</TableCell>
+                        <TableCell>{application.primaryContactEmail}</TableCell>
+                        <TableCell>{application.primaryContactPhone}</TableCell>
                         <TableCell>{application.fleetSize} vehicles</TableCell>
-                        <TableCell>{new Date(application.createdAt).toLocaleDateString()}</TableCell>
+                        <TableCell>{new Date(application.submittedAt || application.createdAt).toLocaleDateString()}</TableCell>
                         <TableCell>
                           <Badge variant={application.status === 'pending' ? 'secondary' : 'default'}>
                             {application.status}
