@@ -136,6 +136,8 @@ import {
   type InsertReminderMetrics,
   type ContractorApplication,
   type InsertContractorApplication,
+  type FleetApplication,
+  type InsertFleetApplication,
   type ApplicationDocument,
   type InsertApplicationDocument,
   type BackgroundCheck,
@@ -910,6 +912,20 @@ export interface IStorage {
     fromDate?: Date;
     toDate?: Date;
   }): Promise<ContractorApplication[]>;
+  
+  // ==================== FLEET APPLICATION OPERATIONS ====================
+  createFleetApplication(data: InsertFleetApplication): Promise<FleetApplication>;
+  getFleetApplication(id: string): Promise<FleetApplication | undefined>;
+  updateFleetApplication(id: string, updates: Partial<InsertFleetApplication>): Promise<FleetApplication | undefined>;
+  findFleetApplications(filters: {
+    status?: string;
+    email?: string;
+    companyName?: string;
+    search?: string;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<FleetApplication[]>;
+  getFleetApplicationByEmail(email: string): Promise<FleetApplication | undefined>;
   
   createApplicationDocument(data: InsertApplicationDocument): Promise<ApplicationDocument>;
   updateApplicationDocument(id: string, updates: Partial<InsertApplicationDocument>): Promise<ApplicationDocument | undefined>;
