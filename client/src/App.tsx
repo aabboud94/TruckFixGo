@@ -39,6 +39,7 @@ import ContractorInvoicePreview from "@/pages/contractor/invoice-preview";
 import FleetLanding from "@/pages/fleet";
 import FleetRegister from "@/pages/fleet/register";
 import FleetLogin from "@/pages/fleet/login";
+import FleetAuth from "@/pages/fleet/auth";
 import FleetDashboard from "@/pages/fleet/dashboard";
 import FleetSchedulePM from "@/pages/fleet/schedule-pm";
 import FleetVehicles from "@/pages/fleet/vehicles";
@@ -142,6 +143,7 @@ function Router() {
       <Route path="/fleet" component={FleetLanding} />
       <Route path="/fleet/register" component={FleetRegister} />
       <Route path="/fleet/login" component={FleetLogin} />
+      <Route path="/fleet/auth" component={FleetAuth} />
       <Route path="/fleet/application-pending" component={FleetApplicationPending} />
       <Route path="/fleet/dashboard" component={FleetDashboard} />
       <Route path="/fleet/schedule-pm" component={FleetSchedulePM} />

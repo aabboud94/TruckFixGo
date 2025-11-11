@@ -9662,6 +9662,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Get users with optional email filter (simpler endpoint for admin verification)
+  app.get('/api/users',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { email } = req.query;
+        
+        if (email && typeof email === 'string') {
+          // Get specific user by email
+          const user = await storage.getUserByEmail(email);
+          if (!user) {
+            return res.json({ users: [], total: 0 });
+          }
+          
+          // Remove password hash from response
+          const { password, ...userWithoutPassword } = user;
+          
+          res.json({
+            users: [userWithoutPassword],
+            total: 1
+          });
+        } else {
+          // Get all users (limited for safety)
+          const { limit, offset } = getPagination(req);
+          const users = await storage.findUsers({}, Math.min(limit, 100), offset);
+          
+          // Remove password hashes from response
+          const sanitizedUsers = users.map(user => {
+            const { password, ...userWithoutPassword } = user;
+            return userWithoutPassword;
+          });
+          
+          res.json({
+            users: sanitizedUsers,
+            total: sanitizedUsers.length
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching users:', error);
+        res.status(500).json({ message: 'Failed to fetch users' });
+      }
+    }
+  );
+
   // Get single user details
   app.get('/api/admin/users/:id',
     requireAuth,
