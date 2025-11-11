@@ -3509,9 +3509,9 @@ export class PostgreSQLStorage implements IStorage {
         conditions.push(
           or(
             ilike(fleetAccounts.companyName, `%${filters.search}%`),
-            ilike(fleetAccounts.contactName, `%${filters.search}%`),
-            ilike(fleetAccounts.contactEmail, `%${filters.search}%`),
-            ilike(fleetAccounts.contactPhone, `%${filters.search}%`)
+            ilike(fleetAccounts.primaryContactName, `%${filters.search}%`),
+            ilike(fleetAccounts.primaryContactEmail, `%${filters.search}%`),
+            ilike(fleetAccounts.primaryContactPhone, `%${filters.search}%`)
           )
         );
       }
@@ -3530,9 +3530,9 @@ export class PostgreSQLStorage implements IStorage {
           return {
             id: fleet.id,
             companyName: fleet.companyName,
-            contactName: fleet.contactName || '',
-            contactEmail: fleet.contactEmail,
-            contactPhone: fleet.contactPhone,
+            contactName: fleet.primaryContactName || '',
+            contactEmail: fleet.primaryContactEmail || '',
+            contactPhone: fleet.primaryContactPhone || '',
             tier: fleet.pricingTier || 'standard',
             creditLimit: Number(fleet.creditLimit) || 0,
             status: fleet.isActive ? 'active' : 'suspended',
@@ -3540,7 +3540,7 @@ export class PostgreSQLStorage implements IStorage {
             activeJobs: metrics.activeJobs,
             totalSpent: metrics.totalSpent,
             memberSince: fleet.createdAt,
-            customPricing: fleet.hasCustomPricing || false
+            customPricing: false // hasCustomPricing column doesn't exist
           };
         })
       );
