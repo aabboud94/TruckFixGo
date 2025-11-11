@@ -6,6 +6,8 @@ import { reminderScheduler } from "./reminder-scheduler";
 import billingScheduler from "./billing-scheduler";
 import { jobMonitor } from "./job-monitor";
 import { storage } from "./storage";
+import { QueueProcessingService } from "./queue-service";
+import { emailService } from "./email-service";
 import { createServer as createViteServer, createLogger } from "vite";
 import path from "path";
 import fs from "fs";
@@ -246,6 +248,14 @@ app.use((req, res, next) => {
   // Start the job monitor for unassigned job alerts
   jobMonitor.start();
   log(`Job monitor started - checking for unassigned jobs`);
+
+  // Initialize Queue Processing Service
+  const queueService = new QueueProcessingService(storage, emailService, trackingWSServer);
+  queueService.initialize();
+  log(`Queue processing service initialized - managing contractor job queues`);
+
+  // Export queue service for use in routes
+  (global as any).queueService = queueService;
 
   const port = parseInt(process.env.PORT || '5000', 10);
   server.listen(port, "0.0.0.0", () => {

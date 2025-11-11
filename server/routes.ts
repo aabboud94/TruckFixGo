@@ -2032,6 +2032,568 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== CONTRACTOR QUEUE MANAGEMENT ENDPOINTS ====================
+
+  // Smart Assignment Endpoint - Assign job to contractor with queue management
+  app.post('/api/contractors/assign-job',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { contractorId, jobId, priority } = req.body;
+
+        // Validate input
+        if (!contractorId || !jobId) {
+          return res.status(400).json({ 
+            message: 'contractorId and jobId are required' 
+          });
+        }
+
+        // Check if job exists and is available
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        if (job.status !== 'new' && job.status !== 'scheduled') {
+          return res.status(400).json({ 
+            message: `Job cannot be assigned - current status: ${job.status}` 
+          });
+        }
+
+        // Check contractor availability
+        const availability = await storage.getContractorAvailabilityWithQueue(contractorId);
+        
+        // Add to queue with priority
+        const queueEntry = await storage.addToContractorQueue(
+          contractorId, 
+          jobId, 
+          priority,
+          {
+            serviceType: job.serviceTypeId,
+            urgencyLevel: job.urgencyLevel,
+            estimatedDuration: job.estimatedDuration,
+            location: job.location
+          }
+        );
+
+        // Calculate estimated wait time
+        const estimates = await storage.getQueueEstimates(contractorId);
+        const jobEstimate = estimates.find(e => e.jobId === jobId);
+
+        // Send notification to contractor
+        if (availability.queueDepth === 0) {
+          // This is the first job, notify immediately
+          await emailService.sendJobAssignmentNotification(contractorId, job);
+        } else {
+          // Job queued, send queue notification
+          await emailService.sendJobQueuedNotification(contractorId, job, queueEntry.queuePosition);
+        }
+
+        // Update job status to assigned
+        if (queueEntry.status === 'assigned') {
+          await storage.updateJobStatus(jobId, 'assigned', req.session.userId);
+        }
+
+        res.json({
+          success: true,
+          queueEntry: {
+            id: queueEntry.id,
+            position: queueEntry.queuePosition,
+            status: queueEntry.status,
+            estimatedStartTime: jobEstimate?.estimatedStartTime || queueEntry.estimatedStartTime,
+            estimatedWaitTime: availability.queueDepth * 60, // minutes
+            isCurrentJob: queueEntry.status === 'assigned'
+          },
+          contractorAvailability: {
+            isAvailable: availability.isAvailable,
+            queueDepth: availability.queueDepth + 1,
+            estimatedAvailabilityTime: availability.estimatedAvailabilityTime
+          },
+          message: queueEntry.status === 'assigned' 
+            ? 'Job assigned as current job' 
+            : `Job added to queue at position ${queueEntry.queuePosition}`
+        });
+      } catch (error) {
+        console.error('Assign job error:', error);
+        res.status(500).json({ 
+          message: 'Failed to assign job',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+  );
+
+  // Get contractor's queue
+  app.get('/api/contractors/:id/queue',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.params.id;
+        
+        // Get queue entries
+        const queue = await storage.getContractorQueue(contractorId);
+        
+        // Get job details for each queue entry
+        const queueWithJobs = await Promise.all(
+          queue.map(async (entry) => {
+            const job = await storage.getJob(entry.jobId);
+            const customer = job?.customerId ? await storage.getUser(job.customerId) : null;
+            const serviceType = job ? await storage.getServiceType(job.serviceTypeId) : null;
+            
+            return {
+              id: entry.id,
+              position: entry.queuePosition,
+              status: entry.status,
+              queuedAt: entry.queuedAt,
+              estimatedStartTime: entry.estimatedStartTime,
+              estimatedDuration: entry.estimatedDuration,
+              priority: entry.priority,
+              job: job ? {
+                id: job.id,
+                jobNumber: job.jobNumber,
+                customerName: customer ? `${customer.firstName} ${customer.lastName}` : job.customerName,
+                locationAddress: job.locationAddress,
+                serviceType: serviceType?.name,
+                urgencyLevel: job.urgencyLevel,
+                totalAmount: job.totalAmount
+              } : null
+            };
+          })
+        );
+
+        // Get contractor info
+        const contractor = await storage.getContractorProfile(contractorId);
+        const user = await storage.getUser(contractorId);
+
+        res.json({
+          contractor: {
+            id: contractorId,
+            name: user ? `${user.firstName} ${user.lastName}` : 'Unknown',
+            companyName: contractor?.companyName,
+            isAvailable: contractor?.isAvailable
+          },
+          queue: queueWithJobs,
+          summary: {
+            totalJobs: queue.length,
+            currentJob: queue.find(q => q.status === 'assigned' || q.status === 'current'),
+            queuedJobs: queue.filter(q => q.status === 'queued').length,
+            estimatedTotalTime: queue.reduce((sum, entry) => sum + (entry.estimatedDuration || 60), 0)
+          }
+        });
+      } catch (error) {
+        console.error('Get contractor queue error:', error);
+        res.status(500).json({ message: 'Failed to get contractor queue' });
+      }
+    }
+  );
+
+  // Reorder contractor's queue
+  app.post('/api/contractors/:id/queue/reorder',
+    requireAuth,
+    requireRole('contractor', 'admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.params.id;
+        const { jobIds } = req.body;
+
+        // Validate contractor access
+        if (req.session.role === 'contractor' && req.session.userId !== contractorId) {
+          return res.status(403).json({ 
+            message: 'You can only reorder your own queue' 
+          });
+        }
+
+        if (!Array.isArray(jobIds) || jobIds.length === 0) {
+          return res.status(400).json({ 
+            message: 'jobIds must be a non-empty array' 
+          });
+        }
+
+        // Reorder the queue
+        const success = await storage.reorderContractorQueue(contractorId, jobIds);
+
+        if (success) {
+          // Update estimates after reordering
+          await storage.updateQueueEstimates(contractorId);
+
+          // Get updated queue
+          const updatedQueue = await storage.getContractorQueue(contractorId);
+
+          res.json({
+            success: true,
+            message: 'Queue reordered successfully',
+            queue: updatedQueue
+          });
+        } else {
+          res.status(400).json({ 
+            message: 'Failed to reorder queue' 
+          });
+        }
+      } catch (error) {
+        console.error('Reorder queue error:', error);
+        res.status(500).json({ message: 'Failed to reorder queue' });
+      }
+    }
+  );
+
+  // Remove job from contractor's queue
+  app.delete('/api/contractors/:id/queue/:jobId',
+    requireAuth,
+    requireRole('contractor', 'admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.params.id;
+        const jobId = req.params.jobId;
+
+        // Validate contractor access
+        if (req.session.role === 'contractor' && req.session.userId !== contractorId) {
+          return res.status(403).json({ 
+            message: 'You can only manage your own queue' 
+          });
+        }
+
+        // Remove from queue
+        const success = await storage.removeFromQueue(jobId);
+
+        if (success) {
+          // Update job status back to new
+          await storage.updateJobStatus(jobId, 'new', req.session.userId);
+
+          res.json({
+            success: true,
+            message: 'Job removed from queue successfully'
+          });
+        } else {
+          res.status(404).json({ 
+            message: 'Job not found in queue' 
+          });
+        }
+      } catch (error) {
+        console.error('Remove from queue error:', error);
+        res.status(500).json({ message: 'Failed to remove job from queue' });
+      }
+    }
+  );
+
+  // Skip job in queue
+  app.post('/api/contractors/:id/queue/:queueId/skip',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.params.id;
+        const queueId = req.params.queueId;
+        const { reason } = req.body;
+
+        // Validate contractor access
+        if (req.session.userId !== contractorId) {
+          return res.status(403).json({ 
+            message: 'You can only skip jobs in your own queue' 
+          });
+        }
+
+        if (!reason) {
+          return res.status(400).json({ 
+            message: 'Skip reason is required' 
+          });
+        }
+
+        // Skip the job
+        const updatedEntry = await storage.skipQueueJob(queueId, reason);
+
+        if (updatedEntry) {
+          res.json({
+            success: true,
+            message: 'Job skipped successfully',
+            nextJob: await storage.getContractorCurrentJob(contractorId)
+          });
+        } else {
+          res.status(404).json({ 
+            message: 'Queue entry not found' 
+          });
+        }
+      } catch (error) {
+        console.error('Skip queue job error:', error);
+        res.status(500).json({ message: 'Failed to skip job' });
+      }
+    }
+  );
+
+  // Get job's queue status
+  app.get('/api/jobs/:id/queue-status',
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        
+        const queueStatus = await storage.getJobQueueStatus(jobId);
+        
+        if (!queueStatus) {
+          return res.status(404).json({ 
+            message: 'Job not found in any queue' 
+          });
+        }
+
+        // Get contractor info
+        const contractor = await storage.getContractorProfile(queueStatus.contractorId);
+        const user = await storage.getUser(queueStatus.contractorId);
+
+        res.json({
+          jobId,
+          queueStatus: {
+            contractorId: queueStatus.contractorId,
+            contractorName: user ? `${user.firstName} ${user.lastName}` : 'Unknown',
+            companyName: contractor?.companyName,
+            position: queueStatus.position,
+            status: queueStatus.status,
+            estimatedStartTime: queueStatus.estimatedStartTime,
+            isCurrentJob: queueStatus.status === 'assigned' || queueStatus.status === 'current'
+          }
+        });
+      } catch (error) {
+        console.error('Get job queue status error:', error);
+        res.status(500).json({ message: 'Failed to get job queue status' });
+      }
+    }
+  );
+
+  // Auto-assign job to best available contractor
+  app.post('/api/jobs/:id/auto-assign',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        
+        // Get job details
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        if (job.status !== 'new' && job.status !== 'scheduled') {
+          return res.status(400).json({ 
+            message: `Job cannot be auto-assigned - current status: ${job.status}` 
+          });
+        }
+
+        // Find contractor with shortest queue
+        const shortestQueue = await storage.findShortestQueue(
+          job.serviceTypeId,
+          job.location as { lat: number; lng: number }
+        );
+
+        if (!shortestQueue) {
+          // No contractors available at all
+          return res.status(404).json({ 
+            message: 'No contractors available for this job' 
+          });
+        }
+
+        // Check if contractor is suitable
+        const contractor = await storage.getContractorProfile(shortestQueue.contractorId);
+        
+        // Consider factors for assignment
+        const factors = {
+          queueLength: shortestQueue.queueLength,
+          estimatedWaitTime: shortestQueue.estimatedWaitTime,
+          rating: contractor?.averageRating || 0,
+          isFleetCapable: contractor?.isFleetCapable || false,
+          performanceTier: contractor?.performanceTier || 'bronze'
+        };
+
+        // Calculate assignment score (higher is better)
+        let assignmentScore = 100;
+        assignmentScore -= shortestQueue.queueLength * 10; // Penalty for queue length
+        assignmentScore += (Number(contractor?.averageRating) || 0) * 5; // Bonus for rating
+        if (contractor?.performanceTier === 'gold') assignmentScore += 10;
+        if (contractor?.performanceTier === 'silver') assignmentScore += 5;
+        
+        // Add to contractor's queue
+        const queueEntry = await storage.addToContractorQueue(
+          shortestQueue.contractorId,
+          jobId,
+          job.urgencyLevel === 'high' ? 1 : undefined,
+          {
+            autoAssigned: true,
+            assignmentScore,
+            factors
+          }
+        );
+
+        // Update job with contractor
+        await storage.assignContractorToJob(jobId, shortestQueue.contractorId);
+
+        // Send notifications
+        await emailService.sendJobAssignmentNotification(shortestQueue.contractorId, job);
+        if (job.customerId) {
+          await emailService.sendContractorAssignedNotification(job.customerId, job, contractor);
+        }
+
+        res.json({
+          success: true,
+          assignment: {
+            contractorId: shortestQueue.contractorId,
+            contractorName: contractor?.companyName,
+            queuePosition: queueEntry.queuePosition,
+            estimatedStartTime: queueEntry.estimatedStartTime,
+            estimatedWaitTime: shortestQueue.estimatedWaitTime,
+            assignmentScore,
+            factors
+          },
+          message: `Job auto-assigned to contractor with queue position ${queueEntry.queuePosition}`
+        });
+      } catch (error) {
+        console.error('Auto-assign job error:', error);
+        res.status(500).json({ message: 'Failed to auto-assign job' });
+      }
+    }
+  );
+
+  // Process next job in contractor's queue
+  app.post('/api/contractors/:id/queue/process-next',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.params.id;
+
+        // Validate contractor access
+        if (req.session.userId !== contractorId) {
+          return res.status(403).json({ 
+            message: 'You can only process your own queue' 
+          });
+        }
+
+        // Process next in queue
+        const result = await storage.processNextInQueue(contractorId);
+
+        if (result.success) {
+          if (result.nextJob) {
+            // Send notification about new current job
+            await emailService.sendJobStartedNotification(contractorId, result.nextJob);
+            
+            res.json({
+              success: true,
+              message: 'Next job in queue is now active',
+              nextJob: result.nextJob,
+              queueEntry: result.queueEntry
+            });
+          } else {
+            res.json({
+              success: true,
+              message: 'Queue is now empty',
+              nextJob: null
+            });
+          }
+        } else {
+          res.status(400).json({ 
+            message: 'Failed to process next job in queue' 
+          });
+        }
+      } catch (error) {
+        console.error('Process next in queue error:', error);
+        res.status(500).json({ message: 'Failed to process next job' });
+      }
+    }
+  );
+
+  // Get contractor availability with queue info
+  app.get('/api/contractors/availability',
+    async (req: Request, res: Response) => {
+      try {
+        const { 
+          serviceTypeId, 
+          lat, 
+          lng, 
+          includeOffline = false 
+        } = req.query;
+
+        // Get all active queues
+        const allQueues = await storage.getAllActiveQueues();
+        
+        // Get contractor profiles for additional info
+        const availabilityList = await Promise.all(
+          allQueues.map(async (queue) => {
+            const contractor = await storage.getContractorProfile(queue.contractorId);
+            const user = await storage.getUser(queue.contractorId);
+            
+            if (!contractor || (!contractor.isAvailable && !includeOffline)) {
+              return null;
+            }
+
+            // Check service type compatibility if specified
+            if (serviceTypeId) {
+              const services = await storage.getContractorServices(queue.contractorId);
+              if (!services.find(s => s.serviceTypeId === serviceTypeId)) {
+                return null;
+              }
+            }
+
+            // Check distance if location provided
+            let distance: number | undefined;
+            if (lat && lng && contractor.currentLocation) {
+              const contractorLoc = contractor.currentLocation as any;
+              distance = Math.sqrt(
+                Math.pow(Number(lat) - contractorLoc.lat, 2) + 
+                Math.pow(Number(lng) - contractorLoc.lng, 2)
+              ) * 69; // Rough conversion to miles
+              
+              if (distance > contractor.serviceRadius) {
+                return null;
+              }
+            }
+
+            return {
+              contractorId: queue.contractorId,
+              name: user ? `${user.firstName} ${user.lastName}` : 'Unknown',
+              companyName: contractor.companyName,
+              status: contractor.isAvailable 
+                ? (queue.currentJob ? 'busy' : 'available')
+                : 'offline',
+              currentJob: queue.currentJob ? {
+                id: queue.currentJob.id,
+                jobNumber: queue.currentJob.jobNumber,
+                estimatedCompletion: queue.currentJob.estimatedDuration
+              } : null,
+              queueDepth: queue.queueLength,
+              estimatedAvailabilityTime: queue.nextAvailableTime,
+              location: contractor.currentLocation,
+              serviceRadius: contractor.serviceRadius,
+              distance,
+              rating: contractor.averageRating,
+              performanceTier: contractor.performanceTier
+            };
+          })
+        );
+
+        // Filter out nulls and sort by availability
+        const filteredList = availabilityList
+          .filter(item => item !== null)
+          .sort((a, b) => {
+            // Sort by: available first, then by queue depth, then by distance
+            if (a!.status === 'available' && b!.status !== 'available') return -1;
+            if (a!.status !== 'available' && b!.status === 'available') return 1;
+            if (a!.queueDepth !== b!.queueDepth) return a!.queueDepth - b!.queueDepth;
+            if (a!.distance && b!.distance) return a!.distance - b!.distance;
+            return 0;
+          });
+
+        res.json({
+          contractors: filteredList,
+          summary: {
+            total: filteredList.length,
+            available: filteredList.filter(c => c!.status === 'available').length,
+            busy: filteredList.filter(c => c!.status === 'busy').length,
+            offline: filteredList.filter(c => c!.status === 'offline').length,
+            averageQueueDepth: filteredList.reduce((sum, c) => sum + c!.queueDepth, 0) / filteredList.length || 0
+          }
+        });
+      } catch (error) {
+        console.error('Get contractor availability error:', error);
+        res.status(500).json({ message: 'Failed to get contractor availability' });
+      }
+    }
+  );
+
   // Update contractor profile
   app.patch('/api/contractor/profile',
     requireAuth,

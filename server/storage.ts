@@ -534,6 +534,28 @@ export interface IStorage {
   getQueuePositionForJob(jobId: string): Promise<{ position: number; totalInQueue: number } | null>;
   updateQueueStatus(queueId: string, status: typeof queueStatusEnum.enumValues[number]): Promise<ContractorJobQueue | null>;
   
+  // Enhanced queue management methods
+  addToContractorQueue(contractorId: string, jobId: string, priority?: number, metadata?: any): Promise<ContractorJobQueue>;
+  processNextInQueue(contractorId: string): Promise<{ success: boolean; nextJob?: Job; queueEntry?: ContractorJobQueue }>;
+  updateQueuePosition(queueId: string, newPosition: number): Promise<ContractorJobQueue | null>;
+  reorderContractorQueue(contractorId: string, jobIds: string[]): Promise<boolean>;
+  skipQueueJob(queueId: string, reason: string): Promise<ContractorJobQueue | null>;
+  expireQueueEntry(queueId: string): Promise<ContractorJobQueue | null>;
+  getQueueEstimates(contractorId: string): Promise<Array<{ jobId: string; position: number; estimatedStartTime: Date }>>;
+  updateQueueEstimates(contractorId: string): Promise<boolean>;
+  getJobQueueStatus(jobId: string): Promise<{ contractorId: string; position: number; estimatedStartTime?: Date; status: string } | null>;
+  getAllActiveQueues(): Promise<Array<{ contractorId: string; queueLength: number; currentJob?: Job; nextAvailableTime?: Date }>>;
+  findShortestQueue(serviceTypeId?: string, location?: { lat: number; lng: number }): Promise<{ contractorId: string; queueLength: number; estimatedWaitTime: number } | null>;
+  handleQueueTimeout(queueId: string): Promise<{ reassigned: boolean; newContractorId?: string }>;
+  sendQueueNotification(queueId: string, notificationType: string): Promise<boolean>;
+  getContractorAvailabilityWithQueue(contractorId: string): Promise<{ 
+    isAvailable: boolean;
+    currentJob?: Job;
+    queueDepth: number;
+    estimatedAvailabilityTime?: Date;
+    nextJobId?: string;
+  }>;
+  
   // ==================== FLEET OPERATIONS ====================
   createFleetAccount(fleet: InsertFleetAccount): Promise<FleetAccount>;
   getFleetAccount(id: string): Promise<FleetAccount | undefined>;
@@ -2634,6 +2656,524 @@ export class PostgreSQLStorage implements IStorage {
       .returning();
 
     return result[0] || null;
+  }
+
+  // Enhanced queue management methods
+  async addToContractorQueue(contractorId: string, jobId: string, priority?: number, metadata?: any): Promise<ContractorJobQueue> {
+    return await db.transaction(async (tx) => {
+      // Check if job is already in any queue
+      const existingQueue = await tx.select()
+        .from(contractorJobQueue)
+        .where(eq(contractorJobQueue.jobId, jobId))
+        .limit(1);
+
+      if (existingQueue.length > 0) {
+        throw new Error('Job is already in a queue');
+      }
+
+      // Get contractor's current queue
+      const currentQueue = await tx.select()
+        .from(contractorJobQueue)
+        .where(and(
+          eq(contractorJobQueue.contractorId, contractorId),
+          inArray(contractorJobQueue.status, ['current', 'queued'])
+        ))
+        .orderBy(asc(contractorJobQueue.queuePosition));
+
+      let queuePosition = 1;
+      let estimatedStartTime = new Date();
+      let status: typeof queueStatusEnum.enumValues[number] = 'queued';
+
+      if (currentQueue.length === 0) {
+        // No jobs in queue, this becomes current
+        status = 'assigned';
+        queuePosition = 1;
+      } else {
+        // Calculate position and estimated start time
+        const lastJob = currentQueue[currentQueue.length - 1];
+        queuePosition = priority || (lastJob.queuePosition + 1);
+        
+        // Estimate based on average job duration (default 60 minutes)
+        const avgDuration = 60; // minutes
+        estimatedStartTime = new Date(Date.now() + (currentQueue.length * avgDuration * 60000));
+      }
+
+      // Get job details for distance calculation
+      const [job] = await tx.select().from(jobs).where(eq(jobs.id, jobId));
+      let distanceToJob = null;
+      
+      if (job && job.location) {
+        const [contractor] = await tx.select().from(contractorProfiles)
+          .where(eq(contractorProfiles.userId, contractorId));
+        
+        if (contractor && contractor.currentLocation) {
+          // Calculate distance (simplified)
+          const jobLoc = job.location as any;
+          const contractorLoc = contractor.currentLocation as any;
+          distanceToJob = Math.sqrt(
+            Math.pow(jobLoc.lat - contractorLoc.lat, 2) + 
+            Math.pow(jobLoc.lng - contractorLoc.lng, 2)
+          ) * 69; // Rough conversion to miles
+        }
+      }
+
+      const queueEntry: InsertContractorJobQueue = {
+        contractorId,
+        jobId,
+        queuePosition,
+        status,
+        estimatedStartTime,
+        priority: priority || 5,
+        autoAssigned: true,
+        distanceToJob,
+        metadata,
+        notificationsSent: []
+      };
+
+      const result = await tx.insert(contractorJobQueue).values(queueEntry).returning();
+
+      // Update job status if this is the current job
+      if (status === 'assigned') {
+        await tx.update(jobs)
+          .set({
+            contractorId,
+            status: 'assigned',
+            assignedAt: new Date()
+          })
+          .where(eq(jobs.id, jobId));
+      }
+
+      return result[0];
+    });
+  }
+
+  async processNextInQueue(contractorId: string): Promise<{ success: boolean; nextJob?: Job; queueEntry?: ContractorJobQueue }> {
+    return await db.transaction(async (tx) => {
+      // Mark current job as completed
+      const currentQueue = await tx.select()
+        .from(contractorJobQueue)
+        .where(and(
+          eq(contractorJobQueue.contractorId, contractorId),
+          eq(contractorJobQueue.status, 'assigned')
+        ))
+        .limit(1);
+
+      if (currentQueue.length > 0) {
+        await tx.update(contractorJobQueue)
+          .set({
+            status: 'completed',
+            completedAt: new Date(),
+            actualDuration: sql`EXTRACT(EPOCH FROM NOW() - ${currentQueue[0].actualStartTime}) / 60`
+          })
+          .where(eq(contractorJobQueue.id, currentQueue[0].id));
+      }
+
+      // Get next in queue
+      const nextQueue = await tx.select()
+        .from(contractorJobQueue)
+        .where(and(
+          eq(contractorJobQueue.contractorId, contractorId),
+          eq(contractorJobQueue.status, 'queued')
+        ))
+        .orderBy(asc(contractorJobQueue.queuePosition))
+        .limit(1);
+
+      if (nextQueue.length === 0) {
+        return { success: true };
+      }
+
+      // Promote next to current
+      await tx.update(contractorJobQueue)
+        .set({
+          status: 'assigned',
+          actualStartTime: new Date(),
+          queuePosition: 1
+        })
+        .where(eq(contractorJobQueue.id, nextQueue[0].id));
+
+      // Update all other positions
+      await tx.update(contractorJobQueue)
+        .set({
+          queuePosition: sql`${contractorJobQueue.queuePosition} - 1`
+        })
+        .where(and(
+          eq(contractorJobQueue.contractorId, contractorId),
+          eq(contractorJobQueue.status, 'queued'),
+          gt(contractorJobQueue.queuePosition, nextQueue[0].queuePosition)
+        ));
+
+      // Get job details
+      const [nextJob] = await tx.select().from(jobs).where(eq(jobs.id, nextQueue[0].jobId));
+
+      // Update job assignment
+      await tx.update(jobs)
+        .set({
+          contractorId,
+          status: 'assigned',
+          assignedAt: new Date()
+        })
+        .where(eq(jobs.id, nextQueue[0].jobId));
+
+      return {
+        success: true,
+        nextJob,
+        queueEntry: { ...nextQueue[0], status: 'assigned' as typeof queueStatusEnum.enumValues[number] }
+      };
+    });
+  }
+
+  async updateQueuePosition(queueId: string, newPosition: number): Promise<ContractorJobQueue | null> {
+    return await db.transaction(async (tx) => {
+      const [queueEntry] = await tx.select()
+        .from(contractorJobQueue)
+        .where(eq(contractorJobQueue.id, queueId));
+
+      if (!queueEntry || queueEntry.status !== 'queued') {
+        return null;
+      }
+
+      const oldPosition = queueEntry.queuePosition;
+
+      // Shift other queue entries
+      if (newPosition < oldPosition) {
+        // Moving up - shift others down
+        await tx.update(contractorJobQueue)
+          .set({
+            queuePosition: sql`${contractorJobQueue.queuePosition} + 1`
+          })
+          .where(and(
+            eq(contractorJobQueue.contractorId, queueEntry.contractorId),
+            eq(contractorJobQueue.status, 'queued'),
+            gte(contractorJobQueue.queuePosition, newPosition),
+            lt(contractorJobQueue.queuePosition, oldPosition)
+          ));
+      } else if (newPosition > oldPosition) {
+        // Moving down - shift others up
+        await tx.update(contractorJobQueue)
+          .set({
+            queuePosition: sql`${contractorJobQueue.queuePosition} - 1`
+          })
+          .where(and(
+            eq(contractorJobQueue.contractorId, queueEntry.contractorId),
+            eq(contractorJobQueue.status, 'queued'),
+            gt(contractorJobQueue.queuePosition, oldPosition),
+            lte(contractorJobQueue.queuePosition, newPosition)
+          ));
+      }
+
+      // Update the entry's position
+      const result = await tx.update(contractorJobQueue)
+        .set({
+          queuePosition: newPosition,
+          updatedAt: new Date()
+        })
+        .where(eq(contractorJobQueue.id, queueId))
+        .returning();
+
+      return result[0];
+    });
+  }
+
+  async reorderContractorQueue(contractorId: string, jobIds: string[]): Promise<boolean> {
+    return await db.transaction(async (tx) => {
+      // Update positions based on the new order
+      for (let i = 0; i < jobIds.length; i++) {
+        await tx.update(contractorJobQueue)
+          .set({
+            queuePosition: i + 2, // Start at 2 (1 is reserved for current)
+            updatedAt: new Date()
+          })
+          .where(and(
+            eq(contractorJobQueue.contractorId, contractorId),
+            eq(contractorJobQueue.jobId, jobIds[i]),
+            eq(contractorJobQueue.status, 'queued')
+          ));
+      }
+      return true;
+    });
+  }
+
+  async skipQueueJob(queueId: string, reason: string): Promise<ContractorJobQueue | null> {
+    const result = await db.update(contractorJobQueue)
+      .set({
+        status: 'skipped',
+        skipReason: reason,
+        skippedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(contractorJobQueue.id, queueId))
+      .returning();
+
+    if (result.length > 0) {
+      // Process next in queue
+      await this.processNextInQueue(result[0].contractorId);
+    }
+
+    return result[0] || null;
+  }
+
+  async expireQueueEntry(queueId: string): Promise<ContractorJobQueue | null> {
+    const result = await db.update(contractorJobQueue)
+      .set({
+        status: 'expired',
+        expiredAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(contractorJobQueue.id, queueId))
+      .returning();
+
+    return result[0] || null;
+  }
+
+  async getQueueEstimates(contractorId: string): Promise<Array<{ jobId: string; position: number; estimatedStartTime: Date }>> {
+    const queue = await db.select()
+      .from(contractorJobQueue)
+      .where(and(
+        eq(contractorJobQueue.contractorId, contractorId),
+        inArray(contractorJobQueue.status, ['current', 'queued', 'assigned'])
+      ))
+      .orderBy(asc(contractorJobQueue.queuePosition));
+
+    const avgDuration = 60; // Default 60 minutes per job
+    let currentTime = new Date();
+    
+    return queue.map((entry, index) => {
+      const estimatedStart = new Date(currentTime.getTime() + (index * avgDuration * 60000));
+      return {
+        jobId: entry.jobId,
+        position: entry.queuePosition,
+        estimatedStartTime: entry.estimatedStartTime || estimatedStart
+      };
+    });
+  }
+
+  async updateQueueEstimates(contractorId: string): Promise<boolean> {
+    const queue = await db.select()
+      .from(contractorJobQueue)
+      .where(and(
+        eq(contractorJobQueue.contractorId, contractorId),
+        inArray(contractorJobQueue.status, ['current', 'queued', 'assigned'])
+      ))
+      .orderBy(asc(contractorJobQueue.queuePosition));
+
+    const avgDuration = 60; // minutes
+    let currentTime = new Date();
+
+    for (let i = 0; i < queue.length; i++) {
+      const estimatedStart = new Date(currentTime.getTime() + (i * avgDuration * 60000));
+      await db.update(contractorJobQueue)
+        .set({
+          estimatedStartTime: estimatedStart,
+          updatedAt: new Date()
+        })
+        .where(eq(contractorJobQueue.id, queue[i].id));
+    }
+
+    return true;
+  }
+
+  async getJobQueueStatus(jobId: string): Promise<{ contractorId: string; position: number; estimatedStartTime?: Date; status: string } | null> {
+    const [entry] = await db.select()
+      .from(contractorJobQueue)
+      .where(eq(contractorJobQueue.jobId, jobId))
+      .limit(1);
+
+    if (!entry) return null;
+
+    return {
+      contractorId: entry.contractorId,
+      position: entry.queuePosition,
+      estimatedStartTime: entry.estimatedStartTime || undefined,
+      status: entry.status
+    };
+  }
+
+  async getAllActiveQueues(): Promise<Array<{ contractorId: string; queueLength: number; currentJob?: Job; nextAvailableTime?: Date }>> {
+    const contractors = await db.select()
+      .from(contractorProfiles)
+      .where(eq(contractorProfiles.isAvailable, true));
+
+    const result = [];
+    
+    for (const contractor of contractors) {
+      const queue = await db.select()
+        .from(contractorJobQueue)
+        .where(and(
+          eq(contractorJobQueue.contractorId, contractor.userId),
+          inArray(contractorJobQueue.status, ['current', 'queued', 'assigned'])
+        ));
+
+      let currentJob: Job | undefined;
+      const currentQueue = queue.find(q => q.status === 'assigned' || q.status === 'current');
+      
+      if (currentQueue) {
+        const [job] = await db.select().from(jobs).where(eq(jobs.id, currentQueue.jobId));
+        currentJob = job;
+      }
+
+      const avgDuration = 60; // minutes
+      const nextAvailableTime = queue.length > 0 
+        ? new Date(Date.now() + (queue.length * avgDuration * 60000))
+        : new Date();
+
+      result.push({
+        contractorId: contractor.userId,
+        queueLength: queue.length,
+        currentJob,
+        nextAvailableTime
+      });
+    }
+
+    return result;
+  }
+
+  async findShortestQueue(serviceTypeId?: string, location?: { lat: number; lng: number }): Promise<{ contractorId: string; queueLength: number; estimatedWaitTime: number } | null> {
+    const contractors = await db.select()
+      .from(contractorProfiles)
+      .where(eq(contractorProfiles.isAvailable, true));
+
+    let shortestQueue = null;
+    let minQueueLength = Infinity;
+
+    for (const contractor of contractors) {
+      // Check if contractor provides this service type
+      if (serviceTypeId) {
+        const [service] = await db.select()
+          .from(contractorServices)
+          .where(and(
+            eq(contractorServices.contractorId, contractor.userId),
+            eq(contractorServices.serviceTypeId, serviceTypeId)
+          ));
+        
+        if (!service) continue;
+      }
+
+      // Check distance if location provided
+      if (location && contractor.currentLocation) {
+        const contractorLoc = contractor.currentLocation as any;
+        const distance = Math.sqrt(
+          Math.pow(location.lat - contractorLoc.lat, 2) + 
+          Math.pow(location.lng - contractorLoc.lng, 2)
+        ) * 69; // Rough conversion to miles
+        
+        if (distance > contractor.serviceRadius) continue;
+      }
+
+      const queue = await db.select()
+        .from(contractorJobQueue)
+        .where(and(
+          eq(contractorJobQueue.contractorId, contractor.userId),
+          inArray(contractorJobQueue.status, ['current', 'queued', 'assigned'])
+        ));
+
+      if (queue.length < minQueueLength) {
+        minQueueLength = queue.length;
+        const avgDuration = 60; // minutes
+        shortestQueue = {
+          contractorId: contractor.userId,
+          queueLength: queue.length,
+          estimatedWaitTime: queue.length * avgDuration
+        };
+      }
+    }
+
+    return shortestQueue;
+  }
+
+  async handleQueueTimeout(queueId: string): Promise<{ reassigned: boolean; newContractorId?: string }> {
+    return await db.transaction(async (tx) => {
+      const [entry] = await tx.select()
+        .from(contractorJobQueue)
+        .where(eq(contractorJobQueue.id, queueId));
+
+      if (!entry) {
+        return { reassigned: false };
+      }
+
+      // Mark as expired
+      await tx.update(contractorJobQueue)
+        .set({
+          status: 'expired',
+          expiredAt: new Date()
+        })
+        .where(eq(contractorJobQueue.id, queueId));
+
+      // Find alternative contractor
+      const shortest = await this.findShortestQueue();
+      
+      if (shortest && shortest.contractorId !== entry.contractorId) {
+        // Add to new contractor's queue
+        await this.addToContractorQueue(shortest.contractorId, entry.jobId);
+        return { reassigned: true, newContractorId: shortest.contractorId };
+      }
+
+      return { reassigned: false };
+    });
+  }
+
+  async sendQueueNotification(queueId: string, notificationType: string): Promise<boolean> {
+    const [entry] = await db.select()
+      .from(contractorJobQueue)
+      .where(eq(contractorJobQueue.id, queueId));
+
+    if (!entry) return false;
+
+    const notifications = (entry.notificationsSent as any[]) || [];
+    notifications.push({
+      type: notificationType,
+      sentAt: new Date()
+    });
+
+    await db.update(contractorJobQueue)
+      .set({
+        notificationsSent: notifications,
+        lastNotificationAt: new Date()
+      })
+      .where(eq(contractorJobQueue.id, queueId));
+
+    return true;
+  }
+
+  async getContractorAvailabilityWithQueue(contractorId: string): Promise<{ 
+    isAvailable: boolean;
+    currentJob?: Job;
+    queueDepth: number;
+    estimatedAvailabilityTime?: Date;
+    nextJobId?: string;
+  }> {
+    const [contractor] = await db.select()
+      .from(contractorProfiles)
+      .where(eq(contractorProfiles.userId, contractorId));
+
+    const queue = await db.select()
+      .from(contractorJobQueue)
+      .where(and(
+        eq(contractorJobQueue.contractorId, contractorId),
+        inArray(contractorJobQueue.status, ['current', 'queued', 'assigned'])
+      ))
+      .orderBy(asc(contractorJobQueue.queuePosition));
+
+    let currentJob: Job | undefined;
+    const currentQueue = queue.find(q => q.status === 'assigned' || q.status === 'current');
+    
+    if (currentQueue) {
+      const [job] = await db.select().from(jobs).where(eq(jobs.id, currentQueue.jobId));
+      currentJob = job;
+    }
+
+    const nextQueue = queue.find(q => q.status === 'queued');
+    const avgDuration = 60; // minutes
+    const estimatedAvailabilityTime = queue.length > 0
+      ? new Date(Date.now() + (queue.length * avgDuration * 60000))
+      : undefined;
+
+    return {
+      isAvailable: contractor?.isAvailable || false,
+      currentJob,
+      queueDepth: queue.length,
+      estimatedAvailabilityTime,
+      nextJobId: nextQueue?.jobId
+    };
   }
 
   // ==================== FLEET OPERATIONS ====================

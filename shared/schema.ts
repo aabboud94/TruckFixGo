@@ -446,25 +446,38 @@ export const jobs = pgTable("jobs", {
 }));
 
 // Job Queue Management
-export const queueStatusEnum = pgEnum('queue_status', ['current', 'queued', 'completed', 'cancelled']);
+export const queueStatusEnum = pgEnum('queue_status', ['current', 'queued', 'assigned', 'skipped', 'expired', 'completed', 'cancelled']);
 
 export const contractorJobQueue = pgTable("contractor_job_queue", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   contractorId: varchar("contractor_id").notNull().references(() => users.id),
   jobId: varchar("job_id").notNull().references(() => jobs.id),
-  position: integer("position").notNull(), // Queue position (1 = current/next, 2+ = queued)
+  queuePosition: integer("queue_position").notNull(), // Queue position (1 = current/next, 2+ = queued)
   status: queueStatusEnum("status").notNull().default('queued'),
   queuedAt: timestamp("queued_at").notNull().defaultNow(),
-  startedAt: timestamp("started_at"),
+  estimatedStartTime: timestamp("estimated_start_time"),
+  actualStartTime: timestamp("actual_start_time"),
   completedAt: timestamp("completed_at"),
+  skippedAt: timestamp("skipped_at"),
+  expiredAt: timestamp("expired_at"),
+  skipReason: text("skip_reason"),
+  estimatedDuration: integer("estimated_duration"), // In minutes
+  actualDuration: integer("actual_duration"), // In minutes
+  priority: integer("priority").notNull().default(5), // 1-10 scale, 1 being highest priority
+  autoAssigned: boolean("auto_assigned").notNull().default(false),
+  distanceToJob: decimal("distance_to_job", { precision: 10, scale: 2 }), // In miles
+  notificationsSent: jsonb("notifications_sent").default('[]'), // Array of notification timestamps
+  lastNotificationAt: timestamp("last_notification_at"),
   notes: text("notes"),
+  metadata: jsonb("metadata"), // Additional data like estimated cost, service type, etc
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow()
 }, (table) => ({
   jobIdx: uniqueIndex("idx_queue_job").on(table.jobId), // Each job can only be in queue once
-  contractorPositionIdx: index("idx_queue_contractor_position").on(table.contractorId, table.position),
+  contractorPositionIdx: index("idx_queue_contractor_position").on(table.contractorId, table.queuePosition),
   contractorStatusIdx: index("idx_queue_contractor_status").on(table.contractorId, table.status),
-  statusIdx: index("idx_queue_status").on(table.status)
+  statusIdx: index("idx_queue_status").on(table.status),
+  estimatedStartIdx: index("idx_queue_estimated_start").on(table.estimatedStartTime)
 }));
 
 export const jobPhotos = pgTable("job_photos", {
