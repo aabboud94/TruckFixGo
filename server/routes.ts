@@ -7632,6 +7632,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== SPLIT PAYMENT ROUTES ====================
   
+  // Create split payment configuration template
+  app.post('/api/payments/split-config',
+    requireAuth,
+    validateRequest(z.object({
+      name: z.string(),
+      description: z.string().optional(),
+      splitRules: z.array(z.object({
+        payerType: z.enum(['driver', 'company', 'fleet', 'insurance']),
+        payerId: z.string().optional(),
+        payerName: z.string().optional(),
+        payerEmail: z.string().email().optional(),
+        payerPhone: z.string().optional(),
+        amount: z.number().optional(),
+        percentage: z.number().min(0).max(100).optional(),
+        isRemainder: z.boolean().optional(),
+        deductFrom: z.number().optional(),
+        description: z.string().optional(),
+        minAmount: z.number().optional(),
+        maxAmount: z.number().optional(),
+        tier: z.object({
+          ranges: z.array(z.object({
+            min: z.number(),
+            max: z.number(),
+            percentage: z.number()
+          }))
+        }).optional()
+      })),
+      conditions: z.any().optional(),
+      priority: z.number().optional(),
+      isActive: z.boolean().optional(),
+      isDefault: z.boolean().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const splitPaymentService = (await import('./split-payment-service')).splitPaymentService;
+        
+        // Validate configuration
+        const validation = splitPaymentService.validateSplitConfiguration(req.body);
+        if (!validation.isValid) {
+          return res.status(400).json({ 
+            message: 'Invalid configuration',
+            errors: validation.errors 
+          });
+        }
+
+        const result = await splitPaymentService.createSplitConfig(req.body);
+        
+        res.status(201).json({
+          message: 'Split payment configuration created successfully',
+          ...result
+        });
+      } catch (error: any) {
+        console.error('Create split config error:', error);
+        res.status(500).json({ 
+          message: 'Failed to create split configuration',
+          error: error.message 
+        });
+      }
+    }
+  );
+  
   // Get split payment templates
   app.get('/api/payments/split/templates',
     requireAuth,
@@ -8005,6 +8066,265 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Create split payment template error:', error);
         res.status(500).json({ message: 'Failed to create template' });
+      }
+    }
+  );
+
+  // NEW: Create split payment for a specific job
+  app.post('/api/jobs/:id/split-payment',
+    requireAuth,
+    validateRequest(z.object({
+      totalAmount: z.number(),
+      splits: z.array(z.object({
+        payerId: z.string(),
+        type: z.enum(['driver', 'company', 'fleet', 'insurance']),
+        payerName: z.string().optional(),
+        payerEmail: z.string().email().optional(),
+        payerPhone: z.string().optional(),
+        amount: z.number().optional(),
+        percentage: z.number().min(0).max(100).optional(),
+        description: z.string().optional()
+      })),
+      templateId: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const splitPaymentService = (await import('./split-payment-service')).splitPaymentService;
+        
+        const result = await splitPaymentService.applySplitToJob(
+          req.params.id,
+          req.body
+        );
+        
+        res.status(201).json({
+          message: 'Split payment created and applied to job',
+          ...result
+        });
+      } catch (error: any) {
+        console.error('Apply split to job error:', error);
+        res.status(500).json({ 
+          message: 'Failed to apply split payment to job',
+          error: error.message 
+        });
+      }
+    }
+  );
+
+  // NEW: Process split payment for specific split portion
+  app.post('/api/payments/split/:splitId/process',
+    validateRequest(z.object({
+      payerId: z.string(),
+      paymentMethodType: z.enum(['credit_card', 'efs_check', 'comdata_check', 'cash', 'fleet_account']),
+      paymentMethodId: z.string().optional(),
+      metadata: z.any().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const splitPaymentService = (await import('./split-payment-service')).splitPaymentService;
+        
+        const result = await splitPaymentService.processSplitPaymentById(
+          req.params.splitId,
+          req.body
+        );
+        
+        res.json({
+          message: 'Payment processed successfully',
+          ...result
+        });
+      } catch (error: any) {
+        console.error('Process split payment error:', error);
+        res.status(500).json({ 
+          message: 'Failed to process split payment',
+          error: error.message 
+        });
+      }
+    }
+  );
+
+  // NEW: Get comprehensive split payment status by split ID
+  app.get('/api/payments/split/:splitId',
+    async (req: Request, res: Response) => {
+      try {
+        const splitPaymentService = (await import('./split-payment-service')).splitPaymentService;
+        
+        const status = await splitPaymentService.getSplitPaymentStatus(req.params.splitId);
+        
+        res.json(status);
+      } catch (error: any) {
+        console.error('Get split payment status error:', error);
+        res.status(500).json({ 
+          message: 'Failed to get split payment status',
+          error: error.message 
+        });
+      }
+    }
+  );
+
+  // NEW: Generate or get payment link for specific payer
+  app.get('/api/payments/split/:splitId/link/:payerId',
+    async (req: Request, res: Response) => {
+      try {
+        const splitPaymentService = (await import('./split-payment-service')).splitPaymentService;
+        
+        const linkInfo = await splitPaymentService.getPaymentLinkForPayer(
+          req.params.splitId,
+          req.params.payerId
+        );
+        
+        res.json(linkInfo);
+      } catch (error: any) {
+        console.error('Get payment link error:', error);
+        res.status(500).json({ 
+          message: 'Failed to get payment link',
+          error: error.message 
+        });
+      }
+    }
+  );
+
+  // NEW: Webhook handler for split payment confirmations
+  app.post('/api/webhooks/split-payment',
+    validateRequest(z.object({
+      paymentIntentId: z.string(),
+      splitPaymentId: z.string(),
+      payerId: z.string(),
+      status: z.enum(['succeeded', 'failed', 'processing']),
+      failureReason: z.string().optional(),
+      metadata: z.any().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const splitPaymentService = (await import('./split-payment-service')).splitPaymentService;
+        
+        const result = await splitPaymentService.handlePaymentWebhook(req.body);
+        
+        res.json(result);
+      } catch (error: any) {
+        console.error('Webhook handler error:', error);
+        res.status(500).json({ 
+          message: 'Failed to process webhook',
+          error: error.message 
+        });
+      }
+    }
+  );
+
+  // NEW: Reconcile split payments
+  app.get('/api/payments/split/:splitId/reconcile',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const reconciliation = await storage.reconcileSplits(req.params.splitId);
+        
+        res.json(reconciliation);
+      } catch (error) {
+        console.error('Reconcile split payment error:', error);
+        res.status(500).json({ message: 'Failed to reconcile split payment' });
+      }
+    }
+  );
+
+  // NEW: Get split payment history
+  app.get('/api/payments/split/:splitId/history',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const history = await storage.getSplitPaymentHistory(req.params.splitId);
+        
+        res.json({ history });
+      } catch (error) {
+        console.error('Get split payment history error:', error);
+        res.status(500).json({ message: 'Failed to get payment history' });
+      }
+    }
+  );
+
+  // NEW: Get payer's split payments
+  app.get('/api/payments/split/payer/:payerId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const splits = await storage.getPaymentSplitsByPayerId(req.params.payerId);
+        
+        res.json({ paymentSplits: splits });
+      } catch (error) {
+        console.error('Get payer splits error:', error);
+        res.status(500).json({ message: 'Failed to get payer payment splits' });
+      }
+    }
+  );
+
+  // NEW: Refund split payment
+  app.post('/api/payments/split/:splitId/refund',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      partial: z.boolean().optional(),
+      percentage: z.number().min(0).max(100).optional(),
+      reason: z.string()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const splitPaymentService = (await import('./split-payment-service')).splitPaymentService;
+        
+        const result = await splitPaymentService.refundSplitPayment(
+          req.params.splitId,
+          req.body
+        );
+        
+        res.json(result);
+      } catch (error: any) {
+        console.error('Refund split payment error:', error);
+        res.status(500).json({ 
+          message: 'Failed to refund split payment',
+          error: error.message 
+        });
+      }
+    }
+  );
+
+  // NEW: Update split payment template
+  app.put('/api/payments/split-config/:templateId',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const template = await storage.updateSplitPaymentTemplate(
+          req.params.templateId,
+          req.body
+        );
+        
+        if (!template) {
+          return res.status(404).json({ message: 'Template not found' });
+        }
+        
+        res.json({
+          message: 'Template updated successfully',
+          template
+        });
+      } catch (error) {
+        console.error('Update template error:', error);
+        res.status(500).json({ message: 'Failed to update template' });
+      }
+    }
+  );
+
+  // NEW: Delete split payment template
+  app.delete('/api/payments/split-config/:templateId',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const success = await storage.deleteSplitPaymentTemplate(req.params.templateId);
+        
+        if (!success) {
+          return res.status(404).json({ message: 'Template not found' });
+        }
+        
+        res.json({ message: 'Template deleted successfully' });
+      } catch (error) {
+        console.error('Delete template error:', error);
+        res.status(500).json({ message: 'Failed to delete template' });
       }
     }
   );

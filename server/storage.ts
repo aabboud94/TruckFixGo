@@ -6462,6 +6462,226 @@ export class PostgreSQLStorage implements IStorage {
     }, {} as Record<string, number>);
   }
 
+  // Additional split payment methods for comprehensive API
+  async applySplitToJob(jobId: string, splitPaymentId: string): Promise<boolean> {
+    try {
+      // Update job with split payment reference
+      await db.update(jobs)
+        .set({ 
+          paymentStatus: 'pending',
+          splitPaymentId,
+          updatedAt: new Date()
+        })
+        .where(eq(jobs.id, jobId));
+      
+      return true;
+    } catch (error) {
+      console.error('Error applying split to job:', error);
+      return false;
+    }
+  }
+
+  async processSplitPayment(splitId: string, paymentDetails: any): Promise<SplitPayment | null> {
+    try {
+      const split = await this.getSplitPayment(splitId);
+      if (!split) return null;
+
+      // Update split payment with processing details
+      const result = await db.update(splitPayments)
+        .set({
+          status: paymentDetails.status || 'processing',
+          processingDetails: paymentDetails,
+          updatedAt: new Date()
+        })
+        .where(eq(splitPayments.id, splitId))
+        .returning();
+      
+      return result[0] || null;
+    } catch (error) {
+      console.error('Error processing split payment:', error);
+      return null;
+    }
+  }
+
+  async getSplitStatus(splitId: string): Promise<any> {
+    const split = await this.getSplitPayment(splitId);
+    if (!split) return null;
+
+    const paymentSplitsList = await this.getPaymentSplitsBySplitPaymentId(splitId);
+    
+    const totalAmount = parseFloat(split.totalAmount);
+    const totalPaid = paymentSplitsList.reduce((sum, ps) => 
+      sum + parseFloat(ps.amountPaid || '0'), 0
+    );
+    const totalPending = paymentSplitsList.reduce((sum, ps) => 
+      ps.status === 'pending' ? sum + parseFloat(ps.amountAssigned) : sum, 0
+    );
+
+    return {
+      splitPayment: split,
+      paymentSplits: paymentSplitsList,
+      totalAmount,
+      totalPaid,
+      totalPending,
+      remainingBalance: totalAmount - totalPaid,
+      completionPercentage: totalAmount > 0 ? (totalPaid / totalAmount) * 100 : 0,
+      allPaid: split.status === 'completed'
+    };
+  }
+
+  async generatePaymentLink(splitId: string, payerId: string): Promise<string | null> {
+    try {
+      const splits = await this.getPaymentSplitsBySplitPaymentId(splitId);
+      const payerSplit = splits.find(s => s.payerId === payerId);
+      
+      if (!payerSplit) return null;
+      
+      // Return existing link if not expired
+      if (payerSplit.paymentLinkUrl && payerSplit.tokenExpiresAt && 
+          new Date() < payerSplit.tokenExpiresAt) {
+        return payerSplit.paymentLinkUrl;
+      }
+      
+      // Generate new token and link
+      const newToken = randomBytes(32).toString('hex');
+      const baseUrl = process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 5000}`;
+      const newLink = `${baseUrl}/payment/split/${newToken}`;
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 48); // 48 hours expiration
+      
+      await db.update(paymentSplits)
+        .set({
+          paymentToken: newToken,
+          paymentLinkUrl: newLink,
+          tokenExpiresAt: expiresAt,
+          updatedAt: new Date()
+        })
+        .where(eq(paymentSplits.id, payerSplit.id));
+      
+      return newLink;
+    } catch (error) {
+      console.error('Error generating payment link:', error);
+      return null;
+    }
+  }
+
+  async reconcileSplits(splitId: string): Promise<{
+    isReconciled: boolean;
+    discrepancies: any[];
+    summary: any;
+  }> {
+    const splitStatus = await this.getSplitStatus(splitId);
+    if (!splitStatus) {
+      return { isReconciled: false, discrepancies: ['Split payment not found'], summary: null };
+    }
+
+    const discrepancies: any[] = [];
+    const { splitPayment, paymentSplits, totalAmount, totalPaid } = splitStatus;
+
+    // Check if all splits are accounted for
+    const totalAssigned = paymentSplits.reduce((sum: number, ps: any) => 
+      sum + parseFloat(ps.amountAssigned), 0
+    );
+
+    if (Math.abs(totalAmount - totalAssigned) > 0.01) {
+      discrepancies.push({
+        type: 'amount_mismatch',
+        message: `Total amount ($${totalAmount}) doesn't match assigned amount ($${totalAssigned})`,
+        difference: totalAmount - totalAssigned
+      });
+    }
+
+    // Check for overpayments
+    paymentSplits.forEach((ps: any) => {
+      const assigned = parseFloat(ps.amountAssigned);
+      const paid = parseFloat(ps.amountPaid || '0');
+      
+      if (paid > assigned) {
+        discrepancies.push({
+          type: 'overpayment',
+          payerId: ps.payerId,
+          message: `Payer ${ps.payerName} paid $${paid} but was assigned $${assigned}`,
+          overpayment: paid - assigned
+        });
+      }
+    });
+
+    // Check for expired unpaid links
+    const now = new Date();
+    paymentSplits.forEach((ps: any) => {
+      if (ps.status === 'pending' && ps.tokenExpiresAt && new Date(ps.tokenExpiresAt) < now) {
+        discrepancies.push({
+          type: 'expired_link',
+          payerId: ps.payerId,
+          message: `Payment link for ${ps.payerName} has expired`,
+          expiredAt: ps.tokenExpiresAt
+        });
+      }
+    });
+
+    const isReconciled = discrepancies.length === 0 && splitPayment.status === 'completed';
+
+    return {
+      isReconciled,
+      discrepancies,
+      summary: {
+        totalAmount,
+        totalAssigned,
+        totalPaid,
+        totalPending: totalAmount - totalPaid,
+        completedSplits: paymentSplits.filter((ps: any) => ps.status === 'paid').length,
+        pendingSplits: paymentSplits.filter((ps: any) => ps.status === 'pending').length,
+        failedSplits: paymentSplits.filter((ps: any) => ps.status === 'failed').length
+      }
+    };
+  }
+
+  async updateSplitPaymentTemplate(id: string, data: Partial<InsertSplitPaymentTemplate>): Promise<SplitPaymentTemplate | null> {
+    const result = await db.update(splitPaymentTemplates)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(splitPaymentTemplates.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async deleteSplitPaymentTemplate(id: string): Promise<boolean> {
+    try {
+      await db.update(splitPaymentTemplates)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(splitPaymentTemplates.id, id));
+      return true;
+    } catch (error) {
+      console.error('Error deleting split payment template:', error);
+      return false;
+    }
+  }
+
+  async getPaymentSplitsByPayerId(payerId: string): Promise<PaymentSplit[]> {
+    return await db.select().from(paymentSplits)
+      .where(eq(paymentSplits.payerId, payerId))
+      .orderBy(desc(paymentSplits.createdAt));
+  }
+
+  async getSplitPaymentHistory(splitId: string): Promise<any[]> {
+    // Get all transactions related to this split payment
+    const splits = await this.getPaymentSplitsBySplitPaymentId(splitId);
+    const transactionIds = splits
+      .filter(s => s.transactionId)
+      .map(s => s.transactionId as string);
+    
+    if (transactionIds.length === 0) return [];
+    
+    const transactionHistory = await db.select()
+      .from(transactions)
+      .where(inArray(transactions.id, transactionIds))
+      .orderBy(desc(transactions.createdAt));
+    
+    return transactionHistory.map(t => ({
+      ...t,
+      payerInfo: splits.find(s => s.transactionId === t.id)
+    }));
+  }
+
   // ====================
   // CONTRACT MANAGEMENT
   // ====================
