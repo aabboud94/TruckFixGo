@@ -14207,9 +14207,22 @@ The TruckFixGo Team
         const contractorId = req.session.userId!;
         const { latitude, longitude, accuracy, altitude, heading, speed, batteryLevel, isCharging, networkType, jobId } = req.body;
         
-        // Validate required fields
-        if (!latitude || !longitude) {
+        // Validate required fields (explicitly check for undefined/null to allow 0 values)
+        if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
           return res.status(400).json({ message: 'Latitude and longitude are required' });
+        }
+        
+        // Validate coordinate values are numbers and within valid ranges
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          return res.status(400).json({ message: 'Latitude and longitude must be valid numbers' });
+        }
+        
+        if (latitude < -90 || latitude > 90) {
+          return res.status(400).json({ message: 'Latitude must be between -90 and 90 degrees' });
+        }
+        
+        if (longitude < -180 || longitude > 180) {
+          return res.status(400).json({ message: 'Longitude must be between -180 and 180 degrees' });
         }
         
         // Update location in database
@@ -14591,8 +14604,22 @@ The TruckFixGo Team
         const { jobId, eventType, latitude, longitude, radius } = req.body;
         
         // Validate required fields
-        if (!jobId || !eventType || !latitude || !longitude) {
+        // Validate required fields (explicitly check to allow 0 values for coordinates)
+        if (!jobId || !eventType || latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
           return res.status(400).json({ message: 'Missing required fields' });
+        }
+        
+        // Validate coordinate values are numbers and within valid ranges
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          return res.status(400).json({ message: 'Latitude and longitude must be valid numbers' });
+        }
+        
+        if (latitude < -90 || latitude > 90) {
+          return res.status(400).json({ message: 'Latitude must be between -90 and 90 degrees' });
+        }
+        
+        if (longitude < -180 || longitude > 180) {
+          return res.status(400).json({ message: 'Longitude must be between -180 and 180 degrees' });
         }
         
         // Get job to validate
@@ -14744,9 +14771,22 @@ The TruckFixGo Team
         const contractorId = req.session.userId!;
         const { latitude, longitude, accuracy, altitude, heading, speed, batteryLevel, isCharging, networkType, jobId } = req.body;
         
-        // Validate required fields
-        if (!latitude || !longitude) {
+        // Validate required fields (explicitly check for undefined/null to allow 0 values)
+        if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
           return res.status(400).json({ message: 'Latitude and longitude are required' });
+        }
+        
+        // Validate coordinate values are numbers and within valid ranges
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          return res.status(400).json({ message: 'Latitude and longitude must be valid numbers' });
+        }
+        
+        if (latitude < -90 || latitude > 90) {
+          return res.status(400).json({ message: 'Latitude must be between -90 and 90 degrees' });
+        }
+        
+        if (longitude < -180 || longitude > 180) {
+          return res.status(400).json({ message: 'Longitude must be between -180 and 180 degrees' });
         }
         
         // Update location in database
@@ -15128,8 +15168,22 @@ The TruckFixGo Team
         const { jobId, eventType, latitude, longitude, radius } = req.body;
         
         // Validate required fields
-        if (!jobId || !eventType || !latitude || !longitude) {
+        // Validate required fields (explicitly check to allow 0 values for coordinates)
+        if (!jobId || !eventType || latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
           return res.status(400).json({ message: 'Missing required fields' });
+        }
+        
+        // Validate coordinate values are numbers and within valid ranges
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          return res.status(400).json({ message: 'Latitude and longitude must be valid numbers' });
+        }
+        
+        if (latitude < -90 || latitude > 90) {
+          return res.status(400).json({ message: 'Latitude must be between -90 and 90 degrees' });
+        }
+        
+        if (longitude < -180 || longitude > 180) {
+          return res.status(400).json({ message: 'Longitude must be between -180 and 180 degrees' });
         }
         
         // Get job to validate
@@ -15269,3 +15323,7 @@ The TruckFixGo Team
     }
   );
 
+  // Create and return the HTTP server
+  const server = createServer(app);
+  return server;
+}

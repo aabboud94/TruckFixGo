@@ -7,7 +7,7 @@ import billingScheduler from "./billing-scheduler";
 import { jobMonitor } from "./job-monitor";
 import { storage } from "./storage";
 import { QueueProcessingService } from "./queue-service";
-import { emailService } from "./email-service";
+import { emailService } from "./services/email-service";
 import { createServer as createViteServer, createLogger } from "vite";
 import path from "path";
 import fs from "fs";
@@ -250,7 +250,7 @@ app.use((req, res, next) => {
   log(`Job monitor started - checking for unassigned jobs`);
 
   // Initialize Queue Processing Service
-  const queueService = new QueueProcessingService(storage, emailService, trackingWSServer);
+  const queueService = new QueueProcessingService(storage);
   queueService.initialize();
   log(`Queue processing service initialized - managing contractor job queues`);
 
