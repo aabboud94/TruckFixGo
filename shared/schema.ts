@@ -284,9 +284,89 @@ export const fleetPricingOverrides = pgTable("fleet_pricing_overrides", {
   fleetServiceIdx: index("idx_fleet_pricing_overrides").on(table.fleetAccountId, table.serviceTypeId)
 }));
 
+// Fleet Applications (for companies applying to become fleet accounts)
+export const fleetApplications = pgTable("fleet_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Status
+  status: applicationStatusEnum("status").notNull().default('pending'),
+  
+  // Company Information
+  companyName: text("company_name").notNull(),
+  dotNumber: varchar("dot_number", { length: 20 }),
+  mcNumber: varchar("mc_number", { length: 20 }),
+  taxId: varchar("tax_id", { length: 20 }),
+  businessType: varchar("business_type", { length: 50 }), // llc, corporation, partnership
+  
+  // Address
+  address: text("address").notNull(),
+  city: varchar("city", { length: 100 }).notNull(),
+  state: varchar("state", { length: 2 }).notNull(),
+  zip: varchar("zip", { length: 10 }).notNull(),
+  
+  // Fleet Information  
+  fleetSize: integer("fleet_size").notNull(),
+  vehicleTypes: text("vehicle_types").array().default(sql`ARRAY[]::text[]`),
+  averageMonthlyServices: integer("average_monthly_services"),
+  primaryServiceNeeds: text("primary_service_needs").array().default(sql`ARRAY[]::text[]`),
+  
+  // Primary Contact
+  primaryContactName: text("primary_contact_name").notNull(),
+  primaryContactTitle: text("primary_contact_title"),
+  primaryContactPhone: varchar("primary_contact_phone", { length: 20 }).notNull(),
+  primaryContactEmail: text("primary_contact_email").notNull(),
+  
+  // Billing Contact
+  billingContactName: text("billing_contact_name"),
+  billingContactPhone: varchar("billing_contact_phone", { length: 20 }),
+  billingContactEmail: text("billing_contact_email"),
+  
+  // Business Details
+  yearsInBusiness: integer("years_in_business"),
+  currentServiceProvider: text("current_service_provider"),
+  reasonForSwitching: text("reason_for_switching"),
+  
+  // Financial Information
+  requestedCreditLimit: decimal("requested_credit_limit", { precision: 10, scale: 2 }),
+  paymentTerms: varchar("payment_terms", { length: 50 }), // net_30, net_60, prepaid
+  preferredBillingCycle: varchar("preferred_billing_cycle", { length: 20 }), // weekly, biweekly, monthly
+  
+  // Insurance
+  insuranceProvider: text("insurance_provider"),
+  insurancePolicyNumber: varchar("insurance_policy_number", { length: 100 }),
+  insuranceExpiryDate: timestamp("insurance_expiry_date"),
+  
+  // Service Requirements
+  requires24HourService: boolean("requires_24_hour_service").default(false),
+  requiresPriorityResponse: boolean("requires_priority_response").default(false),
+  additionalRequirements: text("additional_requirements"),
+  
+  // Consents
+  termsAccepted: boolean("terms_accepted").notNull().default(false),
+  dataProcessingConsent: boolean("data_processing_consent").notNull().default(false),
+  creditCheckConsent: boolean("credit_check_consent").default(false),
+  
+  // Review
+  reviewNotes: text("review_notes"),
+  rejectionReason: text("rejection_reason"),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  
+  // Timestamps
+  submittedAt: timestamp("submitted_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  emailIdx: index("idx_fleet_applications_email").on(table.primaryContactEmail),
+  statusIdx: index("idx_fleet_applications_status").on(table.status),
+  companyIdx: index("idx_fleet_applications_company").on(table.companyName),
+  dotIdx: index("idx_fleet_applications_dot").on(table.dotNumber),
+  submittedIdx: index("idx_fleet_applications_submitted").on(table.submittedAt)
+}));
+
 // ====================
 // SERVICE CATALOG
-// ====================
+// ==================== 
 
 export const serviceTypes = pgTable("service_types", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1893,6 +1973,20 @@ export const insertFleetPricingOverrideSchema = createInsertSchema(fleetPricingO
 });
 export type InsertFleetPricingOverride = z.infer<typeof insertFleetPricingOverrideSchema>;
 export type FleetPricingOverride = typeof fleetPricingOverrides.$inferSelect;
+
+export const insertFleetApplicationSchema = createInsertSchema(fleetApplications).omit({ 
+  id: true, 
+  status: true,
+  reviewNotes: true,
+  rejectionReason: true,
+  approvedBy: true,
+  approvedAt: true,
+  submittedAt: true,
+  createdAt: true, 
+  updatedAt: true 
+});
+export type InsertFleetApplication = z.infer<typeof insertFleetApplicationSchema>;
+export type FleetApplication = typeof fleetApplications.$inferSelect;
 
 // Service Catalog
 export const insertServiceTypeSchema = createInsertSchema(serviceTypes).omit({ 
