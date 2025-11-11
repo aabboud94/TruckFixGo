@@ -15510,6 +15510,31 @@ The TruckFixGo Team
     }
   );
 
+  // Admin: Get active fleets with metrics
+  app.get('/api/admin/fleets',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { tier, status, search } = req.query;
+        
+        // Get fleets with metrics
+        const fleets = await storage.getActiveFleets({
+          tier: tier as string,
+          status: status as string,
+          search: search as string
+        });
+        
+        res.json(fleets);
+      } catch (error) {
+        console.error('Get active fleets error:', error);
+        res.status(500).json({ 
+          message: 'Failed to get active fleets' 
+        });
+      }
+    }
+  );
+
   // Admin: Approve fleet application
   app.put('/api/admin/fleet-applications/:id/approve',
     requireAuth,

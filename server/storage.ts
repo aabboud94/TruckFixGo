@@ -673,6 +673,32 @@ export interface IStorage {
   updateFleetAccount(id: string, updates: Partial<InsertFleetAccount>): Promise<FleetAccount | undefined>;
   deleteFleetAccount(id: string): Promise<boolean>;
   findFleetAccounts(filters: FleetFilterOptions): Promise<FleetAccount[]>;
+  getActiveFleets(filters?: {
+    tier?: string;
+    status?: string;
+    search?: string;
+  }): Promise<Array<{
+    id: string;
+    companyName: string;
+    contactName: string;
+    contactEmail: string;
+    contactPhone: string;
+    tier: string;
+    creditLimit: number;
+    status: string;
+    vehicleCount: number;
+    activeJobs: number;
+    totalSpent: number;
+    memberSince: Date;
+    customPricing: boolean;
+  }>>;
+  getFleetMetrics(fleetId: string): Promise<{
+    totalVehicles: number;
+    activeJobs: number;
+    completedJobs: number;
+    totalSpent: number;
+    averageJobValue: number;
+  }>;
   
   createFleetVehicle(vehicle: InsertFleetVehicle): Promise<FleetVehicle>;
   getFleetVehicle(id: string): Promise<FleetVehicle | undefined>;
@@ -3443,6 +3469,171 @@ export class PostgreSQLStorage implements IStorage {
     if (filters.offset) query = query.offset(filters.offset) as any;
 
     return await query;
+  }
+
+  async getActiveFleets(filters?: {
+    tier?: string;
+    status?: string;
+    search?: string;
+  }): Promise<Array<{
+    id: string;
+    companyName: string;
+    contactName: string;
+    contactEmail: string;
+    contactPhone: string;
+    tier: string;
+    creditLimit: number;
+    status: string;
+    vehicleCount: number;
+    activeJobs: number;
+    totalSpent: number;
+    memberSince: Date;
+    customPricing: boolean;
+  }>> {
+    try {
+      // Build query conditions
+      const conditions = [isNull(fleetAccounts.deletedAt)];
+      
+      // Filter by tier if provided
+      if (filters?.tier && filters.tier !== 'all') {
+        conditions.push(eq(fleetAccounts.pricingTier, filters.tier as typeof fleetPricingTierEnum.enumValues[number]));
+      }
+      
+      // Filter by status if provided
+      if (filters?.status && filters.status !== 'all') {
+        conditions.push(eq(fleetAccounts.isActive, filters.status === 'active'));
+      }
+      
+      // Search filter
+      if (filters?.search) {
+        conditions.push(
+          or(
+            ilike(fleetAccounts.companyName, `%${filters.search}%`),
+            ilike(fleetAccounts.contactName, `%${filters.search}%`),
+            ilike(fleetAccounts.contactEmail, `%${filters.search}%`),
+            ilike(fleetAccounts.contactPhone, `%${filters.search}%`)
+          )
+        );
+      }
+      
+      // Get fleet accounts
+      const fleets = await db.select()
+        .from(fleetAccounts)
+        .where(and(...conditions))
+        .orderBy(desc(fleetAccounts.createdAt));
+      
+      // Get metrics for each fleet in parallel
+      const fleetsWithMetrics = await Promise.all(
+        fleets.map(async (fleet) => {
+          const metrics = await this.getFleetMetrics(fleet.id);
+          
+          return {
+            id: fleet.id,
+            companyName: fleet.companyName,
+            contactName: fleet.contactName || '',
+            contactEmail: fleet.contactEmail,
+            contactPhone: fleet.contactPhone,
+            tier: fleet.pricingTier || 'standard',
+            creditLimit: Number(fleet.creditLimit) || 0,
+            status: fleet.isActive ? 'active' : 'suspended',
+            vehicleCount: metrics.totalVehicles,
+            activeJobs: metrics.activeJobs,
+            totalSpent: metrics.totalSpent,
+            memberSince: fleet.createdAt,
+            customPricing: fleet.hasCustomPricing || false
+          };
+        })
+      );
+      
+      return fleetsWithMetrics;
+    } catch (error) {
+      console.error('Error in getActiveFleets:', error);
+      return [];
+    }
+  }
+
+  async getFleetMetrics(fleetId: string): Promise<{
+    totalVehicles: number;
+    activeJobs: number;
+    completedJobs: number;
+    totalSpent: number;
+    averageJobValue: number;
+  }> {
+    try {
+      const [vehicleCount, activeJobsCount, completedJobsData, totalSpentData] = await Promise.all([
+        // Count active vehicles
+        db.select({
+          count: sql<number>`COUNT(*)`
+        })
+        .from(fleetVehicles)
+        .where(
+          and(
+            eq(fleetVehicles.fleetAccountId, fleetId),
+            eq(fleetVehicles.isActive, true)
+          )
+        ),
+        
+        // Count active jobs (new, assigned, en_route, on_site)
+        db.select({
+          count: sql<number>`COUNT(*)`
+        })
+        .from(jobs)
+        .where(
+          and(
+            eq(jobs.fleetAccountId, fleetId),
+            inArray(jobs.status, ['new', 'assigned', 'en_route', 'on_site'])
+          )
+        ),
+        
+        // Count completed jobs
+        db.select({
+          count: sql<number>`COUNT(*)`
+        })
+        .from(jobs)
+        .where(
+          and(
+            eq(jobs.fleetAccountId, fleetId),
+            eq(jobs.status, 'completed')
+          )
+        ),
+        
+        // Calculate total spent from completed transactions
+        db.select({
+          total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
+        })
+        .from(transactions)
+        .innerJoin(jobs, eq(transactions.jobId, jobs.id))
+        .where(
+          and(
+            eq(jobs.fleetAccountId, fleetId),
+            eq(transactions.status, 'completed')
+          )
+        )
+      ]);
+      
+      const totalVehicles = vehicleCount[0]?.count || 0;
+      const activeJobs = activeJobsCount[0]?.count || 0;
+      const completedJobs = completedJobsData[0]?.count || 0;
+      const totalSpent = Number(totalSpentData[0]?.total) || 0;
+      const averageJobValue = completedJobs > 0 ? totalSpent / completedJobs : 0;
+      
+      return {
+        totalVehicles,
+        activeJobs,
+        completedJobs,
+        totalSpent,
+        averageJobValue
+      };
+    } catch (error) {
+      console.error('Error in getFleetMetrics:', error);
+      return {
+        totalVehicles: 0,
+        activeJobs: 0,
+        completedJobs: 0,
+        totalSpent: 0,
+        averageJobValue: 0
+      };
+    }
   }
 
   async createFleetVehicle(vehicle: InsertFleetVehicle): Promise<FleetVehicle> {
