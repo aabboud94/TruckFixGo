@@ -222,11 +222,13 @@ import {
   checkProviderEnum,
   checkStatusEnum,
   queueStatusEnum
+} from "@shared/schema";
 
+export interface IStorage {
   // ==================== LOCATION TRACKING ====================
   
   // Update contractor's current location
-  async updateContractorLocation(contractorId: string, location: {
+  updateContractorLocation(contractorId: string, location: {
     latitude: number;
     longitude: number;
     accuracy?: number;
@@ -239,10 +241,10 @@ import {
   }): Promise<LocationTracking | null>;
   
   // Save location to history
-  async saveLocationHistory(data: InsertLocationHistory): Promise<LocationHistory>;
+  saveLocationHistory(data: InsertLocationHistory): Promise<LocationHistory>;
   
   // Get location history for contractor
-  async getLocationHistory(contractorId: string, options?: {
+  getLocationHistory(contractorId: string, options?: {
     jobId?: string;
     fromDate?: Date;
     toDate?: Date;
@@ -251,20 +253,20 @@ import {
   }): Promise<LocationHistory[]>;
   
   // Get active tracking session
-  async getActiveTrackingSession(contractorId: string, jobId?: string): Promise<TrackingSession | null>;
+  getActiveTrackingSession(contractorId: string, jobId?: string): Promise<TrackingSession | null>;
   
   // Start new tracking session
-  async startTrackingSession(data: {
+  startTrackingSession(data: {
     contractorId: string;
     jobId?: string;
     startLocation?: any;
   }): Promise<TrackingSession>;
   
   // End tracking session
-  async endTrackingSession(sessionId: string, endReason: string): Promise<TrackingSession>;
+  endTrackingSession(sessionId: string, endReason: string): Promise<TrackingSession>;
   
   // Update tracking session stats
-  async updateTrackingSessionStats(sessionId: string, stats: {
+  updateTrackingSessionStats(sessionId: string, stats: {
     totalDistance?: number;
     totalDuration?: number;
     averageSpeed?: number;
@@ -273,41 +275,40 @@ import {
   }): Promise<void>;
   
   // Record geofence event
-  async recordGeofenceEvent(data: InsertGeofenceEvent): Promise<GeofenceEvent>;
+  recordGeofenceEvent(data: InsertGeofenceEvent): Promise<GeofenceEvent>;
   
   // Get geofence events for job
-  async getGeofenceEvents(jobId: string): Promise<GeofenceEvent[]>;
+  getGeofenceEvents(jobId: string): Promise<GeofenceEvent[]>;
   
   // Get all actively tracked contractors
-  async getActiveTracking(): Promise<LocationTracking[]>;
+  getActiveTracking(): Promise<LocationTracking[]>;
   
   // Pause/resume tracking
-  async pauseTracking(contractorId: string, reason?: string): Promise<void>;
-  async resumeTracking(contractorId: string): Promise<void>;
+  pauseTracking(contractorId: string, reason?: string): Promise<void>;
+  resumeTracking(contractorId: string): Promise<void>;
   
   // Calculate ETA based on current location
-  async calculateETA(contractorLocation: { lat: number; lng: number }, jobLocation: { lat: number; lng: number }, averageSpeed?: number): Promise<{
+  calculateETA(contractorLocation: { lat: number; lng: number }, jobLocation: { lat: number; lng: number }, averageSpeed?: number): Promise<{
     eta: Date;
     distanceMiles: number;
     estimatedMinutes: number;
   }>;
   
   // Detect arrival at job site (geofencing)
-  async detectArrival(contractorId: string, jobId: string, currentLocation: { lat: number; lng: number }, radiusMeters?: number): Promise<boolean>;
+  detectArrival(contractorId: string, jobId: string, currentLocation: { lat: number; lng: number }, radiusMeters?: number): Promise<boolean>;
   
   // Anonymize old location data (GDPR compliance)
-  async anonymizeOldLocationData(daysOld: number): Promise<number>;
+  anonymizeOldLocationData(daysOld: number): Promise<number>;
   
   // Get contractor's current location
-  async getContractorLocation(contractorId: string): Promise<LocationTracking | null>;
+  getContractorLocation(contractorId: string): Promise<LocationTracking | null>;
   
   // Get route polyline for session
-  async getSessionRoute(sessionId: string): Promise<{
+  getSessionRoute(sessionId: string): Promise<{
     polyline: string;
     points: Array<{ lat: number; lng: number; timestamp: Date }>;
   }>;
-
-} from "@shared/schema";
+}
 
 import { db } from "./db";
 import { eq, and, or, gte, lte, isNull, isNotNull, desc, asc, sql, inArray, ne, gt, lt, ilike } from "drizzle-orm";
@@ -7643,8 +7644,6 @@ export class PostgreSQLStorage implements IStorage {
       return 0;
     }
   }
-}
-
 
   // ==================== LOCATION TRACKING IMPLEMENTATION ====================
   
@@ -8035,7 +8034,7 @@ export class PostgreSQLStorage implements IStorage {
     
     // Simple polyline encoding (in production, use Google's polyline encoder)
     const polyline = routePoints
-      .map(p => \`\${p.lat.toFixed(6)},\${p.lng.toFixed(6)}\`)
+      .map(p => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`)
       .join('|');
     
     return {
@@ -8059,6 +8058,7 @@ export class PostgreSQLStorage implements IStorage {
     
     return Math.round(distance * 10) / 10; // Round to 1 decimal place
   }
+}
 
 // Export the PostgreSQL storage instance
 export const storage = new PostgreSQLStorage();

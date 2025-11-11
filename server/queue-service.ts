@@ -1,25 +1,17 @@
 import * as cron from 'node-cron';
 import { PostgreSQLStorage } from './storage';
-import { EmailService } from './email-service';
-import { WebSocketService } from './websocket';
+import { emailService } from './services/email-service';
+import { trackingWSServer } from './websocket';
 import { db } from './db';
 import { contractorJobQueue, jobs, contractorProfiles, users } from '@shared/schema';
 import { and, eq, gte, lte, inArray } from 'drizzle-orm';
 
 export class QueueProcessingService {
   private storage: PostgreSQLStorage;
-  private emailService: EmailService;
-  private wsService: WebSocketService;
   private processingJobs: Set<string> = new Set();
 
-  constructor(
-    storage: PostgreSQLStorage, 
-    emailService: EmailService,
-    wsService: WebSocketService
-  ) {
+  constructor(storage: PostgreSQLStorage) {
     this.storage = storage;
-    this.emailService = emailService;
-    this.wsService = wsService;
   }
 
   /**
@@ -81,7 +73,7 @@ export class QueueProcessingService {
         await this.notifyNextJobStarting(contractorId, result.nextJob);
         
         // Send WebSocket update
-        this.wsService.sendToContractor(contractorId, {
+        trackingWSServer.sendToContractor(contractorId, {
           type: 'queue:next-job',
           data: {
             job: result.nextJob,
@@ -92,7 +84,7 @@ export class QueueProcessingService {
 
         // Notify customer of contractor arrival
         if (result.nextJob.customerId) {
-          await this.emailService.sendContractorEnRouteNotification(
+          await emailService.sendContractorEnRouteNotification(
             result.nextJob.customerId,
             result.nextJob
           );
@@ -149,21 +141,21 @@ export class QueueProcessingService {
           const job = await this.storage.getJob(queueEntry.jobId);
           if (job) {
             // Notify new contractor
-            await this.emailService.sendJobAssignmentNotification(
+            await emailService.sendJobAssignmentNotification(
               result.newContractorId,
               job
             );
 
             // Notify customer of reassignment
             if (job.customerId) {
-              await this.emailService.sendJobReassignedNotification(
+              await emailService.sendJobReassignedNotification(
                 job.customerId,
                 job
               );
             }
 
             // WebSocket notification
-            this.wsService.sendToContractor(result.newContractorId, {
+            trackingWSServer.sendToContractor(result.newContractorId, {
               type: 'queue:job-assigned',
               data: {
                 job,
@@ -238,7 +230,7 @@ export class QueueProcessingService {
       if (!contractor) return;
 
       // Send email notification
-      await this.emailService.sendQueuePositionUpdate(
+      await emailService.sendQueuePositionUpdate(
         contractor.email,
         {
           contractorName: `${contractor.firstName} ${contractor.lastName}`,
@@ -249,7 +241,7 @@ export class QueueProcessingService {
       );
 
       // Send WebSocket notification
-      this.wsService.sendToContractor(queueEntry.contractorId, {
+      trackingWSServer.sendToContractor(queueEntry.contractorId, {
         type: 'queue:position-update',
         data: {
           jobId: job.id,
@@ -319,10 +311,10 @@ export class QueueProcessingService {
         });
 
         // Notify contractor
-        await this.emailService.sendJobAssignmentNotification(contractorId, job);
+        await emailService.sendJobAssignmentNotification(contractorId, job);
 
         // WebSocket notification
-        this.wsService.sendToContractor(contractorId, {
+        trackingWSServer.sendToContractor(contractorId, {
           type: 'queue:auto-assigned',
           data: {
             job,
@@ -346,7 +338,7 @@ export class QueueProcessingService {
       if (!contractor) return;
 
       // Send email
-      await this.emailService.sendJobStartingNotification(contractor.email, {
+      await emailService.sendJobStartingNotification(contractor.email, {
         contractorName: `${contractor.firstName} ${contractor.lastName}`,
         jobNumber: job.jobNumber,
         customerName: job.customerName,
@@ -429,7 +421,7 @@ export class QueueProcessingService {
         }
 
         // Notify contractor
-        this.wsService.sendToContractor(entry.contractorId, {
+        trackingWSServer.sendToContractor(entry.contractorId, {
           type: 'queue:job-cancelled',
           data: {
             jobId,

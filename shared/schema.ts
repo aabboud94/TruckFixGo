@@ -548,7 +548,7 @@ export const jobReassignmentHistory = pgTable("job_reassignment_history", {
 // ====================
 
 export const locationTracking = pgTable("location_tracking", {
-  id: varchar("id").primaryKey().default(sql\`gen_random_uuid()\`),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   contractorId: varchar("contractor_id").notNull().references(() => users.id),
   jobId: varchar("job_id").references(() => jobs.id),
   
@@ -588,7 +588,7 @@ export const locationTracking = pgTable("location_tracking", {
 }));
 
 export const locationHistory = pgTable("location_history", {
-  id: varchar("id").primaryKey().default(sql\`gen_random_uuid()\`),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   contractorId: varchar("contractor_id").notNull().references(() => users.id),
   jobId: varchar("job_id").references(() => jobs.id),
   sessionId: varchar("session_id").references(() => trackingSessions.id),
@@ -620,7 +620,7 @@ export const locationHistory = pgTable("location_history", {
 }));
 
 export const trackingSessions = pgTable("tracking_sessions", {
-  id: varchar("id").primaryKey().default(sql\`gen_random_uuid()\`),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   contractorId: varchar("contractor_id").notNull().references(() => users.id),
   jobId: varchar("job_id").references(() => jobs.id),
   
@@ -655,7 +655,7 @@ export const trackingSessions = pgTable("tracking_sessions", {
 }));
 
 export const geofenceEvents = pgTable("geofence_events", {
-  id: varchar("id").primaryKey().default(sql\`gen_random_uuid()\`),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   contractorId: varchar("contractor_id").notNull().references(() => users.id),
   jobId: varchar("job_id").notNull().references(() => jobs.id),
   sessionId: varchar("session_id").references(() => trackingSessions.id),
