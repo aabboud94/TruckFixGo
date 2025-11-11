@@ -46,30 +46,61 @@ export default function FleetDashboard() {
 
   // Fetch fleet account data
   const { data: fleetData, isLoading: fleetLoading } = useQuery({
-    queryKey: ['/api/fleet/account'],
+    queryKey: ['/api/fleet/accounts'],
     enabled: !!session?.user?.id && session?.user?.role === 'fleet_manager',
-    queryFn: async () => apiRequest('GET', '/api/fleet/account')
+    queryFn: async () => {
+      // Get all fleet accounts for this user
+      const accounts = await apiRequest('GET', '/api/fleet/accounts');
+      // Return the first account (most fleet managers have one account)
+      return accounts?.length > 0 ? accounts[0] : null;
+    }
   });
 
   // Fetch fleet vehicles
   const { data: vehicles, isLoading: vehiclesLoading } = useQuery({
-    queryKey: ['/api/fleet/vehicles'],
-    enabled: !!session?.user?.id && session?.user?.role === 'fleet_manager',
-    queryFn: async () => apiRequest('GET', '/api/fleet/vehicles')
+    queryKey: [`/api/fleet/accounts/${fleetData?.id}/vehicles`],
+    enabled: !!fleetData?.id,
+    queryFn: async () => {
+      if (!fleetData?.id) return { vehicles: [] };
+      try {
+        return await apiRequest('GET', `/api/fleet/accounts/${fleetData.id}/vehicles`);
+      } catch (error) {
+        console.error('Failed to fetch vehicles:', error);
+        return { vehicles: [] };
+      }
+    }
   });
 
-  // Fetch scheduled services
+  // Fetch scheduled services (using jobs endpoint as services)
   const { data: scheduledServices, isLoading: servicesLoading } = useQuery({
-    queryKey: ['/api/fleet/scheduled-services'],
-    enabled: !!session?.user?.id && session?.user?.role === 'fleet_manager',
-    queryFn: async () => apiRequest('GET', '/api/fleet/scheduled-services')
+    queryKey: ['/api/jobs'],
+    enabled: !!fleetData?.id,
+    queryFn: async () => {
+      if (!fleetData?.id) return { services: [] };
+      try {
+        // Get jobs for this fleet account
+        const jobs = await apiRequest('GET', `/api/jobs?fleetAccountId=${fleetData.id}`);
+        return { services: jobs || [] };
+      } catch (error) {
+        console.error('Failed to fetch services:', error);
+        return { services: [] };
+      }
+    }
   });
 
   // Fetch fleet statistics
   const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['/api/fleet/statistics'],
-    enabled: !!session?.user?.id && session?.user?.role === 'fleet_manager',
-    queryFn: async () => apiRequest('GET', '/api/fleet/statistics')
+    queryKey: [`/api/fleet/accounts/${fleetData?.id}/analytics`],
+    enabled: !!fleetData?.id,
+    queryFn: async () => {
+      if (!fleetData?.id) return null;
+      try {
+        return await apiRequest('GET', `/api/fleet/accounts/${fleetData.id}/analytics`);
+      } catch (error) {
+        console.error('Failed to fetch analytics:', error);
+        return null;
+      }
+    }
   });
 
   // Redirect to login if not authenticated
@@ -131,14 +162,14 @@ export default function FleetDashboard() {
   }
 
   // Use real data or defaults
-  const fleetAccount = fleetData?.fleet || {};
-  const vehiclesList = vehicles?.vehicles || [];
+  const fleetAccount = fleetData || {};
+  const vehiclesList = vehicles?.vehicles || vehicles || [];
   const servicesList = scheduledServices?.services || [];
   const statistics = stats || {
     activeVehicles: vehiclesList.filter((v: any) => v.status === 'active').length,
     scheduledServices: servicesList.length,
-    monthlySpend: fleetAccount.currentBalance || 0,
-    complianceRate: fleetAccount.complianceRate || 0
+    monthlySpend: fleetAccount.totalSpent || 0,
+    complianceRate: fleetAccount.complianceRate || 95
   };
 
   const getStatusBadge = (status: string) => {
