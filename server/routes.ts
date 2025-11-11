@@ -15433,6 +15433,49 @@ The TruckFixGo Team
           });
         }
 
+        // First check if user already exists
+        let user = await storage.getUserByEmail(application.primaryContactEmail);
+        
+        // Generate a temporary password for new users
+        let tempPasswordPlain: string | undefined;
+        let isNewUser = false;
+        
+        // Create user account if it doesn't exist
+        if (!user) {
+          // Generate a readable temporary password (matching contractor approval format)
+          tempPasswordPlain = `TFG-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Math.floor(Math.random() * 9000) + 1000}`;
+          const tempPasswordHash = await bcrypt.hash(tempPasswordPlain, 10);
+          
+          // Extract first and last name from primaryContactName
+          const nameParts = application.primaryContactName.split(' ');
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.slice(1).join(' ') || '';
+          
+          user = await storage.createUser({
+            email: application.primaryContactEmail,
+            phone: application.primaryContactPhone,
+            role: 'fleet_manager',
+            firstName,
+            lastName,
+            password: tempPasswordHash,
+            isActive: true,
+            isGuest: false
+          });
+          
+          isNewUser = true;
+          console.log(`Created fleet manager account for ${application.primaryContactEmail} with ID: ${user.id}`);
+        } else {
+          // If user exists but is not a fleet_manager, update their role
+          if (user.role !== 'fleet_manager') {
+            await storage.updateUser(user.id, { role: 'fleet_manager' });
+            console.log(`Updated user ${user.email} role to fleet_manager`);
+          }
+          // Generate new temp password for existing users too
+          tempPasswordPlain = `TFG-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Math.floor(Math.random() * 9000) + 1000}`;
+          const tempPasswordHash = await bcrypt.hash(tempPasswordPlain, 10);
+          await storage.updateUser(user.id, { password: tempPasswordHash });
+        }
+
         // Update application status
         await storage.updateFleetApplication(applicationId, {
           status: 'approved',
@@ -15458,23 +15501,170 @@ The TruckFixGo Team
           paymentTerms: application.paymentTerms || 'net_30',
           isActive: true
         });
+        
+        // Link the user to the fleet account as a primary contact
+        await storage.createFleetContact({
+          fleetAccountId: fleetAccount.id,
+          userId: user.id,
+          name: application.primaryContactName,
+          title: application.primaryContactTitle || 'Fleet Manager',
+          phone: application.primaryContactPhone,
+          email: application.primaryContactEmail,
+          isAuthorizedToBook: true,
+          isPrimaryContact: true
+        });
 
-        // Send approval email
-        if (emailService.isReady()) {
-          await emailService.sendEmail(
-            application.primaryContactEmail, 
-            'FLEET_APPLICATION_APPROVED',
-            {
-              companyName: application.companyName,
-              contactName: application.primaryContactName,
-              fleetAccountId: fleetAccount.id
+        // Send approval email with credentials
+        if (tempPasswordPlain) {
+          try {
+            const { reminderService } = await import('./reminder-service');
+            
+            const emailSubject = 'Welcome to TruckFixGo - Your Fleet Application Has Been Approved!';
+            const emailHtml = `
+              <html>
+                <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                  <div style="background-color: #1e3a5f; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+                    <h1 style="margin: 0; font-size: 28px;">Welcome to TruckFixGo!</h1>
+                    <p style="margin: 10px 0 0 0; font-size: 16px;">Your Fleet Application Has Been Approved</p>
+                  </div>
+                  
+                  <div style="padding: 30px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-top: none;">
+                    <h2 style="color: #1e3a5f; margin-top: 0;">Congratulations, ${application.companyName}!</h2>
+                    
+                    <p style="color: #495057; line-height: 1.6;">
+                      We're excited to welcome ${application.companyName} to the TruckFixGo fleet management network. 
+                      Your fleet application has been thoroughly reviewed and approved. You can now start managing your fleet services with us!
+                    </p>
+                    
+                    <div style="background: white; border-left: 4px solid #ff6b35; padding: 20px; margin: 25px 0; border-radius: 4px;">
+                      <h3 style="color: #1e3a5f; margin-top: 0; font-size: 18px;">Your Fleet Manager Login Credentials</h3>
+                      <p style="color: #495057; margin: 10px 0;">
+                        <strong>Login Email:</strong> <span style="background: #f1f3f5; padding: 5px 10px; border-radius: 4px; font-family: monospace;">${application.primaryContactEmail}</span>
+                      </p>
+                      <p style="color: #495057; margin: 10px 0;">
+                        <strong>Temporary Password:</strong> <span style="background: #f1f3f5; padding: 5px 10px; border-radius: 4px; font-family: monospace; font-weight: bold;">${tempPasswordPlain}</span>
+                      </p>
+                      <p style="color: #dc3545; font-size: 13px; margin-top: 15px;">
+                        ⚠️ <strong>Important:</strong> Please change your password immediately after your first login for security purposes.
+                      </p>
+                    </div>
+                    
+                    <div style="background: #e7f5ff; border: 1px solid #74c0fc; padding: 20px; margin: 25px 0; border-radius: 4px;">
+                      <h3 style="color: #1e3a5f; margin-top: 0; font-size: 18px;">Fleet Account Information</h3>
+                      <ul style="color: #495057; line-height: 1.8; margin: 10px 0; padding-left: 20px;">
+                        <li><strong>Company:</strong> ${application.companyName}</li>
+                        <li><strong>Fleet Account ID:</strong> ${fleetAccount.id}</li>
+                        <li><strong>Credit Limit:</strong> $5,000 (initial limit)</li>
+                        <li><strong>Payment Terms:</strong> ${application.paymentTerms || 'Net 30'}</li>
+                        <li><strong>Primary Contact:</strong> ${application.primaryContactName}</li>
+                      </ul>
+                    </div>
+                    
+                    <div style="background: #f0f9ff; border: 1px solid #3b82f6; padding: 20px; margin: 25px 0; border-radius: 4px;">
+                      <h3 style="color: #1e3a5f; margin-top: 0; font-size: 18px;">Next Steps</h3>
+                      <ol style="color: #495057; line-height: 1.8; margin: 10px 0; padding-left: 20px;">
+                        <li><strong>Log in to your fleet dashboard:</strong> Visit <a href="${process.env.APP_URL || 'https://truckfixgo.com'}/fleet/auth" style="color: #4a90e2;">TruckFixGo Fleet Portal</a></li>
+                        <li><strong>Add your fleet vehicles:</strong> Register all vehicles that will need service</li>
+                        <li><strong>Set up authorized contacts:</strong> Add team members who can request services</li>
+                        <li><strong>Configure billing preferences:</strong> Set up your preferred payment method</li>
+                        <li><strong>Start requesting services:</strong> Book maintenance and repairs for your fleet</li>
+                      </ol>
+                    </div>
+                    
+                    <div style="text-align: center; margin: 30px 0;">
+                      <a href="${process.env.APP_URL || 'https://truckfixgo.com'}/fleet/auth" 
+                         style="display: inline-block; background-color: #ff6b35; color: white; padding: 14px 32px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">
+                        Access Fleet Dashboard
+                      </a>
+                    </div>
+                    
+                    <div style="background: #f8f9fa; padding: 20px; margin: 25px 0; border-radius: 4px; border: 1px solid #dee2e6;">
+                      <h4 style="color: #1e3a5f; margin-top: 0;">Fleet Benefits</h4>
+                      <ul style="color: #495057; line-height: 1.6; margin: 10px 0; padding-left: 20px;">
+                        <li>Priority service scheduling for all fleet vehicles</li>
+                        <li>Consolidated monthly billing and reporting</li>
+                        <li>Dedicated fleet support team</li>
+                        <li>Volume discounts on services</li>
+                        <li>24/7 emergency roadside assistance</li>
+                        <li>Preventive maintenance scheduling</li>
+                      </ul>
+                    </div>
+                    
+                    <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
+                    
+                    <p style="color: #6c757d; font-size: 14px; line-height: 1.6;">
+                      If you have any questions about your fleet account or need assistance getting started, 
+                      our fleet support team is here to help. Contact us at 
+                      <a href="mailto:fleet@truckfixgo.com" style="color: #4a90e2;">fleet@truckfixgo.com</a> 
+                      or call 1-800-FLEET-GO.
+                    </p>
+                  </div>
+                  
+                  <div style="background-color: #1e3a5f; color: white; padding: 20px; text-align: center; border-radius: 0 0 8px 8px;">
+                    <p style="margin: 0; font-size: 14px;">Welcome to the TruckFixGo Fleet Network!</p>
+                    <p style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;">The TruckFixGo Team</p>
+                  </div>
+                </body>
+              </html>
+            `;
+            
+            const emailText = `
+Welcome to TruckFixGo!
+
+Congratulations, ${application.companyName}!
+
+Your fleet application has been approved. You can now start managing your fleet services with us!
+
+Your Fleet Manager Login Credentials:
+Email: ${application.primaryContactEmail}
+Temporary Password: ${tempPasswordPlain}
+
+IMPORTANT: Please change your password after your first login.
+
+Fleet Account Information:
+- Company: ${application.companyName}
+- Fleet Account ID: ${fleetAccount.id}
+- Credit Limit: $5,000 (initial limit)
+- Payment Terms: ${application.paymentTerms || 'Net 30'}
+- Primary Contact: ${application.primaryContactName}
+
+Next Steps:
+1. Log in at: ${process.env.APP_URL || 'https://truckfixgo.com'}/fleet/auth
+2. Add your fleet vehicles
+3. Set up authorized contacts
+4. Configure billing preferences
+5. Start requesting services
+
+Questions? Contact us at fleet@truckfixgo.com or call 1-800-FLEET-GO.
+
+Welcome to the TruckFixGo Fleet Network!
+The TruckFixGo Team
+            `;
+            
+            const emailResult = await reminderService.sendDirectEmail(
+              application.primaryContactEmail,
+              emailSubject,
+              emailHtml,
+              emailText
+            );
+            
+            if (emailResult.success) {
+              console.log(`Welcome email with credentials sent successfully to ${application.primaryContactEmail}`);
+            } else {
+              console.error(`Failed to send welcome email to ${application.primaryContactEmail}:`, emailResult.error);
+              // Don't fail the approval, just log the error
             }
-          ).catch((err: any) => console.error('Fleet approval email error:', err));
+          } catch (emailError) {
+            console.error('Error sending fleet welcome email:', emailError);
+            // Don't fail the approval process if email fails
+          }
         }
 
         res.json({
           message: 'Fleet application approved successfully',
-          fleetAccountId: fleetAccount.id
+          fleetAccountId: fleetAccount.id,
+          userId: user.id,
+          emailSent: tempPasswordPlain ? true : false
         });
       } catch (error) {
         console.error('Approve fleet application error:', error);
