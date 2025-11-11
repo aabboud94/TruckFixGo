@@ -1,7 +1,39 @@
 import { storage } from "./storage";
-import { type InsertSplitPaymentTemplate } from "@shared/schema";
+import { type InsertSplitPaymentTemplate, type InsertPaymentSplit } from "@shared/schema";
 import { randomBytes } from 'crypto';
 import { reminderService } from './reminder-service';
+import stripeService from './stripe-service';
+
+// Split payment types
+export type SplitType = 'driver' | 'company' | 'fleet' | 'insurance';
+
+export interface SplitRule {
+  payerType: SplitType;
+  payerId?: string;
+  payerName?: string;
+  payerEmail?: string;
+  payerPhone?: string;
+  amount?: number;
+  percentage?: number;
+  isRemainder?: boolean;
+  deductFrom?: number;
+  description?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  tier?: {
+    ranges: Array<{ min: number; max: number; percentage: number }>;
+  };
+}
+
+export interface SplitConfiguration {
+  name: string;
+  description?: string;
+  splitRules: SplitRule[];
+  conditions?: any;
+  priority?: number;
+  isActive?: boolean;
+  isDefault?: boolean;
+}
 
 // Generate secure payment token
 function generateSecureToken(): string {
@@ -422,6 +454,459 @@ class SplitPaymentService {
       if (updatedSplit) {
         await this.sendPaymentLink(updatedSplit);
       }
+    }
+  }
+
+  // Create split payment configuration template
+  async createSplitConfig(config: SplitConfiguration): Promise<any> {
+    try {
+      const template = await storage.createSplitPaymentTemplate({
+        name: config.name,
+        description: config.description,
+        splitRules: config.splitRules,
+        conditions: config.conditions,
+        priority: config.priority || 50,
+        isActive: config.isActive !== false,
+        isDefault: config.isDefault || false,
+        serviceTypeIds: config.conditions?.serviceTypes || [],
+      });
+      
+      return {
+        success: true,
+        template
+      };
+    } catch (error) {
+      console.error('Error creating split config:', error);
+      throw error;
+    }
+  }
+
+  // Apply split payment to a job
+  async applySplitToJob(jobId: string, splitData: any): Promise<any> {
+    try {
+      const job = await storage.getJob(jobId);
+      if (!job) {
+        throw new Error('Job not found');
+      }
+
+      // Validate that splits add up to total
+      const totalAmount = splitData.totalAmount || parseFloat(job.totalAmount || '0');
+      const totalAssigned = splitData.splits.reduce((sum: number, split: any) => {
+        if (split.amount) return sum + split.amount;
+        if (split.percentage) return sum + (totalAmount * split.percentage / 100);
+        return sum;
+      }, 0);
+
+      if (Math.abs(totalAmount - totalAssigned) > 0.01) {
+        throw new Error(`Split amounts (${totalAssigned}) do not match total (${totalAmount})`);
+      }
+
+      // Create split payment record
+      const splitPayment = await storage.createSplitPayment({
+        jobId,
+        totalAmount: totalAmount.toString(),
+        splitConfiguration: splitData.splits,
+        status: 'pending'
+      });
+
+      // Create individual payment splits
+      const paymentSplits: InsertPaymentSplit[] = [];
+      for (const split of splitData.splits) {
+        const token = generateSecureToken();
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 48);
+
+        const amount = split.amount || (totalAmount * split.percentage / 100);
+
+        paymentSplits.push({
+          splitPaymentId: splitPayment.id,
+          jobId,
+          payerId: split.payerId,
+          payerType: split.type,
+          payerName: split.payerName || split.type,
+          payerEmail: split.payerEmail,
+          payerPhone: split.payerPhone,
+          amountAssigned: amount.toFixed(2),
+          description: split.description || `${split.type} payment portion`,
+          paymentToken: token,
+          paymentLinkUrl: formatPaymentLinkUrl(token),
+          tokenExpiresAt: expiresAt,
+          status: 'pending'
+        });
+      }
+
+      const createdSplits = await storage.createPaymentSplits(paymentSplits);
+
+      // Apply split to job
+      await storage.applySplitToJob(jobId, splitPayment.id);
+
+      // Send payment links to all payers
+      await this.sendPaymentLinks(splitPayment.id);
+
+      return {
+        success: true,
+        splitPayment,
+        paymentSplits: createdSplits,
+        paymentLinks: createdSplits.map(s => ({
+          payerId: s.payerId,
+          payerType: s.payerType,
+          amount: s.amountAssigned,
+          paymentLink: s.paymentLinkUrl
+        }))
+      };
+    } catch (error) {
+      console.error('Error applying split to job:', error);
+      throw error;
+    }
+  }
+
+  // Process payment for a specific split
+  async processSplitPaymentById(splitId: string, paymentData: any): Promise<any> {
+    try {
+      const splitStatus = await storage.getSplitStatus(splitId);
+      if (!splitStatus) {
+        throw new Error('Split payment not found');
+      }
+
+      // Find the pending split for this payment
+      const pendingSplit = splitStatus.paymentSplits.find(
+        (s: any) => s.status === 'pending' && s.payerId === paymentData.payerId
+      );
+
+      if (!pendingSplit) {
+        throw new Error('No pending payment found for this payer');
+      }
+
+      // Process the payment through Stripe
+      let paymentResult;
+      if (paymentData.paymentMethodType === 'credit_card') {
+        paymentResult = await stripeService.createPaymentIntent(
+          parseFloat(pendingSplit.amountAssigned) * 100, // Convert to cents
+          pendingSplit.jobId,
+          { splitPaymentId: splitId, payerId: paymentData.payerId }
+        );
+      }
+
+      // Mark the split as paid
+      await storage.markPaymentSplitAsPaid(
+        pendingSplit.id,
+        paymentResult?.id || 'manual',
+        parseFloat(pendingSplit.amountAssigned)
+      );
+
+      // Check if all splits are paid
+      const updatedStatus = await storage.getSplitStatus(splitId);
+      
+      if (updatedStatus.allPaid) {
+        // Update job payment status
+        const job = await storage.getJob(splitStatus.splitPayment.jobId);
+        if (job) {
+          await storage.updateJob(job.id, { paymentStatus: 'completed' });
+        }
+
+        // Send full payment notification
+        await this.sendFullPaymentNotification(updatedStatus.splitPayment);
+      }
+
+      return {
+        success: true,
+        paymentSplit: pendingSplit,
+        splitPaymentStatus: updatedStatus.splitPayment.status,
+        allPaid: updatedStatus.allPaid,
+        remainingBalance: updatedStatus.remainingBalance
+      };
+    } catch (error) {
+      console.error('Error processing split payment:', error);
+      throw error;
+    }
+  }
+
+  // Get comprehensive split payment status
+  async getSplitPaymentStatus(splitId: string): Promise<any> {
+    try {
+      const status = await storage.getSplitStatus(splitId);
+      if (!status) {
+        throw new Error('Split payment not found');
+      }
+
+      // Get payment history
+      const paymentHistory = await storage.getSplitPaymentHistory(splitId);
+
+      // Get reconciliation status
+      const reconciliation = await storage.reconcileSplits(splitId);
+
+      return {
+        ...status,
+        paymentHistory,
+        reconciliation,
+        payerBreakdown: status.paymentSplits.map((s: any) => ({
+          payerId: s.payerId,
+          payerType: s.payerType,
+          payerName: s.payerName,
+          status: s.status,
+          amountAssigned: parseFloat(s.amountAssigned),
+          amountPaid: parseFloat(s.amountPaid || '0'),
+          paidAt: s.paidAt,
+          paymentLink: s.paymentLinkUrl,
+          linkExpiry: s.tokenExpiresAt
+        }))
+      };
+    } catch (error) {
+      console.error('Error getting split payment status:', error);
+      throw error;
+    }
+  }
+
+  // Generate or retrieve payment link for a specific payer
+  async getPaymentLinkForPayer(splitId: string, payerId: string): Promise<any> {
+    try {
+      const link = await storage.generatePaymentLink(splitId, payerId);
+      if (!link) {
+        throw new Error('Unable to generate payment link for this payer');
+      }
+
+      const splits = await storage.getPaymentSplitsBySplitPaymentId(splitId);
+      const payerSplit = splits.find(s => s.payerId === payerId);
+
+      if (!payerSplit) {
+        throw new Error('Payer not found in this split payment');
+      }
+
+      return {
+        payerId,
+        payerType: payerSplit.payerType,
+        payerName: payerSplit.payerName,
+        amount: payerSplit.amountAssigned,
+        status: payerSplit.status,
+        paymentLink: link,
+        expiresAt: payerSplit.tokenExpiresAt,
+        description: payerSplit.description
+      };
+    } catch (error) {
+      console.error('Error getting payment link:', error);
+      throw error;
+    }
+  }
+
+  // Handle webhook for payment confirmation
+  async handlePaymentWebhook(webhookData: any): Promise<any> {
+    try {
+      const { paymentIntentId, splitPaymentId, payerId, status } = webhookData;
+
+      if (status === 'succeeded') {
+        // Find the payment split
+        const splits = await storage.getPaymentSplitsBySplitPaymentId(splitPaymentId);
+        const payerSplit = splits.find(s => s.payerId === payerId);
+
+        if (payerSplit && payerSplit.status === 'pending') {
+          // Mark as paid
+          await storage.markPaymentSplitAsPaid(
+            payerSplit.id,
+            paymentIntentId,
+            parseFloat(payerSplit.amountAssigned)
+          );
+
+          // Send confirmation
+          await this.sendPaymentConfirmation(payerSplit);
+
+          // Check if all splits are paid
+          const status = await storage.getSplitStatus(splitPaymentId);
+          if (status.allPaid) {
+            // Update job status
+            const job = await storage.getJob(status.splitPayment.jobId);
+            if (job) {
+              await storage.updateJob(job.id, { paymentStatus: 'completed' });
+              await this.sendFullPaymentNotification(status.splitPayment);
+            }
+          }
+        }
+      } else if (status === 'failed') {
+        // Handle failed payment
+        const splits = await storage.getPaymentSplitsBySplitPaymentId(splitPaymentId);
+        const payerSplit = splits.find(s => s.payerId === payerId);
+
+        if (payerSplit) {
+          await storage.updatePaymentSplit(payerSplit.id, {
+            status: 'failed',
+            lastAttemptAt: new Date(),
+            failureReason: webhookData.failureReason
+          });
+
+          // Send failure notification
+          const message = `Payment Failed
+          
+          Your payment of $${payerSplit.amountAssigned} could not be processed.
+          Reason: ${webhookData.failureReason || 'Unknown error'}
+          
+          Please try again using your payment link:
+          ${payerSplit.paymentLinkUrl}`;
+
+          if (payerSplit.payerEmail) {
+            await reminderService.sendEmail(
+              payerSplit.payerEmail,
+              'Payment Failed - TruckFixGo',
+              message
+            );
+          }
+        }
+      }
+
+      return { success: true, message: 'Webhook processed' };
+    } catch (error) {
+      console.error('Error handling payment webhook:', error);
+      throw error;
+    }
+  }
+
+  // Calculate split amounts based on rules
+  calculateSplitAmounts(totalAmount: number, rules: SplitRule[]): any[] {
+    const splits: any[] = [];
+    let remainingAmount = totalAmount;
+
+    for (const rule of rules) {
+      let amount = 0;
+
+      // Fixed amount
+      if (rule.amount) {
+        amount = Math.min(rule.amount, remainingAmount);
+      } 
+      // Percentage
+      else if (rule.percentage) {
+        amount = (totalAmount * rule.percentage) / 100;
+      }
+      // Tiered
+      else if (rule.tier) {
+        for (const range of rule.tier.ranges) {
+          if (totalAmount >= range.min && totalAmount <= range.max) {
+            amount = (totalAmount * range.percentage) / 100;
+            break;
+          }
+        }
+      }
+      // Remainder
+      else if (rule.isRemainder) {
+        amount = remainingAmount;
+      }
+
+      // Apply deduction if specified
+      if (rule.deductFrom) {
+        amount = Math.max(0, totalAmount - rule.deductFrom);
+      }
+
+      // Apply min/max limits
+      if (rule.minAmount) amount = Math.max(amount, rule.minAmount);
+      if (rule.maxAmount) amount = Math.min(amount, rule.maxAmount);
+
+      remainingAmount -= amount;
+
+      splits.push({
+        payerType: rule.payerType,
+        payerId: rule.payerId,
+        payerName: rule.payerName,
+        payerEmail: rule.payerEmail,
+        payerPhone: rule.payerPhone,
+        amount: parseFloat(amount.toFixed(2)),
+        description: rule.description
+      });
+    }
+
+    return splits;
+  }
+
+  // Validate split configuration
+  validateSplitConfiguration(config: SplitConfiguration): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    if (!config.name) {
+      errors.push('Configuration name is required');
+    }
+
+    if (!config.splitRules || config.splitRules.length === 0) {
+      errors.push('At least one split rule is required');
+    }
+
+    let hasRemainder = false;
+    let totalPercentage = 0;
+
+    for (const rule of config.splitRules) {
+      if (!rule.payerType) {
+        errors.push('Payer type is required for all rules');
+      }
+
+      if (rule.percentage) {
+        totalPercentage += rule.percentage;
+      }
+
+      if (rule.isRemainder) {
+        if (hasRemainder) {
+          errors.push('Only one rule can be marked as remainder');
+        }
+        hasRemainder = true;
+      }
+    }
+
+    if (totalPercentage > 100) {
+      errors.push(`Total percentage (${totalPercentage}%) exceeds 100%`);
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  // Handle refunds for split payments
+  async refundSplitPayment(splitId: string, refundData: any): Promise<any> {
+    try {
+      const status = await storage.getSplitStatus(splitId);
+      if (!status) {
+        throw new Error('Split payment not found');
+      }
+
+      const refunds: any[] = [];
+
+      // Process refunds for each paid split
+      for (const split of status.paymentSplits) {
+        if (split.status === 'paid' && split.transactionId) {
+          const refundAmount = refundData.partial 
+            ? (parseFloat(split.amountPaid) * refundData.percentage / 100)
+            : parseFloat(split.amountPaid);
+
+          // Create refund through Stripe
+          const refund = await stripeService.createRefund(
+            split.transactionId,
+            refundAmount * 100 // Convert to cents
+          );
+
+          // Update split status
+          await storage.updatePaymentSplit(split.id, {
+            status: refundData.partial ? 'partially_refunded' : 'refunded',
+            refundedAmount: refundAmount.toString(),
+            refundedAt: new Date()
+          });
+
+          refunds.push({
+            payerId: split.payerId,
+            amount: refundAmount,
+            refundId: refund.id
+          });
+        }
+      }
+
+      // Update split payment status
+      await storage.updateSplitPayment(splitId, {
+        status: refundData.partial ? 'partially_refunded' : 'refunded',
+        refundDetails: refunds
+      });
+
+      return {
+        success: true,
+        refunds,
+        message: `Refunded ${refunds.length} payment splits`
+      };
+    } catch (error) {
+      console.error('Error refunding split payment:', error);
+      throw error;
     }
   }
 }
