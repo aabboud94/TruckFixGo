@@ -14195,5 +14195,1077 @@ The TruckFixGo Team
 
   const httpServer = createServer(app);
 
-  return httpServer;
-}
+
+  // ==================== LOCATION TRACKING API ENDPOINTS ====================
+  
+  // Update contractor location (POST /api/tracking/location)
+  app.post('/api/tracking/location',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const { latitude, longitude, accuracy, altitude, heading, speed, batteryLevel, isCharging, networkType, jobId } = req.body;
+        
+        // Validate required fields
+        if (!latitude || !longitude) {
+          return res.status(400).json({ message: 'Latitude and longitude are required' });
+        }
+        
+        // Update location in database
+        const location = await storage.updateContractorLocation(contractorId, {
+          latitude,
+          longitude,
+          accuracy,
+          altitude,
+          heading,
+          speed,
+          batteryLevel,
+          isCharging,
+          networkType
+        });
+        
+        if (!location) {
+          return res.status(500).json({ message: 'Failed to update location' });
+        }
+        
+        // Save to history if actively tracking a job
+        if (jobId) {
+          // Get active session
+          let session = await storage.getActiveTrackingSession(contractorId, jobId);
+          if (!session) {
+            session = await storage.startTrackingSession({
+              contractorId,
+              jobId,
+              startLocation: { lat: latitude, lng: longitude }
+            });
+          }
+          
+          // Save to history
+          await storage.saveLocationHistory({
+            contractorId,
+            jobId,
+            sessionId: session.id,
+            latitude: latitude.toString(),
+            longitude: longitude.toString(),
+            accuracy: accuracy?.toString(),
+            altitude: altitude?.toString(),
+            heading: heading?.toString(),
+            speed: speed?.toString(),
+            batteryLevel
+          });
+          
+          // Update session stats
+          const history = await storage.getLocationHistory(contractorId, {
+            jobId,
+            limit: 2
+          });
+          
+          if (history.length >= 2) {
+            const distance = LocationService.calculateDistance(
+              { lat: parseFloat(history[1].latitude), lng: parseFloat(history[1].longitude) },
+              { lat: latitude, lng: longitude }
+            );
+            
+            const currentStats = session;
+            await storage.updateTrackingSessionStats(session.id, {
+              totalDistance: (parseFloat(currentStats.totalDistance || '0') + distance),
+              totalPoints: (currentStats.totalPoints || 0) + 1,
+              maxSpeed: Math.max(parseFloat(currentStats.maxSpeed || '0'), speed || 0)
+            });
+          }
+          
+          // Check for geofence arrival
+          const job = await storage.getJob(jobId);
+          if (job && job.location && job.status === 'en_route') {
+            const arrived = await storage.detectArrival(
+              contractorId,
+              jobId,
+              { lat: latitude, lng: longitude },
+              100 // 100 meter radius
+            );
+            
+            if (arrived) {
+              // Update job status
+              await storage.updateJob(jobId, { status: 'on_site', arrivedAt: new Date() });
+              
+              // Broadcast arrival event via WebSocket
+              trackingWSServer.broadcastJobUpdate(jobId, {
+                type: 'GEOFENCE_EVENT',
+                payload: {
+                  event: 'arrived',
+                  contractorId,
+                  timestamp: new Date().toISOString()
+                }
+              });
+            }
+          }
+          
+          // Calculate ETA if en route
+          if (job && job.location && (job.status === 'en_route' || job.status === 'assigned')) {
+            const etaData = await storage.calculateETA(
+              { lat: latitude, lng: longitude },
+              job.location as any,
+              speed
+            );
+            
+            // Update job with new ETA
+            await storage.updateJob(jobId, {
+              estimatedArrival: etaData.eta,
+              contractorLocation: { lat: latitude, lng: longitude },
+              contractorLocationUpdatedAt: new Date()
+            });
+            
+            // Broadcast location update via WebSocket
+            trackingWSServer.broadcastLocationUpdate(jobId, {
+              location: { lat: latitude, lng: longitude, timestamp: new Date().toISOString() },
+              eta: etaData.eta.toISOString(),
+              speed,
+              heading,
+              batteryLevel
+            });
+          }
+        }
+        
+        res.json({
+          success: true,
+          location: {
+            lat: latitude,
+            lng: longitude,
+            updateFrequency: location.updateFrequency,
+            isStationary: location.isStationary,
+            trackingStatus: location.trackingStatus
+          }
+        });
+      } catch (error) {
+        console.error('Error updating contractor location:', error);
+        res.status(500).json({ message: 'Failed to update location' });
+      }
+    }
+  );
+  
+  // Get contractor location (GET /api/tracking/contractor/:id)
+  app.get('/api/tracking/contractor/:id',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.params.id;
+        
+        // Get current location
+        const location = await storage.getContractorLocation(contractorId);
+        if (!location) {
+          return res.status(404).json({ message: 'No tracking data found for contractor' });
+        }
+        
+        // Get active job if any
+        const activeJobs = await storage.getJobs({
+          contractorId,
+          status: ['assigned', 'en_route', 'on_site']
+        });
+        
+        let eta = null;
+        let routeHistory = [];
+        let activeSession = null;
+        
+        if (activeJobs.length > 0) {
+          const activeJob = activeJobs[0];
+          
+          // Calculate ETA
+          if (activeJob.location) {
+            const etaData = await storage.calculateETA(
+              { lat: parseFloat(location.latitude), lng: parseFloat(location.longitude) },
+              activeJob.location as any,
+              location.speed ? parseFloat(location.speed) : undefined
+            );
+            eta = etaData;
+          }
+          
+          // Get route history
+          activeSession = await storage.getActiveTrackingSession(contractorId, activeJob.id);
+          if (activeSession) {
+            const sessionRoute = await storage.getSessionRoute(activeSession.id);
+            routeHistory = sessionRoute.points;
+          }
+        }
+        
+        res.json({
+          location: {
+            lat: parseFloat(location.latitude),
+            lng: parseFloat(location.longitude),
+            accuracy: location.accuracy ? parseFloat(location.accuracy) : null,
+            heading: location.heading ? parseFloat(location.heading) : null,
+            speed: location.speed ? parseFloat(location.speed) : null,
+            lastUpdate: location.updatedAt
+          },
+          status: {
+            trackingStatus: location.trackingStatus,
+            isStationary: location.isStationary,
+            stationaryDuration: location.stationaryDuration,
+            isPaused: location.isPaused,
+            batteryLevel: location.batteryLevel
+          },
+          activeJob: activeJobs.length > 0 ? {
+            id: activeJobs[0].id,
+            jobNumber: activeJobs[0].jobNumber,
+            status: activeJobs[0].status,
+            eta: eta
+          } : null,
+          routeHistory: routeHistory,
+          session: activeSession ? {
+            id: activeSession.id,
+            startedAt: activeSession.startedAt,
+            totalDistance: activeSession.totalDistance,
+            averageSpeed: activeSession.averageSpeed
+          } : null
+        });
+      } catch (error) {
+        console.error('Error getting contractor location:', error);
+        res.status(500).json({ message: 'Failed to get contractor location' });
+      }
+    }
+  );
+  
+  // Get job tracking (GET /api/tracking/job/:id)
+  app.get('/api/tracking/job/:id',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        
+        // Get job details
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        // Check permissions
+        if (req.session.role !== 'admin' && 
+            req.session.userId !== job.customerId && 
+            req.session.userId !== job.contractorId) {
+          return res.status(403).json({ message: 'Unauthorized to track this job' });
+        }
+        
+        let contractorLocation = null;
+        let eta = null;
+        let route = null;
+        let contractor = null;
+        
+        if (job.contractorId) {
+          // Get contractor details
+          const contractorProfile = await storage.getContractorProfile(job.contractorId);
+          if (contractorProfile) {
+            contractor = {
+              id: job.contractorId,
+              name: contractorProfile.companyName,
+              rating: contractorProfile.averageRating,
+              phone: null // Don't expose contractor phone to customers
+            };
+          }
+          
+          // Get contractor location
+          const location = await storage.getContractorLocation(job.contractorId);
+          if (location) {
+            contractorLocation = {
+              lat: parseFloat(location.latitude),
+              lng: parseFloat(location.longitude),
+              heading: location.heading ? parseFloat(location.heading) : null,
+              speed: location.speed ? parseFloat(location.speed) : null,
+              lastUpdate: location.updatedAt
+            };
+            
+            // Calculate ETA
+            if (job.location) {
+              const etaData = await storage.calculateETA(
+                contractorLocation,
+                job.location as any,
+                contractorLocation.speed || undefined
+              );
+              eta = etaData;
+            }
+          }
+          
+          // Get tracking session for route
+          const session = await storage.getActiveTrackingSession(job.contractorId, jobId);
+          if (session) {
+            const sessionRoute = await storage.getSessionRoute(session.id);
+            route = sessionRoute;
+          }
+        }
+        
+        // Get geofence events
+        const geofenceEvents = await storage.getGeofenceEvents(jobId);
+        
+        res.json({
+          job: {
+            id: job.id,
+            jobNumber: job.jobNumber,
+            status: job.status,
+            location: job.location,
+            scheduledAt: job.scheduledAt,
+            estimatedArrival: job.estimatedArrival
+          },
+          contractor: contractor,
+          tracking: {
+            contractorLocation,
+            eta,
+            route,
+            geofenceEvents: geofenceEvents.map(e => ({
+              type: e.eventType,
+              triggeredAt: e.triggeredAt,
+              dwellTime: e.dwellTime
+            }))
+          }
+        });
+      } catch (error) {
+        console.error('Error getting job tracking:', error);
+        res.status(500).json({ message: 'Failed to get job tracking' });
+      }
+    }
+  );
+  
+  // Get location history (GET /api/tracking/history/:contractorId)
+  app.get('/api/tracking/history/:contractorId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.params.contractorId;
+        
+        // Check permissions
+        if (req.session.role !== 'admin' && req.session.userId !== contractorId) {
+          return res.status(403).json({ message: 'Unauthorized to view location history' });
+        }
+        
+        const { jobId, fromDate, toDate, limit } = req.query;
+        
+        const history = await storage.getLocationHistory(contractorId, {
+          jobId: jobId as string,
+          fromDate: fromDate ? new Date(fromDate as string) : undefined,
+          toDate: toDate ? new Date(toDate as string) : undefined,
+          limit: limit ? parseInt(limit as string) : 1000
+        });
+        
+        // Calculate total distance
+        let totalDistance = 0;
+        for (let i = 1; i < history.length; i++) {
+          const distance = LocationService.calculateDistance(
+            { lat: parseFloat(history[i-1].latitude), lng: parseFloat(history[i-1].longitude) },
+            { lat: parseFloat(history[i].latitude), lng: parseFloat(history[i].longitude) }
+          );
+          totalDistance += distance;
+        }
+        
+        res.json({
+          history: history.map(h => ({
+            lat: parseFloat(h.latitude),
+            lng: parseFloat(h.longitude),
+            accuracy: h.accuracy ? parseFloat(h.accuracy) : null,
+            altitude: h.altitude ? parseFloat(h.altitude) : null,
+            heading: h.heading ? parseFloat(h.heading) : null,
+            speed: h.speed ? parseFloat(h.speed) : null,
+            batteryLevel: h.batteryLevel,
+            timestamp: h.recordedAt
+          })),
+          stats: {
+            totalPoints: history.length,
+            totalDistance: Math.round(totalDistance * 10) / 10,
+            dateRange: {
+              from: history.length > 0 ? history[history.length - 1].recordedAt : null,
+              to: history.length > 0 ? history[0].recordedAt : null
+            }
+          }
+        });
+      } catch (error) {
+        console.error('Error getting location history:', error);
+        res.status(500).json({ message: 'Failed to get location history' });
+      }
+    }
+  );
+  
+  // Record geofence event (POST /api/tracking/geofence)
+  app.post('/api/tracking/geofence',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const { jobId, eventType, latitude, longitude, radius } = req.body;
+        
+        // Validate required fields
+        if (!jobId || !eventType || !latitude || !longitude) {
+          return res.status(400).json({ message: 'Missing required fields' });
+        }
+        
+        // Get job to validate
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        if (job.contractorId !== contractorId) {
+          return res.status(403).json({ message: 'Unauthorized to update this job' });
+        }
+        
+        // Get active session
+        const session = await storage.getActiveTrackingSession(contractorId, jobId);
+        
+        // Record geofence event
+        const event = await storage.recordGeofenceEvent({
+          contractorId,
+          jobId,
+          sessionId: session?.id,
+          eventType,
+          latitude: latitude.toString(),
+          longitude: longitude.toString(),
+          radius: radius || 100,
+          jobLatitude: (job.location as any).lat.toString(),
+          jobLongitude: (job.location as any).lng.toString(),
+          distanceFromSite: LocationService.calculateDistance(
+            { lat: latitude, lng: longitude },
+            job.location as any
+          ).toString(),
+          notificationSent: false
+        });
+        
+        // Broadcast geofence event via WebSocket
+        trackingWSServer.broadcastJobUpdate(jobId, {
+          type: 'GEOFENCE_EVENT',
+          payload: {
+            event: eventType,
+            contractorId,
+            timestamp: new Date().toISOString()
+          }
+        });
+        
+        res.json({
+          success: true,
+          event: {
+            id: event.id,
+            type: event.eventType,
+            triggeredAt: event.triggeredAt
+          }
+        });
+      } catch (error) {
+        console.error('Error recording geofence event:', error);
+        res.status(500).json({ message: 'Failed to record geofence event' });
+      }
+    }
+  );
+  
+  // Pause tracking (POST /api/tracking/pause)
+  app.post('/api/tracking/pause',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const { reason } = req.body;
+        
+        await storage.pauseTracking(contractorId, reason);
+        
+        res.json({ success: true, message: 'Tracking paused' });
+      } catch (error) {
+        console.error('Error pausing tracking:', error);
+        res.status(500).json({ message: 'Failed to pause tracking' });
+      }
+    }
+  );
+  
+  // Resume tracking (POST /api/tracking/resume)
+  app.post('/api/tracking/resume',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        
+        await storage.resumeTracking(contractorId);
+        
+        res.json({ success: true, message: 'Tracking resumed' });
+      } catch (error) {
+        console.error('Error resuming tracking:', error);
+        res.status(500).json({ message: 'Failed to resume tracking' });
+      }
+    }
+  );
+  
+  // Get all active tracking (GET /api/tracking/active) - Admin only
+  app.get('/api/tracking/active',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const activeTracking = await storage.getActiveTracking();
+        
+        // Get contractor details for each
+        const trackingData = await Promise.all(activeTracking.map(async (tracking) => {
+          const contractor = await storage.getContractorProfile(tracking.contractorId);
+          const activeJobs = await storage.getJobs({
+            contractorId: tracking.contractorId,
+            status: ['assigned', 'en_route', 'on_site']
+          });
+          
+          return {
+            contractorId: tracking.contractorId,
+            contractorName: contractor?.companyName || 'Unknown',
+            location: {
+              lat: parseFloat(tracking.latitude),
+              lng: parseFloat(tracking.longitude)
+            },
+            speed: tracking.speed ? parseFloat(tracking.speed) : null,
+            heading: tracking.heading ? parseFloat(tracking.heading) : null,
+            batteryLevel: tracking.batteryLevel,
+            isStationary: tracking.isStationary,
+            activeJob: activeJobs.length > 0 ? {
+              id: activeJobs[0].id,
+              jobNumber: activeJobs[0].jobNumber,
+              status: activeJobs[0].status
+            } : null,
+            lastUpdate: tracking.updatedAt
+          };
+        }));
+        
+        res.json({ activeTracking: trackingData });
+      } catch (error) {
+        console.error('Error getting active tracking:', error);
+        res.status(500).json({ message: 'Failed to get active tracking' });
+      }
+    }
+  );
+
+
+  // ==================== LOCATION TRACKING API ENDPOINTS ====================
+  
+  // Update contractor location (POST /api/tracking/location)
+  app.post('/api/tracking/location',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const { latitude, longitude, accuracy, altitude, heading, speed, batteryLevel, isCharging, networkType, jobId } = req.body;
+        
+        // Validate required fields
+        if (!latitude || !longitude) {
+          return res.status(400).json({ message: 'Latitude and longitude are required' });
+        }
+        
+        // Update location in database
+        const location = await storage.updateContractorLocation(contractorId, {
+          latitude,
+          longitude,
+          accuracy,
+          altitude,
+          heading,
+          speed,
+          batteryLevel,
+          isCharging,
+          networkType
+        });
+        
+        if (!location) {
+          return res.status(500).json({ message: 'Failed to update location' });
+        }
+        
+        // Save to history if actively tracking a job
+        if (jobId) {
+          // Get active session
+          let session = await storage.getActiveTrackingSession(contractorId, jobId);
+          if (!session) {
+            session = await storage.startTrackingSession({
+              contractorId,
+              jobId,
+              startLocation: { lat: latitude, lng: longitude }
+            });
+          }
+          
+          // Save to history
+          await storage.saveLocationHistory({
+            contractorId,
+            jobId,
+            sessionId: session.id,
+            latitude: latitude.toString(),
+            longitude: longitude.toString(),
+            accuracy: accuracy?.toString(),
+            altitude: altitude?.toString(),
+            heading: heading?.toString(),
+            speed: speed?.toString(),
+            batteryLevel
+          });
+          
+          // Update session stats
+          const history = await storage.getLocationHistory(contractorId, {
+            jobId,
+            limit: 2
+          });
+          
+          if (history.length >= 2) {
+            const distance = LocationService.calculateDistance(
+              { lat: parseFloat(history[1].latitude), lng: parseFloat(history[1].longitude) },
+              { lat: latitude, lng: longitude }
+            );
+            
+            const currentStats = session;
+            await storage.updateTrackingSessionStats(session.id, {
+              totalDistance: (parseFloat(currentStats.totalDistance || '0') + distance),
+              totalPoints: (currentStats.totalPoints || 0) + 1,
+              maxSpeed: Math.max(parseFloat(currentStats.maxSpeed || '0'), speed || 0)
+            });
+          }
+          
+          // Check for geofence arrival
+          const job = await storage.getJob(jobId);
+          if (job && job.location && job.status === 'en_route') {
+            const arrived = await storage.detectArrival(
+              contractorId,
+              jobId,
+              { lat: latitude, lng: longitude },
+              100 // 100 meter radius
+            );
+            
+            if (arrived) {
+              // Update job status
+              await storage.updateJob(jobId, { status: 'on_site', arrivedAt: new Date() });
+              
+              // Broadcast arrival event via WebSocket
+              trackingWSServer.broadcastJobUpdate(jobId, {
+                type: 'GEOFENCE_EVENT',
+                payload: {
+                  event: 'arrived',
+                  contractorId,
+                  timestamp: new Date().toISOString()
+                }
+              });
+            }
+          }
+          
+          // Calculate ETA if en route
+          if (job && job.location && (job.status === 'en_route' || job.status === 'assigned')) {
+            const etaData = await storage.calculateETA(
+              { lat: latitude, lng: longitude },
+              job.location as any,
+              speed
+            );
+            
+            // Update job with new ETA
+            await storage.updateJob(jobId, {
+              estimatedArrival: etaData.eta,
+              contractorLocation: { lat: latitude, lng: longitude },
+              contractorLocationUpdatedAt: new Date()
+            });
+            
+            // Broadcast location update via WebSocket
+            trackingWSServer.broadcastLocationUpdate(jobId, {
+              location: { lat: latitude, lng: longitude, timestamp: new Date().toISOString() },
+              eta: etaData.eta.toISOString(),
+              speed,
+              heading,
+              batteryLevel
+            });
+          }
+        }
+        
+        res.json({
+          success: true,
+          location: {
+            lat: latitude,
+            lng: longitude,
+            updateFrequency: location.updateFrequency,
+            isStationary: location.isStationary,
+            trackingStatus: location.trackingStatus
+          }
+        });
+      } catch (error) {
+        console.error('Error updating contractor location:', error);
+        res.status(500).json({ message: 'Failed to update location' });
+      }
+    }
+  );
+  
+  // Get contractor location (GET /api/tracking/contractor/:id)
+  app.get('/api/tracking/contractor/:id',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.params.id;
+        
+        // Get current location
+        const location = await storage.getContractorLocation(contractorId);
+        if (!location) {
+          return res.status(404).json({ message: 'No tracking data found for contractor' });
+        }
+        
+        // Get active job if any
+        const activeJobs = await storage.getJobs({
+          contractorId,
+          status: ['assigned', 'en_route', 'on_site']
+        });
+        
+        let eta = null;
+        let routeHistory = [];
+        let activeSession = null;
+        
+        if (activeJobs.length > 0) {
+          const activeJob = activeJobs[0];
+          
+          // Calculate ETA
+          if (activeJob.location) {
+            const etaData = await storage.calculateETA(
+              { lat: parseFloat(location.latitude), lng: parseFloat(location.longitude) },
+              activeJob.location as any,
+              location.speed ? parseFloat(location.speed) : undefined
+            );
+            eta = etaData;
+          }
+          
+          // Get route history
+          activeSession = await storage.getActiveTrackingSession(contractorId, activeJob.id);
+          if (activeSession) {
+            const sessionRoute = await storage.getSessionRoute(activeSession.id);
+            routeHistory = sessionRoute.points;
+          }
+        }
+        
+        res.json({
+          location: {
+            lat: parseFloat(location.latitude),
+            lng: parseFloat(location.longitude),
+            accuracy: location.accuracy ? parseFloat(location.accuracy) : null,
+            heading: location.heading ? parseFloat(location.heading) : null,
+            speed: location.speed ? parseFloat(location.speed) : null,
+            lastUpdate: location.updatedAt
+          },
+          status: {
+            trackingStatus: location.trackingStatus,
+            isStationary: location.isStationary,
+            stationaryDuration: location.stationaryDuration,
+            isPaused: location.isPaused,
+            batteryLevel: location.batteryLevel
+          },
+          activeJob: activeJobs.length > 0 ? {
+            id: activeJobs[0].id,
+            jobNumber: activeJobs[0].jobNumber,
+            status: activeJobs[0].status,
+            eta: eta
+          } : null,
+          routeHistory: routeHistory,
+          session: activeSession ? {
+            id: activeSession.id,
+            startedAt: activeSession.startedAt,
+            totalDistance: activeSession.totalDistance,
+            averageSpeed: activeSession.averageSpeed
+          } : null
+        });
+      } catch (error) {
+        console.error('Error getting contractor location:', error);
+        res.status(500).json({ message: 'Failed to get contractor location' });
+      }
+    }
+  );
+  
+  // Get job tracking (GET /api/tracking/job/:id)
+  app.get('/api/tracking/job/:id',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        
+        // Get job details
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        // Check permissions
+        if (req.session.role !== 'admin' && 
+            req.session.userId !== job.customerId && 
+            req.session.userId !== job.contractorId) {
+          return res.status(403).json({ message: 'Unauthorized to track this job' });
+        }
+        
+        let contractorLocation = null;
+        let eta = null;
+        let route = null;
+        let contractor = null;
+        
+        if (job.contractorId) {
+          // Get contractor details
+          const contractorProfile = await storage.getContractorProfile(job.contractorId);
+          if (contractorProfile) {
+            contractor = {
+              id: job.contractorId,
+              name: contractorProfile.companyName,
+              rating: contractorProfile.averageRating,
+              phone: null // Don't expose contractor phone to customers
+            };
+          }
+          
+          // Get contractor location
+          const location = await storage.getContractorLocation(job.contractorId);
+          if (location) {
+            contractorLocation = {
+              lat: parseFloat(location.latitude),
+              lng: parseFloat(location.longitude),
+              heading: location.heading ? parseFloat(location.heading) : null,
+              speed: location.speed ? parseFloat(location.speed) : null,
+              lastUpdate: location.updatedAt
+            };
+            
+            // Calculate ETA
+            if (job.location) {
+              const etaData = await storage.calculateETA(
+                contractorLocation,
+                job.location as any,
+                contractorLocation.speed || undefined
+              );
+              eta = etaData;
+            }
+          }
+          
+          // Get tracking session for route
+          const session = await storage.getActiveTrackingSession(job.contractorId, jobId);
+          if (session) {
+            const sessionRoute = await storage.getSessionRoute(session.id);
+            route = sessionRoute;
+          }
+        }
+        
+        // Get geofence events
+        const geofenceEvents = await storage.getGeofenceEvents(jobId);
+        
+        res.json({
+          job: {
+            id: job.id,
+            jobNumber: job.jobNumber,
+            status: job.status,
+            location: job.location,
+            scheduledAt: job.scheduledAt,
+            estimatedArrival: job.estimatedArrival
+          },
+          contractor: contractor,
+          tracking: {
+            contractorLocation,
+            eta,
+            route,
+            geofenceEvents: geofenceEvents.map(e => ({
+              type: e.eventType,
+              triggeredAt: e.triggeredAt,
+              dwellTime: e.dwellTime
+            }))
+          }
+        });
+      } catch (error) {
+        console.error('Error getting job tracking:', error);
+        res.status(500).json({ message: 'Failed to get job tracking' });
+      }
+    }
+  );
+  
+  // Get location history (GET /api/tracking/history/:contractorId)
+  app.get('/api/tracking/history/:contractorId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.params.contractorId;
+        
+        // Check permissions
+        if (req.session.role !== 'admin' && req.session.userId !== contractorId) {
+          return res.status(403).json({ message: 'Unauthorized to view location history' });
+        }
+        
+        const { jobId, fromDate, toDate, limit } = req.query;
+        
+        const history = await storage.getLocationHistory(contractorId, {
+          jobId: jobId as string,
+          fromDate: fromDate ? new Date(fromDate as string) : undefined,
+          toDate: toDate ? new Date(toDate as string) : undefined,
+          limit: limit ? parseInt(limit as string) : 1000
+        });
+        
+        // Calculate total distance
+        let totalDistance = 0;
+        for (let i = 1; i < history.length; i++) {
+          const distance = LocationService.calculateDistance(
+            { lat: parseFloat(history[i-1].latitude), lng: parseFloat(history[i-1].longitude) },
+            { lat: parseFloat(history[i].latitude), lng: parseFloat(history[i].longitude) }
+          );
+          totalDistance += distance;
+        }
+        
+        res.json({
+          history: history.map(h => ({
+            lat: parseFloat(h.latitude),
+            lng: parseFloat(h.longitude),
+            accuracy: h.accuracy ? parseFloat(h.accuracy) : null,
+            altitude: h.altitude ? parseFloat(h.altitude) : null,
+            heading: h.heading ? parseFloat(h.heading) : null,
+            speed: h.speed ? parseFloat(h.speed) : null,
+            batteryLevel: h.batteryLevel,
+            timestamp: h.recordedAt
+          })),
+          stats: {
+            totalPoints: history.length,
+            totalDistance: Math.round(totalDistance * 10) / 10,
+            dateRange: {
+              from: history.length > 0 ? history[history.length - 1].recordedAt : null,
+              to: history.length > 0 ? history[0].recordedAt : null
+            }
+          }
+        });
+      } catch (error) {
+        console.error('Error getting location history:', error);
+        res.status(500).json({ message: 'Failed to get location history' });
+      }
+    }
+  );
+  
+  // Record geofence event (POST /api/tracking/geofence)
+  app.post('/api/tracking/geofence',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const { jobId, eventType, latitude, longitude, radius } = req.body;
+        
+        // Validate required fields
+        if (!jobId || !eventType || !latitude || !longitude) {
+          return res.status(400).json({ message: 'Missing required fields' });
+        }
+        
+        // Get job to validate
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        if (job.contractorId !== contractorId) {
+          return res.status(403).json({ message: 'Unauthorized to update this job' });
+        }
+        
+        // Get active session
+        const session = await storage.getActiveTrackingSession(contractorId, jobId);
+        
+        // Record geofence event
+        const event = await storage.recordGeofenceEvent({
+          contractorId,
+          jobId,
+          sessionId: session?.id,
+          eventType,
+          latitude: latitude.toString(),
+          longitude: longitude.toString(),
+          radius: radius || 100,
+          jobLatitude: (job.location as any).lat.toString(),
+          jobLongitude: (job.location as any).lng.toString(),
+          distanceFromSite: LocationService.calculateDistance(
+            { lat: latitude, lng: longitude },
+            job.location as any
+          ).toString(),
+          notificationSent: false
+        });
+        
+        // Broadcast geofence event via WebSocket
+        trackingWSServer.broadcastJobUpdate(jobId, {
+          type: 'GEOFENCE_EVENT',
+          payload: {
+            event: eventType,
+            contractorId,
+            timestamp: new Date().toISOString()
+          }
+        });
+        
+        res.json({
+          success: true,
+          event: {
+            id: event.id,
+            type: event.eventType,
+            triggeredAt: event.triggeredAt
+          }
+        });
+      } catch (error) {
+        console.error('Error recording geofence event:', error);
+        res.status(500).json({ message: 'Failed to record geofence event' });
+      }
+    }
+  );
+  
+  // Pause tracking (POST /api/tracking/pause)
+  app.post('/api/tracking/pause',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const { reason } = req.body;
+        
+        await storage.pauseTracking(contractorId, reason);
+        
+        res.json({ success: true, message: 'Tracking paused' });
+      } catch (error) {
+        console.error('Error pausing tracking:', error);
+        res.status(500).json({ message: 'Failed to pause tracking' });
+      }
+    }
+  );
+  
+  // Resume tracking (POST /api/tracking/resume)
+  app.post('/api/tracking/resume',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        
+        await storage.resumeTracking(contractorId);
+        
+        res.json({ success: true, message: 'Tracking resumed' });
+      } catch (error) {
+        console.error('Error resuming tracking:', error);
+        res.status(500).json({ message: 'Failed to resume tracking' });
+      }
+    }
+  );
+  
+  // Get all active tracking (GET /api/tracking/active) - Admin only
+  app.get('/api/tracking/active',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const activeTracking = await storage.getActiveTracking();
+        
+        // Get contractor details for each
+        const trackingData = await Promise.all(activeTracking.map(async (tracking) => {
+          const contractor = await storage.getContractorProfile(tracking.contractorId);
+          const activeJobs = await storage.getJobs({
+            contractorId: tracking.contractorId,
+            status: ['assigned', 'en_route', 'on_site']
+          });
+          
+          return {
+            contractorId: tracking.contractorId,
+            contractorName: contractor?.companyName || 'Unknown',
+            location: {
+              lat: parseFloat(tracking.latitude),
+              lng: parseFloat(tracking.longitude)
+            },
+            speed: tracking.speed ? parseFloat(tracking.speed) : null,
+            heading: tracking.heading ? parseFloat(tracking.heading) : null,
+            batteryLevel: tracking.batteryLevel,
+            isStationary: tracking.isStationary,
+            activeJob: activeJobs.length > 0 ? {
+              id: activeJobs[0].id,
+              jobNumber: activeJobs[0].jobNumber,
+              status: activeJobs[0].status
+            } : null,
+            lastUpdate: tracking.updatedAt
+          };
+        }));
+        
+        res.json({ activeTracking: trackingData });
+      } catch (error) {
+        console.error('Error getting active tracking:', error);
+        res.status(500).json({ message: 'Failed to get active tracking' });
+      }
+    }
+  );
+

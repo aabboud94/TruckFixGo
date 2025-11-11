@@ -512,6 +512,45 @@ class TrackingWebSocketServer {
     console.log(`Client left bidding for job ${ws.biddingJobId}`);
   }
 
+  // Broadcast location updates for tracking
+  public broadcastLocationUpdate(jobId: string, locationData: any) {
+    const room = this.rooms.get(jobId);
+    if (!room) return;
+
+    const message = {
+      type: 'LOCATION_UPDATE',
+      payload: locationData
+    };
+
+    this.broadcastToRoom(jobId, message);
+  }
+
+  // Broadcast job updates
+  public broadcastJobUpdate(jobId: string, update: any) {
+    const room = this.rooms.get(jobId);
+    if (!room) return;
+
+    this.broadcastToRoom(jobId, update);
+  }
+
+  // Broadcast ETA updates
+  public broadcastETAUpdate(jobId: string, eta: string) {
+    const room = this.rooms.get(jobId);
+    if (!room) return;
+
+    room.lastEta = eta;
+    
+    const message = {
+      type: 'ETA_UPDATE',
+      payload: {
+        eta,
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    this.broadcastToRoom(jobId, message);
+  }
+
   // Broadcast bid updates to all participants
   public async broadcastNewBid(jobId: string, bid: any) {
     const room = this.biddingRooms.get(jobId);

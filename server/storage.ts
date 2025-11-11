@@ -164,6 +164,18 @@ import {
   breakdownPatterns,
   fleetAnalyticsAlerts,
   contractorJobQueue,
+  locationTracking,
+  locationHistory,
+  trackingSessions,
+  geofenceEvents,
+  type LocationTracking,
+  type InsertLocationTracking,
+  type LocationHistory,
+  type InsertLocationHistory,
+  type TrackingSession,
+  type InsertTrackingSession,
+  type GeofenceEvent,
+  type InsertGeofenceEvent,
   type VehicleAnalytics,
   type InsertVehicleAnalytics,
   type BreakdownPattern,
@@ -210,6 +222,91 @@ import {
   checkProviderEnum,
   checkStatusEnum,
   queueStatusEnum
+
+  // ==================== LOCATION TRACKING ====================
+  
+  // Update contractor's current location
+  async updateContractorLocation(contractorId: string, location: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    altitude?: number;
+    heading?: number;
+    speed?: number;
+    batteryLevel?: number;
+    isCharging?: boolean;
+    networkType?: string;
+  }): Promise<LocationTracking | null>;
+  
+  // Save location to history
+  async saveLocationHistory(data: InsertLocationHistory): Promise<LocationHistory>;
+  
+  // Get location history for contractor
+  async getLocationHistory(contractorId: string, options?: {
+    jobId?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    includeAnonymized?: boolean;
+  }): Promise<LocationHistory[]>;
+  
+  // Get active tracking session
+  async getActiveTrackingSession(contractorId: string, jobId?: string): Promise<TrackingSession | null>;
+  
+  // Start new tracking session
+  async startTrackingSession(data: {
+    contractorId: string;
+    jobId?: string;
+    startLocation?: any;
+  }): Promise<TrackingSession>;
+  
+  // End tracking session
+  async endTrackingSession(sessionId: string, endReason: string): Promise<TrackingSession>;
+  
+  // Update tracking session stats
+  async updateTrackingSessionStats(sessionId: string, stats: {
+    totalDistance?: number;
+    totalDuration?: number;
+    averageSpeed?: number;
+    maxSpeed?: number;
+    totalPoints?: number;
+  }): Promise<void>;
+  
+  // Record geofence event
+  async recordGeofenceEvent(data: InsertGeofenceEvent): Promise<GeofenceEvent>;
+  
+  // Get geofence events for job
+  async getGeofenceEvents(jobId: string): Promise<GeofenceEvent[]>;
+  
+  // Get all actively tracked contractors
+  async getActiveTracking(): Promise<LocationTracking[]>;
+  
+  // Pause/resume tracking
+  async pauseTracking(contractorId: string, reason?: string): Promise<void>;
+  async resumeTracking(contractorId: string): Promise<void>;
+  
+  // Calculate ETA based on current location
+  async calculateETA(contractorLocation: { lat: number; lng: number }, jobLocation: { lat: number; lng: number }, averageSpeed?: number): Promise<{
+    eta: Date;
+    distanceMiles: number;
+    estimatedMinutes: number;
+  }>;
+  
+  // Detect arrival at job site (geofencing)
+  async detectArrival(contractorId: string, jobId: string, currentLocation: { lat: number; lng: number }, radiusMeters?: number): Promise<boolean>;
+  
+  // Anonymize old location data (GDPR compliance)
+  async anonymizeOldLocationData(daysOld: number): Promise<number>;
+  
+  // Get contractor's current location
+  async getContractorLocation(contractorId: string): Promise<LocationTracking | null>;
+  
+  // Get route polyline for session
+  async getSessionRoute(sessionId: string): Promise<{
+    polyline: string;
+    points: Array<{ lat: number; lng: number; timestamp: Date }>;
+  }>;
+
 } from "@shared/schema";
 
 import { db } from "./db";
@@ -7547,6 +7644,421 @@ export class PostgreSQLStorage implements IStorage {
     }
   }
 }
+
+
+  // ==================== LOCATION TRACKING IMPLEMENTATION ====================
+  
+  async updateContractorLocation(contractorId: string, location: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    altitude?: number;
+    heading?: number;
+    speed?: number;
+    batteryLevel?: number;
+    isCharging?: boolean;
+    networkType?: string;
+  }): Promise<LocationTracking | null> {
+    try {
+      // Check if tracking record exists
+      const existing = await db.select()
+        .from(locationTracking)
+        .where(eq(locationTracking.contractorId, contractorId))
+        .limit(1);
+      
+      const now = new Date();
+      
+      // Determine if stationary
+      let isStationary = false;
+      let stationaryDuration = 0;
+      let updateFrequency: 'high' | 'normal' | 'low' | 'stationary' = 'normal';
+      
+      if (existing[0]) {
+        const prevLat = parseFloat(existing[0].latitude);
+        const prevLng = parseFloat(existing[0].longitude);
+        const distance = this.calculateDistance(
+          { lat: prevLat, lng: prevLng },
+          { lat: location.latitude, lng: location.longitude }
+        );
+        
+        // If moved less than 50 meters, consider stationary
+        if (distance < 0.031) { // ~50 meters in miles
+          isStationary = true;
+          const lastMovement = existing[0].lastMovementAt || existing[0].createdAt;
+          stationaryDuration = Math.floor((now.getTime() - lastMovement.getTime()) / 1000);
+          updateFrequency = 'stationary';
+        } else if (location.speed && location.speed > 50) {
+          updateFrequency = 'high';
+        } else if (location.speed && location.speed < 5) {
+          updateFrequency = 'low';
+        }
+      }
+      
+      const trackingData = {
+        contractorId,
+        latitude: location.latitude.toString(),
+        longitude: location.longitude.toString(),
+        accuracy: location.accuracy?.toString(),
+        altitude: location.altitude?.toString(),
+        heading: location.heading?.toString(),
+        speed: location.speed?.toString(),
+        batteryLevel: location.batteryLevel,
+        isCharging: location.isCharging,
+        networkType: location.networkType,
+        updateFrequency,
+        isStationary,
+        stationaryDuration,
+        lastMovementAt: isStationary ? (existing[0]?.lastMovementAt || now) : now,
+        updatedAt: now
+      };
+      
+      let result;
+      if (existing[0]) {
+        // Update existing record
+        result = await db.update(locationTracking)
+          .set(trackingData)
+          .where(eq(locationTracking.contractorId, contractorId))
+          .returning();
+      } else {
+        // Create new record
+        result = await db.insert(locationTracking)
+          .values({ ...trackingData, trackingStatus: 'active', isPaused: false })
+          .returning();
+      }
+      
+      // Update contractor profile current location
+      await db.update(contractorProfiles)
+        .set({
+          currentLocation: { lat: location.latitude, lng: location.longitude },
+          lastLocationUpdate: now
+        })
+        .where(eq(contractorProfiles.userId, contractorId));
+      
+      return result[0];
+    } catch (error) {
+      console.error('Error updating contractor location:', error);
+      return null;
+    }
+  }
+  
+  async saveLocationHistory(data: InsertLocationHistory): Promise<LocationHistory> {
+    const result = await db.insert(locationHistory).values(data).returning();
+    return result[0];
+  }
+  
+  async getLocationHistory(contractorId: string, options?: {
+    jobId?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    includeAnonymized?: boolean;
+  }): Promise<LocationHistory[]> {
+    const conditions: any[] = [eq(locationHistory.contractorId, contractorId)];
+    
+    if (options?.jobId) {
+      conditions.push(eq(locationHistory.jobId, options.jobId));
+    }
+    
+    if (!options?.includeAnonymized) {
+      conditions.push(eq(locationHistory.isAnonymized, false));
+    }
+    
+    if (options?.fromDate) {
+      conditions.push(gte(locationHistory.recordedAt, options.fromDate));
+    }
+    
+    if (options?.toDate) {
+      conditions.push(lte(locationHistory.recordedAt, options.toDate));
+    }
+    
+    const query = db.select()
+      .from(locationHistory)
+      .where(and(...conditions))
+      .orderBy(desc(locationHistory.recordedAt));
+    
+    if (options?.limit) {
+      query.limit(options.limit);
+    }
+    
+    return await query;
+  }
+  
+  async getActiveTrackingSession(contractorId: string, jobId?: string): Promise<TrackingSession | null> {
+    const conditions: any[] = [
+      eq(trackingSessions.contractorId, contractorId),
+      eq(trackingSessions.isActive, true)
+    ];
+    
+    if (jobId) {
+      conditions.push(eq(trackingSessions.jobId, jobId));
+    }
+    
+    const result = await db.select()
+      .from(trackingSessions)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return result[0] || null;
+  }
+  
+  async startTrackingSession(data: {
+    contractorId: string;
+    jobId?: string;
+    startLocation?: any;
+  }): Promise<TrackingSession> {
+    // End any existing active sessions
+    await db.update(trackingSessions)
+      .set({ isActive: false, endedAt: new Date(), endReason: 'new_session' })
+      .where(and(
+        eq(trackingSessions.contractorId, data.contractorId),
+        eq(trackingSessions.isActive, true)
+      ));
+    
+    const result = await db.insert(trackingSessions)
+      .values({
+        contractorId: data.contractorId,
+        jobId: data.jobId,
+        startLocation: data.startLocation,
+        isActive: true
+      })
+      .returning();
+    
+    return result[0];
+  }
+  
+  async endTrackingSession(sessionId: string, endReason: string): Promise<TrackingSession> {
+    const result = await db.update(trackingSessions)
+      .set({
+        isActive: false,
+        endedAt: new Date(),
+        endReason
+      })
+      .where(eq(trackingSessions.id, sessionId))
+      .returning();
+    
+    return result[0];
+  }
+  
+  async updateTrackingSessionStats(sessionId: string, stats: {
+    totalDistance?: number;
+    totalDuration?: number;
+    averageSpeed?: number;
+    maxSpeed?: number;
+    totalPoints?: number;
+  }): Promise<void> {
+    const updateData: any = {};
+    
+    if (stats.totalDistance !== undefined) {
+      updateData.totalDistance = stats.totalDistance.toString();
+    }
+    if (stats.totalDuration !== undefined) {
+      updateData.totalDuration = stats.totalDuration;
+    }
+    if (stats.averageSpeed !== undefined) {
+      updateData.averageSpeed = stats.averageSpeed.toString();
+    }
+    if (stats.maxSpeed !== undefined) {
+      updateData.maxSpeed = stats.maxSpeed.toString();
+    }
+    if (stats.totalPoints !== undefined) {
+      updateData.totalPoints = stats.totalPoints;
+    }
+    
+    await db.update(trackingSessions)
+      .set(updateData)
+      .where(eq(trackingSessions.id, sessionId));
+  }
+  
+  async recordGeofenceEvent(data: InsertGeofenceEvent): Promise<GeofenceEvent> {
+    const result = await db.insert(geofenceEvents).values(data).returning();
+    
+    // Auto-update job status if arrival event
+    if (data.eventType === 'arrived' && data.jobId) {
+      await db.update(jobs)
+        .set({
+          status: 'on_site',
+          arrivedAt: new Date()
+        })
+        .where(eq(jobs.id, data.jobId));
+    }
+    
+    return result[0];
+  }
+  
+  async getGeofenceEvents(jobId: string): Promise<GeofenceEvent[]> {
+    return await db.select()
+      .from(geofenceEvents)
+      .where(eq(geofenceEvents.jobId, jobId))
+      .orderBy(desc(geofenceEvents.triggeredAt));
+  }
+  
+  async getActiveTracking(): Promise<LocationTracking[]> {
+    return await db.select()
+      .from(locationTracking)
+      .where(and(
+        eq(locationTracking.trackingStatus, 'active'),
+        eq(locationTracking.isPaused, false)
+      ));
+  }
+  
+  async pauseTracking(contractorId: string, reason?: string): Promise<void> {
+    await db.update(locationTracking)
+      .set({
+        isPaused: true,
+        pausedAt: new Date(),
+        pausedReason: reason
+      })
+      .where(eq(locationTracking.contractorId, contractorId));
+  }
+  
+  async resumeTracking(contractorId: string): Promise<void> {
+    await db.update(locationTracking)
+      .set({
+        isPaused: false,
+        pausedAt: null,
+        pausedReason: null
+      })
+      .where(eq(locationTracking.contractorId, contractorId));
+  }
+  
+  async calculateETA(contractorLocation: { lat: number; lng: number }, jobLocation: { lat: number; lng: number }, averageSpeed?: number): Promise<{
+    eta: Date;
+    distanceMiles: number;
+    estimatedMinutes: number;
+  }> {
+    const distance = this.calculateDistance(contractorLocation, jobLocation);
+    
+    // Determine average speed based on distance (highway vs city)
+    let speed = averageSpeed;
+    if (!speed) {
+      speed = distance > 20 ? 45 : 25; // Highway vs city speed
+    }
+    
+    const estimatedMinutes = Math.round((distance / speed) * 60);
+    const eta = new Date();
+    eta.setMinutes(eta.getMinutes() + estimatedMinutes);
+    
+    return {
+      eta,
+      distanceMiles: distance,
+      estimatedMinutes
+    };
+  }
+  
+  async detectArrival(contractorId: string, jobId: string, currentLocation: { lat: number; lng: number }, radiusMeters: number = 100): Promise<boolean> {
+    // Get job location
+    const job = await db.select()
+      .from(jobs)
+      .where(eq(jobs.id, jobId))
+      .limit(1);
+    
+    if (!job[0] || !job[0].location) {
+      return false;
+    }
+    
+    const jobLocation = job[0].location as any;
+    const distance = this.calculateDistance(currentLocation, jobLocation) * 1609.34; // Convert miles to meters
+    
+    if (distance <= radiusMeters) {
+      // Check if we already recorded an arrival event
+      const existingEvent = await db.select()
+        .from(geofenceEvents)
+        .where(and(
+          eq(geofenceEvents.jobId, jobId),
+          eq(geofenceEvents.contractorId, contractorId),
+          eq(geofenceEvents.eventType, 'arrived')
+        ))
+        .limit(1);
+      
+      if (!existingEvent[0]) {
+        // Record arrival event
+        await this.recordGeofenceEvent({
+          contractorId,
+          jobId,
+          eventType: 'arrived',
+          latitude: currentLocation.lat.toString(),
+          longitude: currentLocation.lng.toString(),
+          radius: radiusMeters,
+          jobLatitude: jobLocation.lat.toString(),
+          jobLongitude: jobLocation.lng.toString(),
+          distanceFromSite: distance.toString(),
+          notificationSent: false
+        });
+      }
+      
+      return true;
+    }
+    
+    return false;
+  }
+  
+  async anonymizeOldLocationData(daysOld: number): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+    
+    const result = await db.update(locationHistory)
+      .set({
+        isAnonymized: true,
+        anonymizedAt: new Date()
+      })
+      .where(and(
+        lte(locationHistory.recordedAt, cutoffDate),
+        eq(locationHistory.isAnonymized, false)
+      ));
+    
+    return result.rowCount || 0;
+  }
+  
+  async getContractorLocation(contractorId: string): Promise<LocationTracking | null> {
+    const result = await db.select()
+      .from(locationTracking)
+      .where(eq(locationTracking.contractorId, contractorId))
+      .limit(1);
+    
+    return result[0] || null;
+  }
+  
+  async getSessionRoute(sessionId: string): Promise<{
+    polyline: string;
+    points: Array<{ lat: number; lng: number; timestamp: Date }>;
+  }> {
+    const points = await db.select()
+      .from(locationHistory)
+      .where(eq(locationHistory.sessionId, sessionId))
+      .orderBy(asc(locationHistory.recordedAt));
+    
+    const routePoints = points.map(p => ({
+      lat: parseFloat(p.latitude),
+      lng: parseFloat(p.longitude),
+      timestamp: p.recordedAt
+    }));
+    
+    // Simple polyline encoding (in production, use Google's polyline encoder)
+    const polyline = routePoints
+      .map(p => \`\${p.lat.toFixed(6)},\${p.lng.toFixed(6)}\`)
+      .join('|');
+    
+    return {
+      polyline,
+      points: routePoints
+    };
+  }
+  
+  // Helper function for distance calculation
+  private calculateDistance(loc1: { lat: number; lng: number }, loc2: { lat: number; lng: number }): number {
+    const R = 3959; // Earth's radius in miles
+    const dLat = (loc2.lat - loc1.lat) * Math.PI / 180;
+    const dLng = (loc2.lng - loc1.lng) * Math.PI / 180;
+    
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(loc1.lat * Math.PI / 180) * Math.cos(loc2.lat * Math.PI / 180) *
+              Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c;
+    
+    return Math.round(distance * 10) / 10; // Round to 1 decimal place
+  }
 
 // Export the PostgreSQL storage instance
 export const storage = new PostgreSQLStorage();

@@ -55,6 +55,11 @@ export const invoiceStatusEnum = pgEnum('invoice_status', ['draft', 'pending', '
 export const invoiceDefaultTypeEnum = pgEnum('invoice_default_type', ['fee', 'tax', 'surcharge']);
 export const invoiceLineItemTypeEnum = pgEnum('invoice_line_item_type', ['part', 'labor', 'fee', 'tax', 'other']);
 
+// Tracking related enums
+export const trackingStatusEnum = pgEnum('tracking_status', ['active', 'paused', 'completed', 'disabled']);
+export const geofenceEventTypeEnum = pgEnum('geofence_event_type', ['arrived', 'departed', 'entered_zone', 'exited_zone']);
+export const trackingUpdateFrequencyEnum = pgEnum('tracking_update_frequency', ['high', 'normal', 'low', 'stationary']);
+
 // ====================
 // USERS & AUTH
 // ====================
@@ -535,6 +540,152 @@ export const jobReassignmentHistory = pgTable("job_reassignment_history", {
   jobIdx: index("idx_job_reassignment_job").on(table.jobId),
   fromIdx: index("idx_job_reassignment_from").on(table.fromContractorId),
   toIdx: index("idx_job_reassignment_to").on(table.toContractorId)
+}));
+
+
+// ====================
+// LOCATION TRACKING
+// ====================
+
+export const locationTracking = pgTable("location_tracking", {
+  id: varchar("id").primaryKey().default(sql\`gen_random_uuid()\`),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  jobId: varchar("job_id").references(() => jobs.id),
+  
+  // Current location data
+  latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
+  accuracy: decimal("accuracy", { precision: 10, scale: 2 }), // In meters
+  altitude: decimal("altitude", { precision: 10, scale: 2 }), // In meters
+  heading: decimal("heading", { precision: 5, scale: 2 }), // In degrees (0-360)
+  speed: decimal("speed", { precision: 6, scale: 2 }), // In mph
+  
+  // Tracking metadata
+  batteryLevel: integer("battery_level"), // 0-100
+  isCharging: boolean("is_charging"),
+  networkType: varchar("network_type", { length: 20 }), // wifi, cellular, unknown
+  updateFrequency: trackingUpdateFrequencyEnum("update_frequency").notNull().default('normal'),
+  
+  // Tracking status
+  trackingStatus: trackingStatusEnum("tracking_status").notNull().default('active'),
+  lastMovementAt: timestamp("last_movement_at"),
+  isStationary: boolean("is_stationary").notNull().default(false),
+  stationaryDuration: integer("stationary_duration"), // In seconds
+  
+  // Privacy controls
+  isPaused: boolean("is_paused").notNull().default(false),
+  pausedAt: timestamp("paused_at"),
+  pausedReason: text("paused_reason"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  contractorIdx: index("idx_location_tracking_contractor").on(table.contractorId),
+  jobIdx: index("idx_location_tracking_job").on(table.jobId),
+  statusIdx: index("idx_location_tracking_status").on(table.trackingStatus),
+  locationIdx: index("idx_location_tracking_coords").on(table.latitude, table.longitude),
+  updatedIdx: index("idx_location_tracking_updated").on(table.updatedAt)
+}));
+
+export const locationHistory = pgTable("location_history", {
+  id: varchar("id").primaryKey().default(sql\`gen_random_uuid()\`),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  jobId: varchar("job_id").references(() => jobs.id),
+  sessionId: varchar("session_id").references(() => trackingSessions.id),
+  
+  // Location data
+  latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
+  accuracy: decimal("accuracy", { precision: 10, scale: 2 }), // In meters
+  altitude: decimal("altitude", { precision: 10, scale: 2 }), // In meters
+  heading: decimal("heading", { precision: 5, scale: 2 }), // In degrees
+  speed: decimal("speed", { precision: 6, scale: 2 }), // In mph
+  
+  // Additional data
+  batteryLevel: integer("battery_level"),
+  distanceFromPrevious: decimal("distance_from_previous", { precision: 10, scale: 2 }), // In miles
+  timeFromPrevious: integer("time_from_previous"), // In seconds
+  
+  // Anonymization
+  isAnonymized: boolean("is_anonymized").notNull().default(false),
+  anonymizedAt: timestamp("anonymized_at"),
+  
+  recordedAt: timestamp("recorded_at").notNull().defaultNow()
+}, (table) => ({
+  contractorIdx: index("idx_location_history_contractor").on(table.contractorId),
+  jobIdx: index("idx_location_history_job").on(table.jobId),
+  sessionIdx: index("idx_location_history_session").on(table.sessionId),
+  recordedIdx: index("idx_location_history_recorded").on(table.recordedAt),
+  locationIdx: index("idx_location_history_coords").on(table.latitude, table.longitude)
+}));
+
+export const trackingSessions = pgTable("tracking_sessions", {
+  id: varchar("id").primaryKey().default(sql\`gen_random_uuid()\`),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  jobId: varchar("job_id").references(() => jobs.id),
+  
+  // Session data
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  endedAt: timestamp("ended_at"),
+  totalDistance: decimal("total_distance", { precision: 10, scale: 2 }), // In miles
+  totalDuration: integer("total_duration"), // In seconds
+  averageSpeed: decimal("average_speed", { precision: 6, scale: 2 }), // In mph
+  maxSpeed: decimal("max_speed", { precision: 6, scale: 2 }), // In mph
+  
+  // Route data
+  startLocation: jsonb("start_location"), // {lat, lng, address}
+  endLocation: jsonb("end_location"), // {lat, lng, address}
+  routePolyline: text("route_polyline"), // Encoded polyline for route display
+  
+  // Statistics
+  totalPoints: integer("total_points").notNull().default(0),
+  pauseCount: integer("pause_count").notNull().default(0),
+  totalPauseDuration: integer("total_pause_duration").notNull().default(0), // In seconds
+  
+  // Session status
+  isActive: boolean("is_active").notNull().default(true),
+  endReason: varchar("end_reason", { length: 50 }), // completed, cancelled, battery_low, network_lost
+  
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  contractorIdx: index("idx_tracking_sessions_contractor").on(table.contractorId),
+  jobIdx: index("idx_tracking_sessions_job").on(table.jobId),
+  activeIdx: index("idx_tracking_sessions_active").on(table.isActive),
+  startedIdx: index("idx_tracking_sessions_started").on(table.startedAt)
+}));
+
+export const geofenceEvents = pgTable("geofence_events", {
+  id: varchar("id").primaryKey().default(sql\`gen_random_uuid()\`),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  sessionId: varchar("session_id").references(() => trackingSessions.id),
+  
+  // Event data
+  eventType: geofenceEventTypeEnum("event_type").notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
+  radius: integer("radius").notNull().default(100), // In meters
+  
+  // Job site info
+  jobLatitude: decimal("job_latitude", { precision: 10, scale: 8 }).notNull(),
+  jobLongitude: decimal("job_longitude", { precision: 11, scale: 8 }).notNull(),
+  distanceFromSite: decimal("distance_from_site", { precision: 10, scale: 2 }), // In meters
+  
+  // Time tracking
+  triggeredAt: timestamp("triggered_at").notNull().defaultNow(),
+  dwellTime: integer("dwell_time"), // Time spent in geofence (seconds)
+  
+  // Notifications
+  notificationSent: boolean("notification_sent").notNull().default(false),
+  notificationSentAt: timestamp("notification_sent_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  contractorIdx: index("idx_geofence_events_contractor").on(table.contractorId),
+  jobIdx: index("idx_geofence_events_job").on(table.jobId),
+  sessionIdx: index("idx_geofence_events_session").on(table.sessionId),
+  eventIdx: index("idx_geofence_events_type").on(table.eventType),
+  triggeredIdx: index("idx_geofence_events_triggered").on(table.triggeredAt)
 }));
 
 // ====================
@@ -2807,3 +2958,24 @@ export const insertBookingBlacklistSchema = createInsertSchema(bookingBlacklist)
 });
 export type InsertBookingBlacklist = z.infer<typeof insertBookingBlacklistSchema>;
 export type BookingBlacklist = typeof bookingBlacklist.$inferSelect;
+
+
+// Location tracking types
+export type LocationTracking = typeof locationTracking.$inferSelect;
+export type InsertLocationTracking = typeof locationTracking.$inferInsert;
+
+export type LocationHistory = typeof locationHistory.$inferSelect;
+export type InsertLocationHistory = typeof locationHistory.$inferInsert;
+
+export type TrackingSession = typeof trackingSessions.$inferSelect;
+export type InsertTrackingSession = typeof trackingSessions.$inferInsert;
+
+export type GeofenceEvent = typeof geofenceEvents.$inferSelect;
+export type InsertGeofenceEvent = typeof geofenceEvents.$inferInsert;
+
+// Location tracking schemas
+export const insertLocationTrackingSchema = createInsertSchema(locationTracking);
+export const insertLocationHistorySchema = createInsertSchema(locationHistory);
+export const insertTrackingSessionSchema = createInsertSchema(trackingSessions);
+export const insertGeofenceEventSchema = createInsertSchema(geofenceEvents);
+
