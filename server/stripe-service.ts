@@ -12,11 +12,35 @@ import {
 import { storage } from './storage';
 import { db } from './db';
 
-// Initialize Stripe with API key - only if key is available
-const stripeKey = process.env.STRIPE_SECRET_KEY || process.env.TESTING_STRIPE_SECRET_KEY;
+// Clean and initialize Stripe with API key - only if key is available
+// Clean the key to remove any whitespace, newlines, or other invalid characters
+const rawStripeKey = process.env.STRIPE_SECRET_KEY || process.env.TESTING_STRIPE_SECRET_KEY;
+const stripeKey = rawStripeKey ? rawStripeKey.trim().replace(/[\r\n\t]/g, '') : null;
+
+// Log key validation (without exposing the actual key)
+if (stripeKey) {
+  // Check for common issues
+  if (stripeKey !== rawStripeKey) {
+    console.log('[Stripe Service] API key cleaned (removed whitespace/newlines)');
+  }
+  if (stripeKey.length < 30) {
+    console.error('[Stripe Service] API key appears to be too short');
+  }
+  if (!/^(sk_test_|sk_live_)/.test(stripeKey)) {
+    console.error('[Stripe Service] API key does not start with expected prefix (sk_test_ or sk_live_)');
+  }
+  console.log('[Stripe Service] Initializing with API key (length:', stripeKey.length, ')');
+} else {
+  console.log('[Stripe Service] No API key configured, running in stub mode');
+}
+
 const stripe = stripeKey ? new Stripe(stripeKey, {
   apiVersion: '2024-12-18.acacia' as any,
   typescript: true,
+  telemetry: false, // Disable telemetry to reduce noise in logs
+  httpAgent: null, // Let Stripe use default agent
+  timeout: 80000, // 80 second timeout
+  maxNetworkRetries: 2, // Retry network failures
 }) : null;
 
 // Subscription plan configurations

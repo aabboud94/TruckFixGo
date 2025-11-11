@@ -25,6 +25,12 @@ class EmailService {
   private transporter: nodemailer.Transporter | null = null;
   private retryAttempts = 3;
   private retryDelay = 1000;
+  private isVerified = false;
+  private lastVerificationError: string | null = null;
+  private failureCount = 0;
+  private successCount = 0;
+  private queuedEmails: Array<{ to: string; subject: string; timestamp: Date; error?: string }> = [];
+  private maxQueueSize = 100;
 
   constructor() {
     this.initializeTransporter();
@@ -32,33 +38,143 @@ class EmailService {
 
   // Check if email service is ready
   public isReady(): boolean {
-    return this.transporter !== null;
+    return this.transporter !== null && this.isVerified;
   }
 
-  private initializeTransporter() {
+  // Get email service statistics
+  public getStats() {
+    return {
+      verified: this.isVerified,
+      failures: this.failureCount,
+      successes: this.successCount,
+      queueSize: this.queuedEmails.length,
+      lastError: this.lastVerificationError,
+      successRate: this.successCount > 0 ? (this.successCount / (this.successCount + this.failureCount)) * 100 : 0
+    };
+  }
+
+  // Get queued email failures
+  public getQueuedFailures() {
+    return this.queuedEmails.filter(e => e.error);
+  }
+
+  private async initializeTransporter() {
     const email = process.env.OFFICE365_EMAIL;
     const password = process.env.OFFICE365_PASSWORD;
 
     if (!email || !password) {
       console.error('[Email Service] Office365 credentials not configured');
+      this.lastVerificationError = 'Missing Office365 credentials';
       return;
     }
 
-    this.transporter = nodemailer.createTransport({
-      host: 'smtp.office365.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: email,
-        pass: password
-      },
-      tls: {
-        ciphers: 'SSLv3',
-        rejectUnauthorized: false
-      }
-    });
+    try {
+      this.transporter = nodemailer.createTransport({
+        host: 'smtp.office365.com',
+        port: 587,
+        secure: false,
+        auth: {
+          user: email,
+          pass: password
+        },
+        tls: {
+          ciphers: 'SSLv3',
+          rejectUnauthorized: false
+        },
+        logger: process.env.NODE_ENV === 'development' ? true : false,
+        debug: process.env.NODE_ENV === 'development' ? true : false
+      });
 
-    console.log('[Email Service] Office365 email service initialized');
+      // Verify the transporter configuration
+      console.log('[Email Service] Verifying SMTP connection...');
+      await this.verifyConnection();
+      
+    } catch (error) {
+      console.error('[Email Service] Failed to initialize transporter:', error);
+      this.lastVerificationError = `Initialization failed: ${(error as Error).message}`;
+      this.transporter = null;
+    }
+  }
+
+  // Verify SMTP connection
+  private async verifyConnection(): Promise<boolean> {
+    if (!this.transporter) {
+      this.isVerified = false;
+      this.lastVerificationError = 'Transporter not initialized';
+      return false;
+    }
+
+    try {
+      await this.transporter.verify();
+      this.isVerified = true;
+      this.lastVerificationError = null;
+      console.log('[Email Service] SMTP connection verified successfully');
+      return true;
+    } catch (error) {
+      this.isVerified = false;
+      this.lastVerificationError = `SMTP verification failed: ${(error as Error).message}`;
+      console.error('[Email Service] SMTP verification failed:', error);
+      
+      // Log detailed error information
+      if (error instanceof Error) {
+        console.error('[Email Service] Error details:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+      }
+      return false;
+    }
+  }
+
+  // Test email delivery
+  public async testEmailDelivery(): Promise<{ success: boolean; error?: string; messageId?: string }> {
+    if (!this.transporter) {
+      return { 
+        success: false, 
+        error: 'Email transporter not initialized' 
+      };
+    }
+
+    const testEmail = process.env.OFFICE365_EMAIL || 'admin@truckfixgo.com';
+    
+    try {
+      // First verify connection
+      const verified = await this.verifyConnection();
+      if (!verified) {
+        return {
+          success: false,
+          error: this.lastVerificationError || 'SMTP verification failed'
+        };
+      }
+
+      // Send a test email
+      const info = await this.transporter.sendMail({
+        from: testEmail,
+        to: testEmail,
+        subject: `[TruckFixGo] Email Service Test - ${new Date().toISOString()}`,
+        text: 'This is a test email to verify SMTP connectivity.',
+        html: '<p>This is a test email to verify SMTP connectivity.</p>'
+      });
+
+      console.log('[Email Service] Test email sent successfully:', info.messageId);
+      return {
+        success: true,
+        messageId: info.messageId
+      };
+    } catch (error) {
+      const errorMessage = `Test email failed: ${(error as Error).message}`;
+      console.error('[Email Service]', errorMessage);
+      
+      // Track the failure
+      this.failureCount++;
+      this.lastVerificationError = errorMessage;
+      
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
   }
 
   private generateTemplate(type: EmailType, data: any): EmailTemplate {
@@ -246,6 +362,8 @@ class EmailService {
   ): Promise<boolean> {
     if (!this.transporter) {
       console.error('[Email Service] Transporter not initialized, cannot send email');
+      this.failureCount++;
+      this.lastVerificationError = 'Transporter not initialized';
       return false;
     }
 
@@ -264,11 +382,26 @@ class EmailService {
     }
 
     const template = this.generateTemplate(type, data);
+    const emailRecord = {
+      to: recipients,
+      subject: template.subject,
+      timestamp: new Date()
+    };
 
     let attempt = 0;
+    let lastError: Error | null = null;
+    
     while (attempt < this.retryAttempts) {
       try {
         console.log(`[Email Service] Sending ${type} email to: ${recipients} (attempt ${attempt + 1}/${this.retryAttempts})`);
+        
+        // Verify connection before sending
+        if (!this.isVerified) {
+          await this.verifyConnection();
+          if (!this.isVerified) {
+            throw new Error(this.lastVerificationError || 'SMTP verification failed');
+          }
+        }
         
         const info = await this.transporter.sendMail({
           from: process.env.OFFICE365_EMAIL,
@@ -281,10 +414,29 @@ class EmailService {
         });
 
         console.log(`[Email Service] Email sent successfully: ${info.messageId}`);
+        this.successCount++;
         return true;
       } catch (error) {
         attempt++;
-        console.error(`[Email Service] Failed to send email (attempt ${attempt}/${this.retryAttempts}):`, error);
+        lastError = error as Error;
+        console.error(`[Email Service] Failed to send email (attempt ${attempt}/${this.retryAttempts}):`, {
+          error: error instanceof Error ? error.message : error,
+          stack: error instanceof Error ? error.stack : undefined,
+          type,
+          recipients
+        });
+        
+        // If it's an authentication error, don't retry
+        if (error instanceof Error && (
+          error.message.includes('Invalid login') ||
+          error.message.includes('Authentication') ||
+          error.message.includes('535')
+        )) {
+          console.error('[Email Service] Authentication error detected, stopping retries');
+          this.isVerified = false;
+          this.lastVerificationError = `Authentication failed: ${error.message}`;
+          break;
+        }
         
         if (attempt < this.retryAttempts) {
           await new Promise(resolve => setTimeout(resolve, this.retryDelay * attempt));
@@ -292,7 +444,20 @@ class EmailService {
       }
     }
 
-    console.error(`[Email Service] Failed to send ${type} email after ${this.retryAttempts} attempts`);
+    // Track the failure
+    this.failureCount++;
+    const errorMessage = lastError ? lastError.message : 'Unknown error';
+    this.lastVerificationError = errorMessage;
+    
+    // Add to queue if not too large
+    if (this.queuedEmails.length < this.maxQueueSize) {
+      this.queuedEmails.push({
+        ...emailRecord,
+        error: errorMessage
+      });
+    }
+
+    console.error(`[Email Service] Failed to send ${type} email after ${attempt} attempts. Error: ${errorMessage}`);
     return false;
   }
 
