@@ -189,6 +189,7 @@ export class HealthMonitor {
   private startTime: Date;
   private requestCount: number = 0;
   private requestCountStartTime: Date;
+  private lastEmailTest: number | null = null;
 
   constructor() {
     this.startTime = new Date();
@@ -370,24 +371,100 @@ export class HealthMonitor {
       details.configured = hasCredentials;
 
       if (!hasCredentials) {
-        status = 'degraded';
-        errors.push('Email service not configured');
+        status = 'unhealthy';
+        errors.push('Email service not configured - missing Office365 credentials');
+        details.transporterReady = false;
+        details.canSendEmails = false;
       } else {
+        // Get email service statistics
+        const stats = emailService.getStats();
+        details.stats = stats;
+        
         // Check transporter status
         details.transporterReady = emailService.isReady();
         
+        // Check for recent failures
+        const queuedFailures = emailService.getQueuedFailures();
+        details.recentFailures = queuedFailures.length;
+        details.failureRate = stats.failureCount > 0 ? 
+          (stats.failureCount / (stats.failureCount + stats.successCount)) * 100 : 0;
+        
         if (!details.transporterReady) {
+          status = 'unhealthy';
+          errors.push('Email transporter not ready - SMTP connection not verified');
+          if (stats.lastError) {
+            errors.push(`Last error: ${stats.lastError}`);
+          }
+        } else {
+          // Actually test email delivery (only do this occasionally)
+          // To avoid spamming test emails, only test if:
+          // 1. We haven't tested in the last 5 minutes
+          // 2. Or there have been recent failures
+          const shouldTestDelivery = 
+            !this.lastEmailTest || 
+            (Date.now() - this.lastEmailTest) > 300000 || // 5 minutes
+            stats.failureCount > 0;
+          
+          if (shouldTestDelivery) {
+            console.log('[Health Monitor] Testing email delivery...');
+            const testResult = await emailService.testEmailDelivery();
+            details.testDelivery = testResult;
+            this.lastEmailTest = Date.now();
+            
+            if (!testResult.success) {
+              status = 'unhealthy';
+              errors.push(`Email delivery test failed: ${testResult.error}`);
+              details.canSendEmails = false;
+              
+              // Track this failure
+              errorTracker.addError({
+                type: 'email_delivery_test',
+                category: 'notification',
+                message: testResult.error,
+                timestamp: new Date().toISOString()
+              });
+            } else {
+              details.canSendEmails = true;
+              console.log('[Health Monitor] Email delivery test successful');
+            }
+          } else {
+            // Use cached test result
+            details.canSendEmails = stats.verified;
+            details.testDelivery = {
+              cached: true,
+              lastTestTime: this.lastEmailTest ? new Date(this.lastEmailTest).toISOString() : null
+            };
+          }
+        }
+        
+        // Determine overall email health based on failure rate
+        if (details.failureRate > 50) {
+          status = 'unhealthy';
+          errors.push(`High email failure rate: ${details.failureRate.toFixed(1)}%`);
+        } else if (details.failureRate > 20) {
           status = 'degraded';
-          errors.push('Email transporter not ready');
+          errors.push(`Elevated email failure rate: ${details.failureRate.toFixed(1)}%`);
+        }
+        
+        // Check for queue size issues
+        if (details.recentFailures > 10) {
+          status = status === 'healthy' ? 'degraded' : status;
+          errors.push(`${details.recentFailures} recent email failures in queue`);
         }
       }
-
-      // Check email queue (if implemented)
-      details.queueSize = 0; // Would need to implement queue tracking in email service
 
     } catch (error) {
       status = 'unhealthy';
       errors.push(`Email service check failed: ${(error as Error).message}`);
+      
+      // Track this error
+      errorTracker.addError({
+        type: 'email_health_check',
+        category: 'notification',
+        message: (error as Error).message,
+        stack: (error as Error).stack,
+        timestamp: new Date().toISOString()
+      });
     }
 
     const responseTime = Date.now() - startTime;
