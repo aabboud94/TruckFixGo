@@ -6492,6 +6492,300 @@ export class PostgreSQLStorage implements IStorage {
       .where(eq(fleetAccounts.isActive, true));
     return parseInt(result[0]?.count as string || '0');
   }
+
+  // ==================== GUEST USER & EMERGENCY BOOKING OPERATIONS ====================
+
+  async createGuestUser(data: {
+    phone: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    ipAddress?: string;
+  }): Promise<User> {
+    try {
+      // Check if a guest user with this phone already exists
+      const existingGuest = await db.select()
+        .from(users)
+        .where(and(
+          eq(users.phone, data.phone),
+          eq(users.isGuest, true)
+        ))
+        .limit(1);
+
+      if (existingGuest.length > 0) {
+        // Update existing guest user with new info if provided
+        const updates: any = { updatedAt: new Date() };
+        if (data.email) updates.email = data.email;
+        if (data.firstName) updates.firstName = data.firstName;
+        if (data.lastName) updates.lastName = data.lastName;
+        
+        const updated = await db.update(users)
+          .set(updates)
+          .where(eq(users.id, existingGuest[0].id))
+          .returning();
+        return updated[0];
+      }
+
+      // For guest users, don't use email (to avoid unique constraint issues)
+      // Guest users are identified by phone number only
+      const guestUser = await db.insert(users)
+        .values({
+          phone: data.phone,
+          email: null, // Don't store email for guest users to avoid unique constraint
+          firstName: data.firstName || 'Guest',
+          lastName: data.lastName || 'User',
+          role: 'driver', // Guest users default to driver role
+          isGuest: true,
+          isActive: true,
+          password: null // No password for guest users
+        })
+        .returning();
+
+      return guestUser[0];
+    } catch (error) {
+      console.error('Error creating guest user:', error);
+      
+      // If there's still a phone conflict, try to find and return the existing user
+      if (error instanceof Error && error.message.includes('unique')) {
+        const existingUser = await db.select()
+          .from(users)
+          .where(eq(users.phone, data.phone))
+          .limit(1);
+        
+        if (existingUser.length > 0) {
+          // Update to mark as guest if not already
+          if (!existingUser[0].isGuest) {
+            const updated = await db.update(users)
+              .set({ isGuest: true, updatedAt: new Date() })
+              .where(eq(users.id, existingUser[0].id))
+              .returning();
+            return updated[0];
+          }
+          return existingUser[0];
+        }
+      }
+      
+      throw error;
+    }
+  }
+
+  async createEmergencyBooking(data: {
+    guestUserId: string;
+    serviceTypeId: string;
+    location: { lat: number; lng: number };
+    locationAddress: string;
+    vehicleInfo: {
+      make?: string;
+      model?: string;
+      year?: string;
+      licensePlate?: string;
+    };
+    description: string;
+    photos?: string[];
+    ipAddress?: string;
+  }): Promise<Job> {
+    try {
+      // Generate a shorter job number for emergency
+      const timestamp = Date.now().toString().slice(-6);
+      const random = Math.random().toString(36).substr(2, 4).toUpperCase();
+      const jobNumber = `EM-${timestamp}-${random}`;
+
+      // Create the emergency job
+      const job = await db.insert(jobs)
+        .values({
+          jobNumber,
+          customerId: data.guestUserId,
+          serviceTypeId: data.serviceTypeId,
+          jobType: 'emergency',
+          status: 'new',
+          location: data.location,
+          address: data.locationAddress,
+          vehicleMake: data.vehicleInfo.make,
+          vehicleModel: data.vehicleInfo.model,
+          vehicleYear: data.vehicleInfo.year,
+          vehicleLicensePlate: data.vehicleInfo.licensePlate,
+          issueDescription: data.description,
+          photos: data.photos || [],
+          isEmergency: true,
+          priority: 'high',
+          notes: `Guest booking from IP: ${data.ipAddress || 'Unknown'}`
+        })
+        .returning();
+
+      // Add to job status history
+      await db.insert(jobStatusHistory)
+        .values({
+          jobId: job[0].id,
+          toStatus: 'new',
+          changedBy: data.guestUserId,
+          reason: 'Emergency guest booking'
+        });
+
+      return job[0];
+    } catch (error) {
+      console.error('Error creating emergency booking:', error);
+      throw error;
+    }
+  }
+
+  async getPublicJobInfo(jobId: string): Promise<{
+    job: Job | null;
+    contractor: any | null;
+    customer: any | null;
+    statusHistory: JobStatusHistory[];
+  }> {
+    try {
+      // Get job details
+      const job = await db.select()
+        .from(jobs)
+        .where(eq(jobs.id, jobId))
+        .limit(1);
+
+      if (job.length === 0) {
+        return { job: null, contractor: null, customer: null, statusHistory: [] };
+      }
+
+      // Get contractor info if assigned
+      let contractor = null;
+      if (job[0].contractorId) {
+        const contractorResult = await db.select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          phone: users.phone,
+          companyName: contractorProfiles.companyName,
+          averageRating: contractorProfiles.averageRating,
+          totalJobsCompleted: contractorProfiles.totalJobsCompleted,
+          currentLocation: contractorProfiles.currentLocation,
+          isOnline: contractorProfiles.isOnline
+        })
+        .from(users)
+        .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
+        .where(eq(users.id, job[0].contractorId))
+        .limit(1);
+        
+        if (contractorResult.length > 0) {
+          contractor = contractorResult[0];
+        }
+      }
+
+      // Get limited customer info (for display purposes)
+      let customer = null;
+      if (job[0].customerId) {
+        const customerResult = await db.select({
+          firstName: users.firstName,
+          lastName: users.lastName
+        })
+        .from(users)
+        .where(eq(users.id, job[0].customerId))
+        .limit(1);
+        
+        if (customerResult.length > 0) {
+          customer = customerResult[0];
+        }
+      }
+
+      // Get status history
+      const statusHistory = await db.select()
+        .from(jobStatusHistory)
+        .where(eq(jobStatusHistory.jobId, jobId))
+        .orderBy(desc(jobStatusHistory.createdAt));
+
+      return {
+        job: job[0],
+        contractor,
+        customer,
+        statusHistory
+      };
+    } catch (error) {
+      console.error('Error getting public job info:', error);
+      return { job: null, contractor: null, customer: null, statusHistory: [] };
+    }
+  }
+
+  async getGuestBookingsByPhone(phone: string, hoursAgo: number = 1): Promise<Job[]> {
+    try {
+      const timeLimit = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
+      
+      // First get guest users with this phone
+      const guestUsers = await db.select()
+        .from(users)
+        .where(and(
+          eq(users.phone, phone),
+          eq(users.isGuest, true)
+        ));
+
+      if (guestUsers.length === 0) {
+        return [];
+      }
+
+      const guestUserIds = guestUsers.map(u => u.id);
+
+      // Get jobs created by these guest users within the time limit
+      const recentJobs = await db.select()
+        .from(jobs)
+        .where(and(
+          inArray(jobs.customerId, guestUserIds),
+          gte(jobs.createdAt, timeLimit)
+        ))
+        .orderBy(desc(jobs.createdAt));
+
+      return recentJobs;
+    } catch (error) {
+      console.error('Error getting guest bookings by phone:', error);
+      return [];
+    }
+  }
+
+  async verifyJobOwnershipByPhone(jobId: string, phone: string): Promise<boolean> {
+    try {
+      const job = await db.select()
+        .from(jobs)
+        .where(eq(jobs.id, jobId))
+        .limit(1);
+
+      if (job.length === 0) {
+        return false;
+      }
+
+      const user = await db.select()
+        .from(users)
+        .where(and(
+          eq(users.id, job[0].customerId),
+          eq(users.phone, phone)
+        ))
+        .limit(1);
+
+      return user.length > 0;
+    } catch (error) {
+      console.error('Error verifying job ownership:', error);
+      return false;
+    }
+  }
+
+  async cleanupExpiredGuestUsers(): Promise<number> {
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      
+      // Soft delete expired guest users
+      const result = await db.update(users)
+        .set({ 
+          deletedAt: new Date(),
+          isActive: false 
+        })
+        .where(and(
+          eq(users.isGuest, true),
+          lte(users.createdAt, thirtyDaysAgo),
+          isNull(users.deletedAt)
+        ))
+        .returning();
+
+      return result.length;
+    } catch (error) {
+      console.error('Error cleaning up expired guest users:', error);
+      return 0;
+    }
+  }
 }
 
 // Export the PostgreSQL storage instance
