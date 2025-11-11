@@ -78,6 +78,7 @@ import AdminSupport from "@/pages/admin/support";
 import AdminHealth from "@/pages/admin/health";
 import AdminLiveMap from "@/pages/admin/live-map";
 import AdminInvoiceDefaults from "@/pages/admin/invoice-defaults";
+import AdminStatus from "@/pages/admin/status";
 
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
@@ -179,6 +180,7 @@ function Router() {
       <Route path="/admin/support" component={AdminSupport} />
       <Route path="/admin/health" component={AdminHealth} />
       <Route path="/admin/live-map" component={AdminLiveMap} />
+      <Route path="/admin/status" component={AdminStatus} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />

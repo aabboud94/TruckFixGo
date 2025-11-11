@@ -759,6 +759,27 @@ class TrackingWebSocketServer {
     this.clients.clear();
   }
 
+  // Get WebSocket server status
+  public getStatus() {
+    return {
+      initialized: !!this.wss,
+      rooms: this.rooms.size,
+      biddingRooms: this.biddingRooms.size,
+      clients: this.clients.size,
+      connections: this.wss?.clients?.size || 0
+    };
+  }
+
+  // Get number of tracking rooms
+  public getRoomCount(): number {
+    return this.rooms.size + this.biddingRooms.size;
+  }
+
+  // Get number of active connections
+  public getConnectionCount(): number {
+    return this.wss?.clients?.size || 0;
+  }
+
   // Demo mode: Simulate contractor movement
   public startDemoMovement(jobId: string, startLocation: { lat: number; lng: number }, endLocation: { lat: number; lng: number }) {
     let progress = 0;

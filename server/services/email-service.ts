@@ -30,6 +30,11 @@ class EmailService {
     this.initializeTransporter();
   }
 
+  // Check if email service is ready
+  public isReady(): boolean {
+    return this.transporter !== null;
+  }
+
   private initializeTransporter() {
     const email = process.env.OFFICE365_EMAIL;
     const password = process.env.OFFICE365_PASSWORD;

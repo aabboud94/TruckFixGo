@@ -15,6 +15,7 @@ import stripeService from "./stripe-service";
 import { emailService } from "./services/email-service";
 import LocationService from "./services/location-service";
 import { trackingWSServer } from "./websocket";
+import { healthMonitor } from "./health-monitor";
 import multer from "multer";
 import sharp from "sharp";
 import path from "path";
@@ -12755,6 +12756,108 @@ The TruckFixGo Team
       } catch (error) {
         console.error('Twilio webhook error:', error);
         res.status(400).json({ message: 'Webhook processing failed' });
+      }
+    }
+  );
+
+  // ==================== HEALTH MONITORING ====================
+
+  // System health endpoint
+  app.get('/api/health/system',
+    async (req: Request, res: Response) => {
+      try {
+        const startTime = Date.now();
+        const health = await healthMonitor.checkSystemHealth();
+        const responseTime = Date.now() - startTime;
+        
+        res.json({
+          ...health,
+          responseTime,
+          lastChecked: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('System health check error:', error);
+        res.status(503).json({
+          status: 'unhealthy',
+          responseTime: 0,
+          lastChecked: new Date().toISOString(),
+          errors: ['Failed to check system health']
+        });
+      }
+    }
+  );
+
+  // Services health endpoint
+  app.get('/api/health/services',
+    async (req: Request, res: Response) => {
+      try {
+        const startTime = Date.now();
+        const health = await healthMonitor.checkServicesHealth();
+        const responseTime = Date.now() - startTime;
+        
+        res.json({
+          ...health,
+          responseTime,
+          lastChecked: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Services health check error:', error);
+        res.status(503).json({
+          status: 'unhealthy',
+          responseTime: 0,
+          lastChecked: new Date().toISOString(),
+          errors: ['Failed to check services health']
+        });
+      }
+    }
+  );
+
+  // Database health endpoint
+  app.get('/api/health/database',
+    async (req: Request, res: Response) => {
+      try {
+        const startTime = Date.now();
+        const health = await healthMonitor.checkDatabaseDetailed();
+        const responseTime = Date.now() - startTime;
+        
+        res.json({
+          ...health,
+          responseTime,
+          lastChecked: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Database health check error:', error);
+        res.status(503).json({
+          status: 'unhealthy',
+          responseTime: 0,
+          lastChecked: new Date().toISOString(),
+          errors: ['Failed to check database health']
+        });
+      }
+    }
+  );
+
+  // Errors tracking endpoint
+  app.get('/api/health/errors',
+    async (req: Request, res: Response) => {
+      try {
+        const startTime = Date.now();
+        const errors = await healthMonitor.getErrorTracking();
+        const responseTime = Date.now() - startTime;
+        
+        res.json({
+          ...errors,
+          responseTime,
+          lastChecked: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Error metrics check error:', error);
+        res.status(503).json({
+          status: 'unhealthy',
+          responseTime: 0,
+          lastChecked: new Date().toISOString(),
+          errors: ['Failed to get error metrics']
+        });
       }
     }
   );

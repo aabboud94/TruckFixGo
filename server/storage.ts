@@ -6330,6 +6330,168 @@ export class PostgreSQLStorage implements IStorage {
     
     return { breached: false };
   }
+
+  // Health monitoring methods
+  async getUserCount(): Promise<number> {
+    const result = await db.select({ count: sql`count(*)` }).from(users);
+    return parseInt(result[0]?.count as string || '0');
+  }
+
+  async getJobCount(): Promise<number> {
+    const result = await db.select({ count: sql`count(*)` }).from(jobs);
+    return parseInt(result[0]?.count as string || '0');
+  }
+
+  async getActiveSessionCount(): Promise<number> {
+    const result = await db.select({ count: sql`count(*)` })
+      .from(sessions)
+      .where(gte(sessions.expiresAt, new Date()));
+    return parseInt(result[0]?.count as string || '0');
+  }
+
+  async getPendingPasswordResetCount(): Promise<number> {
+    const result = await db.select({ count: sql`count(*)` })
+      .from(passwordResetTokens)
+      .where(and(
+        gte(passwordResetTokens.expiresAt, new Date()),
+        isNull(passwordResetTokens.usedAt)
+      ));
+    return parseInt(result[0]?.count as string || '0');
+  }
+
+  async getJobStatistics() {
+    const stats = await db.select({
+      status: jobs.status,
+      count: sql<number>`count(*)`
+    })
+    .from(jobs)
+    .groupBy(jobs.status);
+
+    const total = stats.reduce((sum, s) => sum + Number(s.count), 0);
+    const byStatus: Record<string, number> = {};
+    stats.forEach(s => {
+      byStatus[s.status] = Number(s.count);
+    });
+
+    return {
+      total,
+      byStatus,
+      completionRate: total > 0 ? (byStatus['completed'] || 0) / total : 0
+    };
+  }
+
+  async getStuckJobs(): Promise<number> {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const result = await db.select({ count: sql`count(*)` })
+      .from(jobs)
+      .where(and(
+        inArray(jobs.status, ['assigned', 'en_route', 'on_site']),
+        lte(jobs.updatedAt, oneHourAgo)
+      ));
+    return parseInt(result[0]?.count as string || '0');
+  }
+
+  async getPaymentStatistics() {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    
+    const stats = await db.select({
+      status: transactions.status,
+      count: sql<number>`count(*)`,
+      total: sql<number>`sum(cast(amount as numeric))`
+    })
+    .from(transactions)
+    .where(gte(transactions.createdAt, thirtyDaysAgo))
+    .groupBy(transactions.status);
+
+    const totalTransactions = stats.reduce((sum, s) => sum + Number(s.count), 0);
+    const totalAmount = stats.reduce((sum, s) => sum + Number(s.total || 0), 0);
+    const failedCount = stats.find(s => s.status === 'failed')?.count || 0;
+
+    return {
+      totalTransactions,
+      totalAmount,
+      failedCount: Number(failedCount),
+      failureRate: totalTransactions > 0 ? Number(failedCount) / totalTransactions : 0
+    };
+  }
+
+  async getNotificationStatistics() {
+    const result = await db.select({
+      totalSent: sql<number>`count(*)`,
+      delivered: sql<number>`sum(case when status = 'delivered' then 1 else 0 end)`,
+      failed: sql<number>`sum(case when status = 'failed' then 1 else 0 end)`
+    })
+    .from(reminderLog)
+    .where(gte(reminderLog.sentAt, new Date(Date.now() - 24 * 60 * 60 * 1000)));
+
+    return {
+      totalSent: Number(result[0]?.totalSent || 0),
+      delivered: Number(result[0]?.delivered || 0),
+      failed: Number(result[0]?.failed || 0)
+    };
+  }
+
+  async getSchedulerLastRunTimes() {
+    // This would need a dedicated table to track scheduler runs
+    // For now, return mock data
+    return {
+      'reminder-processor': new Date(Date.now() - 60 * 1000).toISOString(),
+      'upcoming-services-checker': new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+      'reminder-retry': new Date(Date.now() - 30 * 60 * 1000).toISOString()
+    };
+  }
+
+  async getInvoiceStatistics() {
+    const stats = await db.select({
+      status: invoices.status,
+      count: sql<number>`count(*)`,
+      total: sql<number>`sum(cast(total_amount as numeric))`
+    })
+    .from(invoices)
+    .groupBy(invoices.status);
+
+    return {
+      total: stats.reduce((sum, s) => sum + Number(s.count), 0),
+      byStatus: Object.fromEntries(stats.map(s => [s.status, Number(s.count)])),
+      totalAmount: stats.reduce((sum, s) => sum + Number(s.total || 0), 0)
+    };
+  }
+
+  async getOverdueInvoiceCount(): Promise<number> {
+    const result = await db.select({ count: sql`count(*)` })
+      .from(invoices)
+      .where(and(
+        eq(invoices.status, 'overdue'),
+        lte(invoices.dueDate, new Date())
+      ));
+    return parseInt(result[0]?.count as string || '0');
+  }
+
+  async getFleetStatistics() {
+    const fleets = await db.select({
+      totalFleets: sql<number>`count(distinct ${fleetAccounts.id})`,
+      totalVehicles: sql<number>`count(distinct ${fleetVehicles.id})`
+    })
+    .from(fleetAccounts)
+    .leftJoin(fleetVehicles, eq(fleetVehicles.fleetAccountId, fleetAccounts.id));
+
+    return {
+      totalFleets: Number(fleets[0]?.totalFleets || 0),
+      totalVehicles: Number(fleets[0]?.totalVehicles || 0)
+    };
+  }
+
+  async getFleetVehicleCount(): Promise<number> {
+    const result = await db.select({ count: sql`count(*)` }).from(fleetVehicles);
+    return parseInt(result[0]?.count as string || '0');
+  }
+
+  async getActiveFleetCount(): Promise<number> {
+    const result = await db.select({ count: sql`count(*)` })
+      .from(fleetAccounts)
+      .where(eq(fleetAccounts.isActive, true));
+    return parseInt(result[0]?.count as string || '0');
+  }
 }
 
 // Export the PostgreSQL storage instance

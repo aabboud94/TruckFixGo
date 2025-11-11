@@ -32,7 +32,8 @@ import {
   MessageSquare,
   MapPin,
   Palette,
-  FileSignature
+  FileSignature,
+  Activity
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
@@ -84,6 +85,7 @@ const menuItems = [
       { title: "Support Tools", url: "/admin/support", icon: HeadphonesIcon, badge: "3" },
       { title: "Review Moderation", url: "/admin/review-moderation", icon: MessageSquare, badge: null },
       { title: "System Health", url: "/admin/health", icon: ShieldCheck, badge: null },
+      { title: "System Status", url: "/admin/status", icon: Activity, badge: "live" },
     ]
   }
 ];
