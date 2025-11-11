@@ -12862,6 +12862,440 @@ The TruckFixGo Team
     }
   );
 
+  // ==================== EMERGENCY BOOKING ENDPOINTS ====================
+
+  // Rate limiting map for guest bookings (phone -> booking info)
+  const guestBookingRateLimit = new Map<string, { count: number; resetTime: number }>();
+
+  // Guest emergency booking rate limiter
+  function guestBookingRateLimiter(req: Request, res: Response, next: NextFunction) {
+    const phone = req.body.customerPhone;
+    if (!phone) {
+      return res.status(400).json({ message: 'Phone number is required' });
+    }
+
+    const now = Date.now();
+    const record = guestBookingRateLimit.get(phone);
+    const windowMs = 60 * 60 * 1000; // 1 hour
+    const maxBookings = 3;
+
+    if (!record || record.resetTime < now) {
+      guestBookingRateLimit.set(phone, { count: 1, resetTime: now + windowMs });
+      return next();
+    }
+
+    if (record.count >= maxBookings) {
+      return res.status(429).json({ 
+        message: 'Too many bookings from this phone number. Please try again in an hour.',
+        retryAfter: Math.ceil((record.resetTime - now) / 1000)
+      });
+    }
+
+    record.count++;
+    next();
+  }
+
+  // Create guest emergency booking
+  app.post('/api/emergency/book-guest',
+    rateLimiter(10, 60000), // General rate limit: 10 requests per minute
+    guestBookingRateLimiter, // Phone-specific rate limit
+    validateRequest(z.object({
+      customerName: z.string().min(2).max(100),
+      customerPhone: z.string().min(7).max(30),
+      customerEmail: z.string().email().optional(),
+      location: z.object({
+        lat: z.number().min(-90).max(90),
+        lng: z.number().min(-180).max(180)
+      }),
+      locationAddress: z.string().min(5).max(500),
+      serviceTypeId: z.string().uuid(),
+      vehicleInfo: z.object({
+        make: z.string().optional(),
+        model: z.string().optional(),
+        year: z.string().optional(),
+        licensePlate: z.string().optional()
+      }).optional(),
+      description: z.string().min(10).max(2000),
+      photos: z.array(z.string()).optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const {
+          customerName,
+          customerPhone,
+          customerEmail,
+          location,
+          locationAddress,
+          serviceTypeId,
+          vehicleInfo = {},
+          description,
+          photos
+        } = req.body;
+
+        // Validate phone number
+        const phoneValidation = validatePhoneNumber(customerPhone);
+        if (!phoneValidation.isValid) {
+          return res.status(400).json({ message: phoneValidation.message });
+        }
+
+        // Parse customer name
+        const nameParts = customerName.trim().split(' ');
+        const firstName = nameParts[0] || 'Guest';
+        const lastName = nameParts.slice(1).join(' ') || 'User';
+
+        // Create or update guest user
+        const guestUser = await storage.createGuestUser({
+          phone: customerPhone,
+          email: customerEmail,
+          firstName,
+          lastName,
+          ipAddress: req.ip
+        });
+
+        if (!guestUser) {
+          throw new Error('Failed to create guest user');
+        }
+
+        // Create emergency booking
+        const job = await storage.createEmergencyBooking({
+          guestUserId: guestUser.id,
+          serviceTypeId,
+          location,
+          locationAddress,
+          vehicleInfo,
+          description,
+          photos,
+          ipAddress: req.ip
+        });
+
+        if (!job) {
+          throw new Error('Failed to create emergency booking');
+        }
+
+        // Build tracking link
+        const trackingLink = `${process.env.APP_URL || 'https://truck-fix-go-aabboud94.replit.app'}/tracking?jobId=${job.id}`;
+
+        // Send notifications asynchronously
+        (async () => {
+          try {
+            // Send SMS confirmation if Twilio is configured
+            const smsIntegration = await storage.getIntegrationsConfig('twilio');
+            if (smsIntegration?.config && customerPhone) {
+              const twilioConfig = smsIntegration.config as any;
+              if (twilioConfig.accountSid && twilioConfig.authToken && twilioConfig.phoneNumber) {
+                const twilioClient = require('twilio')(twilioConfig.accountSid, twilioConfig.authToken);
+                await twilioClient.messages.create({
+                  body: `TruckFixGo: Your emergency repair request ${job.jobNumber} has been received. Track your mechanic: ${trackingLink}`,
+                  from: twilioConfig.phoneNumber,
+                  to: customerPhone
+                }).catch((err: any) => console.error('SMS send error:', err));
+              }
+            }
+
+            // Send email confirmation if email provided
+            if (customerEmail && emailService.isReady()) {
+              const emailTemplate = {
+                subject: `Emergency Repair Request Confirmed - ${job.jobNumber}`,
+                html: `
+                  <!DOCTYPE html>
+                  <html>
+                  <head>
+                    <style>
+                      body { font-family: Arial, sans-serif; color: #333; }
+                      .header { background: #1e3a5f; color: white; padding: 20px; text-align: center; }
+                      .content { padding: 20px; }
+                      .job-info { background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 15px 0; }
+                      .button { background: #4a90e2; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0; }
+                      .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+                    </style>
+                  </head>
+                  <body>
+                    <div class="header">
+                      <h2>Emergency Repair Request Confirmed</h2>
+                    </div>
+                    <div class="content">
+                      <p>Hello ${customerName},</p>
+                      <p>Your emergency repair request has been received and we're finding the nearest available mechanic for you.</p>
+                      
+                      <div class="job-info">
+                        <h3>Request Details:</h3>
+                        <p><strong>Job Number:</strong> ${job.jobNumber}</p>
+                        <p><strong>Location:</strong> ${locationAddress}</p>
+                        <p><strong>Vehicle:</strong> ${vehicleInfo.make || ''} ${vehicleInfo.model || ''} ${vehicleInfo.year || ''}</p>
+                        <p><strong>Issue:</strong> ${description}</p>
+                      </div>
+                      
+                      <p>You'll receive another notification as soon as a mechanic is assigned and on their way.</p>
+                      
+                      <a href="${trackingLink}" class="button">Track Your Mechanic</a>
+                      
+                      <p><strong>What happens next:</strong></p>
+                      <ul>
+                        <li>We'll assign the nearest available qualified mechanic</li>
+                        <li>You'll receive updates when they're on their way</li>
+                        <li>Track their location in real-time using the link above</li>
+                        <li>The mechanic will contact you when they're close</li>
+                      </ul>
+                      
+                      <p>If you need immediate assistance, please call us at 1-800-TRUCK-FIX.</p>
+                    </div>
+                    <div class="footer">
+                      <p>Thank you for choosing TruckFixGo</p>
+                      <p>This is an automated message, please do not reply to this email.</p>
+                    </div>
+                  </body>
+                  </html>
+                `,
+                text: `Your emergency repair request ${job.jobNumber} has been confirmed. Track your mechanic: ${trackingLink}`
+              };
+
+              await emailService.sendEmail(customerEmail, 'JOB_PENDING_CUSTOMER', {
+                customerName,
+                jobNumber: job.jobNumber
+              }).catch((err: any) => console.error('Email send error:', err));
+            }
+          } catch (notificationError) {
+            console.error('Notification error:', notificationError);
+            // Don't fail the booking if notifications fail
+          }
+        })();
+
+        // Return success response immediately
+        res.status(201).json({
+          success: true,
+          message: 'Emergency booking created successfully',
+          job: {
+            id: job.id,
+            jobNumber: job.jobNumber,
+            status: job.status,
+            trackingLink,
+            estimatedWaitTime: '30-45 minutes'
+          }
+        });
+
+      } catch (error) {
+        console.error('Emergency booking error:', error);
+        res.status(500).json({ 
+          success: false,
+          message: error instanceof Error ? error.message : 'Failed to create emergency booking'
+        });
+      }
+    }
+  );
+
+  // Get public job tracking information
+  app.get('/api/emergency/track/:jobId',
+    rateLimiter(60, 60000), // 60 requests per minute
+    async (req: Request, res: Response) => {
+      try {
+        const { jobId } = req.params;
+
+        // Validate job ID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(jobId)) {
+          return res.status(400).json({ message: 'Invalid job ID format' });
+        }
+
+        // Get public job information
+        const jobInfo = await storage.getPublicJobInfo(jobId);
+
+        if (!jobInfo.job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        // Build response with limited information for privacy
+        const response = {
+          job: {
+            id: jobInfo.job.id,
+            jobNumber: jobInfo.job.jobNumber,
+            status: jobInfo.job.status,
+            jobType: jobInfo.job.jobType,
+            createdAt: jobInfo.job.createdAt,
+            assignedAt: jobInfo.job.assignedAt,
+            enRouteAt: jobInfo.job.enRouteAt,
+            arrivedAt: jobInfo.job.arrivedAt,
+            completedAt: jobInfo.job.completedAt,
+            cancelledAt: jobInfo.job.cancelledAt,
+            estimatedArrival: jobInfo.job.estimatedArrival,
+            address: jobInfo.job.address,
+            serviceTypeId: jobInfo.job.serviceTypeId
+          },
+          contractor: jobInfo.contractor ? {
+            name: `${jobInfo.contractor.firstName} ${jobInfo.contractor.lastName}`,
+            company: jobInfo.contractor.companyName,
+            rating: jobInfo.contractor.averageRating,
+            totalJobs: jobInfo.contractor.totalJobsCompleted,
+            phone: jobInfo.contractor.phone,
+            location: jobInfo.contractor.currentLocation,
+            isOnline: jobInfo.contractor.isOnline
+          } : null,
+          statusHistory: jobInfo.statusHistory.map(h => ({
+            fromStatus: h.fromStatus,
+            toStatus: h.toStatus,
+            createdAt: h.createdAt,
+            reason: h.reason
+          })),
+          customer: jobInfo.customer ? {
+            name: `${jobInfo.customer.firstName} ${jobInfo.customer.lastName}`
+          } : null
+        };
+
+        res.json(response);
+
+      } catch (error) {
+        console.error('Job tracking error:', error);
+        res.status(500).json({ 
+          message: 'Failed to get job tracking information'
+        });
+      }
+    }
+  );
+
+  // Cancel guest emergency booking
+  app.post('/api/emergency/cancel/:jobId',
+    rateLimiter(5, 60000), // 5 requests per minute
+    validateRequest(z.object({
+      phone: z.string().min(7).max(30),
+      reason: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { jobId } = req.params;
+        const { phone, reason } = req.body;
+
+        // Validate phone number
+        const phoneValidation = validatePhoneNumber(phone);
+        if (!phoneValidation.isValid) {
+          return res.status(400).json({ message: phoneValidation.message });
+        }
+
+        // Verify ownership
+        const isOwner = await storage.verifyJobOwnershipByPhone(jobId, phone);
+        if (!isOwner) {
+          return res.status(403).json({ 
+            message: 'Invalid phone number or job not found'
+          });
+        }
+
+        // Get job details
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        // Check if job can be cancelled
+        if (!['new', 'assigned'].includes(job.status)) {
+          return res.status(400).json({ 
+            message: `Cannot cancel job with status: ${job.status}. Jobs can only be cancelled when new or assigned.`
+          });
+        }
+
+        // Cancel the job
+        const cancelledJob = await storage.updateJobStatus(
+          jobId, 
+          'cancelled', 
+          job.customerId,
+          reason || 'Cancelled by customer'
+        );
+
+        if (!cancelledJob) {
+          throw new Error('Failed to cancel job');
+        }
+
+        // Send cancellation notifications asynchronously
+        (async () => {
+          try {
+            // Get customer info
+            const customer = await storage.getUser(job.customerId);
+            
+            // Send SMS confirmation if phone available
+            if (customer?.phone) {
+              const smsIntegration = await storage.getIntegrationsConfig('twilio');
+              if (smsIntegration?.config) {
+                const twilioConfig = smsIntegration.config as any;
+                if (twilioConfig.accountSid && twilioConfig.authToken && twilioConfig.phoneNumber) {
+                  const twilioClient = require('twilio')(twilioConfig.accountSid, twilioConfig.authToken);
+                  await twilioClient.messages.create({
+                    body: `TruckFixGo: Your repair request ${job.jobNumber} has been cancelled successfully.`,
+                    from: twilioConfig.phoneNumber,
+                    to: customer.phone
+                  }).catch((err: any) => console.error('SMS cancellation error:', err));
+                }
+              }
+            }
+
+            // Send email confirmation if email available
+            if (customer?.email && emailService.isReady()) {
+              await emailService.sendEmail(customer.email, 'JOB_PENDING_CUSTOMER', {
+                customerName: `${customer.firstName} ${customer.lastName}`,
+                jobNumber: job.jobNumber
+              }).catch((err: any) => console.error('Email cancellation error:', err));
+            }
+
+            // Notify contractor if assigned
+            if (job.contractorId) {
+              const contractor = await storage.getUser(job.contractorId);
+              if (contractor?.phone) {
+                const smsIntegration = await storage.getIntegrationsConfig('twilio');
+                if (smsIntegration?.config) {
+                  const twilioConfig = smsIntegration.config as any;
+                  if (twilioConfig.accountSid && twilioConfig.authToken && twilioConfig.phoneNumber) {
+                    const twilioClient = require('twilio')(twilioConfig.accountSid, twilioConfig.authToken);
+                    await twilioClient.messages.create({
+                      body: `TruckFixGo: Job ${job.jobNumber} has been cancelled by the customer.`,
+                      from: twilioConfig.phoneNumber,
+                      to: contractor.phone
+                    }).catch((err: any) => console.error('Contractor SMS error:', err));
+                  }
+                }
+              }
+            }
+          } catch (notificationError) {
+            console.error('Cancellation notification error:', notificationError);
+          }
+        })();
+
+        res.json({
+          success: true,
+          message: 'Job cancelled successfully',
+          job: {
+            id: cancelledJob.id,
+            jobNumber: cancelledJob.jobNumber,
+            status: cancelledJob.status,
+            cancelledAt: cancelledJob.cancelledAt
+          }
+        });
+
+      } catch (error) {
+        console.error('Job cancellation error:', error);
+        res.status(500).json({ 
+          success: false,
+          message: 'Failed to cancel job'
+        });
+      }
+    }
+  );
+
+  // Cleanup expired guest users (scheduled task endpoint)
+  app.post('/api/admin/cleanup-guests',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const deletedCount = await storage.cleanupExpiredGuestUsers();
+        res.json({
+          success: true,
+          message: `Cleaned up ${deletedCount} expired guest users`
+        });
+      } catch (error) {
+        console.error('Guest cleanup error:', error);
+        res.status(500).json({ 
+          message: 'Failed to cleanup guest users'
+        });
+      }
+    }
+  );
+
   // ==================== ERROR HANDLING ====================
   
   // Global error handler
