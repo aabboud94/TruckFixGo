@@ -610,6 +610,7 @@ export interface IStorage {
     limit?: number;
     offset?: number;
   }): Promise<any[]>;
+  getAdminUsers(): Promise<User[]>;
   getUserById(id: string): Promise<any>;
   updateUserStatus(userId: string, isActive: boolean): Promise<User | undefined>;
   updateUserRole(userId: string, newRole: typeof userRoleEnum.enumValues[number]): Promise<User | undefined>;
@@ -2093,6 +2094,24 @@ export class PostgreSQLStorage implements IStorage {
       }));
     } catch (error) {
       console.error('Error in getAllUsers:', error);
+      return [];
+    }
+  }
+
+  async getAdminUsers(): Promise<User[]> {
+    try {
+      const adminUsers = await db
+        .select()
+        .from(users)
+        .where(
+          and(
+            eq(users.role, 'admin'),
+            eq(users.isActive, true)
+          )
+        );
+      return adminUsers;
+    } catch (error) {
+      console.error('Error in getAdminUsers:', error);
       return [];
     }
   }

@@ -11360,6 +11360,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         );
 
+        // Send notification to all admin users about the new contractor application
+        emailService.sendNewContractorApplicationNotification(updatedApplication).catch((err: any) => {
+          console.error('Failed to notify admins about contractor application:', err);
+          // Don't fail the request if admin notification fails
+        });
+
         // Send confirmation email with login credentials
         try {
           const emailContent = `
@@ -15470,6 +15476,12 @@ The TruckFixGo Team
             }
           ).catch((err: any) => console.error('Fleet application email error:', err));
         }
+
+        // Send notification to all admin users
+        emailService.sendNewFleetApplicationNotification(application).catch((err: any) => {
+          console.error('Failed to notify admins about fleet application:', err);
+          // Don't fail the request if admin notification fails
+        });
 
         res.status(201).json({
           message: 'Fleet application submitted successfully',

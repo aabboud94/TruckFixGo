@@ -515,6 +515,284 @@ class EmailService {
       jobNumber: job.jobNumber
     });
   }
+
+  // Send new fleet application notification to all admins
+  async sendNewFleetApplicationNotification(application: any): Promise<void> {
+    try {
+      // Import storage dynamically to avoid circular dependencies
+      const { storage } = await import('../storage');
+      
+      // Get all admin users
+      const adminUsers = await storage.getAdminUsers();
+      
+      if (adminUsers.length === 0) {
+        console.log('[Email Service] No admin users found to notify about fleet application');
+        return;
+      }
+      
+      const appUrl = process.env.APP_URL || 'https://truckfixgo.com';
+      
+      // Generate email content
+      const subject = `New Fleet Application - ${application.companyName}`;
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; color: #333; background: #f5f5f5; }
+            .container { max-width: 600px; margin: 0 auto; background: white; }
+            .header { background: #1e3a5f; color: white; padding: 20px; text-align: center; }
+            .header h1 { margin: 0; font-size: 24px; }
+            .content { padding: 30px; }
+            .alert-banner { background: #4a90e2; color: white; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+            .details-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            .details-table th { background: #f8f9fa; padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; }
+            .details-table td { padding: 12px; border-bottom: 1px solid #dee2e6; }
+            .button { background: #4a90e2; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 20px; }
+            .button:hover { background: #357abd; }
+            .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🚚 TruckFixGo - New Fleet Application</h1>
+            </div>
+            <div class="content">
+              <div class="alert-banner">
+                📋 A new fleet application has been submitted and requires review
+              </div>
+              
+              <p>Hello Admin,</p>
+              <p>A new fleet has submitted an application to join the TruckFixGo platform:</p>
+              
+              <table class="details-table">
+                <tr>
+                  <th>Company Name</th>
+                  <td>${application.companyName}</td>
+                </tr>
+                <tr>
+                  <th>Fleet Size</th>
+                  <td>${application.fleetSize} vehicles</td>
+                </tr>
+                <tr>
+                  <th>Requested Tier</th>
+                  <td>${application.requestedTier || 'Standard'}</td>
+                </tr>
+                <tr>
+                  <th>DOT Number</th>
+                  <td>${application.dotNumber || 'Not provided'}</td>
+                </tr>
+                <tr>
+                  <th>MC Number</th>
+                  <td>${application.mcNumber || 'Not provided'}</td>
+                </tr>
+                <tr>
+                  <th>Primary Contact</th>
+                  <td>${application.primaryContactName}</td>
+                </tr>
+                <tr>
+                  <th>Contact Email</th>
+                  <td>${application.primaryContactEmail}</td>
+                </tr>
+                <tr>
+                  <th>Contact Phone</th>
+                  <td>${application.primaryContactPhone}</td>
+                </tr>
+                <tr>
+                  <th>Address</th>
+                  <td>${application.address}</td>
+                </tr>
+                <tr>
+                  <th>Submitted At</th>
+                  <td>${new Date(application.submittedAt || application.createdAt).toLocaleString()}</td>
+                </tr>
+              </table>
+              
+              <p>Please review this application and take appropriate action:</p>
+              
+              <center>
+                <a href="${appUrl}/admin/applications#fleet" class="button">Review Application</a>
+              </center>
+              
+              <p style="margin-top: 30px; font-size: 14px; color: #666;">
+                This is an automated notification. Please review the application promptly to ensure a smooth onboarding process.
+              </p>
+            </div>
+            <div class="footer">
+              <p>© ${new Date().getFullYear()} TruckFixGo - Fleet Management Platform</p>
+              <p style="font-size: 12px;">This email was sent to admins of TruckFixGo</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      // Send email to each admin
+      for (const admin of adminUsers) {
+        if (admin.email) {
+          try {
+            if (this.transporter && this.isVerified) {
+              await this.transporter.sendMail({
+                from: process.env.OFFICE365_EMAIL || 'admin@truckfixgo.com',
+                to: admin.email,
+                subject: subject,
+                html: html
+              });
+              console.log(`[Email Service] Notified admin ${admin.email} about fleet application`);
+            }
+          } catch (err) {
+            console.error(`[Email Service] Failed to notify admin ${admin.email} about fleet application:`, err);
+          }
+        }
+      }
+      
+      console.log(`[Email Service] Sent fleet application notifications to ${adminUsers.length} admin(s)`);
+    } catch (error) {
+      console.error('[Email Service] Error sending fleet application notifications:', error);
+    }
+  }
+
+  // Send new contractor application notification to all admins
+  async sendNewContractorApplicationNotification(application: any): Promise<void> {
+    try {
+      // Import storage dynamically to avoid circular dependencies
+      const { storage } = await import('../storage');
+      
+      // Get all admin users
+      const adminUsers = await storage.getAdminUsers();
+      
+      if (adminUsers.length === 0) {
+        console.log('[Email Service] No admin users found to notify about contractor application');
+        return;
+      }
+      
+      const appUrl = process.env.APP_URL || 'https://truckfixgo.com';
+      
+      // Generate email content
+      const subject = `New Contractor Application - ${application.companyName || `${application.firstName} ${application.lastName}`}`;
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; color: #333; background: #f5f5f5; }
+            .container { max-width: 600px; margin: 0 auto; background: white; }
+            .header { background: #1e3a5f; color: white; padding: 20px; text-align: center; }
+            .header h1 { margin: 0; font-size: 24px; }
+            .content { padding: 30px; }
+            .alert-banner { background: #28a745; color: white; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+            .details-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            .details-table th { background: #f8f9fa; padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; }
+            .details-table td { padding: 12px; border-bottom: 1px solid #dee2e6; }
+            .button { background: #28a745; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 20px; }
+            .button:hover { background: #218838; }
+            .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🔧 TruckFixGo - New Contractor Application</h1>
+            </div>
+            <div class="content">
+              <div class="alert-banner">
+                👷 A new contractor application has been submitted and requires review
+              </div>
+              
+              <p>Hello Admin,</p>
+              <p>A new contractor has submitted an application to join the TruckFixGo platform:</p>
+              
+              <table class="details-table">
+                <tr>
+                  <th>Name</th>
+                  <td>${application.firstName} ${application.lastName}</td>
+                </tr>
+                <tr>
+                  <th>Company Name</th>
+                  <td>${application.companyName || 'Individual Contractor'}</td>
+                </tr>
+                <tr>
+                  <th>Email</th>
+                  <td>${application.email}</td>
+                </tr>
+                <tr>
+                  <th>Phone</th>
+                  <td>${application.phone}</td>
+                </tr>
+                <tr>
+                  <th>Service Area</th>
+                  <td>${application.serviceArea || 'Not specified'}</td>
+                </tr>
+                <tr>
+                  <th>Service Radius</th>
+                  <td>${application.serviceRadius ? `${application.serviceRadius} miles` : 'Not specified'}</td>
+                </tr>
+                <tr>
+                  <th>Years of Experience</th>
+                  <td>${application.yearsExperience || 'Not specified'}</td>
+                </tr>
+                <tr>
+                  <th>Certifications</th>
+                  <td>${application.certifications || 'Not specified'}</td>
+                </tr>
+                <tr>
+                  <th>Insurance Provider</th>
+                  <td>${application.insuranceProvider || 'Not provided'}</td>
+                </tr>
+                <tr>
+                  <th>Application Status</th>
+                  <td>${application.status}</td>
+                </tr>
+                <tr>
+                  <th>Submitted At</th>
+                  <td>${new Date(application.createdAt).toLocaleString()}</td>
+                </tr>
+              </table>
+              
+              <p>Please review this application and verify the contractor's credentials:</p>
+              
+              <center>
+                <a href="${appUrl}/admin/applications#contractor" class="button">Review Application</a>
+              </center>
+              
+              <p style="margin-top: 30px; font-size: 14px; color: #666;">
+                This is an automated notification. Please review the application and verify all documentation before approval.
+              </p>
+            </div>
+            <div class="footer">
+              <p>© ${new Date().getFullYear()} TruckFixGo - Contractor Management Platform</p>
+              <p style="font-size: 12px;">This email was sent to admins of TruckFixGo</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      // Send email to each admin
+      for (const admin of adminUsers) {
+        if (admin.email) {
+          try {
+            if (this.transporter && this.isVerified) {
+              await this.transporter.sendMail({
+                from: process.env.OFFICE365_EMAIL || 'admin@truckfixgo.com',
+                to: admin.email,
+                subject: subject,
+                html: html
+              });
+              console.log(`[Email Service] Notified admin ${admin.email} about contractor application`);
+            }
+          } catch (err) {
+            console.error(`[Email Service] Failed to notify admin ${admin.email} about contractor application:`, err);
+          }
+        }
+      }
+      
+      console.log(`[Email Service] Sent contractor application notifications to ${adminUsers.length} admin(s)`);
+    } catch (error) {
+      console.error('[Email Service] Error sending contractor application notifications:', error);
+    }
+  }
 }
 
 // Export singleton instance
