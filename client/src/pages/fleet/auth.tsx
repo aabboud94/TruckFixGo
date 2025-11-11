@@ -36,14 +36,15 @@ export default function FleetAuth() {
   // Login mutation
   const loginMutation = useMutation({
     mutationFn: async (data: z.infer<typeof loginSchema>) => {
-      return await apiRequest("POST", "/api/fleet/login", data);
+      return await apiRequest("POST", "/api/auth/login", data);
     },
     onSuccess: () => {
       toast({
         title: "Login Successful",
-        description: "Welcome! Redirecting to your fleet dashboard..."
+        description: "Welcome back!"
       });
-      navigate("/fleet/dashboard");
+      // Reload the page to update auth context
+      window.location.href = "/fleet/dashboard";
     },
     onError: (error: any) => {
       toast({
