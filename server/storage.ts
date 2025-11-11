@@ -2593,7 +2593,7 @@ export class PostgreSQLStorage implements IStorage {
       } else {
         // Get the highest position in the queue for this contractor
         const maxPositionResult = await tx.select({
-          maxPosition: sql<number>`COALESCE(MAX(${contractorJobQueue.position}), 0)`
+          maxPosition: sql<number>`COALESCE(MAX(${contractorJobQueue.queuePosition}), 0)`
         })
         .from(contractorJobQueue)
         .where(and(
@@ -2614,12 +2614,12 @@ export class PostgreSQLStorage implements IStorage {
             // Increment their positions by 1 to make room for the new entry
             await tx.update(contractorJobQueue)
               .set({
-                position: sql`${contractorJobQueue.position} + 1`,
+                queuePosition: sql`${contractorJobQueue.queuePosition} + 1`,
                 updatedAt: new Date()
               })
               .where(and(
                 eq(contractorJobQueue.contractorId, contractorId),
-                gte(contractorJobQueue.position, priority),
+                gte(contractorJobQueue.queuePosition, priority),
                 or(
                   eq(contractorJobQueue.status, 'current'),
                   eq(contractorJobQueue.status, 'queued')
@@ -2673,7 +2673,7 @@ export class PostgreSQLStorage implements IStorage {
           eq(contractorJobQueue.status, 'queued')
         )
       ))
-      .orderBy(asc(contractorJobQueue.position));
+      .orderBy(asc(contractorJobQueue.queuePosition));
   }
 
   async getContractorCurrentJob(contractorId: string): Promise<{ job: Job | null; queueEntry: ContractorJobQueue | null }> {

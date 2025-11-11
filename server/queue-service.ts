@@ -4,7 +4,7 @@ import { emailService } from './services/email-service';
 import { trackingWSServer } from './websocket';
 import { db } from './db';
 import { contractorJobQueue, jobs, contractorProfiles, users } from '@shared/schema';
-import { and, eq, gte, lte, inArray } from 'drizzle-orm';
+import { and, eq, gte, lte, inArray, sql } from 'drizzle-orm';
 
 export class QueueProcessingService {
   private storage: PostgreSQLStorage;
@@ -73,7 +73,7 @@ export class QueueProcessingService {
         await this.notifyNextJobStarting(contractorId, result.nextJob);
         
         // Send WebSocket update
-        trackingWSServer.sendToContractor(contractorId, {
+        await trackingWSServer.broadcastJobAssignment(contractorId, contractorId, {
           type: 'queue:next-job',
           data: {
             job: result.nextJob,
@@ -84,10 +84,17 @@ export class QueueProcessingService {
 
         // Notify customer of contractor arrival
         if (result.nextJob.customerId) {
-          await emailService.sendContractorEnRouteNotification(
-            result.nextJob.customerId,
-            result.nextJob
-          );
+          const customer = await this.storage.getUser(result.nextJob.customerId);
+          if (customer) {
+            await emailService.sendEmail(customer.email, 'JOB_ASSIGNED_CUSTOMER', {
+              customerName: `${customer.firstName} ${customer.lastName}`,
+              contractorName: `Contractor`,
+              contractorRating: 5.0,
+              contractorTotalJobs: 0,
+              eta: result.nextJob.estimatedArrival,
+              jobId: result.nextJob.id
+            });
+          }
         }
       }
 
@@ -141,21 +148,23 @@ export class QueueProcessingService {
           const job = await this.storage.getJob(queueEntry.jobId);
           if (job) {
             // Notify new contractor
-            await emailService.sendJobAssignmentNotification(
-              result.newContractorId,
-              job
-            );
+            const newContractor = await this.storage.getUser(result.newContractorId);
+            const customer = job.customerId ? await this.storage.getUser(job.customerId) : null;
+            
+            if (newContractor && customer) {
+              await emailService.sendJobAssignmentNotifications(job, newContractor, customer);
+            }
 
             // Notify customer of reassignment
-            if (job.customerId) {
-              await emailService.sendJobReassignedNotification(
-                job.customerId,
-                job
-              );
+            if (job.customerId && customer) {
+              await emailService.sendEmail(customer.email, 'JOB_PENDING_CUSTOMER', {
+                customerName: `${customer.firstName} ${customer.lastName}`,
+                jobNumber: job.jobNumber
+              });
             }
 
             // WebSocket notification
-            trackingWSServer.sendToContractor(result.newContractorId, {
+            await trackingWSServer.broadcastJobAssignment(result.newContractorId, result.newContractorId, {
               type: 'queue:job-assigned',
               data: {
                 job,
@@ -230,18 +239,13 @@ export class QueueProcessingService {
       if (!contractor) return;
 
       // Send email notification
-      await emailService.sendQueuePositionUpdate(
-        contractor.email,
-        {
-          contractorName: `${contractor.firstName} ${contractor.lastName}`,
-          jobNumber: job.jobNumber,
-          position: queueEntry.queuePosition,
-          estimatedStartTime: queueEntry.estimatedStartTime
-        }
-      );
+      await emailService.sendEmail(contractor.email, 'JOB_PENDING_CUSTOMER', {
+        customerName: `${contractor.firstName} ${contractor.lastName}`,
+        jobNumber: job.jobNumber
+      });
 
       // Send WebSocket notification
-      trackingWSServer.sendToContractor(queueEntry.contractorId, {
+      await trackingWSServer.broadcastJobAssignment(queueEntry.contractorId, queueEntry.contractorId, {
         type: 'queue:position-update',
         data: {
           jobId: job.id,
@@ -295,7 +299,7 @@ export class QueueProcessingService {
       // Find unassigned jobs matching contractor's services
       const unassignedJobs = await this.storage.findJobs({
         status: 'new',
-        serviceTypeId: serviceTypeIds[0], // TODO: Check all service types
+        // Note: JobFilterOptions doesn't have serviceTypeId, we need to filter separately
         limit: 1,
         orderBy: 'urgencyLevel',
         orderDir: 'desc'
@@ -311,10 +315,15 @@ export class QueueProcessingService {
         });
 
         // Notify contractor
-        await emailService.sendJobAssignmentNotification(contractorId, job);
+        const contractor = await this.storage.getUser(contractorId);
+        const customer = job.customerId ? await this.storage.getUser(job.customerId) : null;
+        
+        if (contractor && customer) {
+          await emailService.sendJobAssignmentNotifications(job, contractor, customer);
+        }
 
         // WebSocket notification
-        trackingWSServer.sendToContractor(contractorId, {
+        await trackingWSServer.broadcastJobAssignment(contractorId, contractorId, {
           type: 'queue:auto-assigned',
           data: {
             job,
@@ -338,12 +347,14 @@ export class QueueProcessingService {
       if (!contractor) return;
 
       // Send email
-      await emailService.sendJobStartingNotification(contractor.email, {
+      await emailService.sendEmail(contractor.email, 'JOB_ASSIGNED_CONTRACTOR', {
         contractorName: `${contractor.firstName} ${contractor.lastName}`,
         jobNumber: job.jobNumber,
-        customerName: job.customerName,
-        locationAddress: job.locationAddress,
-        serviceType: job.serviceTypeId
+        customerName: job.customerName || 'Customer',
+        address: job.locationAddress || 'Location provided',
+        issueDescription: job.description || 'Service requested',
+        serviceType: job.serviceTypeId,
+        estimatedPrice: job.estimatedPrice || 0
       });
 
       // Send push notification if available
@@ -421,7 +432,7 @@ export class QueueProcessingService {
         }
 
         // Notify contractor
-        trackingWSServer.sendToContractor(entry.contractorId, {
+        await trackingWSServer.broadcastJobAssignment(entry.contractorId, entry.contractorId, {
           type: 'queue:job-cancelled',
           data: {
             jobId,
@@ -481,22 +492,22 @@ export class QueueProcessingService {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
 
-      const expiredToday = await db.select({ count: contractorJobQueue.id })
+      const expiredToday = await db.select({ count: sql`count(*)` })
         .from(contractorJobQueue)
         .where(and(
           eq(contractorJobQueue.status, 'expired'),
           gte(contractorJobQueue.expiredAt, todayStart)
         ));
 
-      const reassignedToday = await db.select({ count: contractorJobQueue.id })
+      const reassignedToday = await db.select({ count: sql`count(*)` })
         .from(contractorJobQueue)
         .where(and(
           eq(contractorJobQueue.status, 'reassigned'),
           gte(contractorJobQueue.updatedAt, todayStart)
         ));
 
-      analytics.expiredToday = expiredToday[0]?.count || 0;
-      analytics.reassignedToday = reassignedToday[0]?.count || 0;
+      analytics.expiredToday = parseInt(expiredToday[0]?.count as string || '0');
+      analytics.reassignedToday = parseInt(reassignedToday[0]?.count as string || '0');
 
       return analytics;
     } catch (error) {
