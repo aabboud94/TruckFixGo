@@ -902,6 +902,288 @@ export default function AdminFleets() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Fleet Application Details Dialog */}
+      <Dialog open={!!selectedApplication} onOpenChange={(open) => !open && setSelectedApplication(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Fleet Application Details</DialogTitle>
+            <DialogDescription>
+              Review complete fleet application information
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedApplication && (
+            <div className="space-y-6">
+              {/* Status Badge */}
+              <div className="flex items-center justify-between">
+                <Badge variant={
+                  selectedApplication.status === 'approved' ? 'default' :
+                  selectedApplication.status === 'rejected' ? 'destructive' :
+                  'secondary'
+                }>
+                  {selectedApplication.status.toUpperCase()}
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  Submitted: {selectedApplication.submittedAt ? format(new Date(selectedApplication.submittedAt), 'PPP') : 'N/A'}
+                </span>
+              </div>
+
+              {/* Company Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Company Information</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">Company Name</Label>
+                    <p className="font-medium" data-testid="text-company-name">{selectedApplication.companyName}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">DOT Number</Label>
+                    <p className="font-medium" data-testid="text-dot-number">{selectedApplication.dotNumber || 'N/A'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">MC Number</Label>
+                    <p className="font-medium" data-testid="text-mc-number">{selectedApplication.mcNumber || 'N/A'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">Tax ID</Label>
+                    <p className="font-medium" data-testid="text-tax-id">{selectedApplication.taxId || 'N/A'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">Business Type</Label>
+                    <p className="font-medium" data-testid="text-business-type">{selectedApplication.businessType || 'N/A'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">Requested Tier</Label>
+                    <p className="font-medium" data-testid="text-requested-tier">{selectedApplication.requestedTier || 'standard'}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Address Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Address</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1 md:col-span-2">
+                    <Label className="text-sm text-muted-foreground">Street Address</Label>
+                    <p className="font-medium" data-testid="text-address">{selectedApplication.address}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">City</Label>
+                    <p className="font-medium" data-testid="text-city">{selectedApplication.city}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">State</Label>
+                    <p className="font-medium" data-testid="text-state">{selectedApplication.state}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">ZIP Code</Label>
+                    <p className="font-medium" data-testid="text-zip">{selectedApplication.zip}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Fleet Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Fleet Information</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">Fleet Size</Label>
+                    <p className="font-medium" data-testid="text-fleet-size">
+                      <Truck className="inline h-4 w-4 mr-1" />
+                      {selectedApplication.fleetSize} vehicles
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">Vehicle Types</Label>
+                    <p className="font-medium" data-testid="text-vehicle-types">
+                      {selectedApplication.vehicleTypes?.join(', ') || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">Avg Monthly Services</Label>
+                    <p className="font-medium" data-testid="text-monthly-services">
+                      {selectedApplication.averageMonthlyServices || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">Service Needs</Label>
+                    <p className="font-medium" data-testid="text-service-needs">
+                      {selectedApplication.primaryServiceNeeds?.join(', ') || 'N/A'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Contact Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Contact Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Primary Contact */}
+                  <div>
+                    <h4 className="font-medium mb-3">Primary Contact</h4>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label className="text-sm text-muted-foreground">Name</Label>
+                        <p className="font-medium" data-testid="text-primary-name">{selectedApplication.primaryContactName}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-sm text-muted-foreground">Title</Label>
+                        <p className="font-medium" data-testid="text-primary-title">{selectedApplication.primaryContactTitle || 'N/A'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-sm text-muted-foreground">Phone</Label>
+                        <p className="font-medium" data-testid="text-primary-phone">{selectedApplication.primaryContactPhone}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-sm text-muted-foreground">Email</Label>
+                        <p className="font-medium" data-testid="text-primary-email">{selectedApplication.primaryContactEmail}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Billing Contact (if different) */}
+                  {selectedApplication.billingContactName && (
+                    <div>
+                      <h4 className="font-medium mb-3">Billing Contact</h4>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label className="text-sm text-muted-foreground">Name</Label>
+                          <p className="font-medium" data-testid="text-billing-name">{selectedApplication.billingContactName}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-sm text-muted-foreground">Phone</Label>
+                          <p className="font-medium" data-testid="text-billing-phone">{selectedApplication.billingContactPhone || 'N/A'}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-sm text-muted-foreground">Email</Label>
+                          <p className="font-medium" data-testid="text-billing-email">{selectedApplication.billingContactEmail}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Financial Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Financial Information</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">Requested Credit Limit</Label>
+                    <p className="font-medium" data-testid="text-credit-limit">
+                      <DollarSign className="inline h-4 w-4" />
+                      {selectedApplication.requestedCreditLimit ? 
+                        Number(selectedApplication.requestedCreditLimit).toLocaleString() : 'N/A'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">Preferred Payment Terms</Label>
+                    <p className="font-medium" data-testid="text-payment-terms">
+                      {selectedApplication.preferredPaymentTerms || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">Payment Methods</Label>
+                    <p className="font-medium" data-testid="text-payment-methods">
+                      {selectedApplication.paymentMethods?.join(', ') || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">EFS/Comdata Capable</Label>
+                    <p className="font-medium" data-testid="text-efs-capable">
+                      {selectedApplication.hasEfsComdata ? 'Yes' : 'No'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Additional Information */}
+              {selectedApplication.additionalInfo && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Additional Information</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="whitespace-pre-wrap" data-testid="text-additional-info">
+                      {selectedApplication.additionalInfo}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Documents */}
+              {selectedApplication.documents && selectedApplication.documents.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Submitted Documents</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {selectedApplication.documents.map((doc: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-2 border rounded">
+                          <span className="text-sm">{doc.type || doc.name}</span>
+                          <Badge variant="outline">{doc.status || 'Pending Review'}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            {selectedApplication?.status === 'pending' && (
+              <>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    const reason = prompt('Please enter rejection reason:');
+                    if (reason) {
+                      rejectApplicationMutation.mutate({
+                        applicationId: selectedApplication.id,
+                        reason
+                      });
+                    }
+                  }}
+                  disabled={rejectApplicationMutation.isPending}
+                  data-testid="button-dialog-reject"
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Reject Application
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={() => approveApplicationMutation.mutate(selectedApplication.id)}
+                  disabled={approveApplicationMutation.isPending}
+                  data-testid="button-dialog-approve"
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Approve Application
+                </Button>
+              </>
+            )}
+            <Button 
+              variant="outline" 
+              onClick={() => setSelectedApplication(null)}
+              data-testid="button-dialog-close"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
