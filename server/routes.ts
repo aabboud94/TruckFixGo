@@ -9175,12 +9175,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const jobLat = lat ? parseFloat(lat as string) : undefined;
         const jobLon = lon ? parseFloat(lon as string) : undefined;
         
+        // Ensure all contractors have profiles before fetching
+        const profileStats = await storage.ensureAllContractorsHaveProfiles();
+        if (profileStats.created > 0) {
+          console.log(`[API] Created ${profileStats.created} missing contractor profiles`);
+        }
+        
         // Use the enhanced method that includes queue information
         const contractors = await storage.getAvailableContractorsForAssignment(jobLat, jobLon);
+        
+        console.log(`[API] Returning ${contractors.length} available contractors`);
         res.json(contractors);
       } catch (error) {
         console.error('Error fetching available contractors:', error);
         res.status(500).json({ message: 'Failed to fetch available contractors' });
+      }
+    }
+  );
+
+  // Initialize contractor profiles for all contractors without one
+  app.post('/api/admin/contractors/initialize-profiles',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        console.log('[API] Admin requested contractor profile initialization');
+        
+        const result = await storage.ensureAllContractorsHaveProfiles();
+        
+        console.log(`[API] Profile initialization completed. Created: ${result.created}, Existing: ${result.existing}`);
+        
+        res.json({
+          success: true,
+          message: `Successfully initialized ${result.created} contractor profiles`,
+          stats: result
+        });
+      } catch (error) {
+        console.error('Error initializing contractor profiles:', error);
+        res.status(500).json({ message: 'Failed to initialize contractor profiles' });
       }
     }
   );
