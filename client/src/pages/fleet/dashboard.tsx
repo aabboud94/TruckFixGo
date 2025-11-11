@@ -34,10 +34,10 @@ export default function FleetDashboard() {
 
   // Check authentication and fetch user session
   const { data: session, isLoading: sessionLoading } = useQuery({
-    queryKey: ['/api/auth/session'],
+    queryKey: ['/api/auth/me'],
     queryFn: async () => {
       try {
-        return await apiRequest('GET', '/api/auth/session');
+        return await apiRequest('GET', '/api/auth/me');
       } catch (error) {
         return null;
       }
@@ -47,7 +47,7 @@ export default function FleetDashboard() {
   // Fetch fleet account data
   const { data: fleetData, isLoading: fleetLoading } = useQuery({
     queryKey: ['/api/fleet/accounts'],
-    enabled: !!session?.user?.id && session?.user?.role === 'fleet_manager',
+    enabled: !!session?.id && session?.role === 'fleet_manager',
     queryFn: async () => {
       // Get all fleet accounts for this user
       const accounts = await apiRequest('GET', '/api/fleet/accounts');
@@ -105,7 +105,7 @@ export default function FleetDashboard() {
 
   // Redirect to login if not authenticated
   useEffect(() => {
-    if (!sessionLoading && (!session?.user || session?.user?.role !== 'fleet_manager')) {
+    if (!sessionLoading && (!session || session?.role !== 'fleet_manager')) {
       setLocation('/fleet/login');
     }
   }, [session, sessionLoading, setLocation]);
@@ -134,7 +134,7 @@ export default function FleetDashboard() {
   }
 
   // Check if user is authenticated with fleet_manager role
-  if (!session?.user || session?.user?.role !== 'fleet_manager') {
+  if (!session || session?.role !== 'fleet_manager') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Card className="max-w-md w-full">
