@@ -541,7 +541,7 @@ export const contractorJobQueue = pgTable("contractor_job_queue", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   contractorId: varchar("contractor_id").notNull().references(() => users.id),
   jobId: varchar("job_id").notNull().references(() => jobs.id),
-  queuePosition: integer("queue_position").notNull(), // Queue position (1 = current/next, 2+ = queued)
+  queuePosition: integer("position").notNull(), // Queue position (1 = current/next, 2+ = queued)
   status: queueStatusEnum("status").notNull().default('queued'),
   queuedAt: timestamp("queued_at").notNull().defaultNow(),
   estimatedStartTime: timestamp("estimated_start_time"),
