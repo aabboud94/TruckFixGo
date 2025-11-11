@@ -50,27 +50,27 @@ export default function FleetLogin() {
           description: `Welcome back, ${result.user.firstName || result.user.email}!`
         });
         
-        // Redirect based on role
+        // Redirect based on role - using window.location for immediate redirect
         switch (userRole) {
           case "admin":
             // Admins should go to admin dashboard
-            setLocation("/admin");
+            window.location.href = "/admin";
             break;
           case "fleet_manager":
             // Fleet managers go to fleet dashboard
-            setLocation("/fleet/dashboard");
+            window.location.href = "/fleet/dashboard";
             break;
           case "contractor":
             // Contractors go to contractor dashboard
-            setLocation("/contractor/dashboard");
+            window.location.href = "/contractor/dashboard";
             break;
           case "driver":
             // Drivers go to homepage or driver dashboard
-            setLocation("/");
+            window.location.href = "/";
             break;
           default:
             // Default to fleet dashboard for fleet login page
-            setLocation("/fleet/dashboard");
+            window.location.href = "/fleet/dashboard";
         }
       } else {
         // If no role returned, default to fleet dashboard
@@ -78,7 +78,7 @@ export default function FleetLogin() {
           title: "Login Successful",
           description: "Welcome back to TruckFixGo"
         });
-        setLocation("/fleet/dashboard");
+        window.location.href = "/fleet/dashboard";
       }
     } catch (error) {
       console.error("Login error:", error);
@@ -143,7 +143,7 @@ export default function FleetLogin() {
                         <Input 
                           {...field} 
                           type="email" 
-                          placeholder="fleet@company.com"
+                          placeholder=""
                           disabled={isLoading}
                           data-testid="input-email"
                         />

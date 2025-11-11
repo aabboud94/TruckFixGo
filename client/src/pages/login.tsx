@@ -152,7 +152,7 @@ export default function Login() {
                         <Input 
                           {...field} 
                           type="email" 
-                          placeholder="your@email.com"
+                          placeholder=""
                           disabled={isLoading}
                           autoComplete="email"
                           data-testid="input-email"

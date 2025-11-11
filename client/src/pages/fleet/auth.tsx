@@ -136,7 +136,7 @@ export default function FleetAuth() {
                       <FormLabel>Email</FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder="fleet@company.com" 
+                          placeholder="" 
                           type="email" 
                           {...field} 
                           data-testid="input-email"

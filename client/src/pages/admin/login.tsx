@@ -100,7 +100,7 @@ export default function AdminLogin() {
                       <Input
                         {...field}
                         type="email"
-                        placeholder="admin@truckfixgo.com"
+                        placeholder=""
                         autoComplete="email"
                         data-testid="input-admin-email"
                       />

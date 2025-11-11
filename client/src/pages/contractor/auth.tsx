@@ -209,7 +209,7 @@ export default function ContractorAuth() {
                             <FormLabel>Email</FormLabel>
                             <FormControl>
                               <Input 
-                                placeholder="your@email.com" 
+                                placeholder="" 
                                 type="email" 
                                 {...field} 
                                 data-testid="input-login-email"
