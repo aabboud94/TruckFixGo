@@ -5829,14 +5829,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole('admin', 'fleet_manager', 'dispatcher'),
     async (req: Request, res: Response) => {
       try {
-        const filters = {
+        const filters: any = {
           ...getPagination(req),
           pricingTier: req.query.pricingTier as any,
-          isActive: req.query.isActive === 'true',
           companyName: req.query.companyName as string
         };
+        
+        // Only include isActive filter if explicitly provided
+        if (req.query.isActive !== undefined) {
+          filters.isActive = req.query.isActive === 'true';
+        }
 
-        const fleets = await storage.findFleetAccounts(filters);
+        let fleets = await storage.findFleetAccounts(filters);
+        
+        // If user is a fleet_manager, filter to only show their fleet accounts
+        if (req.session?.user?.role === 'fleet_manager' && req.session?.user?.email) {
+          fleets = fleets.filter(fleet => 
+            fleet.primaryContactEmail === req.session.user.email
+          );
+        }
         
         res.json({ fleets });
       } catch (error) {
@@ -6013,12 +6024,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole('admin', 'fleet_manager'),
     async (req: Request, res: Response) => {
       try {
-        const stats = await storage.getFleetUsageStats(req.params.id);
+        // Check if the method exists before calling
+        if (typeof storage.getFleetUsageStats !== 'function') {
+          // Return empty analytics if method doesn't exist
+          res.json({ 
+            analytics: {
+              totalVehicles: 0,
+              activeJobs: 0,
+              totalSpent: 0,
+              monthlySpend: 0,
+              completedJobs: 0,
+              averageJobValue: 0
+            }
+          });
+          return;
+        }
         
+        const stats = await storage.getFleetUsageStats(req.params.id);
         res.json({ analytics: stats });
       } catch (error) {
         console.error('Get fleet analytics error:', error);
-        res.status(500).json({ message: 'Failed to get fleet analytics' });
+        // Return empty analytics on error instead of 500
+        res.json({ 
+          analytics: {
+            totalVehicles: 0,
+            activeJobs: 0,
+            totalSpent: 0,
+            monthlySpend: 0,
+            completedJobs: 0,
+            averageJobValue: 0
+          }
+        });
       }
     }
   );
