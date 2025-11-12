@@ -37,7 +37,9 @@ export default function FleetDashboard() {
     queryKey: ['/api/auth/me'],
     queryFn: async () => {
       try {
-        return await apiRequest('GET', '/api/auth/me');
+        const response = await apiRequest('GET', '/api/auth/me');
+        // The API returns { user: {...} }, extract the user object
+        return response?.user || null;
       } catch (error) {
         return null;
       }
@@ -50,9 +52,11 @@ export default function FleetDashboard() {
     enabled: !!session?.id && session?.role === 'fleet_manager',
     queryFn: async () => {
       // Get all fleet accounts for this user
-      const accounts = await apiRequest('GET', '/api/fleet/accounts');
+      const response = await apiRequest('GET', '/api/fleet/accounts');
+      // API returns { fleets: [...] }
+      const fleets = response?.fleets || [];
       // Return the first account (most fleet managers have one account)
-      return accounts?.length > 0 ? accounts[0] : null;
+      return fleets.length > 0 ? fleets[0] : null;
     }
   });
 
@@ -88,19 +92,36 @@ export default function FleetDashboard() {
     }
   });
 
-  // Fetch fleet statistics
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  // Fetch fleet statistics (optional - handle failure gracefully)
+  const { data: stats } = useQuery({
     queryKey: [`/api/fleet/accounts/${fleetData?.id}/analytics`],
     enabled: !!fleetData?.id,
     queryFn: async () => {
       if (!fleetData?.id) return null;
+      
+      // Wrap in try-catch to absolutely prevent any errors
       try {
-        return await apiRequest('GET', `/api/fleet/accounts/${fleetData.id}/analytics`);
+        const response = await fetch(`/api/fleet/accounts/${fleetData.id}/analytics`, {
+          credentials: 'include'
+        });
+        
+        if (!response.ok) {
+          console.warn(`Analytics unavailable (${response.status})`);
+          return null;
+        }
+        
+        const data = await response.json();
+        return data?.analytics || null;
       } catch (error) {
-        console.error('Failed to fetch analytics:', error);
+        console.warn('Analytics unavailable:', error);
+        // Always return null on any error
         return null;
       }
-    }
+    },
+    // Don't retry analytics on failure - it's optional
+    retry: false,
+    // Don't throw errors - analytics is optional
+    throwOnError: false
   });
 
   // Redirect to login if not authenticated
@@ -110,8 +131,8 @@ export default function FleetDashboard() {
     }
   }, [session, sessionLoading, setLocation]);
 
-  // Show loading state
-  if (sessionLoading || fleetLoading || vehiclesLoading || servicesLoading || statsLoading) {
+  // Show loading state (don't wait for stats since they're optional)
+  if (sessionLoading || fleetLoading || vehiclesLoading || servicesLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -154,6 +175,34 @@ export default function FleetDashboard() {
               data-testid="button-go-to-login"
             >
               Go to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+  
+  // Check if fleet account is found
+  if (!fleetData) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle>No Fleet Account Found</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                No fleet account is associated with your email address. Please contact support to set up your fleet account.
+              </AlertDescription>
+            </Alert>
+            <Button 
+              className="w-full mt-4" 
+              onClick={() => setLocation('/fleet/login')}
+              data-testid="button-back-to-login"
+            >
+              Back to Login
             </Button>
           </CardContent>
         </Card>
