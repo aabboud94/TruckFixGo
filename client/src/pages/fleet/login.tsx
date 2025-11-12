@@ -45,40 +45,35 @@ export default function FleetLogin() {
       if (result.user && result.user.role) {
         const userRole = result.user.role;
         
-        toast({
-          title: "Login Successful",
-          description: `Welcome back, ${result.user.firstName || result.user.email}!`
-        });
-        
-        // Redirect based on role - using window.location for immediate redirect
+        // Don't show toast - just redirect immediately
+        // Redirect immediately - using assign for navigation
+        let redirectUrl = "/fleet/dashboard";
         switch (userRole) {
           case "admin":
-            // Admins should go to admin dashboard
-            window.location.href = "/admin";
+            redirectUrl = "/admin";
             break;
           case "fleet_manager":
-            // Fleet managers go to fleet dashboard
-            window.location.href = "/fleet/dashboard";
+            redirectUrl = "/fleet/dashboard";
             break;
           case "contractor":
-            // Contractors go to contractor dashboard
-            window.location.href = "/contractor/dashboard";
+            redirectUrl = "/contractor/dashboard";
             break;
           case "driver":
-            // Drivers go to homepage or driver dashboard
-            window.location.href = "/";
+            redirectUrl = "/";
             break;
           default:
-            // Default to fleet dashboard for fleet login page
-            window.location.href = "/fleet/dashboard";
+            redirectUrl = "/fleet/dashboard";
         }
+        console.log(`Login successful, redirecting ${userRole} user to ${redirectUrl}`);
+        // Force navigation by setting location.href
+        window.location.href = redirectUrl;
+        // Prevent any further execution
+        return;
       } else {
         // If no role returned, default to fleet dashboard
-        toast({
-          title: "Login Successful",
-          description: "Welcome back to TruckFixGo"
-        });
+        console.log("No role specified, redirecting to fleet dashboard");
         window.location.href = "/fleet/dashboard";
+        return;
       }
     } catch (error) {
       console.error("Login error:", error);
@@ -183,7 +178,7 @@ export default function FleetLogin() {
                   type="submit" 
                   className="w-full" 
                   disabled={isLoading}
-                  data-testid="button-login"
+                  data-testid="button-fleet-sign-in"
                 >
                   {isLoading ? (
                     "Signing in..."
