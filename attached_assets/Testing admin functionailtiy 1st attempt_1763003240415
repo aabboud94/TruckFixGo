@@ -1,0 +1,357 @@
+{
+    "title": "Testing admin functionailtiy",
+    "steps": [
+        {
+            "type": "setViewport",
+            "width": 1661,
+            "height": 947,
+            "deviceScaleFactor": 1,
+            "isMobile": false,
+            "hasTouch": false,
+            "isLandscape": false
+        },
+        {
+            "type": "navigate",
+            "url": "https://replit.com/@aabboud94/TruckFixGo",
+            "assertedEvents": [
+                {
+                    "type": "navigation",
+                    "url": "https://replit.com/@aabboud94/TruckFixGo",
+                    "title": "TruckFixGo - Replit"
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin%2Fsupport&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Dashboard"
+                ],
+                [
+                    "[data-testid='sidebar-dashboard']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"sidebar-dashboard\"]"
+                ],
+                [
+                    "pierce/[data-testid='sidebar-dashboard']"
+                ]
+            ],
+            "offsetY": 18.04735565185547,
+            "offsetX": 175.01388931274414,
+            "frame": [
+                0
+            ],
+            "assertedEvents": [
+                {
+                    "type": "navigation"
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin%2Fsupport&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Analytics",
+                    "aria/[role=\"generic\"]"
+                ],
+                [
+                    "div.min-h-0 > div:nth-of-type(1) li:nth-of-type(2) span"
+                ],
+                [
+                    "xpath///*[@data-testid=\"sidebar-analytics\"]/span"
+                ],
+                [
+                    "pierce/div.min-h-0 > div:nth-of-type(1) li:nth-of-type(2) span"
+                ],
+                [
+                    "text/Analytics"
+                ]
+            ],
+            "offsetY": 15.065032958984375,
+            "offsetX": 59.05366516113281,
+            "frame": [
+                0
+            ],
+            "assertedEvents": [
+                {
+                    "type": "navigation"
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin%2Fsupport&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/SLA & Response"
+                ],
+                [
+                    "#radix-\\:r1\\:-trigger-sla"
+                ],
+                [
+                    "xpath///*[@id=\"radix-:r1:-trigger-sla\"]"
+                ],
+                [
+                    "pierce/#radix-\\:r1\\:-trigger-sla"
+                ],
+                [
+                    "text/SLA & Response"
+                ]
+            ],
+            "offsetY": 15.059356689453125,
+            "offsetX": 68.39144897460938,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin%2Fsupport&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Revenue"
+                ],
+                [
+                    "#radix-\\:r1\\:-trigger-revenue"
+                ],
+                [
+                    "xpath///*[@id=\"radix-:r1:-trigger-revenue\"]"
+                ],
+                [
+                    "pierce/#radix-\\:r1\\:-trigger-revenue"
+                ],
+                [
+                    "text/Revenue"
+                ]
+            ],
+            "offsetY": 24.059356689453125,
+            "offsetX": 23.1351318359375,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin%2Fsupport&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Export PDF"
+                ],
+                [
+                    "[data-testid='button-export-pdf']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"button-export-pdf\"]"
+                ],
+                [
+                    "pierce/[data-testid='button-export-pdf']"
+                ],
+                [
+                    "text/Export PDF"
+                ]
+            ],
+            "offsetY": 18.031570434570312,
+            "offsetX": 99.01080322265625,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin%2Fsupport&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Export CSV"
+                ],
+                [
+                    "[data-testid='button-export-csv']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"button-export-csv\"]"
+                ],
+                [
+                    "pierce/[data-testid='button-export-csv']"
+                ],
+                [
+                    "text/Export CSV"
+                ]
+            ],
+            "offsetY": 10.031570434570312,
+            "offsetX": 106.7052001953125,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin%2Fsupport&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Fleet Analytics"
+                ],
+                [
+                    "#radix-\\:r1\\:-trigger-fleets"
+                ],
+                [
+                    "xpath///*[@id=\"radix-:r1:-trigger-fleets\"]"
+                ],
+                [
+                    "pierce/#radix-\\:r1\\:-trigger-fleets"
+                ],
+                [
+                    "text/Fleet Analytics"
+                ]
+            ],
+            "offsetY": 13.059356689453125,
+            "offsetX": 57.4912109375,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin%2Fsupport&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Operations"
+                ],
+                [
+                    "#radix-\\:r1\\:-trigger-operations"
+                ],
+                [
+                    "xpath///*[@id=\"radix-:r1:-trigger-operations\"]"
+                ],
+                [
+                    "pierce/#radix-\\:r1\\:-trigger-operations"
+                ]
+            ],
+            "offsetY": 21.059356689453125,
+            "offsetX": 36.863037109375,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin%2Fsupport&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Live Map live"
+                ],
+                [
+                    "[data-testid='sidebar-live-map']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"sidebar-live-map\"]"
+                ],
+                [
+                    "pierce/[data-testid='sidebar-live-map']"
+                ],
+                [
+                    "text/Live Maplive"
+                ]
+            ],
+            "offsetY": 15.120590209960938,
+            "offsetX": 138.01388931274414,
+            "frame": [
+                0
+            ],
+            "assertedEvents": [
+                {
+                    "type": "navigation"
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin%2Fsupport&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "div:nth-of-type(58) svg"
+                ],
+                [
+                    "xpath///*[@id=\"root\"]/div[2]/div[1]/div[2]/main/div/div/div[3]/div[1]/div[4]/div[58]/div/svg"
+                ],
+                [
+                    "pierce/div:nth-of-type(58) svg"
+                ]
+            ],
+            "offsetY": 14.986053466796875,
+            "offsetX": 8.01129150390625,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin%2Fsupport&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "body"
+                ],
+                [
+                    "xpath//html/body"
+                ],
+                [
+                    "pierce/body"
+                ]
+            ],
+            "offsetY": 332,
+            "offsetX": 964,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin%2Fsupport&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "div.inset-0"
+                ],
+                [
+                    "xpath//html/body/div[2]"
+                ],
+                [
+                    "pierce/div.inset-0"
+                ]
+            ],
+            "offsetY": 304,
+            "offsetX": 124,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin%2Fsupport&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Jobs"
+                ],
+                [
+                    "[data-testid='sidebar-jobs']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"sidebar-jobs\"]"
+                ],
+                [
+                    "pierce/[data-testid='sidebar-jobs']"
+                ]
+            ],
+            "offsetY": 18.1357421875,
+            "offsetX": 103.01388931274414,
+            "frame": [
+                0
+            ],
+            "assertedEvents": [
+                {
+                    "type": "navigation"
+                }
+            ]
+        }
+    ]
+}

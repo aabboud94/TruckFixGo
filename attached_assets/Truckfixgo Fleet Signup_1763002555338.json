@@ -1,0 +1,1312 @@
+{
+    "title": "Truckfixgo Fleet Signup",
+    "steps": [
+        {
+            "type": "setViewport",
+            "width": 1424,
+            "height": 947,
+            "deviceScaleFactor": 1,
+            "isMobile": false,
+            "hasTouch": false,
+            "isLandscape": false
+        },
+        {
+            "type": "navigate",
+            "url": "https://replit.com/@aabboud94/TruckFixGo",
+            "assertedEvents": [
+                {
+                    "type": "navigation",
+                    "url": "https://replit.com/@aabboud94/TruckFixGo",
+                    "title": "TruckFixGo - Replit"
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "aria/Create Fleet Account"
+                ],
+                [
+                    "[data-testid='button-fleet-account']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"button-fleet-account\"]"
+                ],
+                [
+                    "pierce/[data-testid='button-fleet-account']"
+                ],
+                [
+                    "text/Create Fleet"
+                ]
+            ],
+            "offsetY": 8.15533447265625,
+            "offsetX": 158.81378173828125,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "aria/Company Name *"
+                ],
+                [
+                    "[data-testid='input-company-name']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-company-name\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-company-name']"
+                ]
+            ],
+            "offsetY": 19.026519775390625,
+            "offsetX": 197.81629180908203,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "change",
+            "value": "F",
+            "selectors": [
+                [
+                    "aria/Company Name *"
+                ],
+                [
+                    "[data-testid='input-company-name']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-company-name\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-company-name']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyUp",
+            "key": "f",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "change",
+            "value": "Fleet signup 1",
+            "selectors": [
+                [
+                    "aria/Company Name *"
+                ],
+                [
+                    "[data-testid='input-company-name']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-company-name\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-company-name']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "div.space-y-4 > div.grid > div:nth-of-type(1)"
+                ],
+                [
+                    "xpath///*[@id=\"root\"]/div[2]/div/div/div[2]/form/div[1]/div[3]/div[1]"
+                ],
+                [
+                    "pierce/div.space-y-4 > div.grid > div:nth-of-type(1)"
+                ],
+                [
+                    "text/DOT NumberOptional"
+                ]
+            ],
+            "offsetY": 73.05368041992188,
+            "offsetX": 122.81629180908203,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "doubleClick",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "div.space-y-4 > div.grid > div:nth-of-type(1)"
+                ],
+                [
+                    "xpath///*[@id=\"root\"]/div[2]/div/div/div[2]/form/div[1]/div[3]/div[1]"
+                ],
+                [
+                    "pierce/div.space-y-4 > div.grid > div:nth-of-type(1)"
+                ],
+                [
+                    "text/DOT NumberOptional"
+                ]
+            ],
+            "offsetY": 68.05368041992188,
+            "offsetX": 123.81629180908203,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "aria/DOT Number"
+                ],
+                [
+                    "[data-testid='input-dot-number']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-dot-number\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-dot-number']"
+                ]
+            ],
+            "offsetY": 28.0618896484375,
+            "offsetX": 132.81629180908203,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "change",
+            "value": "1234567",
+            "selectors": [
+                [
+                    "aria/DOT Number"
+                ],
+                [
+                    "[data-testid='input-dot-number']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-dot-number\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-dot-number']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "change",
+            "value": "123456",
+            "selectors": [
+                [
+                    "aria/MC Number"
+                ],
+                [
+                    "[data-testid='input-mc-number']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-mc-number\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-mc-number']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "html"
+                ],
+                [
+                    "xpath//html"
+                ],
+                [
+                    "pierce/html"
+                ]
+            ],
+            "offsetY": 485.40403747558594,
+            "offsetX": 337,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "aria/Full Name *"
+                ],
+                [
+                    "[data-testid='input-contact-name']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-contact-name\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-contact-name']"
+                ]
+            ],
+            "offsetY": 30.5618896484375,
+            "offsetX": 140.81629180908203,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "change",
+            "value": "T",
+            "selectors": [
+                [
+                    "aria/Full Name *"
+                ],
+                [
+                    "[data-testid='input-contact-name']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-contact-name\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-contact-name']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyUp",
+            "key": "t",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "change",
+            "value": "Test fleet name 1",
+            "selectors": [
+                [
+                    "aria/Full Name *"
+                ],
+                [
+                    "[data-testid='input-contact-name']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-contact-name\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-contact-name']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "change",
+            "value": "5864043793",
+            "selectors": [
+                [
+                    "aria/Phone Number *"
+                ],
+                [
+                    "[data-testid='input-contact-phone']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-contact-phone\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-contact-phone']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "aria/Email Address *"
+                ],
+                [
+                    "[data-testid='input-contact-email']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-contact-email\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-contact-email']"
+                ]
+            ],
+            "offsetY": 17.59722900390625,
+            "offsetX": 137.82199096679688,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "change",
+            "value": "testfleet@",
+            "selectors": [
+                [
+                    "aria/Email Address *"
+                ],
+                [
+                    "[data-testid='input-contact-email']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-contact-email\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-contact-email']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyUp",
+            "key": "2",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "change",
+            "value": "testfleet@google.com",
+            "selectors": [
+                [
+                    "aria/Email Address *"
+                ],
+                [
+                    "[data-testid='input-contact-email']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-contact-email\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-contact-email']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "aria/Next"
+                ],
+                [
+                    "[data-testid='button-next']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"button-next\"]"
+                ],
+                [
+                    "pierce/[data-testid='button-next']"
+                ],
+                [
+                    "text/Next"
+                ]
+            ],
+            "offsetY": 2.63262939453125,
+            "offsetX": 34.08526611328125,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "aria/Billing Address *"
+                ],
+                [
+                    "[data-testid='input-billing-address']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-billing-address\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-billing-address']"
+                ]
+            ],
+            "offsetY": 20.026519775390625,
+            "offsetX": 185.23043823242188,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "change",
+            "value": "14285 Grandview dr",
+            "selectors": [
+                [
+                    "aria/Billing Address *"
+                ],
+                [
+                    "[data-testid='input-billing-address']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-billing-address\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-billing-address']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "change",
+            "value": "sterling heights",
+            "selectors": [
+                [
+                    "aria/City *"
+                ],
+                [
+                    "[data-testid='input-city']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-city\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-city']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "change",
+            "value": "mi",
+            "selectors": [
+                [
+                    "aria/State *"
+                ],
+                [
+                    "[data-testid='input-state']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-state\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-state']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "change",
+            "value": "48044",
+            "selectors": [
+                [
+                    "aria/ZIP Code *"
+                ],
+                [
+                    "[data-testid='input-zip']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-zip\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-zip']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "change",
+            "value": "testfleet@",
+            "selectors": [
+                [
+                    "aria/Billing Email *"
+                ],
+                [
+                    "[data-testid='input-billing-email']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-billing-email\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-billing-email']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyUp",
+            "key": "2",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "change",
+            "value": "testfleet@google.com",
+            "selectors": [
+                [
+                    "aria/Billing Email *"
+                ],
+                [
+                    "[data-testid='input-billing-email']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"input-billing-email\"]"
+                ],
+                [
+                    "pierce/[data-testid='input-billing-email']"
+                ]
+            ],
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "aria/Next"
+                ],
+                [
+                    "[data-testid='button-next']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"button-next\"]"
+                ],
+                [
+                    "pierce/[data-testid='button-next']"
+                ],
+                [
+                    "text/Next"
+                ]
+            ],
+            "offsetY": 35.149658203125,
+            "offsetX": 30.4993896484375,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "div.space-y-4 > div:nth-of-type(2) div:nth-of-type(1) > label"
+                ],
+                [
+                    "xpath///*[@data-testid=\"radio-payment-method\"]/div[1]/label"
+                ],
+                [
+                    "pierce/div.space-y-4 > div:nth-of-type(2) div:nth-of-type(1) > label"
+                ],
+                [
+                    "text/NET 30 Terms"
+                ]
+            ],
+            "offsetY": 20.026519775390625,
+            "offsetX": 90.84217834472656,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "div.space-y-4 > div:nth-of-type(3)"
+                ],
+                [
+                    "xpath///*[@id=\"root\"]/div[2]/div/div/div[2]/form/div[1]/div[3]"
+                ],
+                [
+                    "pierce/div.space-y-4 > div:nth-of-type(3)"
+                ]
+            ],
+            "offsetY": 70.04736328125,
+            "offsetX": 126.81629180908203,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "html"
+                ],
+                [
+                    "xpath//html"
+                ],
+                [
+                    "pierce/html"
+                ]
+            ],
+            "offsetY": 476.98988342285156,
+            "offsetX": 275,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "div:nth-of-type(4) div:nth-of-type(1) > label"
+                ],
+                [
+                    "xpath///*[@data-testid=\"radio-service-location\"]/div[1]/label"
+                ],
+                [
+                    "pierce/div:nth-of-type(4) div:nth-of-type(1) > label"
+                ],
+                [
+                    "text/On-site at our"
+                ]
+            ],
+            "offsetY": 14.80810546875,
+            "offsetX": 54.84217834472656,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "div:nth-of-type(5)"
+                ],
+                [
+                    "xpath///*[@id=\"root\"]/div[2]/div/div/div[2]/form/div[1]/div[5]"
+                ],
+                [
+                    "pierce/div:nth-of-type(5)"
+                ]
+            ],
+            "offsetY": 30.55810546875,
+            "offsetX": 78.81629180908203,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "html"
+                ],
+                [
+                    "xpath//html"
+                ],
+                [
+                    "pierce/html"
+                ]
+            ],
+            "offsetY": 681.4343414306641,
+            "offsetX": 205,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "aria/I agree to the terms and conditions *"
+                ],
+                [
+                    "[data-testid='checkbox-agree-terms']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"checkbox-agree-terms\"]"
+                ],
+                [
+                    "pierce/[data-testid='checkbox-agree-terms']"
+                ]
+            ],
+            "offsetY": 11.32769775390625,
+            "offsetX": 3.8162918090820312,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "aria/Submit Application"
+                ],
+                [
+                    "[data-testid='button-submit']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"button-submit\"]"
+                ],
+                [
+                    "pierce/[data-testid='button-submit']"
+                ],
+                [
+                    "text/Submit Application"
+                ]
+            ],
+            "offsetY": 29.09600830078125,
+            "offsetX": 160.97161865234375,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "selectors": [
+                [
+                    "aria/[role=\"status\"]",
+                    "aria/[role=\"button\"]"
+                ],
+                [
+                    "#root > div:nth-of-type(1) button"
+                ],
+                [
+                    "xpath///*[@id=\"root\"]/div[1]/ol/li/button"
+                ],
+                [
+                    "pierce/#root > div:nth-of-type(1) button"
+                ]
+            ],
+            "offsetY": 19.33587646484375,
+            "offsetX": 1.57452392578125,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "l"
+        },
+        {
+            "type": "keyUp",
+            "key": "l",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "o"
+        },
+        {
+            "type": "keyUp",
+            "key": "o",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "g"
+        },
+        {
+            "type": "keyUp",
+            "key": "g",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "a"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "d"
+        },
+        {
+            "type": "keyUp",
+            "key": "a",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyUp",
+            "key": "d",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "m"
+        },
+        {
+            "type": "keyUp",
+            "key": "m",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "i"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "n"
+        },
+        {
+            "type": "keyUp",
+            "key": "i",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyUp",
+            "key": "n",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "Backspace"
+        },
+        {
+            "type": "keyUp",
+            "key": "Backspace",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "Backspace"
+        },
+        {
+            "type": "keyUp",
+            "key": "Backspace",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "Backspace"
+        },
+        {
+            "type": "keyUp",
+            "key": "Backspace",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "Backspace"
+        },
+        {
+            "type": "keyUp",
+            "key": "Backspace",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "l"
+        },
+        {
+            "type": "keyUp",
+            "key": "l",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "o"
+        },
+        {
+            "type": "keyUp",
+            "key": "o",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "g"
+        },
+        {
+            "type": "keyUp",
+            "key": "g",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "i"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "n"
+        },
+        {
+            "type": "keyUp",
+            "key": "i",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyUp",
+            "key": "n",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "Enter"
+        },
+        {
+            "type": "keyUp",
+            "key": "Enter",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "Escape"
+        },
+        {
+            "type": "keyUp",
+            "key": "Escape",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "keyDown",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A",
+            "key": "Escape"
+        },
+        {
+            "type": "keyUp",
+            "key": "Escape",
+            "frame": [
+                0
+            ],
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Ar9h%3A"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#\\30 8e3ec4e-e133-40ed-bb84-801b575761c6 input"
+                ],
+                [
+                    "xpath///*[@id=\"08e3ec4e-e133-40ed-bb84-801b575761c6\"]/div[1]/div[2]/div[1]/div[1]/div/div/input"
+                ],
+                [
+                    "pierce/#\\30 8e3ec4e-e133-40ed-bb84-801b575761c6 input"
+                ]
+            ],
+            "offsetY": 3.002521514892578,
+            "offsetX": 71.5587158203125
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#\\30 8e3ec4e-e133-40ed-bb84-801b575761c6 input"
+                ],
+                [
+                    "xpath///*[@id=\"08e3ec4e-e133-40ed-bb84-801b575761c6\"]/div[1]/div[2]/div[1]/div[1]/div/div/input"
+                ],
+                [
+                    "pierce/#\\30 8e3ec4e-e133-40ed-bb84-801b575761c6 input"
+                ]
+            ],
+            "offsetY": 8.002521514892578,
+            "offsetX": 47.5587158203125
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#\\30 8e3ec4e-e133-40ed-bb84-801b575761c6 input"
+                ],
+                [
+                    "xpath///*[@id=\"08e3ec4e-e133-40ed-bb84-801b575761c6\"]/div[1]/div[2]/div[1]/div[1]/div/div/input"
+                ],
+                [
+                    "pierce/#\\30 8e3ec4e-e133-40ed-bb84-801b575761c6 input"
+                ]
+            ],
+            "offsetY": 17.002521514892578,
+            "offsetX": 43.5587158203125
+        }
+    ]
+}
