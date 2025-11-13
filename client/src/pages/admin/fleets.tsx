@@ -30,7 +30,6 @@ export default function AdminFleets() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedFleet, setSelectedFleet] = useState<any>(null);
   const [showFleetDetails, setShowFleetDetails] = useState(false);
-  const [showApprovalQueue, setShowApprovalQueue] = useState(false);
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
   const [selectedFleets, setSelectedFleets] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<"fleets" | "applications">("fleets");
@@ -48,11 +47,6 @@ export default function AdminFleets() {
     }
   });
 
-  // Query for pending approvals (deprecated - for backward compatibility)
-  const { data: pendingApprovals } = useQuery({
-    queryKey: ['/api/admin/fleets/pending'],
-    queryFn: async () => apiRequest('GET', '/api/admin/fleets/pending')
-  });
 
   // Query for fleet applications
   const { data: fleetApplicationsResponse, isLoading: isLoadingApplications, refetch: refetchApplications } = useQuery({
@@ -145,50 +139,6 @@ export default function AdminFleets() {
   });
 
   const fleetsData = Array.isArray(fleets) ? fleets : (fleets?.data || []);
-  
-  // Mock data fallback for development
-  const mockFleets = [
-    {
-      id: "FLT-001",
-      name: "ABC Transport",
-      contactName: "John Smith",
-      email: "john@abctransport.com",
-      phone: "(555) 123-4567",
-      status: "active",
-      tier: "gold",
-      creditLimit: 50000,
-      currentBalance: 12500,
-      paymentTerms: "NET30",
-      totalSpent: 245600,
-      totalJobs: 892,
-      avgMonthlySpend: 20467,
-      lastJobDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-      joinedDate: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
-      vehicles: 45,
-      customPricing: true,
-    },
-    {
-      id: "FLT-002",
-      name: "XYZ Logistics",
-      contactName: "Sarah Johnson",
-      email: "sarah@xyzlogistics.com",
-      phone: "(555) 987-6543",
-      status: "active",
-      tier: "silver",
-      creditLimit: 25000,
-      currentBalance: 5800,
-      paymentTerms: "NET15",
-      totalSpent: 128400,
-      totalJobs: 456,
-      avgMonthlySpend: 10700,
-      lastJobDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-      joinedDate: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
-      vehicles: 22,
-      customPricing: false,
-    },
-  ];
-
-  const pendingData = Array.isArray(pendingApprovals) ? pendingApprovals : (pendingApprovals?.data || []);
 
   const getTierBadge = (tier: string) => {
     const colorConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline', className?: string }> = {
@@ -239,13 +189,16 @@ export default function AdminFleets() {
             <Building2 className="mr-2 h-4 w-4" />
             Active Fleets
           </TabsTrigger>
-          <TabsTrigger value="applications" data-testid="tab-applications">
+          <TabsTrigger value="applications" data-testid="tab-applications" className="relative">
             <FileText className="mr-2 h-4 w-4" />
             Applications
-            {fleetApplications?.length > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {fleetApplications.length}
-              </Badge>
+            {fleetApplications?.filter((app: any) => app.status === 'pending').length > 0 && (
+              <>
+                <Badge variant="secondary" className="ml-2 bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                  {fleetApplications.filter((app: any) => app.status === 'pending').length}
+                </Badge>
+                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+              </>
             )}
           </TabsTrigger>
         </TabsList>
@@ -388,7 +341,31 @@ export default function AdminFleets() {
                           <p className="text-sm text-muted-foreground">{fleet.contactName}</p>
                         </div>
                       </TableCell>
-                      <TableCell>{getTierBadge(fleet.tier)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {getTierBadge(fleet.tier)}
+                          {fleet.status === 'active' ? (
+                            <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                              <CheckCircle className="mr-1 h-3 w-3" />
+                              ACTIVE
+                            </Badge>
+                          ) : fleet.status === 'suspended' ? (
+                            <Badge variant="destructive">
+                              <XCircle className="mr-1 h-3 w-3" />
+                              SUSPENDED
+                            </Badge>
+                          ) : fleet.status === 'overdue' ? (
+                            <Badge variant="secondary" className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                              <AlertCircle className="mr-1 h-3 w-3" />
+                              OVERDUE
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              {fleet.status?.toUpperCase()}
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div>
                           <div className="flex items-center gap-2">
@@ -452,12 +429,23 @@ export default function AdminFleets() {
 
         {/* Applications Tab */}
         <TabsContent value="applications">
-          <Card>
+          <Card className={fleetApplications?.filter((app: any) => app.status === 'pending').length > 0 
+            ? "border-yellow-200 dark:border-yellow-900 bg-yellow-50/30 dark:bg-yellow-900/10" 
+            : ""}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Fleet Applications</CardTitle>
-                  <CardDescription>Review and manage pending fleet applications</CardDescription>
+                  <CardTitle className="flex items-center gap-2">
+                    {fleetApplications?.filter((app: any) => app.status === 'pending').length > 0 && (
+                      <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                    )}
+                    Fleet Applications
+                  </CardTitle>
+                  <CardDescription>
+                    {fleetApplications?.filter((app: any) => app.status === 'pending').length > 0 
+                      ? `${fleetApplications.filter((app: any) => app.status === 'pending').length} pending applications require review`
+                      : "Review and manage fleet applications"}
+                  </CardDescription>
                 </div>
                 <Button
                   variant="outline"
@@ -498,7 +486,17 @@ export default function AdminFleets() {
                     </TableRow>
                   ) : (
                     fleetApplications.map((application: any) => (
-                      <TableRow key={application.id} data-testid={`application-row-${application.id}`}>
+                      <TableRow 
+                        key={application.id} 
+                        data-testid={`application-row-${application.id}`}
+                        className={application.status === 'pending' 
+                          ? 'bg-yellow-50/50 dark:bg-yellow-900/20 border-l-4 border-l-yellow-500' 
+                          : application.status === 'approved'
+                          ? 'bg-green-50/30 dark:bg-green-900/10 border-l-4 border-l-green-500'
+                          : application.status === 'rejected'
+                          ? 'bg-red-50/30 dark:bg-red-900/10 border-l-4 border-l-red-500'
+                          : ''}
+                      >
                         <TableCell className="font-medium">{application.companyName}</TableCell>
                         <TableCell>{application.primaryContactName}</TableCell>
                         <TableCell>{application.primaryContactEmail}</TableCell>
@@ -506,8 +504,24 @@ export default function AdminFleets() {
                         <TableCell>{application.fleetSize} vehicles</TableCell>
                         <TableCell>{new Date(application.submittedAt || application.createdAt).toLocaleDateString()}</TableCell>
                         <TableCell>
-                          <Badge variant={application.status === 'pending' ? 'secondary' : 'default'}>
-                            {application.status}
+                          <Badge 
+                            variant={
+                              application.status === 'pending' ? 'secondary' : 
+                              application.status === 'approved' ? 'default' :
+                              application.status === 'rejected' ? 'destructive' :
+                              'secondary'
+                            }
+                            className={
+                              application.status === 'pending' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' : 
+                              application.status === 'approved' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                              application.status === 'rejected' ? '' :
+                              ''
+                            }
+                          >
+                            {application.status === 'pending' && <Clock className="mr-1 h-3 w-3" />}
+                            {application.status === 'approved' && <CheckCircle className="mr-1 h-3 w-3" />}
+                            {application.status === 'rejected' && <XCircle className="mr-1 h-3 w-3" />}
+                            {application.status?.toUpperCase()}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -762,86 +776,6 @@ export default function AdminFleets() {
         </DialogContent>
       </Dialog>
 
-      {/* Approval Queue Dialog */}
-      <Dialog open={showApprovalQueue} onOpenChange={setShowApprovalQueue}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Fleet Application Queue</DialogTitle>
-            <DialogDescription>
-              Review and approve pending fleet applications
-            </DialogDescription>
-          </DialogHeader>
-          
-          <ScrollArea className="h-[400px]">
-            <div className="space-y-4">
-              {pendingData.map((fleet: any) => (
-                <Card key={fleet.id}>
-                  <CardContent className="pt-6">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-semibold">{fleet.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Contact: {fleet.contactName}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {fleet.email} • {fleet.phone}
-                          </p>
-                        </div>
-                        <Badge>{fleet.requestedTier}</Badge>
-                      </div>
-                      
-                      <div className="grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <p className="text-muted-foreground">Est. Monthly Volume</p>
-                          <p className="font-semibold">
-                            ${(fleet.estimatedMonthlyVolume ?? 0).toLocaleString()}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Number of Vehicles</p>
-                          <p className="font-semibold">{fleet.numberOfVehicles ?? 0}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Submitted</p>
-                          <p className="font-semibold">
-                            {fleet.submittedAt ? format(fleet.submittedAt, 'MMM d, yyyy') : 'N/A'}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex gap-2">
-                        <Button
-                          className="flex-1"
-                          onClick={() => {
-                            // Approve fleet
-                            setShowApprovalQueue(false);
-                            toast({
-                              title: "Fleet approved",
-                              description: "Fleet account has been approved",
-                            });
-                          }}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() => {
-                            // Reject fleet
-                          }}
-                        >
-                          Reject
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
 
       {/* Generate Invoices Dialog */}
       <Dialog open={showInvoiceDialog} onOpenChange={setShowInvoiceDialog}>
