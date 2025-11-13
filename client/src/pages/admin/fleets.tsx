@@ -393,28 +393,28 @@ export default function AdminFleets() {
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-sm">
-                              ${fleet.currentBalance.toLocaleString()} / ${fleet.creditLimit.toLocaleString()}
+                              ${(fleet.currentBalance ?? 0).toLocaleString()} / ${(fleet.creditLimit ?? 0).toLocaleString()}
                             </span>
                           </div>
                           <Progress 
-                            value={(fleet.currentBalance / fleet.creditLimit) * 100}
+                            value={fleet.creditLimit ? ((fleet.currentBalance ?? 0) / fleet.creditLimit) * 100 : 0}
                             className="mt-1 h-1.5"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
-                            {fleet.paymentTerms}
+                            {fleet.paymentTerms || 'N/A'}
                           </p>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Truck className="h-4 w-4 text-muted-foreground" />
-                          {fleet.vehicles}
+                          {fleet.vehicles ?? 0}
                         </div>
                       </TableCell>
-                      <TableCell>${fleet.totalSpent.toLocaleString()}</TableCell>
-                      <TableCell>${fleet.avgMonthlySpend.toLocaleString()}</TableCell>
-                      <TableCell>{fleet.totalJobs}</TableCell>
-                      <TableCell>{format(fleet.lastJobDate, 'MMM d, yyyy')}</TableCell>
+                      <TableCell>${(fleet.totalSpent ?? 0).toLocaleString()}</TableCell>
+                      <TableCell>${(fleet.avgMonthlySpend ?? 0).toLocaleString()}</TableCell>
+                      <TableCell>{fleet.totalJobs ?? 0}</TableCell>
+                      <TableCell>{fleet.lastJobDate ? format(fleet.lastJobDate, 'MMM d, yyyy') : 'Never'}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
                           <Button
@@ -627,7 +627,7 @@ export default function AdminFleets() {
                   </div>
                   <div className="space-y-2">
                     <Label>Joined Date</Label>
-                    <Input value={format(selectedFleet.joinedDate, 'PPP')} readOnly />
+                    <Input value={selectedFleet?.joinedDate ? format(selectedFleet.joinedDate, 'PPP') : 'N/A'} readOnly />
                   </div>
                 </div>
               </TabsContent>
@@ -641,10 +641,10 @@ export default function AdminFleets() {
                         Override standard tier pricing
                       </p>
                     </div>
-                    <Checkbox checked={selectedFleet.customPricing} />
+                    <Checkbox checked={selectedFleet?.customPricing ?? false} />
                   </div>
                   
-                  {selectedFleet.customPricing && (
+                  {selectedFleet?.customPricing && (
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-sm">Custom Price Configuration</CardTitle>
@@ -681,7 +681,7 @@ export default function AdminFleets() {
                       <Label>Credit Limit</Label>
                       <Input
                         type="number"
-                        defaultValue={selectedFleet.creditLimit}
+                        defaultValue={selectedFleet?.creditLimit ?? 0}
                         onChange={(e) => {
                           // Update credit limit
                         }}
@@ -689,7 +689,7 @@ export default function AdminFleets() {
                     </div>
                     <div className="space-y-2">
                       <Label>Payment Terms</Label>
-                      <Select defaultValue={selectedFleet.paymentTerms}>
+                      <Select defaultValue={selectedFleet?.paymentTerms || 'NET30'}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -713,14 +713,16 @@ export default function AdminFleets() {
                         <div className="flex justify-between">
                           <span>Outstanding Balance</span>
                           <span className="font-semibold">
-                            ${selectedFleet.currentBalance.toLocaleString()}
+                            ${(selectedFleet?.currentBalance ?? 0).toLocaleString()}
                           </span>
                         </div>
                         <Progress
-                          value={(selectedFleet.currentBalance / selectedFleet.creditLimit) * 100}
+                          value={selectedFleet?.creditLimit ? ((selectedFleet?.currentBalance ?? 0) / selectedFleet.creditLimit) * 100 : 0}
                         />
                         <p className="text-xs text-muted-foreground">
-                          {((selectedFleet.currentBalance / selectedFleet.creditLimit) * 100).toFixed(1)}% of credit limit used
+                          {selectedFleet?.creditLimit 
+                            ? `${((selectedFleet?.currentBalance ?? 0) / selectedFleet.creditLimit * 100).toFixed(1)}% of credit limit used`
+                            : 'No credit limit set'}
                         </p>
                       </div>
                     </CardContent>
@@ -731,7 +733,7 @@ export default function AdminFleets() {
               <TabsContent value="vehicles">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-medium">Fleet Vehicles ({selectedFleet.vehicles})</h3>
+                    <h3 className="font-medium">Fleet Vehicles ({selectedFleet?.vehicles ?? 0})</h3>
                     <Button size="sm">
                       Add Vehicle
                     </Button>
@@ -793,17 +795,17 @@ export default function AdminFleets() {
                         <div>
                           <p className="text-muted-foreground">Est. Monthly Volume</p>
                           <p className="font-semibold">
-                            ${fleet.estimatedMonthlyVolume.toLocaleString()}
+                            ${(fleet.estimatedMonthlyVolume ?? 0).toLocaleString()}
                           </p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Number of Vehicles</p>
-                          <p className="font-semibold">{fleet.numberOfVehicles}</p>
+                          <p className="font-semibold">{fleet.numberOfVehicles ?? 0}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Submitted</p>
                           <p className="font-semibold">
-                            {format(fleet.submittedAt, 'MMM d, yyyy')}
+                            {fleet.submittedAt ? format(fleet.submittedAt, 'MMM d, yyyy') : 'N/A'}
                           </p>
                         </div>
                       </div>
