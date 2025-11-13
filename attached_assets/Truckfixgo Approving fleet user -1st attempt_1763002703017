@@ -1,0 +1,284 @@
+{
+    "title": "Truckfixgo Approving fleet user",
+    "steps": [
+        {
+            "type": "setViewport",
+            "width": 1424,
+            "height": 947,
+            "deviceScaleFactor": 1,
+            "isMobile": false,
+            "hasTouch": false,
+            "isLandscape": false
+        },
+        {
+            "type": "navigate",
+            "url": "https://replit.com/@aabboud94/TruckFixGo",
+            "assertedEvents": [
+                {
+                    "type": "navigation",
+                    "url": "https://replit.com/@aabboud94/TruckFixGo",
+                    "title": "TruckFixGo - Replit"
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Sign In"
+                ],
+                [
+                    "[data-testid='button-login']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"button-login\"]"
+                ],
+                [
+                    "pierce/[data-testid='button-login']"
+                ],
+                [
+                    "text/Sign In"
+                ]
+            ],
+            "offsetY": 10.113037109375,
+            "offsetX": 270.81378173828125,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Fleet Accounts"
+                ],
+                [
+                    "[data-testid='sidebar-fleet-accounts']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"sidebar-fleet-accounts\"]"
+                ],
+                [
+                    "pierce/[data-testid='sidebar-fleet-accounts']"
+                ]
+            ],
+            "offsetY": 24.18121337890625,
+            "offsetX": 172.01388931274414,
+            "frame": [
+                0
+            ],
+            "assertedEvents": [
+                {
+                    "type": "navigation"
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Fleet Accounts",
+                    "aria/[role=\"generic\"]"
+                ],
+                [
+                    "div.min-h-0 > div:nth-of-type(2) li:nth-of-type(5) span"
+                ],
+                [
+                    "xpath///*[@data-testid=\"sidebar-fleet-accounts\"]/span"
+                ],
+                [
+                    "pierce/div.min-h-0 > div:nth-of-type(2) li:nth-of-type(5) span"
+                ],
+                [
+                    "text/Fleet Accounts"
+                ]
+            ],
+            "offsetY": 8.183746337890625,
+            "offsetX": 25.053665161132812,
+            "frame": [
+                0
+            ],
+            "assertedEvents": [
+                {
+                    "type": "navigation",
+                    "url": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin&id=%3Arev%3A",
+                    "title": ""
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Error details (development only)"
+                ],
+                [
+                    "summary"
+                ],
+                [
+                    "xpath///*[@id=\"root\"]/div[2]/div/div/details/summary"
+                ],
+                [
+                    "pierce/summary"
+                ],
+                [
+                    "text/Error details"
+                ]
+            ],
+            "offsetY": 8.6357421875,
+            "offsetX": 67.529052734375,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Try Again"
+                ],
+                [
+                    "button.\\[border-color\\:var\\(--button-outline\\)\\]"
+                ],
+                [
+                    "xpath///*[@id=\"root\"]/div[2]/div/div/div/button[1]"
+                ],
+                [
+                    "pierce/button.\\[border-color\\:var\\(--button-outline\\)\\]"
+                ],
+                [
+                    "text/Try Again"
+                ]
+            ],
+            "offsetY": 7.109222412109375,
+            "offsetX": 69.529052734375,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Try Again"
+                ],
+                [
+                    "button.\\[border-color\\:var\\(--button-outline\\)\\]"
+                ],
+                [
+                    "xpath///*[@id=\"root\"]/div[2]/div/div/div/button[1]"
+                ],
+                [
+                    "pierce/button.\\[border-color\\:var\\(--button-outline\\)\\]"
+                ],
+                [
+                    "text/Try Again"
+                ]
+            ],
+            "offsetY": 30.650894165039062,
+            "offsetX": 78.529052734375,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Flogin&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Error details (development only)"
+                ],
+                [
+                    "summary"
+                ],
+                [
+                    "xpath///*[@id=\"root\"]/div[2]/div/div/details/summary"
+                ],
+                [
+                    "pierce/summary"
+                ],
+                [
+                    "text/Error details"
+                ]
+            ],
+            "offsetY": 10.6357421875,
+            "offsetX": 150.529052734375,
+            "frame": [
+                0
+            ]
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Back"
+                ],
+                [
+                    "#\\30 8e3ec4e-e133-40ed-bb84-801b575761c6 div.useView-module__etopAW__isHorizontal > div:nth-of-type(1) > button:nth-of-type(1)"
+                ],
+                [
+                    "xpath///*[@id=\"08e3ec4e-e133-40ed-bb84-801b575761c6\"]/div[1]/div[2]/div[1]/div[1]/button[1]"
+                ],
+                [
+                    "pierce/#\\30 8e3ec4e-e133-40ed-bb84-801b575761c6 div.useView-module__etopAW__isHorizontal > div:nth-of-type(1) > button:nth-of-type(1)"
+                ]
+            ],
+            "offsetY": 10.002521514892578,
+            "offsetX": 20.0069580078125
+        },
+        {
+            "type": "click",
+            "target": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin&id=%3Arev%3A",
+            "selectors": [
+                [
+                    "aria/Fleet Accounts"
+                ],
+                [
+                    "[data-testid='sidebar-fleet-accounts']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"sidebar-fleet-accounts\"]"
+                ],
+                [
+                    "pierce/[data-testid='sidebar-fleet-accounts']"
+                ]
+            ],
+            "offsetY": 20.18121337890625,
+            "offsetX": 164.01388931274414,
+            "frame": [
+                0
+            ],
+            "assertedEvents": [
+                {
+                    "type": "navigation",
+                    "url": "https://cb238208-58bd-4017-a7b2-0477023c5a39-00-3k8s650xpfvyk.riker.replit.dev/__replco/workspace_iframe.html?initialPath=%2Fadmin&id=%3Arev%3A",
+                    "title": ""
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#\\30 8e3ec4e-e133-40ed-bb84-801b575761c6 div:nth-of-type(1) > button:nth-of-type(1) > svg"
+                ],
+                [
+                    "xpath///*[@id=\"08e3ec4e-e133-40ed-bb84-801b575761c6\"]/div[1]/div[2]/div[1]/div[1]/button[1]/svg"
+                ],
+                [
+                    "pierce/#\\30 8e3ec4e-e133-40ed-bb84-801b575761c6 div:nth-of-type(1) > button:nth-of-type(1) > svg"
+                ]
+            ],
+            "offsetY": 11.009464263916016,
+            "offsetX": 5.013916015625
+        }
+    ]
+}
