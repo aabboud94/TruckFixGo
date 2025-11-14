@@ -15,6 +15,61 @@ import fs from "fs";
 import type { Server } from "http";
 import viteConfig from "../vite.config";
 
+/**
+ * =================================================================
+ * EXTERNAL API CONFIGURATION (CURRENTLY DISABLED - STUBS ONLY)
+ * =================================================================
+ * 
+ * The following services require API keys to provide real data.
+ * Currently, these services return stub responses indicating that
+ * API configuration is required.
+ * 
+ * To enable these services, set the following environment variables:
+ * 
+ * WEATHER SERVICE:
+ * ----------------
+ * # Required:
+ * WEATHER_API_KEY=your-api-key-here
+ * WEATHER_API_PROVIDER=openweathermap  # Options: openweathermap, weatherapi, accuweather
+ * 
+ * # Recommended Weather API Providers:
+ * # - OpenWeatherMap: https://openweathermap.org/api (Free tier available)
+ * # - WeatherAPI: https://www.weatherapi.com/ (Free tier available)
+ * # - National Weather Service: https://www.weather.gov/documentation/services-web-api (Free, US only)
+ * # - AccuWeather: https://developer.accuweather.com/ (Free tier limited)
+ * 
+ * FUEL PRICE SERVICE:
+ * -------------------
+ * # Required:
+ * FUEL_API_KEY=your-api-key-here
+ * FUEL_API_PROVIDER=gasbuddy  # Options: gasbuddy, opis, fuelapi, mygasfeed
+ * 
+ * # Optional:
+ * FUEL_API_ENDPOINT=https://api.example.com  # Provider-specific endpoint
+ * 
+ * # Recommended Fuel Price API Providers:
+ * # - GasBuddy: https://developers.gasbuddy.com/ (Enterprise pricing)
+ * # - OPIS: https://www.opisnet.com/ (Enterprise pricing, most comprehensive)
+ * # - FuelAPI: https://www.fuelapi.com/ (Starting at $99/month)
+ * # - MyGasFeed: http://www.mygasfeed.com/ (Free tier available)
+ * 
+ * ADDITIONAL INTEGRATIONS (Future):
+ * ----------------------------------
+ * # Fleet Card Integration:
+ * # EFS_API_KEY=your-efs-key
+ * # COMDATA_API_KEY=your-comdata-key
+ * 
+ * # Traffic & Routing:
+ * # GOOGLE_MAPS_API_KEY=your-google-maps-key
+ * # MAPBOX_API_KEY=your-mapbox-key
+ * 
+ * # Vehicle Diagnostics:
+ * # SAMSARA_API_KEY=your-samsara-key
+ * # GEOTAB_API_KEY=your-geotab-key
+ * 
+ * =================================================================
+ */
+
 const app = express();
 
 // Fixed Vite setup that doesn't use nanoid() to prevent constant reloads
