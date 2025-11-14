@@ -18,6 +18,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { CommissionCalculator } from "@/components/commission-calculator";
+import { useContractorEarnings } from "@/hooks/use-payment-reconciliation";
 import {
   MapPin, User, Phone, Mail, Truck, Calendar, DollarSign,
   Plus, Edit, Trash2, Save, Check, Upload, Camera, FileText,
@@ -85,6 +87,12 @@ export default function JobCompletion() {
   const [completionNotes, setCompletionNotes] = useState("");
   const [uploadedPhotos, setUploadedPhotos] = useState<File[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+
+  // Get current user ID from session (you may need to get this from your auth context)
+  const [currentUser, setCurrentUser] = useState<string | undefined>();
+  
+  // Fetch contractor earnings for commission tier
+  const contractorEarnings = useContractorEarnings(currentUser);
 
   // Fetch job details
   const { data: job, isLoading: jobLoading } = useQuery<JobData>({
@@ -577,6 +585,17 @@ export default function JobCompletion() {
             )}
           </CardContent>
         </Card>
+
+        {/* Commission Preview */}
+        {total > 0 && (
+          <CommissionCalculator
+            baseAmount={total}
+            surgeMultiplier={1.0} // Could be dynamic based on job urgency
+            contractorTier={contractorEarnings?.tier || 'bronze'}
+            showDetails={true}
+            className="border-2 border-green-500/20"
+          />
+        )}
 
         {/* Signature Pad */}
         <Card>

@@ -1365,8 +1365,7 @@ export default function ContractorDashboard() {
                 onCalculate={(result) => {
                   toast({
                     title: "Fuel Cost Calculated",
-                    description: `Estimated cost: $${result.estimatedCost?.toFixed(2) || 'N/A'}`,
-                    data-testid: "toast-fuel-calculated"
+                    description: `Estimated cost: $${result.estimatedCost?.toFixed(2) || 'N/A'}`
                   });
                 }}
               />

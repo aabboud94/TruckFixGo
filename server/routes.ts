@@ -118,7 +118,11 @@ import {
   maintenanceAlertTypeEnum,
   maintenanceSeverityEnum,
   insertPerformanceGoalSchema,
-  kpiDefinitions
+  kpiDefinitions,
+  insertCommissionRuleSchema,
+  insertCommissionTransactionSchema,
+  insertPaymentReconciliationSchema,
+  insertPayoutBatchSchema
 } from "@shared/schema";
 
 // Extend Express Request to include user
@@ -9338,6 +9342,372 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Get invoice error:', error);
         res.status(500).json({ message: 'Failed to get invoice' });
+      }
+    }
+  );
+
+  // ==================== COMMISSION & RECONCILIATION ROUTES ====================
+
+  // Get reconciliation report
+  app.get('/api/payments/reconciliation/report',
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { periodType, startDate, endDate, status } = req.query;
+        
+        const report = await storage.getReconciliationReport(
+          periodType as any,
+          startDate ? new Date(startDate as string) : undefined,
+          endDate ? new Date(endDate as string) : undefined,
+          status as string
+        );
+        
+        res.json({ report });
+      } catch (error) {
+        console.error('Get reconciliation report error:', error);
+        res.status(500).json({ message: 'Failed to get reconciliation report' });
+      }
+    }
+  );
+
+  // Process reconciliation for period
+  app.post('/api/payments/reconciliation/process',
+    requireAdmin,
+    validateRequest(z.object({
+      periodType: z.enum(['daily', 'weekly', 'monthly', 'quarterly']),
+      periodStart: z.string().transform(str => new Date(str)),
+      periodEnd: z.string().transform(str => new Date(str))
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { periodType, periodStart, periodEnd } = req.body;
+        
+        const reconciliation = await storage.processReconciliation(
+          periodType,
+          periodStart,
+          periodEnd,
+          req.session.userId
+        );
+        
+        res.json({
+          message: 'Reconciliation processed successfully',
+          reconciliation
+        });
+      } catch (error) {
+        console.error('Process reconciliation error:', error);
+        res.status(500).json({ message: 'Failed to process reconciliation' });
+      }
+    }
+  );
+
+  // Get commission rules
+  app.get('/api/payments/commissions/rules',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { userType, isActive } = req.query;
+        
+        const rules = await storage.getCommissionRules(
+          userType as any,
+          isActive === 'true' ? true : isActive === 'false' ? false : undefined
+        );
+        
+        res.json({ rules });
+      } catch (error) {
+        console.error('Get commission rules error:', error);
+        res.status(500).json({ message: 'Failed to get commission rules' });
+      }
+    }
+  );
+
+  // Create/update commission rules
+  app.post('/api/payments/commissions/rules',
+    requireAdmin,
+    validateRequest(insertCommissionRuleSchema.omit({ id: true, createdAt: true, updatedAt: true })),
+    async (req: Request, res: Response) => {
+      try {
+        const rule = await storage.saveCommissionRule({
+          ...req.body,
+          createdBy: req.session.userId
+        });
+        
+        res.status(201).json({
+          message: 'Commission rule created successfully',
+          rule
+        });
+      } catch (error) {
+        console.error('Create commission rule error:', error);
+        res.status(500).json({ message: 'Failed to create commission rule' });
+      }
+    }
+  );
+
+  // Update commission rule
+  app.put('/api/payments/commissions/rules/:id',
+    requireAdmin,
+    validateRequest(insertCommissionRuleSchema.partial()),
+    async (req: Request, res: Response) => {
+      try {
+        const rule = await storage.updateCommissionRule(req.params.id, req.body);
+        
+        if (!rule) {
+          return res.status(404).json({ message: 'Commission rule not found' });
+        }
+        
+        res.json({
+          message: 'Commission rule updated successfully',
+          rule
+        });
+      } catch (error) {
+        console.error('Update commission rule error:', error);
+        res.status(500).json({ message: 'Failed to update commission rule' });
+      }
+    }
+  );
+
+  // Delete commission rule
+  app.delete('/api/payments/commissions/rules/:id',
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const success = await storage.deleteCommissionRule(req.params.id);
+        
+        if (!success) {
+          return res.status(404).json({ message: 'Commission rule not found' });
+        }
+        
+        res.json({ message: 'Commission rule deleted successfully' });
+      } catch (error) {
+        console.error('Delete commission rule error:', error);
+        res.status(500).json({ message: 'Failed to delete commission rule' });
+      }
+    }
+  );
+
+  // Get pending payouts
+  app.get('/api/payments/payouts/pending',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        // Admin can see all pending payouts, contractors only see their own
+        const contractorId = req.session.role === 'admin' ? undefined : req.session.userId;
+        
+        const payouts = await storage.getPendingPayouts(contractorId);
+        
+        res.json({ payouts });
+      } catch (error) {
+        console.error('Get pending payouts error:', error);
+        res.status(500).json({ message: 'Failed to get pending payouts' });
+      }
+    }
+  );
+
+  // Create payout batch
+  app.post('/api/payments/payouts/batch',
+    requireAdmin,
+    validateRequest(z.object({
+      contractorId: z.string(),
+      periodStart: z.string().transform(str => new Date(str)),
+      periodEnd: z.string().transform(str => new Date(str)),
+      reconciliationId: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { contractorId, periodStart, periodEnd, reconciliationId } = req.body;
+        
+        const batch = await storage.createPayoutBatch(
+          contractorId,
+          periodStart,
+          periodEnd,
+          reconciliationId,
+          req.session.userId
+        );
+        
+        res.status(201).json({
+          message: 'Payout batch created successfully',
+          batch
+        });
+      } catch (error) {
+        console.error('Create payout batch error:', error);
+        res.status(500).json({ message: 'Failed to create payout batch' });
+      }
+    }
+  );
+
+  // Process payout batch
+  app.post('/api/payments/payouts/batch/:id/process',
+    requireAdmin,
+    validateRequest(z.object({
+      paymentMethod: z.string(),
+      paymentReference: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { paymentMethod, paymentReference } = req.body;
+        
+        const batch = await storage.processPayoutBatch(
+          req.params.id,
+          paymentMethod,
+          paymentReference
+        );
+        
+        res.json({
+          message: 'Payout batch processed successfully',
+          batch
+        });
+      } catch (error) {
+        console.error('Process payout batch error:', error);
+        res.status(500).json({ message: 'Failed to process payout batch' });
+      }
+    }
+  );
+
+  // Get contractor earnings
+  app.get('/api/payments/contractor/:id/earnings',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        // Contractors can only see their own earnings
+        const contractorId = req.session.role === 'contractor' ? req.session.userId! : req.params.id;
+        
+        if (req.session.role !== 'admin' && req.session.userId !== contractorId) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+        
+        const { startDate, endDate } = req.query;
+        
+        const earnings = await storage.getContractorEarnings(
+          contractorId,
+          startDate ? new Date(startDate as string) : undefined,
+          endDate ? new Date(endDate as string) : undefined
+        );
+        
+        res.json({ earnings });
+      } catch (error) {
+        console.error('Get contractor earnings error:', error);
+        res.status(500).json({ message: 'Failed to get contractor earnings' });
+      }
+    }
+  );
+
+  // Get commission for a specific job
+  app.get('/api/payments/commissions/job/:jobId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const commission = await storage.getCommissionTransactionByJobId(req.params.jobId);
+        
+        if (!commission) {
+          return res.status(404).json({ message: 'Commission not found for this job' });
+        }
+        
+        res.json({ commission });
+      } catch (error) {
+        console.error('Get job commission error:', error);
+        res.status(500).json({ message: 'Failed to get job commission' });
+      }
+    }
+  );
+
+  // Calculate commission preview
+  app.post('/api/payments/commissions/calculate',
+    requireAuth,
+    validateRequest(z.object({
+      amount: z.number().positive(),
+      surgeMultiplier: z.number().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { amount, surgeMultiplier } = req.body;
+        
+        // Get a preview calculation (without creating a transaction)
+        const dummyJobId = `preview_${Date.now()}`;
+        const calculation = await storage.calculateCommission(
+          dummyJobId,
+          req.session.userId!,
+          amount,
+          surgeMultiplier
+        );
+        
+        res.json({
+          baseAmount: amount,
+          commissionAmount: parseFloat(calculation.commissionAmount),
+          platformFeeAmount: parseFloat(calculation.platformFeeAmount),
+          netPayoutAmount: parseFloat(calculation.netPayoutAmount),
+          commissionRate: parseFloat(calculation.commissionRate)
+        });
+      } catch (error) {
+        console.error('Calculate commission error:', error);
+        res.status(500).json({ message: 'Failed to calculate commission' });
+      }
+    }
+  );
+
+  // Handle commission dispute
+  app.post('/api/payments/commissions/:id/dispute',
+    requireAuth,
+    validateRequest(z.object({
+      reason: z.string().min(10),
+      adjustmentAmount: z.number().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { reason, adjustmentAmount } = req.body;
+        
+        const commission = await storage.handleCommissionDispute(
+          req.params.id,
+          reason,
+          adjustmentAmount
+        );
+        
+        res.json({
+          message: 'Commission dispute submitted successfully',
+          commission
+        });
+      } catch (error) {
+        console.error('Handle commission dispute error:', error);
+        res.status(500).json({ message: 'Failed to handle commission dispute' });
+      }
+    }
+  );
+
+  // Get disputed commissions
+  app.get('/api/payments/commissions/disputed',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.role === 'admin' ? undefined : req.session.userId;
+        
+        const disputed = await storage.getDisputedCommissions(contractorId);
+        
+        res.json({ disputed });
+      } catch (error) {
+        console.error('Get disputed commissions error:', error);
+        res.status(500).json({ message: 'Failed to get disputed commissions' });
+      }
+    }
+  );
+
+  // Resolve commission dispute
+  app.post('/api/payments/commissions/:id/resolve',
+    requireAdmin,
+    validateRequest(z.object({
+      resolution: z.string()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const commission = await storage.resolveCommissionDispute(
+          req.params.id,
+          req.body.resolution
+        );
+        
+        res.json({
+          message: 'Commission dispute resolved successfully',
+          commission
+        });
+      } catch (error) {
+        console.error('Resolve commission dispute error:', error);
+        res.status(500).json({ message: 'Failed to resolve commission dispute' });
       }
     }
   );
