@@ -60,6 +60,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import PerformanceWidget from "@/components/performance-widget";
+import { SOSButton } from "@/components/sos-button";
 
 interface QueuedJob {
   id: string;
@@ -405,6 +406,12 @@ export default function ContractorDashboard() {
               <Badge variant={isConnected ? "default" : "secondary"}>
                 {isConnected ? "Connected" : "Offline"}
               </Badge>
+              
+              {/* Emergency SOS Button */}
+              <SOSButton 
+                jobId={activeJob?.id}
+                className="ml-2"
+              />
             </div>
           </div>
         </div>

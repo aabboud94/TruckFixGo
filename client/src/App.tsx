@@ -85,6 +85,7 @@ import AdminLiveMap from "@/pages/admin/live-map";
 import AdminInvoiceDefaults from "@/pages/admin/invoice-defaults";
 import AdminStatus from "@/pages/admin/status";
 import AIDispatchDashboard from "@/pages/admin/ai-dispatch-dashboard";
+import EmergencyResponsePage from "@/pages/emergency-response";
 
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
@@ -142,6 +143,7 @@ function Router() {
       <Route path="/contractor/manage-drivers" component={ManageDrivers} />
       <Route path="/contractor/jobs/:id/complete" component={ContractorJobCompletion} />
       <Route path="/contractor/invoices/:id" component={ContractorInvoicePreview} />
+      <Route path="/contractor/emergency-response" component={EmergencyResponsePage} />
       
       {/* Fleet Pages */}
       <Route path="/fleet" component={FleetLanding} />

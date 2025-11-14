@@ -313,7 +313,21 @@ import {
   type MetricSnapshot,
   type InsertMetricSnapshot,
   type PerformanceGoal,
-  type InsertPerformanceGoal
+  type InsertPerformanceGoal,
+  emergencySosAlerts,
+  emergencyContacts,
+  emergencyResponseLog,
+  type EmergencySosAlert,
+  type InsertEmergencySosAlert,
+  type EmergencyContact,
+  type InsertEmergencyContact,
+  type EmergencyResponseLog,
+  type InsertEmergencyResponseLog,
+  sosStatusEnum,
+  sosSeverityEnum,
+  sosAlertTypeEnum,
+  sosInitiatorTypeEnum,
+  sosResponseActionEnum
 } from "@shared/schema";
 import { partsInventoryService } from "./services/parts-inventory-service";
 
@@ -1944,6 +1958,85 @@ export interface IStorage {
     completionRate: number;
     onTimeRate: number;
   }>>;
+  
+  // ==================== EMERGENCY SOS ====================
+  
+  // Create a new emergency SOS alert
+  createSOSAlert(
+    userId: string,
+    location: { lat: number; lng: number; accuracy?: number; address?: string },
+    alertType: 'medical' | 'accident' | 'threat' | 'mechanical' | 'other',
+    message: string,
+    severity?: 'critical' | 'high' | 'medium' | 'low',
+    jobId?: string
+  ): Promise<EmergencySosAlert>;
+  
+  // Acknowledge an SOS alert
+  acknowledgeSOSAlert(alertId: string, responderId: string): Promise<EmergencySosAlert>;
+  
+  // Resolve an SOS alert
+  resolveSOSAlert(
+    alertId: string,
+    resolution: 'resolved' | 'false_alarm' | 'cancelled',
+    notes?: string,
+    responderId?: string
+  ): Promise<EmergencySosAlert>;
+  
+  // Get all active SOS alerts
+  getActiveSOSAlerts(): Promise<EmergencySosAlert[]>;
+  
+  // Get emergency contacts for a user
+  getEmergencyContacts(userId: string): Promise<EmergencyContact[]>;
+  
+  // Add or update emergency contact
+  upsertEmergencyContact(contact: InsertEmergencyContact): Promise<EmergencyContact>;
+  
+  // Delete emergency contact
+  deleteEmergencyContact(contactId: string): Promise<boolean>;
+  
+  // Find nearby responders to an emergency location
+  findNearbyResponders(
+    location: { lat: number; lng: number },
+    radiusMiles: number
+  ): Promise<Array<{
+    id: string;
+    name: string;
+    distance: number;
+    estimatedArrival: number;
+    location: { lat: number; lng: number };
+    phone?: string;
+    type: 'contractor' | 'emergency_service' | 'fleet_manager';
+    isAvailable: boolean;
+  }>>;
+  
+  // Log emergency response action
+  logEmergencyResponse(
+    alertId: string,
+    action: typeof sosResponseActionEnum.enumValues[number],
+    notes?: string,
+    responderId?: string
+  ): Promise<EmergencyResponseLog>;
+  
+  // Get SOS alert history for a user
+  getSOSAlertHistory(userId: string, limit?: number): Promise<EmergencySosAlert[]>;
+  
+  // Get response logs for an alert
+  getEmergencyResponseLogs(alertId: string): Promise<EmergencyResponseLog[]>;
+  
+  // Update alert location (for live tracking)
+  updateSOSAlertLocation(
+    alertId: string,
+    location: { lat: number; lng: number; accuracy?: number }
+  ): Promise<void>;
+  
+  // Get SOS alert by ID
+  getSOSAlertById(alertId: string): Promise<EmergencySosAlert | null>;
+  
+  // Get alerts within time range
+  getSOSAlertsByTimeRange(startDate: Date, endDate: Date): Promise<EmergencySosAlert[]>;
+  
+  // Test the SOS system (for drills)
+  testSOSSystem(userId: string): Promise<{ success: boolean; message: string }>;
 }
 
 // PostgreSQL implementation using Drizzle ORM
@@ -13160,6 +13253,165 @@ export class PostgreSQLStorage implements IStorage {
   ) {
     const { performanceMetricsService } = await import('./services/performance-metrics-service');
     return performanceMetricsService.calculateOnTimeDelivery(entityType, entityId, dateRange);
+  }
+
+  // ==================== EMERGENCY SOS METHODS ====================
+  
+  async createSOSAlert(
+    userId: string,
+    location: { lat: number; lng: number; accuracy?: number; address?: string },
+    alertType: 'medical' | 'accident' | 'threat' | 'mechanical' | 'other',
+    message: string,
+    severity: 'critical' | 'high' | 'medium' | 'low' = 'high',
+    jobId?: string
+  ): Promise<EmergencySosAlert> {
+    const { emergencySOSService } = await import('./services/emergency-sos-service');
+    
+    // Get user details for initiator type
+    const user = await this.getUser(userId);
+    if (!user) throw new Error('User not found');
+    
+    const initiatorType = user.role as 'driver' | 'contractor' | 'fleet_manager' | 'dispatcher';
+    
+    return emergencySOSService.createSOSAlert({
+      initiatorId: userId,
+      initiatorType,
+      location,
+      alertType,
+      severity,
+      message,
+      jobId
+    });
+  }
+  
+  async acknowledgeSOSAlert(alertId: string, responderId: string): Promise<EmergencySosAlert> {
+    const { emergencySOSService } = await import('./services/emergency-sos-service');
+    return emergencySOSService.acknowledgeSOSAlert(alertId, responderId);
+  }
+  
+  async resolveSOSAlert(
+    alertId: string,
+    resolution: 'resolved' | 'false_alarm' | 'cancelled',
+    notes?: string,
+    responderId?: string
+  ): Promise<EmergencySosAlert> {
+    const { emergencySOSService } = await import('./services/emergency-sos-service');
+    return emergencySOSService.resolveSOSAlert(alertId, resolution, notes, responderId);
+  }
+  
+  async getActiveSOSAlerts(): Promise<EmergencySosAlert[]> {
+    const { emergencySOSService } = await import('./services/emergency-sos-service');
+    return emergencySOSService.getActiveSOSAlerts();
+  }
+  
+  async getEmergencyContacts(userId: string): Promise<EmergencyContact[]> {
+    const { emergencySOSService } = await import('./services/emergency-sos-service');
+    return emergencySOSService.getEmergencyContacts(userId);
+  }
+  
+  async upsertEmergencyContact(contact: InsertEmergencyContact): Promise<EmergencyContact> {
+    const { emergencySOSService } = await import('./services/emergency-sos-service');
+    return emergencySOSService.upsertEmergencyContact(contact);
+  }
+  
+  async deleteEmergencyContact(contactId: string): Promise<boolean> {
+    try {
+      const result = await db
+        .delete(emergencyContacts)
+        .where(eq(emergencyContacts.id, contactId))
+        .returning();
+      return result.length > 0;
+    } catch (error) {
+      console.error('Error deleting emergency contact:', error);
+      return false;
+    }
+  }
+  
+  async findNearbyResponders(
+    location: { lat: number; lng: number },
+    radiusMiles: number
+  ): Promise<Array<{
+    id: string;
+    name: string;
+    distance: number;
+    estimatedArrival: number;
+    location: { lat: number; lng: number };
+    phone?: string;
+    type: 'contractor' | 'emergency_service' | 'fleet_manager';
+    isAvailable: boolean;
+  }>> {
+    const { emergencySOSService } = await import('./services/emergency-sos-service');
+    return emergencySOSService.findNearbyResponders(location, radiusMiles);
+  }
+  
+  async logEmergencyResponse(
+    alertId: string,
+    action: typeof sosResponseActionEnum.enumValues[number],
+    notes?: string,
+    responderId?: string
+  ): Promise<EmergencyResponseLog> {
+    const { emergencySOSService } = await import('./services/emergency-sos-service');
+    const result = await db
+      .insert(emergencyResponseLog)
+      .values({
+        sosAlertId: alertId,
+        responderId,
+        action: action as any,
+        notes,
+        actionDetails: notes
+      })
+      .returning();
+    return result[0];
+  }
+  
+  async getSOSAlertHistory(userId: string, limit: number = 50): Promise<EmergencySosAlert[]> {
+    const { emergencySOSService } = await import('./services/emergency-sos-service');
+    return emergencySOSService.getSOSAlertHistory(userId, limit);
+  }
+  
+  async getEmergencyResponseLogs(alertId: string): Promise<EmergencyResponseLog[]> {
+    const logs = await db
+      .select()
+      .from(emergencyResponseLog)
+      .where(eq(emergencyResponseLog.sosAlertId, alertId))
+      .orderBy(desc(emergencyResponseLog.timestamp));
+    return logs;
+  }
+  
+  async updateSOSAlertLocation(
+    alertId: string,
+    location: { lat: number; lng: number; accuracy?: number }
+  ): Promise<void> {
+    const { emergencySOSService } = await import('./services/emergency-sos-service');
+    await emergencySOSService.updateAlertLocation(alertId, location);
+  }
+  
+  async getSOSAlertById(alertId: string): Promise<EmergencySosAlert | null> {
+    const result = await db
+      .select()
+      .from(emergencySosAlerts)
+      .where(eq(emergencySosAlerts.id, alertId))
+      .limit(1);
+    return result[0] || null;
+  }
+  
+  async getSOSAlertsByTimeRange(startDate: Date, endDate: Date): Promise<EmergencySosAlert[]> {
+    const alerts = await db
+      .select()
+      .from(emergencySosAlerts)
+      .where(
+        and(
+          gte(emergencySosAlerts.createdAt, startDate),
+          lt(emergencySosAlerts.createdAt, endDate)
+        )
+      )
+      .orderBy(desc(emergencySosAlerts.createdAt));
+    return alerts;
+  }
+  
+  async testSOSSystem(userId: string): Promise<{ success: boolean; message: string }> {
+    const { emergencySOSService } = await import('./services/emergency-sos-service');
+    return emergencySOSService.testSOSSystem(userId);
   }
 }
 

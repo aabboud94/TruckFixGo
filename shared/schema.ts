@@ -4106,3 +4106,169 @@ export const insertPerformanceGoalSchema = createInsertSchema(performanceGoals).
 export type InsertPerformanceGoal = z.infer<typeof insertPerformanceGoalSchema>;
 export type PerformanceGoal = typeof performanceGoals.$inferSelect;
 
+// ====================
+// EMERGENCY SOS SYSTEM
+// ====================
+
+// Emergency SOS enums
+export const sosAlertTypeEnum = pgEnum('sos_alert_type', ['medical', 'accident', 'threat', 'mechanical', 'other']);
+export const sosSeverityEnum = pgEnum('sos_severity', ['critical', 'high', 'medium', 'low']);
+export const sosStatusEnum = pgEnum('sos_status', ['active', 'acknowledged', 'resolved', 'false_alarm', 'cancelled']);
+export const sosInitiatorTypeEnum = pgEnum('sos_initiator_type', ['driver', 'contractor', 'fleet_manager', 'dispatcher']);
+export const sosResponseActionEnum = pgEnum('sos_response_action', ['acknowledged', 'dispatched', 'arrived', 'assisting', 'escalated', 'resolved', 'cancelled']);
+export const emergencyContactPreferenceEnum = pgEnum('emergency_contact_preference', ['sms', 'call', 'email', 'all']);
+
+// Emergency SOS alerts table
+export const emergencySosAlerts = pgTable("emergency_sos_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Initiator information
+  initiatorId: varchar("initiator_id").notNull().references(() => users.id),
+  initiatorType: sosInitiatorTypeEnum("initiator_type").notNull(),
+  jobId: varchar("job_id").references(() => jobs.id), // Associated job if any
+  
+  // Location information
+  location: jsonb("location").notNull(), // { lat, lng, accuracy, address }
+  locationHistory: jsonb("location_history").default('[]'), // Array of location updates
+  
+  // Alert details
+  alertType: sosAlertTypeEnum("alert_type").notNull(),
+  severity: sosSeverityEnum("severity").notNull(),
+  message: text("message"),
+  
+  // Response tracking
+  status: sosStatusEnum("status").notNull().default('active'),
+  responderId: varchar("responder_id").references(() => users.id),
+  responseTime: timestamp("response_time"),
+  resolvedAt: timestamp("resolved_at"),
+  resolutionNotes: text("resolution_notes"),
+  
+  // Escalation tracking
+  escalationLevel: integer("escalation_level").notNull().default(0),
+  escalatedAt: timestamp("escalated_at"),
+  autoEscalationEnabled: boolean("auto_escalation_enabled").notNull().default(true),
+  
+  // Emergency services integration
+  emergencyServicesNotified: boolean("emergency_services_notified").notNull().default(false),
+  emergencyServicesNotifiedAt: timestamp("emergency_services_notified_at"),
+  emergencyServiceReferenceId: varchar("emergency_service_reference_id", { length: 100 }),
+  
+  // Notification tracking
+  notificationsSent: jsonb("notifications_sent").default('[]'), // Array of notification records
+  acknowledgments: jsonb("acknowledgments").default('[]'), // Array of acknowledgment records
+  
+  // False alarm handling
+  falseAlarmReason: text("false_alarm_reason"),
+  falseAlarmMarkedBy: varchar("false_alarm_marked_by").references(() => users.id),
+  
+  // Metadata
+  deviceInfo: jsonb("device_info"), // Device and app version info
+  metadata: jsonb("metadata").default('{}'),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  initiatorIdx: index("idx_emergency_sos_alerts_initiator").on(table.initiatorId),
+  statusIdx: index("idx_emergency_sos_alerts_status").on(table.status),
+  severityIdx: index("idx_emergency_sos_alerts_severity").on(table.severity),
+  jobIdx: index("idx_emergency_sos_alerts_job").on(table.jobId),
+  createdAtIdx: index("idx_emergency_sos_alerts_created").on(table.createdAt),
+  activeAlertsIdx: index("idx_emergency_sos_alerts_active").on(table.status, table.severity)
+}));
+
+// Emergency contacts table
+export const emergencyContacts = pgTable("emergency_contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // User reference
+  userId: varchar("user_id").notNull().references(() => users.id),
+  
+  // Contact information
+  contactName: varchar("contact_name", { length: 100 }).notNull(),
+  contactPhone: varchar("contact_phone", { length: 20 }).notNull(),
+  contactEmail: varchar("contact_email", { length: 100 }),
+  relationship: varchar("relationship", { length: 50 }), // e.g., "spouse", "parent", "friend"
+  
+  // Notification preferences
+  isPrimary: boolean("is_primary").notNull().default(false),
+  notificationPreference: emergencyContactPreferenceEnum("notification_preference").notNull().default('all'),
+  
+  // Auto-notification settings
+  autoNotifyOnSos: boolean("auto_notify_on_sos").notNull().default(true),
+  autoNotifyDelay: integer("auto_notify_delay").default(0), // Delay in seconds before notifying
+  
+  // Additional info
+  notes: text("notes"),
+  isActive: boolean("is_active").notNull().default(true),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  userIdx: index("idx_emergency_contacts_user").on(table.userId),
+  primaryIdx: index("idx_emergency_contacts_primary").on(table.userId, table.isPrimary),
+  activeIdx: index("idx_emergency_contacts_active").on(table.isActive)
+}));
+
+// Emergency response log table
+export const emergencyResponseLog = pgTable("emergency_response_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Alert reference
+  sosAlertId: varchar("sos_alert_id").notNull().references(() => emergencySosAlerts.id),
+  
+  // Responder information
+  responderId: varchar("responder_id").references(() => users.id),
+  responderType: varchar("responder_type", { length: 50 }), // e.g., "contractor", "fleet_manager", "emergency_service"
+  
+  // Action taken
+  action: sosResponseActionEnum("action").notNull(),
+  actionDetails: text("action_details"),
+  notes: text("notes"),
+  
+  // Location at time of action
+  location: jsonb("location"), // { lat, lng, accuracy }
+  
+  // Communication record
+  communicationMethod: varchar("communication_method", { length: 50 }), // e.g., "sms", "call", "in_app"
+  communicationDetails: jsonb("communication_details"),
+  
+  // Timestamp
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  
+  // Metadata
+  metadata: jsonb("metadata").default('{}')
+}, (table) => ({
+  alertIdx: index("idx_emergency_response_log_alert").on(table.sosAlertId),
+  responderIdx: index("idx_emergency_response_log_responder").on(table.responderId),
+  timestampIdx: index("idx_emergency_response_log_timestamp").on(table.timestamp),
+  actionIdx: index("idx_emergency_response_log_action").on(table.action)
+}));
+
+// Emergency SOS schemas and types
+export const insertEmergencySosAlertSchema = createInsertSchema(emergencySosAlerts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  responseTime: true,
+  resolvedAt: true,
+  escalatedAt: true,
+  emergencyServicesNotifiedAt: true
+});
+export type InsertEmergencySosAlert = z.infer<typeof insertEmergencySosAlertSchema>;
+export type EmergencySosAlert = typeof emergencySosAlerts.$inferSelect;
+
+export const insertEmergencyContactSchema = createInsertSchema(emergencyContacts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertEmergencyContact = z.infer<typeof insertEmergencyContactSchema>;
+export type EmergencyContact = typeof emergencyContacts.$inferSelect;
+
+export const insertEmergencyResponseLogSchema = createInsertSchema(emergencyResponseLog).omit({
+  id: true,
+  timestamp: true
+});
+export type InsertEmergencyResponseLog = z.infer<typeof insertEmergencyResponseLogSchema>;
+export type EmergencyResponseLog = typeof emergencyResponseLog.$inferSelect;
+

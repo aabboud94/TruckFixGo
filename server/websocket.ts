@@ -54,7 +54,14 @@ const MessageTypeEnum = z.enum([
   'MESSAGE_DELIVERED',
   'MESSAGE_EDITED',
   'MESSAGE_DELETED',
-  'UNREAD_COUNT_UPDATE'
+  'UNREAD_COUNT_UPDATE',
+  // Emergency SOS message types
+  'EMERGENCY_SOS',
+  'EMERGENCY_ACKNOWLEDGED',
+  'EMERGENCY_RESOLVED',
+  'EMERGENCY_LOCATION_UPDATE',
+  'JOIN_EMERGENCY',
+  'LEAVE_EMERGENCY'
 ]);
 
 const LocationSchema = z.object({

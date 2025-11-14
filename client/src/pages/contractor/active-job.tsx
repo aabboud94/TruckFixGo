@@ -42,6 +42,7 @@ import {
   Plus
 } from "lucide-react";
 import { format } from "date-fns";
+import { SOSButton } from "@/components/sos-button";
 
 interface ActiveJobData {
   job: any;
@@ -456,6 +457,11 @@ export default function ContractorActiveJob() {
               <Badge>
                 {job.status.toUpperCase().replace("_", " ")}
               </Badge>
+              {/* Emergency SOS Button for active job */}
+              <SOSButton 
+                jobId={job.id}
+                variant="default"
+              />
             </div>
           </div>
         </div>
