@@ -5947,6 +5947,125 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== NEW VEHICLE MANAGEMENT ROUTES ====================
+  // Get all vehicles for a fleet
+  app.get('/api/fleet/:fleetId/vehicles',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicles = await storage.getFleetVehicles(req.params.fleetId);
+        res.json({ vehicles });
+      } catch (error) {
+        console.error('Get fleet vehicles error:', error);
+        res.status(500).json({ message: 'Failed to get fleet vehicles' });
+      }
+    }
+  );
+
+  // Add a new vehicle to a fleet
+  app.post('/api/fleet/:fleetId/vehicles',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    validateRequest(insertFleetVehicleSchema.omit({ fleetAccountId: true })),
+    async (req: Request, res: Response) => {
+      try {
+        // Convert string values to integers where needed
+        const vehicleData = {
+          ...req.body,
+          fleetAccountId: req.params.fleetId,
+          year: typeof req.body.year === 'string' ? parseInt(req.body.year) : req.body.year,
+          currentOdometer: req.body.currentOdometer ? 
+            (typeof req.body.currentOdometer === 'string' ? 
+              parseInt(req.body.currentOdometer.replace(/,/g, '')) : 
+              req.body.currentOdometer) : null
+        };
+
+        const vehicle = await storage.createFleetVehicle(vehicleData);
+
+        res.status(201).json({
+          message: 'Vehicle added successfully',
+          vehicle
+        });
+      } catch (error) {
+        console.error('Add vehicle error:', error);
+        res.status(500).json({ message: 'Failed to add vehicle' });
+      }
+    }
+  );
+
+  // Update a vehicle
+  app.put('/api/fleet/:fleetId/vehicles/:vehicleId',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        // Validate that the vehicle belongs to the fleet
+        const existingVehicle = await storage.getFleetVehicle(req.params.vehicleId);
+        if (!existingVehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        if (existingVehicle.fleetAccountId !== req.params.fleetId) {
+          return res.status(403).json({ message: 'Vehicle does not belong to this fleet' });
+        }
+
+        // Convert string values to integers where needed
+        const updates = { ...req.body };
+        if (updates.year) {
+          updates.year = typeof updates.year === 'string' ? parseInt(updates.year) : updates.year;
+        }
+        if (updates.currentOdometer) {
+          updates.currentOdometer = typeof updates.currentOdometer === 'string' ? 
+            parseInt(updates.currentOdometer.replace(/,/g, '')) : 
+            updates.currentOdometer;
+        }
+
+        const vehicle = await storage.updateFleetVehicle(req.params.vehicleId, updates);
+        
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+
+        res.json({
+          message: 'Vehicle updated successfully',
+          vehicle
+        });
+      } catch (error) {
+        console.error('Update vehicle error:', error);
+        res.status(500).json({ message: 'Failed to update vehicle' });
+      }
+    }
+  );
+
+  // Delete a vehicle
+  app.delete('/api/fleet/:fleetId/vehicles/:vehicleId',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        // Validate that the vehicle belongs to the fleet
+        const existingVehicle = await storage.getFleetVehicle(req.params.vehicleId);
+        if (!existingVehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        if (existingVehicle.fleetAccountId !== req.params.fleetId) {
+          return res.status(403).json({ message: 'Vehicle does not belong to this fleet' });
+        }
+
+        const deleted = await storage.deleteFleetVehicle(req.params.vehicleId);
+        
+        if (!deleted) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+
+        res.json({ message: 'Vehicle deleted successfully' });
+      } catch (error) {
+        console.error('Delete vehicle error:', error);
+        res.status(500).json({ message: 'Failed to delete vehicle' });
+      }
+    }
+  );
+
   // Add authorized contact
   app.post('/api/fleet/accounts/:id/contacts',
     requireAuth,
