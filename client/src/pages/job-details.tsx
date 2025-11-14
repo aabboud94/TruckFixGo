@@ -3,6 +3,7 @@ import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { WeatherWidget } from "@/components/weather-widget";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -30,7 +31,8 @@ import {
   MessageSquare,
   Camera,
   Activity,
-  Hash
+  Hash,
+  Cloud
 } from "lucide-react";
 import type { Job, Invoice, User as UserType, FleetAccount } from "@shared/schema";
 
@@ -344,6 +346,27 @@ export default function JobDetails() {
             )}
           </CardContent>
         </Card>
+
+        {/* Weather Information Card */}
+        {job.location && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Cloud className="h-5 w-5" />
+                Weather Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WeatherWidget 
+                jobId={job.id}
+                compact={false}
+                showAlerts={true}
+                showForecast={false}
+                showImpactScore={true}
+              />
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Additional Information Tabs */}

@@ -993,6 +993,106 @@ class TrackingWebSocketServer {
     console.log(`[WebSocket] Notified ${count} online contractors about new job`);
   }
 
+  // ==================== WEATHER EVENT HANDLERS ====================
+  
+  // Broadcast severe weather alert to all users
+  public async broadcastWeatherAlert(alert: any) {
+    console.log('[WebSocket] Broadcasting weather alert to all connected users');
+    
+    let count = 0;
+    this.clients.forEach((ws, userId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        this.sendMessage(ws, {
+          type: 'weather:alert',
+          payload: {
+            id: alert.id,
+            alertType: alert.alertType,
+            severity: alert.severity,
+            location: alert.location,
+            message: alert.message,
+            startTime: alert.startTime,
+            endTime: alert.endTime,
+            timestamp: new Date().toISOString()
+          }
+        });
+        count++;
+      }
+    });
+    
+    console.log(`[WebSocket] Weather alert sent to ${count} connected users`);
+  }
+
+  // Send weather update for a specific job
+  public async sendJobWeatherUpdate(jobId: string, weatherData: any) {
+    console.log(`[WebSocket] Sending weather update for job ${jobId}`);
+    
+    const job = await storage.getJob(jobId);
+    if (!job) {
+      console.log(`[WebSocket] Job ${jobId} not found`);
+      return;
+    }
+    
+    // Send to customer
+    if (job.customerId) {
+      const customerWs = this.clients.get(job.customerId);
+      if (customerWs && customerWs.readyState === WebSocket.OPEN) {
+        this.sendMessage(customerWs, {
+          type: 'weather:update',
+          payload: {
+            jobId,
+            weather: weatherData,
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+    }
+    
+    // Send to contractor
+    if (job.contractorId) {
+      const contractorWs = this.clients.get(job.contractorId);
+      if (contractorWs && contractorWs.readyState === WebSocket.OPEN) {
+        this.sendMessage(contractorWs, {
+          type: 'weather:update',
+          payload: {
+            jobId,
+            weather: weatherData,
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+    }
+    
+    console.log(`[WebSocket] Weather update sent for job ${jobId}`);
+  }
+
+  // Send weather updates for active jobs
+  public async broadcastActiveJobsWeatherUpdate() {
+    console.log('[WebSocket] Broadcasting weather updates for active jobs');
+    
+    try {
+      // Get active jobs
+      const activeJobs = await storage.findJobs({
+        status: ['assigned', 'en_route', 'on_site', 'scheduled']
+      });
+      
+      let updateCount = 0;
+      for (const job of activeJobs) {
+        if (job.location) {
+          const weather = await weatherService.getCurrentWeather(
+            job.location.lat, 
+            job.location.lng
+          );
+          await this.sendJobWeatherUpdate(job.id, weather);
+          updateCount++;
+        }
+      }
+      
+      console.log(`[WebSocket] Weather updates sent for ${updateCount} active jobs`);
+    } catch (error) {
+      console.error('[WebSocket] Error broadcasting weather updates:', error);
+    }
+  }
+
   // ==================== ROUTE TRACKING HANDLERS ====================
   
   private async handleJoinRouteTracking(ws: ExtendedWebSocket, payload: any) {

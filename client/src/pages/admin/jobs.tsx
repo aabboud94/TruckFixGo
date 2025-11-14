@@ -19,11 +19,12 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import JobPhotoGallery from "@/components/job-photo-gallery";
+import { WeatherBadge } from "@/components/weather-widget";
 import {
   Search, Filter, Download, RefreshCw, MapPin, Clock, DollarSign,
   User, Truck, AlertCircle, CheckCircle, XCircle, Edit, Eye,
   MessageSquare, Camera, Ban, CreditCard, Loader2, Save, ChevronDown,
-  FileText, Receipt, ChevronUp, Package
+  FileText, Receipt, ChevronUp, Package, Cloud
 } from "lucide-react";
 
 export default function AdminJobs() {
@@ -380,6 +381,7 @@ export default function AdminJobs() {
                   <TableHead>Customer</TableHead>
                   <TableHead>Contractor</TableHead>
                   <TableHead>Location</TableHead>
+                  <TableHead>Weather</TableHead>
                   <TableHead>Price</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Actions</TableHead>
@@ -451,6 +453,13 @@ export default function AdminJobs() {
                               ? job.locationAddress || `${job.location.lat?.toFixed(4)}, ${job.location.lng?.toFixed(4)}`
                               : job.location || 'Unknown'}
                           </p>
+                        </TableCell>
+                        <TableCell>
+                          {job.location && typeof job.location === 'object' && job.location.lat && job.location.lng ? (
+                            <WeatherBadge lat={job.location.lat} lng={job.location.lng} />
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
                         </TableCell>
                         <TableCell>${job.price}</TableCell>
                         <TableCell>{format(job.createdAt, 'MMM d, h:mm a')}</TableCell>

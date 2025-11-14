@@ -84,6 +84,12 @@ export const maintenanceRiskLevelEnum = pgEnum('maintenance_risk_level', ['low',
 export const maintenanceAlertTypeEnum = pgEnum('maintenance_alert_type', ['predictive', 'scheduled', 'critical', 'overdue', 'safety', 'warranty']);
 export const maintenanceSeverityEnum = pgEnum('maintenance_severity', ['info', 'warning', 'urgent', 'critical']);
 
+// Weather related enums
+export const weatherConditionsEnum = pgEnum('weather_conditions', ['clear', 'partly_cloudy', 'cloudy', 'overcast', 'light_rain', 'moderate_rain', 'heavy_rain', 'drizzle', 'thunderstorm', 'light_snow', 'moderate_snow', 'heavy_snow', 'sleet', 'hail', 'fog', 'mist', 'dust', 'smoke', 'tornado', 'hurricane']);
+export const weatherAlertTypeEnum = pgEnum('weather_alert_type', ['wind', 'rain', 'snow', 'ice', 'thunderstorm', 'tornado', 'hurricane', 'flood', 'heat', 'cold', 'fog', 'dust_storm', 'air_quality']);
+export const weatherAlertSeverityEnum = pgEnum('weather_alert_severity', ['advisory', 'watch', 'warning', 'emergency']);
+export const weatherImpactLevelEnum = pgEnum('weather_impact_level', ['none', 'low', 'moderate', 'high', 'severe', 'extreme']);
+
 // ====================
 // USERS & AUTH
 // ====================
@@ -4105,6 +4111,182 @@ export const insertPerformanceGoalSchema = createInsertSchema(performanceGoals).
 });
 export type InsertPerformanceGoal = z.infer<typeof insertPerformanceGoalSchema>;
 export type PerformanceGoal = typeof performanceGoals.$inferSelect;
+
+// ====================
+// WEATHER SYSTEM
+// ====================
+
+// Weather data table for storing weather information for locations
+export const weatherData = pgTable("weather_data", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Location information
+  latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
+  locationName: text("location_name"),
+  
+  // Current weather conditions
+  temperature: decimal("temperature", { precision: 5, scale: 2 }).notNull(), // in Fahrenheit
+  feelsLike: decimal("feels_like", { precision: 5, scale: 2 }),
+  conditions: weatherConditionsEnum("conditions").notNull(),
+  description: text("description"),
+  
+  // Wind information
+  windSpeed: decimal("wind_speed", { precision: 5, scale: 2 }).notNull(), // in mph
+  windDirection: integer("wind_direction"), // degrees
+  windGust: decimal("wind_gust", { precision: 5, scale: 2 }),
+  
+  // Precipitation
+  precipitation: decimal("precipitation", { precision: 5, scale: 2 }).default('0'), // in inches
+  precipitationProbability: integer("precipitation_probability"), // percentage
+  precipitationType: varchar("precipitation_type", { length: 20 }), // rain, snow, sleet
+  
+  // Atmospheric conditions
+  humidity: integer("humidity").notNull(), // percentage
+  pressure: decimal("pressure", { precision: 6, scale: 2 }), // in inHg
+  visibility: decimal("visibility", { precision: 5, scale: 2 }), // in miles
+  uvIndex: integer("uv_index"),
+  cloudCover: integer("cloud_cover"), // percentage
+  
+  // Additional data
+  sunrise: timestamp("sunrise"),
+  sunset: timestamp("sunset"),
+  moonPhase: decimal("moon_phase", { precision: 3, scale: 2 }),
+  
+  // Source and timestamps
+  source: varchar("source", { length: 50 }).default('mock'), // 'mock', 'api', 'manual'
+  isForecast: boolean("is_forecast").notNull().default(false),
+  forecastFor: timestamp("forecast_for"), // if this is forecast data, when it's for
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at"), // when this data should be refreshed
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  locationIdx: index("idx_weather_data_location").on(table.latitude, table.longitude),
+  timestampIdx: index("idx_weather_data_timestamp").on(table.timestamp),
+  forecastIdx: index("idx_weather_data_forecast").on(table.isForecast, table.forecastFor),
+  expiresIdx: index("idx_weather_data_expires").on(table.expiresAt)
+}));
+
+// Weather alerts table
+export const weatherAlerts = pgTable("weather_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Alert details
+  alertType: weatherAlertTypeEnum("alert_type").notNull(),
+  severity: weatherAlertSeverityEnum("severity").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  
+  // Location coverage
+  affectedAreas: jsonb("affected_areas").notNull().default('[]'), // Array of { lat, lng, radius } or polygon coordinates
+  stateCode: varchar("state_code", { length: 2 }),
+  countyName: varchar("county_name", { length: 100 }),
+  cityName: varchar("city_name", { length: 100 }),
+  
+  // Time range
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time").notNull(),
+  
+  // Status
+  isActive: boolean("is_active").notNull().default(true),
+  
+  // Additional information
+  instructions: text("instructions"),
+  urgency: varchar("urgency", { length: 20 }), // immediate, expected, future, past
+  certainty: varchar("certainty", { length: 20 }), // observed, likely, possible, unlikely
+  
+  // Source
+  source: varchar("source", { length: 50 }).default('mock'),
+  externalId: varchar("external_id", { length: 100 }), // ID from external weather service
+  
+  // Impact metrics
+  estimatedImpactRadius: decimal("estimated_impact_radius", { precision: 6, scale: 2 }), // in miles
+  affectedJobCount: integer("affected_job_count").default(0),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  activeIdx: index("idx_weather_alerts_active").on(table.isActive),
+  severityIdx: index("idx_weather_alerts_severity").on(table.severity),
+  timeRangeIdx: index("idx_weather_alerts_time").on(table.startTime, table.endTime),
+  alertTypeIdx: index("idx_weather_alerts_type").on(table.alertType)
+}));
+
+// Job weather impacts table
+export const jobWeatherImpacts = pgTable("job_weather_impacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // References
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  weatherDataId: varchar("weather_data_id").references(() => weatherData.id),
+  weatherAlertId: varchar("weather_alert_id").references(() => weatherAlerts.id),
+  
+  // Impact assessment
+  impactLevel: weatherImpactLevelEnum("impact_level").notNull(),
+  impactScore: decimal("impact_score", { precision: 5, scale: 2 }).notNull(), // 0-100
+  
+  // Specific impacts
+  safetyRisk: boolean("safety_risk").notNull().default(false),
+  delayRisk: boolean("delay_risk").notNull().default(false),
+  equipmentRisk: boolean("equipment_risk").notNull().default(false),
+  visibilityIssue: boolean("visibility_issue").notNull().default(false),
+  
+  // Impact details
+  impactFactors: jsonb("impact_factors").default('[]'), // Array of { factor, severity, description }
+  recommendedActions: text("recommended_actions").array().default(sql`ARRAY[]::text[]`),
+  
+  // Contractor notification
+  contractorNotified: boolean("contractor_notified").notNull().default(false),
+  contractorNotifiedAt: timestamp("contractor_notified_at"),
+  contractorAcknowledged: boolean("contractor_acknowledged").notNull().default(false),
+  contractorAcknowledgedAt: timestamp("contractor_acknowledged_at"),
+  
+  // Customer notification
+  customerNotified: boolean("customer_notified").notNull().default(false),
+  customerNotifiedAt: timestamp("customer_notified_at"),
+  
+  // Notes
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  jobIdx: index("idx_job_weather_impacts_job").on(table.jobId),
+  weatherDataIdx: index("idx_job_weather_impacts_weather").on(table.weatherDataId),
+  alertIdx: index("idx_job_weather_impacts_alert").on(table.weatherAlertId),
+  impactLevelIdx: index("idx_job_weather_impacts_level").on(table.impactLevel),
+  safetyIdx: index("idx_job_weather_impacts_safety").on(table.safetyRisk)
+}));
+
+// Weather schemas and types
+export const insertWeatherDataSchema = createInsertSchema(weatherData).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertWeatherData = z.infer<typeof insertWeatherDataSchema>;
+export type WeatherData = typeof weatherData.$inferSelect;
+export type SelectWeatherData = typeof weatherData.$inferSelect;
+
+export const insertWeatherAlertSchema = createInsertSchema(weatherAlerts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertWeatherAlert = z.infer<typeof insertWeatherAlertSchema>;
+export type WeatherAlert = typeof weatherAlerts.$inferSelect;
+export type SelectWeatherAlert = typeof weatherAlerts.$inferSelect;
+
+export const insertJobWeatherImpactSchema = createInsertSchema(jobWeatherImpacts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertJobWeatherImpact = z.infer<typeof insertJobWeatherImpactSchema>;
+export type JobWeatherImpact = typeof jobWeatherImpacts.$inferSelect;
+export type SelectJobWeatherImpact = typeof jobWeatherImpacts.$inferSelect;
 
 // ====================
 // EMERGENCY SOS SYSTEM

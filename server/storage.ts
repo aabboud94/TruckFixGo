@@ -68,6 +68,9 @@ import {
   contractorRoutes,
   routeStops,
   routeWaypoints,
+  weatherData,
+  weatherAlerts,
+  jobWeatherImpacts,
   type User,
   type InsertUser,
   type Session,
@@ -327,7 +330,13 @@ import {
   sosSeverityEnum,
   sosAlertTypeEnum,
   sosInitiatorTypeEnum,
-  sosResponseActionEnum
+  sosResponseActionEnum,
+  type WeatherData,
+  type InsertWeatherData,
+  type WeatherAlert,
+  type InsertWeatherAlert,
+  type JobWeatherImpact,
+  type InsertJobWeatherImpact
 } from "@shared/schema";
 import { partsInventoryService } from "./services/parts-inventory-service";
 
@@ -1959,6 +1968,35 @@ export interface IStorage {
     onTimeRate: number;
   }>>;
   
+  // ==================== WEATHER SYSTEM ====================
+  
+  // Save weather data
+  saveWeatherData(data: InsertWeatherData): Promise<WeatherData>;
+  
+  // Get weather for a specific location
+  getWeatherForLocation(lat: number, lng: number, isForecast?: boolean): Promise<WeatherData | null>;
+  
+  // Save weather alert
+  saveWeatherAlert(alert: InsertWeatherAlert): Promise<WeatherAlert>;
+  
+  // Get active weather alerts
+  getActiveWeatherAlerts(): Promise<WeatherAlert[]>;
+  
+  // Record job weather impact
+  recordJobWeatherImpact(impact: InsertJobWeatherImpact): Promise<JobWeatherImpact>;
+  
+  // Get job weather impact
+  getJobWeatherImpact(jobId: string): Promise<JobWeatherImpact | null>;
+  
+  // Update weather data expiration
+  updateWeatherDataExpiration(id: string, expiresAt: Date): Promise<void>;
+  
+  // Get weather alerts for location
+  getWeatherAlertsForLocation(lat: number, lng: number): Promise<WeatherAlert[]>;
+  
+  // Get active jobs (for weather refresh)
+  getActiveJobs(): Promise<Job[]>;
+
   // ==================== EMERGENCY SOS ====================
   
   // Create a new emergency SOS alert
@@ -13253,6 +13291,111 @@ export class PostgreSQLStorage implements IStorage {
   ) {
     const { performanceMetricsService } = await import('./services/performance-metrics-service');
     return performanceMetricsService.calculateOnTimeDelivery(entityType, entityId, dateRange);
+  }
+
+  // ==================== WEATHER METHODS ====================
+  
+  async saveWeatherData(data: InsertWeatherData): Promise<WeatherData> {
+    const result = await db.insert(weatherData).values(data).returning();
+    return result[0];
+  }
+  
+  async getWeatherForLocation(lat: number, lng: number, isForecast: boolean = false): Promise<WeatherData | null> {
+    const result = await db.select()
+      .from(weatherData)
+      .where(and(
+        eq(weatherData.latitude, lat.toString()),
+        eq(weatherData.longitude, lng.toString()),
+        eq(weatherData.isForecast, isForecast),
+        gte(weatherData.expiresAt, new Date())
+      ))
+      .orderBy(desc(weatherData.timestamp))
+      .limit(1);
+    
+    return result[0] || null;
+  }
+  
+  async saveWeatherAlert(alert: InsertWeatherAlert): Promise<WeatherAlert> {
+    const result = await db.insert(weatherAlerts).values(alert).returning();
+    return result[0];
+  }
+  
+  async getActiveWeatherAlerts(): Promise<WeatherAlert[]> {
+    const now = new Date();
+    return await db.select()
+      .from(weatherAlerts)
+      .where(and(
+        eq(weatherAlerts.isActive, true),
+        lte(weatherAlerts.startTime, now),
+        gte(weatherAlerts.endTime, now)
+      ))
+      .orderBy(desc(weatherAlerts.severity));
+  }
+  
+  async recordJobWeatherImpact(impact: InsertJobWeatherImpact): Promise<JobWeatherImpact> {
+    const result = await db.insert(jobWeatherImpacts).values(impact).returning();
+    return result[0];
+  }
+  
+  async getJobWeatherImpact(jobId: string): Promise<JobWeatherImpact | null> {
+    const result = await db.select()
+      .from(jobWeatherImpacts)
+      .where(eq(jobWeatherImpacts.jobId, jobId))
+      .orderBy(desc(jobWeatherImpacts.createdAt))
+      .limit(1);
+    
+    return result[0] || null;
+  }
+  
+  async updateWeatherDataExpiration(id: string, expiresAt: Date): Promise<void> {
+    await db.update(weatherData)
+      .set({ expiresAt, updatedAt: new Date() })
+      .where(eq(weatherData.id, id));
+  }
+  
+  async getWeatherAlertsForLocation(lat: number, lng: number): Promise<WeatherAlert[]> {
+    const now = new Date();
+    const alerts = await db.select()
+      .from(weatherAlerts)
+      .where(and(
+        eq(weatherAlerts.isActive, true),
+        lte(weatherAlerts.startTime, now),
+        gte(weatherAlerts.endTime, now)
+      ));
+    
+    // Filter alerts that affect the given location
+    // This is simplified - in a real system you'd check if the location
+    // is within the affected areas using proper geospatial queries
+    const radius = 50; // miles
+    const filteredAlerts = alerts.filter(alert => {
+      const areas = alert.affectedAreas as any[];
+      return areas.some((area: any) => {
+        const distance = this.calculateDistance(lat, lng, area.lat, area.lng);
+        return distance <= (area.radius || radius);
+      });
+    });
+    
+    return filteredAlerts;
+  }
+  
+  async getActiveJobs(): Promise<Job[]> {
+    return await db.select()
+      .from(jobs)
+      .where(inArray(jobs.status, ['new', 'assigned', 'en_route', 'on_site']))
+      .orderBy(desc(jobs.createdAt));
+  }
+  
+  // Helper function to calculate distance between two coordinates (in miles)
+  private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 3959; // Earth's radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
   }
 
   // ==================== EMERGENCY SOS METHODS ====================

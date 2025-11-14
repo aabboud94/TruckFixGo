@@ -16,6 +16,7 @@ import pdfService from "./pdf-service";
 import { emailService } from "./services/email-service";
 import { availabilityService } from "./services/availability-service";
 import LocationService from "./services/location-service";
+import weatherService from "./services/weather-service";
 import { trackingWSServer } from "./websocket";
 import { healthMonitor } from "./health-monitor";
 import { pushNotificationService } from "./services/push-notification-service";
@@ -2300,6 +2301,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Get active job error:', error);
         res.status(500).json({ message: 'Failed to get active job' });
+      }
+    }
+  );
+
+  // ==================== WEATHER API ENDPOINTS ====================
+
+  // Get current weather for coordinates
+  app.get('/api/weather/current/:lat/:lng',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const lat = parseFloat(req.params.lat);
+        const lng = parseFloat(req.params.lng);
+        
+        if (isNaN(lat) || isNaN(lng)) {
+          return res.status(400).json({ message: 'Invalid coordinates' });
+        }
+        
+        const weather = await weatherService.getCurrentWeather(lat, lng);
+        res.json(weather);
+      } catch (error) {
+        console.error('Get current weather error:', error);
+        res.status(500).json({ message: 'Failed to get weather data' });
+      }
+    }
+  );
+
+  // Get 5-day forecast for coordinates
+  app.get('/api/weather/forecast/:lat/:lng',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const lat = parseFloat(req.params.lat);
+        const lng = parseFloat(req.params.lng);
+        
+        if (isNaN(lat) || isNaN(lng)) {
+          return res.status(400).json({ message: 'Invalid coordinates' });
+        }
+        
+        const forecast = await weatherService.getForecast(lat, lng);
+        res.json(forecast);
+      } catch (error) {
+        console.error('Get weather forecast error:', error);
+        res.status(500).json({ message: 'Failed to get weather forecast' });
+      }
+    }
+  );
+
+  // Get active weather alerts
+  app.get('/api/weather/alerts',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const lat = req.query.lat ? parseFloat(req.query.lat as string) : undefined;
+        const lng = req.query.lng ? parseFloat(req.query.lng as string) : undefined;
+        
+        let alerts;
+        if (lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)) {
+          alerts = await storage.getWeatherAlertsForLocation(lat, lng);
+        } else {
+          alerts = await storage.getActiveWeatherAlerts();
+        }
+        
+        res.json(alerts);
+      } catch (error) {
+        console.error('Get weather alerts error:', error);
+        res.status(500).json({ message: 'Failed to get weather alerts' });
+      }
+    }
+  );
+
+  // Get weather for specific job location
+  app.get('/api/weather/job/:jobId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { jobId } = req.params;
+        
+        // Get job details
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        // Check permissions
+        if (req.session.role === 'driver' && job.customerId !== req.session.userId) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+        if (req.session.role === 'contractor' && job.contractorId !== req.session.userId) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+        
+        const weatherData = await weatherService.getJobWeather(jobId);
+        res.json(weatherData);
+      } catch (error) {
+        console.error('Get job weather error:', error);
+        res.status(500).json({ message: 'Failed to get weather for job' });
+      }
+    }
+  );
+
+  // Manually refresh weather data
+  app.post('/api/weather/refresh',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const result = await weatherService.refreshAllWeatherData();
+        res.json({
+          message: 'Weather data refreshed',
+          ...result
+        });
+      } catch (error) {
+        console.error('Refresh weather data error:', error);
+        res.status(500).json({ message: 'Failed to refresh weather data' });
       }
     }
   );
