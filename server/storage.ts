@@ -18,6 +18,9 @@ import {
   jobStatusHistory,
   contractorServices,
   contractorAvailability,
+  vacationRequests,
+  availabilityOverrides,
+  contractorCoverage,
   contractorEarnings,
   reviews,
   reviewVotes,
@@ -104,6 +107,12 @@ import {
   type InsertContractorService,
   type ContractorAvailability,
   type InsertContractorAvailability,
+  type VacationRequest,
+  type InsertVacationRequest,
+  type AvailabilityOverride,
+  type InsertAvailabilityOverride,
+  type ContractorCoverage,
+  type InsertContractorCoverage,
   type ContractorEarning,
   type InsertContractorEarning,
   type Review,
@@ -250,7 +259,10 @@ import {
   refundStatusEnum,
   checkProviderEnum,
   checkStatusEnum,
-  queueStatusEnum
+  queueStatusEnum,
+  timeOffRequestTypeEnum,
+  timeOffStatusEnum,
+  coverageStatusEnum
 } from "@shared/schema";
 
 export interface IStorage {
@@ -1067,6 +1079,40 @@ export interface IStorage {
   setContractorAvailability(availability: InsertContractorAvailability): Promise<ContractorAvailability>;
   getContractorAvailability(contractorId: string): Promise<ContractorAvailability[]>;
   updateContractorLocation(contractorId: string, location: {lat: number, lng: number}): Promise<boolean>;
+  
+  // ==================== VACATION AND TIME-OFF MANAGEMENT ====================
+  requestTimeOff(contractorId: string, request: InsertVacationRequest): Promise<VacationRequest>;
+  approveTimeOff(requestId: string, adminId: string, notes?: string): Promise<VacationRequest | null>;
+  rejectTimeOff(requestId: string, adminId: string, reason: string): Promise<VacationRequest | null>;
+  getTimeOffRequests(contractorId?: string, status?: typeof timeOffStatusEnum.enumValues[number]): Promise<VacationRequest[]>;
+  checkAvailabilityConflicts(contractorId: string, startDate: Date, endDate: Date): Promise<Job[]>;
+  assignCoverageContractor(requestId: string, coveringContractorId: string): Promise<VacationRequest | null>;
+  getAvailabilityCalendar(contractorId: string, month: number, year: number): Promise<{
+    regularAvailability: ContractorAvailability[];
+    vacationRequests: VacationRequest[];
+    availabilityOverrides: AvailabilityOverride[];
+    scheduledJobs: Job[];
+  }>;
+  bulkUpdateAvailability(contractorId: string, dates: {
+    date: Date;
+    isAvailable: boolean;
+    startTime?: string;
+    endTime?: string;
+    reason?: string;
+  }[]): Promise<AvailabilityOverride[]>;
+  createAvailabilityOverride(override: InsertAvailabilityOverride): Promise<AvailabilityOverride>;
+  getAvailabilityOverrides(contractorId: string, fromDate?: Date, toDate?: Date): Promise<AvailabilityOverride[]>;
+  createContractorCoverage(coverage: InsertContractorCoverage): Promise<ContractorCoverage>;
+  updateContractorCoverage(coverageId: string, updates: Partial<InsertContractorCoverage>): Promise<ContractorCoverage | null>;
+  getContractorCoverage(contractorId: string, role: 'requesting' | 'covering' | 'both'): Promise<ContractorCoverage[]>;
+  suggestCoverageContractors(requestingContractorId: string, startDate: Date, endDate: Date): Promise<{
+    contractorId: string;
+    name: string;
+    availability: number; // percentage of availability during the period
+    skills: ServiceType[];
+    distance?: number;
+    rating?: number;
+  }[]>;
   
   addContractorEarning(earning: InsertContractorEarning): Promise<ContractorEarning>;
   getContractorEarnings(contractorId: string, isPaid?: boolean): Promise<ContractorEarning[]>;
@@ -2228,6 +2274,42 @@ export class PostgreSQLStorage implements IStorage {
         // Log contractor details for debugging
         console.log(`[AssignJob] Processing contractor: ID=${row.users.id}, Email=${row.users.email}, HasProfile=${!!row.contractor_profiles}`);
         
+        // Check if contractor is on vacation
+        const today = new Date();
+        const contractorVacations = await db.select()
+          .from(vacationRequests)
+          .where(
+            and(
+              eq(vacationRequests.contractorId, row.users.id),
+              eq(vacationRequests.status, 'approved'),
+              sql`${vacationRequests.startDate} <= ${today}`,
+              sql`${vacationRequests.endDate} >= ${today}`
+            )
+          )
+          .limit(1);
+        
+        if (contractorVacations.length > 0) {
+          console.log(`[AssignJob] Contractor ${row.users.id} is on vacation, skipping`);
+          return null; // Skip contractors on vacation
+        }
+        
+        // Check availability overrides for today
+        const todayOverrides = await db.select()
+          .from(availabilityOverrides)
+          .where(
+            and(
+              eq(availabilityOverrides.contractorId, row.users.id),
+              eq(availabilityOverrides.date, today),
+              eq(availabilityOverrides.isAvailable, false)
+            )
+          )
+          .limit(1);
+        
+        if (todayOverrides.length > 0) {
+          console.log(`[AssignJob] Contractor ${row.users.id} is unavailable today, skipping`);
+          return null; // Skip unavailable contractors
+        }
+        
         const fullName = `${row.users.firstName || ''} ${row.users.lastName || ''}`.trim() || row.users.email || 'Unknown';
         let distance = 0;
         
@@ -2312,10 +2394,13 @@ export class PostgreSQLStorage implements IStorage {
         return contractor;
       }));
 
+      // Filter out null values (contractors on vacation or unavailable)
+      const availableContractors = processedContractors.filter(c => c !== null);
+
       // Filter contractors within service radius if location provided
       const eligibleContractors = jobLat && jobLon 
-        ? processedContractors.filter(c => c.withinServiceRadius)
-        : processedContractors;
+        ? availableContractors.filter(c => c.withinServiceRadius)
+        : availableContractors;
 
       console.log(`[AssignJob] ${eligibleContractors.length} contractors within service radius`);
 
@@ -4701,6 +4786,340 @@ export class PostgreSQLStorage implements IStorage {
     return await db.select().from(contractorAvailability)
       .where(eq(contractorAvailability.contractorId, contractorId))
       .orderBy(asc(contractorAvailability.dayOfWeek));
+  }
+  
+  // ==================== VACATION AND TIME-OFF MANAGEMENT ====================
+  
+  async requestTimeOff(contractorId: string, request: InsertVacationRequest): Promise<VacationRequest> {
+    const result = await db.insert(vacationRequests).values({
+      ...request,
+      contractorId
+    }).returning();
+    return result[0];
+  }
+  
+  async approveTimeOff(requestId: string, adminId: string, notes?: string): Promise<VacationRequest | null> {
+    const result = await db.update(vacationRequests)
+      .set({
+        status: 'approved',
+        approvedBy: adminId,
+        approvedAt: new Date(),
+        notes,
+        updatedAt: new Date()
+      })
+      .where(eq(vacationRequests.id, requestId))
+      .returning();
+    return result[0] || null;
+  }
+  
+  async rejectTimeOff(requestId: string, adminId: string, reason: string): Promise<VacationRequest | null> {
+    const result = await db.update(vacationRequests)
+      .set({
+        status: 'rejected',
+        approvedBy: adminId,
+        approvedAt: new Date(),
+        notes: reason,
+        updatedAt: new Date()
+      })
+      .where(eq(vacationRequests.id, requestId))
+      .returning();
+    return result[0] || null;
+  }
+  
+  async getTimeOffRequests(contractorId?: string, status?: typeof timeOffStatusEnum.enumValues[number]): Promise<VacationRequest[]> {
+    const conditions = [];
+    if (contractorId) {
+      conditions.push(eq(vacationRequests.contractorId, contractorId));
+    }
+    if (status) {
+      conditions.push(eq(vacationRequests.status, status));
+    }
+    
+    return await db.select().from(vacationRequests)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(vacationRequests.createdAt));
+  }
+  
+  async checkAvailabilityConflicts(contractorId: string, startDate: Date, endDate: Date): Promise<Job[]> {
+    // Check for scheduled jobs that conflict with the requested time off
+    return await db.select().from(jobs)
+      .where(
+        and(
+          eq(jobs.contractorId, contractorId),
+          eq(jobs.jobType, 'scheduled'),
+          gte(jobs.scheduledDate, startDate),
+          sql`${jobs.scheduledDate} <= ${endDate}`
+        )
+      )
+      .orderBy(asc(jobs.scheduledDate));
+  }
+  
+  async assignCoverageContractor(requestId: string, coveringContractorId: string): Promise<VacationRequest | null> {
+    const result = await db.update(vacationRequests)
+      .set({
+        coverageContractorId: coveringContractorId,
+        updatedAt: new Date()
+      })
+      .where(eq(vacationRequests.id, requestId))
+      .returning();
+    return result[0] || null;
+  }
+  
+  async getAvailabilityCalendar(contractorId: string, month: number, year: number): Promise<{
+    regularAvailability: ContractorAvailability[];
+    vacationRequests: VacationRequest[];
+    availabilityOverrides: AvailabilityOverride[];
+    scheduledJobs: Job[];
+  }> {
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0);
+    
+    const [regular, vacations, overrides, jobsList] = await Promise.all([
+      this.getContractorAvailability(contractorId),
+      db.select().from(vacationRequests)
+        .where(
+          and(
+            eq(vacationRequests.contractorId, contractorId),
+            eq(vacationRequests.status, 'approved'),
+            sql`${vacationRequests.startDate} <= ${endDate}`,
+            sql`${vacationRequests.endDate} >= ${startDate}`
+          )
+        ),
+      db.select().from(availabilityOverrides)
+        .where(
+          and(
+            eq(availabilityOverrides.contractorId, contractorId),
+            sql`${availabilityOverrides.date} >= ${startDate}`,
+            sql`${availabilityOverrides.date} <= ${endDate}`
+          )
+        ),
+      db.select().from(jobs)
+        .where(
+          and(
+            eq(jobs.contractorId, contractorId),
+            eq(jobs.jobType, 'scheduled'),
+            sql`${jobs.scheduledDate} >= ${startDate}`,
+            sql`${jobs.scheduledDate} <= ${endDate}`
+          )
+        )
+    ]);
+    
+    return {
+      regularAvailability: regular,
+      vacationRequests: vacations,
+      availabilityOverrides: overrides,
+      scheduledJobs: jobsList
+    };
+  }
+  
+  async bulkUpdateAvailability(contractorId: string, dates: {
+    date: Date;
+    isAvailable: boolean;
+    startTime?: string;
+    endTime?: string;
+    reason?: string;
+  }[]): Promise<AvailabilityOverride[]> {
+    const results: AvailabilityOverride[] = [];
+    
+    for (const dateEntry of dates) {
+      // Delete existing override for this date
+      await db.delete(availabilityOverrides)
+        .where(
+          and(
+            eq(availabilityOverrides.contractorId, contractorId),
+            eq(availabilityOverrides.date, dateEntry.date)
+          )
+        );
+      
+      // Insert new override
+      const result = await db.insert(availabilityOverrides)
+        .values({
+          contractorId,
+          date: dateEntry.date,
+          startTime: dateEntry.startTime,
+          endTime: dateEntry.endTime,
+          isAvailable: dateEntry.isAvailable,
+          reason: dateEntry.reason
+        })
+        .returning();
+      
+      results.push(result[0]);
+    }
+    
+    return results;
+  }
+  
+  async createAvailabilityOverride(override: InsertAvailabilityOverride): Promise<AvailabilityOverride> {
+    const result = await db.insert(availabilityOverrides).values(override).returning();
+    return result[0];
+  }
+  
+  async getAvailabilityOverrides(contractorId: string, fromDate?: Date, toDate?: Date): Promise<AvailabilityOverride[]> {
+    const conditions = [eq(availabilityOverrides.contractorId, contractorId)];
+    
+    if (fromDate) {
+      conditions.push(sql`${availabilityOverrides.date} >= ${fromDate}`);
+    }
+    if (toDate) {
+      conditions.push(sql`${availabilityOverrides.date} <= ${toDate}`);
+    }
+    
+    return await db.select().from(availabilityOverrides)
+      .where(and(...conditions))
+      .orderBy(asc(availabilityOverrides.date));
+  }
+  
+  async createContractorCoverage(coverage: InsertContractorCoverage): Promise<ContractorCoverage> {
+    const result = await db.insert(contractorCoverage).values(coverage).returning();
+    return result[0];
+  }
+  
+  async updateContractorCoverage(coverageId: string, updates: Partial<InsertContractorCoverage>): Promise<ContractorCoverage | null> {
+    const result = await db.update(contractorCoverage)
+      .set({
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(eq(contractorCoverage.id, coverageId))
+      .returning();
+    return result[0] || null;
+  }
+  
+  async getContractorCoverage(contractorId: string, role: 'requesting' | 'covering' | 'both'): Promise<ContractorCoverage[]> {
+    const conditions = [];
+    
+    if (role === 'requesting' || role === 'both') {
+      conditions.push(eq(contractorCoverage.requestingContractorId, contractorId));
+    }
+    if (role === 'covering' || role === 'both') {
+      conditions.push(eq(contractorCoverage.coveringContractorId, contractorId));
+    }
+    
+    return await db.select().from(contractorCoverage)
+      .where(conditions.length > 0 ? or(...conditions) : undefined)
+      .orderBy(desc(contractorCoverage.createdAt));
+  }
+  
+  async suggestCoverageContractors(requestingContractorId: string, startDate: Date, endDate: Date): Promise<{
+    contractorId: string;
+    name: string;
+    availability: number;
+    skills: ServiceType[];
+    distance?: number;
+    rating?: number;
+  }[]> {
+    // Get the requesting contractor's services and location
+    const requestingProfile = await this.getContractorProfile(requestingContractorId);
+    const requestingServices = await this.getContractorServices(requestingContractorId);
+    const requestingServiceIds = requestingServices.map(s => s.serviceTypeId);
+    
+    // Get all contractors with matching services
+    const potentialContractors = await db
+      .selectDistinct({
+        contractorId: contractorServices.contractorId
+      })
+      .from(contractorServices)
+      .innerJoin(contractorProfiles, eq(contractorServices.contractorId, contractorProfiles.userId))
+      .where(
+        and(
+          inArray(contractorServices.serviceTypeId, requestingServiceIds),
+          eq(contractorServices.isAvailable, true),
+          eq(contractorProfiles.isActive, true),
+          sql`${contractorServices.contractorId} != ${requestingContractorId}`
+        )
+      );
+    
+    const suggestions = [];
+    
+    for (const contractor of potentialContractors) {
+      // Check if contractor has approved time off during this period
+      const timeOffConflicts = await db.select().from(vacationRequests)
+        .where(
+          and(
+            eq(vacationRequests.contractorId, contractor.contractorId),
+            eq(vacationRequests.status, 'approved'),
+            sql`${vacationRequests.startDate} <= ${endDate}`,
+            sql`${vacationRequests.endDate} >= ${startDate}`
+          )
+        )
+        .limit(1);
+      
+      if (timeOffConflicts.length > 0) continue; // Skip if contractor has time off
+      
+      // Get contractor details
+      const profile = await this.getContractorProfile(contractor.contractorId);
+      const user = await this.getUser(contractor.contractorId);
+      const services = await this.getContractorServices(contractor.contractorId);
+      
+      // Calculate availability percentage (simplified)
+      const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      const availableDays = totalDays - timeOffConflicts.length;
+      const availabilityPercentage = (availableDays / totalDays) * 100;
+      
+      // Get average rating
+      const contractorReviews = await db.select({
+        avgRating: sql<number>`AVG(overall_rating)`
+      })
+      .from(reviews)
+      .where(eq(reviews.contractorId, contractor.contractorId));
+      
+      suggestions.push({
+        contractorId: contractor.contractorId,
+        name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Unknown',
+        availability: availabilityPercentage,
+        skills: await Promise.all(
+          services.map(async s => {
+            const serviceType = await db.select().from(serviceTypes)
+              .where(eq(serviceTypes.id, s.serviceTypeId))
+              .limit(1);
+            return serviceType[0];
+          })
+        ),
+        distance: requestingProfile?.baseLocation && profile?.baseLocation 
+          ? this.calculateDistance(requestingProfile.baseLocation, profile.baseLocation)
+          : undefined,
+        rating: contractorReviews[0]?.avgRating || undefined
+      });
+    }
+    
+    // Sort by availability, rating, and distance
+    suggestions.sort((a, b) => {
+      // Primary sort by availability
+      if (a.availability !== b.availability) {
+        return b.availability - a.availability;
+      }
+      // Secondary sort by rating
+      if (a.rating && b.rating) {
+        return b.rating - a.rating;
+      }
+      // Tertiary sort by distance
+      if (a.distance && b.distance) {
+        return a.distance - b.distance;
+      }
+      return 0;
+    });
+    
+    return suggestions.slice(0, 10); // Return top 10 suggestions
+  }
+  
+  private calculateDistance(loc1: any, loc2: any): number {
+    // Simple distance calculation (you might want to use a proper geolocation library)
+    const lat1 = loc1.lat || loc1.latitude;
+    const lon1 = loc1.lng || loc1.longitude;
+    const lat2 = loc2.lat || loc2.latitude;
+    const lon2 = loc2.lng || loc2.longitude;
+    
+    if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+    
+    const R = 3959; // Radius of the Earth in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
   }
 
   async updateContractorLocation(contractorId: string, location: {lat: number, lng: number}): Promise<boolean> {

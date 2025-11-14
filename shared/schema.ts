@@ -571,6 +571,11 @@ export const jobs = pgTable("jobs", {
 // Job Queue Management
 export const queueStatusEnum = pgEnum('queue_status', ['current', 'queued', 'assigned', 'skipped', 'expired', 'completed', 'cancelled']);
 
+// Vacation and time-off related enums
+export const timeOffRequestTypeEnum = pgEnum('time_off_request_type', ['vacation', 'sick_leave', 'personal', 'training', 'other']);
+export const timeOffStatusEnum = pgEnum('time_off_status', ['pending', 'approved', 'rejected', 'cancelled']);
+export const coverageStatusEnum = pgEnum('coverage_status', ['pending', 'confirmed', 'declined', 'cancelled']);
+
 export const contractorJobQueue = pgTable("contractor_job_queue", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   contractorId: varchar("contractor_id").notNull().references(() => users.id),
@@ -1139,6 +1144,62 @@ export const contractorAvailability = pgTable("contractor_availability", {
   updatedAt: timestamp("updated_at").notNull().defaultNow()
 }, (table) => ({
   contractorDayIdx: index("idx_contractor_availability").on(table.contractorId, table.dayOfWeek)
+}));
+
+// Vacation/time-off request table
+export const vacationRequests = pgTable("vacation_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  reason: text("reason"),
+  requestType: timeOffRequestTypeEnum("request_type").notNull(),
+  status: timeOffStatusEnum("status").notNull().default('pending'),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  notes: text("notes"),
+  coverageContractorId: varchar("coverage_contractor_id").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  contractorIdx: index("idx_vacation_requests_contractor").on(table.contractorId),
+  statusIdx: index("idx_vacation_requests_status").on(table.status),
+  dateIdx: index("idx_vacation_requests_dates").on(table.startDate, table.endDate),
+  coverageIdx: index("idx_vacation_requests_coverage").on(table.coverageContractorId)
+}));
+
+// Availability overrides table (for specific date/time exceptions)
+export const availabilityOverrides = pgTable("availability_overrides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  date: timestamp("date").notNull(),
+  startTime: varchar("start_time", { length: 5 }), // null means entire day
+  endTime: varchar("end_time", { length: 5 }), // null means entire day
+  isAvailable: boolean("is_available").notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  contractorDateIdx: uniqueIndex("idx_availability_overrides_unique").on(table.contractorId, table.date),
+  contractorIdx: index("idx_availability_overrides_contractor").on(table.contractorId),
+  dateIdx: index("idx_availability_overrides_date").on(table.date)
+}));
+
+// Contractor coverage table
+export const contractorCoverage = pgTable("contractor_coverage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requestingContractorId: varchar("requesting_contractor_id").notNull().references(() => users.id),
+  coveringContractorId: varchar("covering_contractor_id").notNull().references(() => users.id),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  status: coverageStatusEnum("status").notNull().default('pending'),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  requestingIdx: index("idx_contractor_coverage_requesting").on(table.requestingContractorId),
+  coveringIdx: index("idx_contractor_coverage_covering").on(table.coveringContractorId),
+  statusIdx: index("idx_contractor_coverage_status").on(table.status),
+  dateIdx: index("idx_contractor_coverage_dates").on(table.startDate, table.endDate)
 }));
 
 export const contractorEarnings = pgTable("contractor_earnings", {
@@ -2335,6 +2396,34 @@ export const insertContractorAvailabilitySchema = createInsertSchema(contractorA
 });
 export type InsertContractorAvailability = z.infer<typeof insertContractorAvailabilitySchema>;
 export type ContractorAvailability = typeof contractorAvailability.$inferSelect;
+
+// Vacation and time-off schemas
+export const insertVacationRequestSchema = createInsertSchema(vacationRequests).omit({
+  id: true,
+  status: true,
+  approvedBy: true,
+  approvedAt: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertVacationRequest = z.infer<typeof insertVacationRequestSchema>;
+export type VacationRequest = typeof vacationRequests.$inferSelect;
+
+export const insertAvailabilityOverrideSchema = createInsertSchema(availabilityOverrides).omit({
+  id: true,
+  createdAt: true
+});
+export type InsertAvailabilityOverride = z.infer<typeof insertAvailabilityOverrideSchema>;
+export type AvailabilityOverride = typeof availabilityOverrides.$inferSelect;
+
+export const insertContractorCoverageSchema = createInsertSchema(contractorCoverage).omit({
+  id: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertContractorCoverage = z.infer<typeof insertContractorCoverageSchema>;
+export type ContractorCoverage = typeof contractorCoverage.$inferSelect;
 
 export const insertContractorEarningsSchema = createInsertSchema(contractorEarnings).omit({ 
   id: true, 

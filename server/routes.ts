@@ -14,6 +14,7 @@ import efsComdataService from "./efs-comdata-service";
 import stripeService from "./stripe-service";
 import pdfService from "./pdf-service";
 import { emailService } from "./services/email-service";
+import { availabilityService } from "./services/availability-service";
 import LocationService from "./services/location-service";
 import { trackingWSServer } from "./websocket";
 import { healthMonitor } from "./health-monitor";
@@ -61,6 +62,10 @@ import {
   insertBillingHistorySchema,
   insertBillingUsageTrackingSchema,
   insertSplitPaymentTemplateSchema,
+  insertVacationRequestSchema,
+  insertAvailabilityOverrideSchema,
+  insertContractorCoverageSchema,
+  timeOffStatusEnum,
   splitPayments,
   transactions,
   contractorProfiles,
@@ -1739,6 +1744,244 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: 'Failed to get job tracking' });
     }
   });
+
+  // ==================== VACATION AND TIME-OFF MANAGEMENT ====================
+  
+  // Request time off
+  app.post('/api/contractor/time-off',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const validatedData = insertVacationRequestSchema.parse(req.body);
+        
+        // Check for conflicts
+        const { hasConflicts, scheduledJobs, existingRequests } = 
+          await availabilityService.checkConflicts(
+            contractorId,
+            new Date(validatedData.startDate),
+            new Date(validatedData.endDate)
+          );
+        
+        if (hasConflicts && scheduledJobs.length > 0) {
+          return res.status(409).json({
+            message: 'Time off request conflicts with scheduled jobs',
+            conflicts: {
+              scheduledJobs,
+              existingRequests
+            }
+          });
+        }
+        
+        const request = await storage.requestTimeOff(contractorId, validatedData);
+        res.status(201).json(request);
+      } catch (error) {
+        console.error('Request time off error:', error);
+        res.status(500).json({ message: 'Failed to request time off' });
+      }
+    }
+  );
+  
+  // Get time off requests
+  app.get('/api/contractor/time-off',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const status = req.query.status as typeof timeOffStatusEnum.enumValues[number] | undefined;
+        
+        const requests = await storage.getTimeOffRequests(contractorId, status);
+        res.json(requests);
+      } catch (error) {
+        console.error('Get time off requests error:', error);
+        res.status(500).json({ message: 'Failed to get time off requests' });
+      }
+    }
+  );
+  
+  // Admin approve time off
+  app.patch('/api/admin/time-off/:id/approve',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const requestId = req.params.id;
+        const adminId = req.session.userId!;
+        const { notes, coverageContractorId } = req.body;
+        
+        // First approve the request
+        let updatedRequest = await storage.approveTimeOff(requestId, adminId, notes);
+        
+        if (!updatedRequest) {
+          return res.status(404).json({ message: 'Time off request not found' });
+        }
+        
+        // Assign coverage if provided
+        if (coverageContractorId) {
+          updatedRequest = await storage.assignCoverageContractor(requestId, coverageContractorId);
+        }
+        
+        // Send notification
+        if (updatedRequest) {
+          await availabilityService.notifyApproval(updatedRequest);
+        }
+        
+        res.json(updatedRequest);
+      } catch (error) {
+        console.error('Approve time off error:', error);
+        res.status(500).json({ message: 'Failed to approve time off' });
+      }
+    }
+  );
+  
+  // Admin reject time off
+  app.patch('/api/admin/time-off/:id/reject',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const requestId = req.params.id;
+        const adminId = req.session.userId!;
+        const { reason } = req.body;
+        
+        if (!reason) {
+          return res.status(400).json({ message: 'Rejection reason is required' });
+        }
+        
+        const updatedRequest = await storage.rejectTimeOff(requestId, adminId, reason);
+        
+        if (!updatedRequest) {
+          return res.status(404).json({ message: 'Time off request not found' });
+        }
+        
+        // Send notification
+        await availabilityService.notifyRejection(updatedRequest);
+        
+        res.json(updatedRequest);
+      } catch (error) {
+        console.error('Reject time off error:', error);
+        res.status(500).json({ message: 'Failed to reject time off' });
+      }
+    }
+  );
+  
+  // Get availability calendar
+  app.get('/api/contractor/availability/calendar',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
+        const year = parseInt(req.query.year as string) || new Date().getFullYear();
+        
+        const calendar = await storage.getAvailabilityCalendar(contractorId, month, year);
+        const balance = await availabilityService.calculateVacationBalance(contractorId);
+        
+        res.json({
+          calendar,
+          balance
+        });
+      } catch (error) {
+        console.error('Get availability calendar error:', error);
+        res.status(500).json({ message: 'Failed to get availability calendar' });
+      }
+    }
+  );
+  
+  // Bulk update availability
+  app.put('/api/contractor/availability/bulk',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const { dates } = req.body;
+        
+        if (!dates || !Array.isArray(dates)) {
+          return res.status(400).json({ message: 'Invalid dates array' });
+        }
+        
+        // Convert string dates to Date objects
+        const formattedDates = dates.map(d => ({
+          ...d,
+          date: new Date(d.date)
+        }));
+        
+        const overrides = await storage.bulkUpdateAvailability(contractorId, formattedDates);
+        res.json(overrides);
+      } catch (error) {
+        console.error('Bulk update availability error:', error);
+        res.status(500).json({ message: 'Failed to update availability' });
+      }
+    }
+  );
+  
+  // Get coverage suggestions
+  app.get('/api/contractor/coverage-suggestions',
+    requireAuth,
+    requireRole('contractor', 'admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.query.contractorId as string || req.session.userId!;
+        const startDate = new Date(req.query.startDate as string);
+        const endDate = new Date(req.query.endDate as string);
+        
+        if (!startDate || !endDate) {
+          return res.status(400).json({ message: 'Start date and end date are required' });
+        }
+        
+        const suggestions = await availabilityService.suggestCoverage(
+          contractorId,
+          startDate,
+          endDate
+        );
+        
+        res.json(suggestions);
+      } catch (error) {
+        console.error('Get coverage suggestions error:', error);
+        res.status(500).json({ message: 'Failed to get coverage suggestions' });
+      }
+    }
+  );
+  
+  // Fleet view of contractor availability
+  app.get('/api/fleet/contractor-availability',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.query.fleetId as string;
+        const startDate = new Date(req.query.startDate as string || new Date());
+        const endDate = new Date(req.query.endDate as string || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
+        
+        let contractorIds: string[] = [];
+        
+        if (fleetId) {
+          // Get contractors for specific fleet
+          const fleetContractors = await storage.getFleetContractors(fleetId);
+          contractorIds = fleetContractors.map(c => c.contractorId);
+        } else {
+          // Get all contractors
+          const allContractors = await storage.findUsers({ role: 'contractor' });
+          contractorIds = allContractors.map(c => c.id);
+        }
+        
+        const report = await availabilityService.generateAvailabilityReport(
+          contractorIds,
+          startDate,
+          endDate
+        );
+        
+        res.json(report);
+      } catch (error) {
+        console.error('Get fleet availability error:', error);
+        res.status(500).json({ message: 'Failed to get fleet availability' });
+      }
+    }
+  );
 
   // Get contractor dashboard data
   app.get('/api/contractor/dashboard',
