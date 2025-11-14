@@ -3816,6 +3816,176 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== ENHANCED CHAT API ENDPOINTS ====================
+
+  // Get paginated message history
+  app.get('/api/jobs/:jobId/messages/history', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const jobId = req.params.jobId;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const beforeId = req.query.beforeId as string;
+      const afterId = req.query.afterId as string;
+      
+      const result = await storage.getMessageHistory(jobId, {
+        limit,
+        offset,
+        beforeId,
+        afterId
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error('Get message history error:', error);
+      res.status(500).json({ message: 'Failed to get message history' });
+    }
+  });
+
+  // Get unread message count
+  app.get('/api/jobs/:jobId/messages/unread', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const jobId = req.params.jobId;
+      const userId = req.session.userId!;
+      
+      const unreadCount = await storage.getUnreadMessageCount(jobId, userId);
+      
+      res.json({ unreadCount });
+    } catch (error) {
+      console.error('Get unread count error:', error);
+      res.status(500).json({ message: 'Failed to get unread count' });
+    }
+  });
+
+  // Mark messages as read
+  app.patch('/api/jobs/:jobId/messages/read', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const jobId = req.params.jobId;
+      const userId = req.session.userId!;
+      
+      const success = await storage.markMessagesAsRead(jobId, userId);
+      
+      res.json({ success });
+    } catch (error) {
+      console.error('Mark messages as read error:', error);
+      res.status(500).json({ message: 'Failed to mark messages as read' });
+    }
+  });
+
+  // Edit a message
+  app.put('/api/messages/:id', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const messageId = req.params.id;
+      const userId = req.session.userId!;
+      const { content } = req.body;
+      
+      if (!content || content.trim().length === 0) {
+        return res.status(400).json({ message: 'Message content is required' });
+      }
+      
+      const editedMessage = await storage.editMessage(messageId, content.trim(), userId);
+      
+      if (!editedMessage) {
+        return res.status(404).json({ message: 'Message not found or you do not have permission to edit' });
+      }
+      
+      res.json({ message: editedMessage });
+    } catch (error) {
+      console.error('Edit message error:', error);
+      res.status(500).json({ message: 'Failed to edit message' });
+    }
+  });
+
+  // Delete a message
+  app.delete('/api/messages/:id', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const messageId = req.params.id;
+      const userId = req.session.userId!;
+      
+      const deleted = await storage.deleteMessage(messageId, userId);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: 'Message not found or you do not have permission to delete' });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete message error:', error);
+      res.status(500).json({ message: 'Failed to delete message' });
+    }
+  });
+
+  // Add reaction to message
+  app.post('/api/messages/:id/reactions', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const messageId = req.params.id;
+      const userId = req.session.userId!;
+      const { emoji } = req.body;
+      
+      if (!emoji) {
+        return res.status(400).json({ message: 'Emoji is required' });
+      }
+      
+      const updatedMessage = await storage.addMessageReaction(messageId, userId, emoji);
+      
+      if (!updatedMessage) {
+        return res.status(404).json({ message: 'Message not found' });
+      }
+      
+      res.json({ message: updatedMessage });
+    } catch (error) {
+      console.error('Add reaction error:', error);
+      res.status(500).json({ message: 'Failed to add reaction' });
+    }
+  });
+
+  // Remove reaction from message
+  app.delete('/api/messages/:id/reactions/:emoji', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const messageId = req.params.id;
+      const emoji = req.params.emoji;
+      const userId = req.session.userId!;
+      
+      const updatedMessage = await storage.removeMessageReaction(messageId, userId, emoji);
+      
+      if (!updatedMessage) {
+        return res.status(404).json({ message: 'Message not found' });
+      }
+      
+      res.json({ message: updatedMessage });
+    } catch (error) {
+      console.error('Remove reaction error:', error);
+      res.status(500).json({ message: 'Failed to remove reaction' });
+    }
+  });
+
+  // Get message thread (replies to a message)
+  app.get('/api/messages/:id/thread', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const messageId = req.params.id;
+      
+      const thread = await storage.getMessageThread(messageId);
+      
+      res.json({ thread });
+    } catch (error) {
+      console.error('Get message thread error:', error);
+      res.status(500).json({ message: 'Failed to get message thread' });
+    }
+  });
+
+  // Get read receipts for a message
+  app.get('/api/messages/:id/receipts', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const messageId = req.params.id;
+      
+      const receipts = await storage.getMessageReadReceipts(messageId);
+      
+      res.json({ receipts });
+    } catch (error) {
+      console.error('Get read receipts error:', error);
+      res.status(500).json({ message: 'Failed to get read receipts' });
+    }
+  });
+
   // Get real-time GPS tracking data
   app.get('/api/jobs/:id/tracking', requireAuth, async (req: Request, res: Response) => {
     try {

@@ -623,12 +623,39 @@ export const jobMessages = pgTable("job_messages", {
   senderId: varchar("sender_id").notNull().references(() => users.id),
   message: text("message").notNull(),
   isSystemMessage: boolean("is_system_message").notNull().default(false),
-  readAt: timestamp("read_at"),
-  createdAt: timestamp("created_at").notNull().defaultNow()
+  readAt: timestamp("read_at"), // Deprecated in favor of message_read_receipts table
+  
+  // Enhanced fields for real-time chat
+  isEdited: boolean("is_edited").notNull().default(false),
+  editedAt: timestamp("edited_at"),
+  replyToId: varchar("reply_to_id").references(() => jobMessages.id),
+  attachmentUrl: varchar("attachment_url", { length: 500 }),
+  attachmentType: varchar("attachment_type", { length: 50 }), // image, document, etc.
+  reactions: jsonb("reactions").default('{}'), // { emoji: [userId1, userId2] }
+  isDeleted: boolean("is_deleted").notNull().default(false),
+  deletedAt: timestamp("deleted_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
 }, (table) => ({
   jobIdx: index("idx_job_messages_job").on(table.jobId),
   senderIdx: index("idx_job_messages_sender").on(table.senderId),
-  createdIdx: index("idx_job_messages_created").on(table.createdAt)
+  createdIdx: index("idx_job_messages_created").on(table.createdAt),
+  replyToIdx: index("idx_job_messages_reply_to").on(table.replyToId),
+  deletedIdx: index("idx_job_messages_deleted").on(table.isDeleted)
+}));
+
+// Message read receipts table for tracking individual read statuses
+export const messageReadReceipts = pgTable("message_read_receipts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id").notNull().references(() => jobMessages.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  readAt: timestamp("read_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  messageUserIdx: uniqueIndex("idx_message_read_receipts_unique").on(table.messageId, table.userId),
+  userIdx: index("idx_message_read_receipts_user").on(table.userId),
+  messageIdx: index("idx_message_read_receipts_message").on(table.messageId)
 }));
 
 export const jobStatusHistory = pgTable("job_status_history", {
@@ -2220,10 +2247,19 @@ export type JobPhoto = typeof jobPhotos.$inferSelect;
 
 export const insertJobMessageSchema = createInsertSchema(jobMessages).omit({ 
   id: true, 
-  createdAt: true 
+  createdAt: true,
+  updatedAt: true 
 });
 export type InsertJobMessage = z.infer<typeof insertJobMessageSchema>;
 export type JobMessage = typeof jobMessages.$inferSelect;
+
+export const insertMessageReadReceiptSchema = createInsertSchema(messageReadReceipts).omit({ 
+  id: true, 
+  createdAt: true,
+  readAt: true 
+});
+export type InsertMessageReadReceipt = z.infer<typeof insertMessageReadReceiptSchema>;
+export type MessageReadReceipt = typeof messageReadReceipts.$inferSelect;
 
 export const insertJobStatusHistorySchema = createInsertSchema(jobStatusHistory).omit({ 
   id: true, 

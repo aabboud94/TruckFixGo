@@ -37,7 +37,24 @@ const MessageTypeEnum = z.enum([
   'ROUTE_ETA_UPDATE',
   'ROUTE_DEVIATION',
   'ROUTE_OPTIMIZED',
-  'ROUTE_COMPLETED'
+  'ROUTE_COMPLETED',
+  // Chat message types
+  'JOIN_CHAT',
+  'LEAVE_CHAT',
+  'SEND_MESSAGE',
+  'EDIT_MESSAGE',
+  'DELETE_MESSAGE',
+  'TYPING_INDICATOR',
+  'STOP_TYPING',
+  'READ_RECEIPT',
+  'USER_JOINED_CHAT',
+  'USER_LEFT_CHAT',
+  'MESSAGE_REACTION',
+  'REMOVE_REACTION',
+  'MESSAGE_DELIVERED',
+  'MESSAGE_EDITED',
+  'MESSAGE_DELETED',
+  'UNREAD_COUNT_UPDATE'
 ]);
 
 const LocationSchema = z.object({
@@ -55,10 +72,13 @@ const WebSocketMessageSchema = z.object({
 interface ExtendedWebSocket extends WebSocket {
   isAlive: boolean;
   userId?: string;
-  role?: 'customer' | 'contractor' | 'guest' | 'admin';
+  role?: 'customer' | 'contractor' | 'guest' | 'admin' | 'fleet_manager';
   jobId?: string;
   biddingJobId?: string;
   routeId?: string;
+  chatJobId?: string;
+  isTyping?: boolean;
+  typingTimeout?: NodeJS.Timeout;
 }
 
 interface TrackingRoom {
@@ -108,11 +128,120 @@ interface RouteRoom {
   lastUpdate?: string;
 }
 
+interface ChatRoom {
+  jobId: string;
+  participants: Map<string, ExtendedWebSocket>; // Map of userId to WebSocket
+  typingUsers: Set<string>; // Set of userIds currently typing
+  onlineUsers: Set<string>; // Set of online userIds
+  lastActivity?: Date;
+  messageCache?: Array<{
+    id: string;
+    message: string;
+    senderId: string;
+    timestamp: Date;
+  }>;
+}
+
+interface TypingTimeout {
+  userId: string;
+  jobId: string;
+  timeout: NodeJS.Timeout;
+}
+
+class ChatRoom {
+  jobId: string;
+  participants: Map<string, ExtendedWebSocket>;
+  typingUsers: Set<string>;
+  onlineUsers: Set<string>;
+  lastActivity: Date;
+  typingTimeouts: Map<string, NodeJS.Timeout>;
+
+  constructor(jobId: string) {
+    this.jobId = jobId;
+    this.participants = new Map();
+    this.typingUsers = new Set();
+    this.onlineUsers = new Set();
+    this.lastActivity = new Date();
+    this.typingTimeouts = new Map();
+  }
+
+  addParticipant(userId: string, ws: ExtendedWebSocket): void {
+    this.participants.set(userId, ws);
+    this.onlineUsers.add(userId);
+    this.lastActivity = new Date();
+  }
+
+  removeParticipant(userId: string): void {
+    this.participants.delete(userId);
+    this.onlineUsers.delete(userId);
+    this.stopTyping(userId);
+    this.lastActivity = new Date();
+  }
+
+  startTyping(userId: string): void {
+    this.typingUsers.add(userId);
+    
+    // Clear existing timeout if any
+    const existingTimeout = this.typingTimeouts.get(userId);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+    
+    // Set new timeout to automatically stop typing after 5 seconds
+    const timeout = setTimeout(() => {
+      this.stopTyping(userId);
+      this.broadcastTypingStatus();
+    }, 5000);
+    
+    this.typingTimeouts.set(userId, timeout);
+  }
+
+  stopTyping(userId: string): void {
+    this.typingUsers.delete(userId);
+    
+    const timeout = this.typingTimeouts.get(userId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.typingTimeouts.delete(userId);
+    }
+  }
+
+  broadcastTypingStatus(): void {
+    const typingArray = Array.from(this.typingUsers);
+    this.participants.forEach((ws, userId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'TYPING_INDICATOR',
+          payload: {
+            typingUsers: typingArray.filter(id => id !== userId)
+          }
+        }));
+      }
+    });
+  }
+
+  broadcast(message: any, excludeUserId?: string): void {
+    this.participants.forEach((ws, userId) => {
+      if (ws.readyState === WebSocket.OPEN && userId !== excludeUserId) {
+        ws.send(JSON.stringify(message));
+      }
+    });
+  }
+
+  sendTo(userId: string, message: any): void {
+    const ws = this.participants.get(userId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message));
+    }
+  }
+}
+
 class TrackingWebSocketServer {
   private wss: WebSocketServer | null = null;
   private rooms: Map<string, TrackingRoom> = new Map();
   private biddingRooms: Map<string, BiddingRoom> = new Map();
   private routeRooms: Map<string, RouteRoom> = new Map();
+  private chatRooms: Map<string, ChatRoom> = new Map();
   private clients: Map<string, ExtendedWebSocket> = new Map();
   private pingInterval: NodeJS.Timeout | null = null;
 
@@ -204,6 +333,37 @@ class TrackingWebSocketServer {
         break;
       case 'ROUTE_UPDATE':
         await this.handleRouteUpdate(ws, message.payload);
+        break;
+      // Chat message handlers
+      case 'JOIN_CHAT':
+        await this.handleJoinChat(ws, message.payload);
+        break;
+      case 'LEAVE_CHAT':
+        this.handleLeaveChat(ws);
+        break;
+      case 'SEND_MESSAGE':
+        await this.handleSendMessage(ws, message.payload);
+        break;
+      case 'EDIT_MESSAGE':
+        await this.handleEditMessage(ws, message.payload);
+        break;
+      case 'DELETE_MESSAGE':
+        await this.handleDeleteMessage(ws, message.payload);
+        break;
+      case 'TYPING_INDICATOR':
+        this.handleTypingIndicator(ws, message.payload);
+        break;
+      case 'STOP_TYPING':
+        this.handleStopTyping(ws);
+        break;
+      case 'READ_RECEIPT':
+        await this.handleReadReceipt(ws, message.payload);
+        break;
+      case 'MESSAGE_REACTION':
+        await this.handleMessageReaction(ws, message.payload);
+        break;
+      case 'REMOVE_REACTION':
+        await this.handleRemoveReaction(ws, message.payload);
         break;
       default:
         this.sendError(ws, `Unknown message type: ${message.type}`);
@@ -1200,6 +1360,397 @@ class TrackingWebSocketServer {
     }, 5000); // Update every 5 seconds for demo
 
     return updateInterval;
+  }
+
+  // ==================== CHAT HANDLERS ====================
+  
+  private async handleJoinChat(ws: ExtendedWebSocket, payload: any) {
+    const { jobId, userId, role } = payload;
+    
+    if (!jobId || !userId) {
+      this.sendError(ws, 'Job ID and User ID are required');
+      return;
+    }
+    
+    // Verify job exists
+    const job = await storage.getJob(jobId);
+    if (!job) {
+      this.sendError(ws, 'Job not found');
+      return;
+    }
+    
+    // Set websocket properties
+    ws.chatJobId = jobId;
+    ws.userId = userId;
+    ws.role = role || 'guest';
+    
+    // Get or create chat room
+    let room = this.chatRooms.get(jobId);
+    if (!room) {
+      room = new ChatRoom(jobId);
+      this.chatRooms.set(jobId, room);
+    }
+    
+    // Add participant
+    room.addParticipant(userId, ws);
+    
+    // Store client reference
+    this.clients.set(userId, ws);
+    
+    // Get recent messages
+    const recentMessages = await storage.getJobMessages(jobId, 50);
+    const unreadCount = await storage.getUnreadMessageCount(jobId, userId);
+    
+    // Send join confirmation with initial data
+    this.sendMessage(ws, {
+      type: 'JOIN_CHAT',
+      payload: {
+        success: true,
+        jobId,
+        messages: recentMessages.reverse(),
+        unreadCount,
+        onlineUsers: Array.from(room.onlineUsers)
+      }
+    });
+    
+    // Notify other participants
+    room.broadcast({
+      type: 'USER_JOINED_CHAT',
+      payload: {
+        userId,
+        timestamp: new Date().toISOString()
+      }
+    }, userId);
+  }
+  
+  private handleLeaveChat(ws: ExtendedWebSocket) {
+    if (!ws.chatJobId || !ws.userId) return;
+    
+    const room = this.chatRooms.get(ws.chatJobId);
+    if (!room) return;
+    
+    // Remove participant
+    room.removeParticipant(ws.userId);
+    
+    // Notify others
+    room.broadcast({
+      type: 'USER_LEFT_CHAT',
+      payload: {
+        userId: ws.userId,
+        timestamp: new Date().toISOString()
+      }
+    });
+    
+    // Clean up empty rooms
+    if (room.participants.size === 0) {
+      this.chatRooms.delete(ws.chatJobId);
+    }
+    
+    // Remove client reference
+    this.clients.delete(ws.userId);
+    ws.chatJobId = undefined;
+  }
+  
+  private async handleSendMessage(ws: ExtendedWebSocket, payload: any) {
+    const { message, replyToId, attachmentUrl, attachmentType } = payload;
+    
+    if (!ws.chatJobId || !ws.userId) {
+      this.sendError(ws, 'Not in a chat room');
+      return;
+    }
+    
+    if (!message || message.trim().length === 0) {
+      this.sendError(ws, 'Message cannot be empty');
+      return;
+    }
+    
+    const room = this.chatRooms.get(ws.chatJobId);
+    if (!room) {
+      this.sendError(ws, 'Chat room not found');
+      return;
+    }
+    
+    try {
+      // Save message to database
+      const newMessage = await storage.addJobMessage({
+        jobId: ws.chatJobId,
+        senderId: ws.userId,
+        message: message.trim(),
+        replyToId,
+        attachmentUrl,
+        attachmentType,
+        isSystemMessage: false
+      });
+      
+      // Send acknowledgment to sender
+      this.sendMessage(ws, {
+        type: 'MESSAGE_DELIVERED',
+        payload: {
+          tempId: payload.tempId, // Client-side temporary ID
+          messageId: newMessage.id,
+          timestamp: newMessage.createdAt
+        }
+      });
+      
+      // Broadcast to all participants
+      room.broadcast({
+        type: 'SEND_MESSAGE',
+        payload: {
+          ...newMessage,
+          senderName: payload.senderName // Include sender name if provided
+        }
+      });
+      
+      // Stop typing indicator for sender
+      room.stopTyping(ws.userId);
+      room.broadcastTypingStatus();
+      
+    } catch (error) {
+      console.error('Error sending message:', error);
+      this.sendError(ws, 'Failed to send message');
+    }
+  }
+  
+  private async handleEditMessage(ws: ExtendedWebSocket, payload: any) {
+    const { messageId, newContent } = payload;
+    
+    if (!ws.chatJobId || !ws.userId) {
+      this.sendError(ws, 'Not in a chat room');
+      return;
+    }
+    
+    if (!messageId || !newContent || newContent.trim().length === 0) {
+      this.sendError(ws, 'Invalid edit request');
+      return;
+    }
+    
+    const room = this.chatRooms.get(ws.chatJobId);
+    if (!room) {
+      this.sendError(ws, 'Chat room not found');
+      return;
+    }
+    
+    try {
+      // Edit message in database
+      const editedMessage = await storage.editMessage(messageId, newContent.trim(), ws.userId);
+      
+      if (!editedMessage) {
+        this.sendError(ws, 'Message not found or you do not have permission to edit');
+        return;
+      }
+      
+      // Broadcast edit to all participants
+      room.broadcast({
+        type: 'MESSAGE_EDITED',
+        payload: editedMessage
+      });
+      
+    } catch (error) {
+      console.error('Error editing message:', error);
+      this.sendError(ws, 'Failed to edit message');
+    }
+  }
+  
+  private async handleDeleteMessage(ws: ExtendedWebSocket, payload: any) {
+    const { messageId } = payload;
+    
+    if (!ws.chatJobId || !ws.userId) {
+      this.sendError(ws, 'Not in a chat room');
+      return;
+    }
+    
+    if (!messageId) {
+      this.sendError(ws, 'Message ID is required');
+      return;
+    }
+    
+    const room = this.chatRooms.get(ws.chatJobId);
+    if (!room) {
+      this.sendError(ws, 'Chat room not found');
+      return;
+    }
+    
+    try {
+      // Delete message in database
+      const deleted = await storage.deleteMessage(messageId, ws.userId);
+      
+      if (!deleted) {
+        this.sendError(ws, 'Message not found or you do not have permission to delete');
+        return;
+      }
+      
+      // Broadcast deletion to all participants
+      room.broadcast({
+        type: 'MESSAGE_DELETED',
+        payload: { messageId }
+      });
+      
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      this.sendError(ws, 'Failed to delete message');
+    }
+  }
+  
+  private handleTypingIndicator(ws: ExtendedWebSocket, payload: any) {
+    if (!ws.chatJobId || !ws.userId) return;
+    
+    const room = this.chatRooms.get(ws.chatJobId);
+    if (!room) return;
+    
+    // Start typing indicator
+    room.startTyping(ws.userId);
+    room.broadcastTypingStatus();
+  }
+  
+  private handleStopTyping(ws: ExtendedWebSocket) {
+    if (!ws.chatJobId || !ws.userId) return;
+    
+    const room = this.chatRooms.get(ws.chatJobId);
+    if (!room) return;
+    
+    // Stop typing indicator
+    room.stopTyping(ws.userId);
+    room.broadcastTypingStatus();
+  }
+  
+  private async handleReadReceipt(ws: ExtendedWebSocket, payload: any) {
+    const { messageIds } = payload;
+    
+    if (!ws.chatJobId || !ws.userId) {
+      this.sendError(ws, 'Not in a chat room');
+      return;
+    }
+    
+    if (!Array.isArray(messageIds) || messageIds.length === 0) {
+      this.sendError(ws, 'Message IDs are required');
+      return;
+    }
+    
+    const room = this.chatRooms.get(ws.chatJobId);
+    if (!room) {
+      this.sendError(ws, 'Chat room not found');
+      return;
+    }
+    
+    try {
+      // Mark messages as read
+      const receipts = await Promise.all(
+        messageIds.map(msgId => storage.markMessageAsRead(msgId, ws.userId))
+      );
+      
+      // Get updated unread count
+      const unreadCount = await storage.getUnreadMessageCount(ws.chatJobId, ws.userId);
+      
+      // Send updated count to user
+      this.sendMessage(ws, {
+        type: 'UNREAD_COUNT_UPDATE',
+        payload: { unreadCount }
+      });
+      
+      // Broadcast read receipts to other participants
+      room.broadcast({
+        type: 'READ_RECEIPT',
+        payload: {
+          userId: ws.userId,
+          messageIds,
+          timestamp: new Date().toISOString()
+        }
+      }, ws.userId);
+      
+    } catch (error) {
+      console.error('Error handling read receipt:', error);
+      this.sendError(ws, 'Failed to mark messages as read');
+    }
+  }
+  
+  private async handleMessageReaction(ws: ExtendedWebSocket, payload: any) {
+    const { messageId, emoji } = payload;
+    
+    if (!ws.chatJobId || !ws.userId) {
+      this.sendError(ws, 'Not in a chat room');
+      return;
+    }
+    
+    if (!messageId || !emoji) {
+      this.sendError(ws, 'Message ID and emoji are required');
+      return;
+    }
+    
+    const room = this.chatRooms.get(ws.chatJobId);
+    if (!room) {
+      this.sendError(ws, 'Chat room not found');
+      return;
+    }
+    
+    try {
+      // Add reaction in database
+      const updatedMessage = await storage.addMessageReaction(messageId, ws.userId, emoji);
+      
+      if (!updatedMessage) {
+        this.sendError(ws, 'Message not found');
+        return;
+      }
+      
+      // Broadcast reaction to all participants
+      room.broadcast({
+        type: 'MESSAGE_REACTION',
+        payload: {
+          messageId,
+          userId: ws.userId,
+          emoji,
+          reactions: updatedMessage.reactions
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error adding reaction:', error);
+      this.sendError(ws, 'Failed to add reaction');
+    }
+  }
+  
+  private async handleRemoveReaction(ws: ExtendedWebSocket, payload: any) {
+    const { messageId, emoji } = payload;
+    
+    if (!ws.chatJobId || !ws.userId) {
+      this.sendError(ws, 'Not in a chat room');
+      return;
+    }
+    
+    if (!messageId || !emoji) {
+      this.sendError(ws, 'Message ID and emoji are required');
+      return;
+    }
+    
+    const room = this.chatRooms.get(ws.chatJobId);
+    if (!room) {
+      this.sendError(ws, 'Chat room not found');
+      return;
+    }
+    
+    try {
+      // Remove reaction in database
+      const updatedMessage = await storage.removeMessageReaction(messageId, ws.userId, emoji);
+      
+      if (!updatedMessage) {
+        this.sendError(ws, 'Message not found');
+        return;
+      }
+      
+      // Broadcast reaction removal to all participants
+      room.broadcast({
+        type: 'REMOVE_REACTION',
+        payload: {
+          messageId,
+          userId: ws.userId,
+          emoji,
+          reactions: updatedMessage.reactions
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error removing reaction:', error);
+      this.sendError(ws, 'Failed to remove reaction');
+    }
   }
 }
 

@@ -14,6 +14,7 @@ import {
   jobs,
   jobPhotos,
   jobMessages,
+  messageReadReceipts,
   jobStatusHistory,
   contractorServices,
   contractorAvailability,
@@ -93,6 +94,8 @@ import {
   type InsertJobPhoto,
   type JobMessage,
   type InsertJobMessage,
+  type MessageReadReceipt,
+  type InsertMessageReadReceipt,
   type JobStatusHistory,
   type InsertJobStatusHistory,
   type ContractorService,
@@ -872,8 +875,28 @@ export interface IStorage {
   getJobPhotos(jobId: string): Promise<JobPhoto[]>;
   deleteJobPhoto(photoId: string): Promise<boolean>;
   
+  // Enhanced messaging methods
   addJobMessage(message: InsertJobMessage): Promise<JobMessage>;
   getJobMessages(jobId: string, limit?: number): Promise<JobMessage[]>;
+  getUnreadMessageCount(jobId: string, userId: string): Promise<number>;
+  markMessagesAsRead(jobId: string, userId: string): Promise<boolean>;
+  editMessage(messageId: string, newContent: string, userId: string): Promise<JobMessage | null>;
+  deleteMessage(messageId: string, userId: string): Promise<boolean>;
+  addMessageReaction(messageId: string, userId: string, emoji: string): Promise<JobMessage | null>;
+  removeMessageReaction(messageId: string, userId: string, emoji: string): Promise<JobMessage | null>;
+  getMessageThread(messageId: string): Promise<JobMessage[]>;
+  getMessageHistory(jobId: string, options?: {
+    limit?: number;
+    offset?: number;
+    beforeId?: string;
+    afterId?: string;
+  }): Promise<{
+    messages: JobMessage[];
+    hasMore: boolean;
+    total: number;
+  }>;
+  markMessageAsRead(messageId: string, userId: string): Promise<MessageReadReceipt | null>;
+  getMessageReadReceipts(messageId: string): Promise<MessageReadReceipt[]>;
   
   calculateJobPrice(jobId: string): Promise<number>;
   
@@ -2920,9 +2943,276 @@ export class PostgreSQLStorage implements IStorage {
 
   async getJobMessages(jobId: string, limit: number = 50): Promise<JobMessage[]> {
     return await db.select().from(jobMessages)
-      .where(eq(jobMessages.jobId, jobId))
+      .where(and(
+        eq(jobMessages.jobId, jobId),
+        eq(jobMessages.isDeleted, false)
+      ))
       .orderBy(desc(jobMessages.createdAt))
       .limit(limit);
+  }
+
+  async getUnreadMessageCount(jobId: string, userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(jobMessages)
+      .leftJoin(
+        messageReadReceipts,
+        and(
+          eq(jobMessages.id, messageReadReceipts.messageId),
+          eq(messageReadReceipts.userId, userId)
+        )
+      )
+      .where(and(
+        eq(jobMessages.jobId, jobId),
+        eq(jobMessages.isDeleted, false),
+        ne(jobMessages.senderId, userId),
+        isNull(messageReadReceipts.id)
+      ));
+    
+    return Number(result[0]?.count || 0);
+  }
+
+  async markMessagesAsRead(jobId: string, userId: string): Promise<boolean> {
+    try {
+      // Get all unread messages for this job
+      const unreadMessages = await db
+        .select({ id: jobMessages.id })
+        .from(jobMessages)
+        .leftJoin(
+          messageReadReceipts,
+          and(
+            eq(jobMessages.id, messageReadReceipts.messageId),
+            eq(messageReadReceipts.userId, userId)
+          )
+        )
+        .where(and(
+          eq(jobMessages.jobId, jobId),
+          eq(jobMessages.isDeleted, false),
+          ne(jobMessages.senderId, userId),
+          isNull(messageReadReceipts.id)
+        ));
+
+      // Batch insert read receipts
+      if (unreadMessages.length > 0) {
+        const receipts = unreadMessages.map(msg => ({
+          messageId: msg.id,
+          userId: userId
+        }));
+        
+        await db.insert(messageReadReceipts)
+          .values(receipts)
+          .onConflictDoNothing();
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+      return false;
+    }
+  }
+
+  async editMessage(messageId: string, newContent: string, userId: string): Promise<JobMessage | null> {
+    try {
+      const result = await db
+        .update(jobMessages)
+        .set({
+          message: newContent,
+          isEdited: true,
+          editedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(and(
+          eq(jobMessages.id, messageId),
+          eq(jobMessages.senderId, userId),
+          eq(jobMessages.isDeleted, false)
+        ))
+        .returning();
+      
+      return result[0] || null;
+    } catch (error) {
+      console.error('Error editing message:', error);
+      return null;
+    }
+  }
+
+  async deleteMessage(messageId: string, userId: string): Promise<boolean> {
+    try {
+      const result = await db
+        .update(jobMessages)
+        .set({
+          isDeleted: true,
+          deletedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(and(
+          eq(jobMessages.id, messageId),
+          eq(jobMessages.senderId, userId)
+        ))
+        .returning();
+      
+      return result.length > 0;
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      return false;
+    }
+  }
+
+  async addMessageReaction(messageId: string, userId: string, emoji: string): Promise<JobMessage | null> {
+    try {
+      // Get current message
+      const messages = await db
+        .select()
+        .from(jobMessages)
+        .where(eq(jobMessages.id, messageId))
+        .limit(1);
+      
+      if (messages.length === 0) return null;
+      
+      const message = messages[0];
+      const reactions = message.reactions as any || {};
+      
+      // Add user to emoji reaction array
+      if (!reactions[emoji]) {
+        reactions[emoji] = [];
+      }
+      if (!reactions[emoji].includes(userId)) {
+        reactions[emoji].push(userId);
+      }
+      
+      // Update message with new reactions
+      const result = await db
+        .update(jobMessages)
+        .set({
+          reactions: reactions,
+          updatedAt: new Date()
+        })
+        .where(eq(jobMessages.id, messageId))
+        .returning();
+      
+      return result[0] || null;
+    } catch (error) {
+      console.error('Error adding reaction:', error);
+      return null;
+    }
+  }
+
+  async removeMessageReaction(messageId: string, userId: string, emoji: string): Promise<JobMessage | null> {
+    try {
+      // Get current message
+      const messages = await db
+        .select()
+        .from(jobMessages)
+        .where(eq(jobMessages.id, messageId))
+        .limit(1);
+      
+      if (messages.length === 0) return null;
+      
+      const message = messages[0];
+      const reactions = message.reactions as any || {};
+      
+      // Remove user from emoji reaction array
+      if (reactions[emoji]) {
+        reactions[emoji] = reactions[emoji].filter((id: string) => id !== userId);
+        if (reactions[emoji].length === 0) {
+          delete reactions[emoji];
+        }
+      }
+      
+      // Update message with new reactions
+      const result = await db
+        .update(jobMessages)
+        .set({
+          reactions: reactions,
+          updatedAt: new Date()
+        })
+        .where(eq(jobMessages.id, messageId))
+        .returning();
+      
+      return result[0] || null;
+    } catch (error) {
+      console.error('Error removing reaction:', error);
+      return null;
+    }
+  }
+
+  async getMessageThread(messageId: string): Promise<JobMessage[]> {
+    return await db
+      .select()
+      .from(jobMessages)
+      .where(and(
+        eq(jobMessages.replyToId, messageId),
+        eq(jobMessages.isDeleted, false)
+      ))
+      .orderBy(asc(jobMessages.createdAt));
+  }
+
+  async getMessageHistory(jobId: string, options?: {
+    limit?: number;
+    offset?: number;
+    beforeId?: string;
+    afterId?: string;
+  }): Promise<{
+    messages: JobMessage[];
+    hasMore: boolean;
+    total: number;
+  }> {
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    
+    // Build query conditions
+    let conditions = and(
+      eq(jobMessages.jobId, jobId),
+      eq(jobMessages.isDeleted, false)
+    );
+    
+    // Get total count
+    const countResult = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(jobMessages)
+      .where(conditions);
+    
+    const total = Number(countResult[0]?.count || 0);
+    
+    // Get messages with pagination
+    const messages = await db
+      .select()
+      .from(jobMessages)
+      .where(conditions)
+      .orderBy(desc(jobMessages.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    return {
+      messages,
+      hasMore: offset + messages.length < total,
+      total
+    };
+  }
+
+  async markMessageAsRead(messageId: string, userId: string): Promise<MessageReadReceipt | null> {
+    try {
+      const result = await db
+        .insert(messageReadReceipts)
+        .values({
+          messageId,
+          userId
+        })
+        .onConflictDoNothing()
+        .returning();
+      
+      return result[0] || null;
+    } catch (error) {
+      console.error('Error marking message as read:', error);
+      return null;
+    }
+  }
+
+  async getMessageReadReceipts(messageId: string): Promise<MessageReadReceipt[]> {
+    return await db
+      .select()
+      .from(messageReadReceipts)
+      .where(eq(messageReadReceipts.messageId, messageId))
+      .orderBy(desc(messageReadReceipts.readAt));
   }
 
   async calculateJobPrice(jobId: string): Promise<number> {
