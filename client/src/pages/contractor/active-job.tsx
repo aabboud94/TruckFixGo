@@ -37,7 +37,9 @@ import {
   AlertTriangle,
   Wrench,
   ClipboardList,
-  HelpCircle
+  HelpCircle,
+  Package,
+  Plus
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -58,6 +60,9 @@ export default function ContractorActiveJob() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [photoAnalyses, setPhotoAnalyses] = useState<any[]>([]);
   const [repairRecommendations, setRepairRecommendations] = useState<any>(null);
+  const [showPartsDialog, setShowPartsDialog] = useState(false);
+  const [laborCost, setLaborCost] = useState<number>(0);
+  const [additionalCost, setAdditionalCost] = useState<number>(0);
   const locationWatchId = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -70,6 +75,23 @@ export default function ContractorActiveJob() {
   const job = activeJobData?.job;
   const customer = activeJobData?.customer;
   const messages = activeJobData?.messages || [];
+
+  // Fetch job parts
+  const { data: jobPartsData, isLoading: partsLoading } = useQuery({
+    queryKey: ['/api/jobs', job?.id, 'parts'],
+    queryFn: async () => {
+      if (!job?.id) return null;
+      const response = await fetch(`/api/jobs/${job.id}/parts`);
+      if (!response.ok) throw new Error('Failed to fetch job parts');
+      return response.json();
+    },
+    enabled: !!job?.id
+  });
+
+  // Calculate total parts cost
+  const totalPartsCost = jobPartsData?.parts?.reduce((sum: number, item: any) => 
+    sum + (item.jobPart.quantity * item.jobPart.unitPrice), 0
+  ) || 0;
 
   // WebSocket connection for real-time tracking
   const {
@@ -148,16 +170,28 @@ export default function ContractorActiveJob() {
         throw new Error('Job information is not available. Please refresh the page.');
       }
       
+      // Calculate total cost including parts
+      const totalCost = laborCost + totalPartsCost + additionalCost;
+      
       console.log('Completing job:', { 
         jobId: job.id,
         completionNotes,
-        photosCount: selectedPhotos.length
+        photosCount: selectedPhotos.length,
+        laborCost,
+        partsCost: totalPartsCost,
+        additionalCost,
+        totalCost
       });
       
-      // Note: The server expects 'completionNotes' and 'finalPhotos'
+      // Note: The server expects 'completionNotes', 'finalPhotos', and cost breakdown
       return await apiRequest("POST", `/api/jobs/${job.id}/complete`, {
         completionNotes: completionNotes || '',
-        finalPhotos: selectedPhotos.map(f => f.name) // In real app, would upload first
+        finalPhotos: selectedPhotos.map(f => f.name), // In real app, would upload first
+        laborCost,
+        partsCost: totalPartsCost,
+        additionalCost,
+        totalCost,
+        partsUsed: jobPartsData?.parts || []
       });
     },
     onSuccess: (data) => {
@@ -645,6 +679,126 @@ export default function ContractorActiveJob() {
             </TabsList>
 
             <TabsContent value="complete" className="space-y-4">
+              {/* Parts Summary Card */}
+              <Card>
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Package className="w-5 h-5" />
+                      Parts Used
+                    </CardTitle>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => navigate(`/contractor/parts-lookup?jobId=${job?.id}`)}
+                      data-testid="button-add-parts"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Parts
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {partsLoading ? (
+                    <div className="text-center py-4">Loading parts...</div>
+                  ) : jobPartsData?.parts && jobPartsData.parts.length > 0 ? (
+                    <div className="space-y-3">
+                      {jobPartsData.parts.map((item: any) => (
+                        <div key={item.jobPart.id} className="flex justify-between items-center p-2 border rounded">
+                          <div>
+                            <div className="font-medium">{item.part.name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {item.part.partNumber} • Qty: {item.jobPart.quantity}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-medium">${(item.jobPart.quantity * item.jobPart.unitPrice).toFixed(2)}</div>
+                            <div className="text-sm text-muted-foreground">
+                              ${item.jobPart.unitPrice.toFixed(2)} each
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      <Separator />
+                      <div className="flex justify-between items-center font-medium">
+                        <span>Total Parts Cost:</span>
+                        <span className="text-lg">${totalPartsCost.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <Alert>
+                      <AlertDescription>
+                        No parts have been added to this job. Click "Add Parts" to search and add parts.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Cost Summary Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <DollarSign className="w-5 h-5" />
+                    Cost Summary
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="labor-cost">Labor Cost ($)</Label>
+                      <input
+                        id="labor-cost"
+                        type="number"
+                        step="0.01"
+                        value={laborCost}
+                        onChange={(e) => setLaborCost(parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 border rounded-md"
+                        placeholder="Enter labor cost"
+                        data-testid="input-labor-cost"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="additional-cost">Additional Costs ($)</Label>
+                      <input
+                        id="additional-cost"
+                        type="number"
+                        step="0.01"
+                        value={additionalCost}
+                        onChange={(e) => setAdditionalCost(parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 border rounded-md"
+                        placeholder="Enter any additional costs"
+                        data-testid="input-additional-cost"
+                      />
+                    </div>
+
+                    <Separator />
+                    
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span>Labor:</span>
+                        <span>${laborCost.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Parts:</span>
+                        <span>${totalPartsCost.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Additional:</span>
+                        <span>${additionalCost.toFixed(2)}</span>
+                      </div>
+                      <Separator />
+                      <div className="flex justify-between font-bold text-lg">
+                        <span>Total:</span>
+                        <span>${(laborCost + totalPartsCost + additionalCost).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Job Completion Card */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Complete Job</CardTitle>

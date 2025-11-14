@@ -74,6 +74,11 @@ export const routeStatusEnum = pgEnum('route_status', ['planned', 'active', 'com
 export const routeStopTypeEnum = pgEnum('route_stop_type', ['pickup', 'dropoff', 'service']);
 export const routeStopStatusEnum = pgEnum('route_stop_status', ['pending', 'arrived', 'in_progress', 'completed', 'skipped']);
 
+// Parts inventory related enums
+export const partsTransactionTypeEnum = pgEnum('parts_transaction_type', ['used', 'returned', 'restocked', 'damaged', 'expired', 'adjustment', 'initial_stock']);
+export const partsOrderStatusEnum = pgEnum('parts_order_status', ['pending', 'ordered', 'shipped', 'delivered', 'cancelled', 'returned']);
+export const partsCategoryEnum = pgEnum('parts_category', ['engine', 'transmission', 'brakes', 'electrical', 'suspension', 'body', 'hvac', 'tires', 'fluids', 'filters', 'belts_hoses', 'lighting', 'exhaust', 'accessories', 'tools', 'safety', 'other']);
+
 // ====================
 // USERS & AUTH
 // ====================
@@ -3553,6 +3558,130 @@ export type BookingBlacklist = typeof bookingBlacklist.$inferSelect;
 
 
 // ====================
+// PARTS INVENTORY
+// ====================
+
+export const partsCatalog = pgTable("parts_catalog", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partNumber: varchar("part_number", { length: 100 }).notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  category: partsCategoryEnum("category").notNull().default('other'),
+  manufacturer: varchar("manufacturer", { length: 100 }),
+  unitCost: decimal("unit_cost", { precision: 10, scale: 2 }).notNull(),
+  sellingPrice: decimal("selling_price", { precision: 10, scale: 2 }).notNull(),
+  markup: decimal("markup", { precision: 5, scale: 2 }),
+  imageUrl: text("image_url"),
+  specifications: jsonb("specifications"), // { weight: "5lbs", dimensions: "10x5x3", material: "steel", etc }
+  compatibleModels: jsonb("compatible_models"), // { makes: ["Freightliner", "Peterbilt"], models: ["Cascadia", "579"], years: [2018, 2019, 2020] }
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  partNumberIdx: uniqueIndex("idx_parts_catalog_part_number").on(table.partNumber),
+  categoryIdx: index("idx_parts_catalog_category").on(table.category),
+  manufacturerIdx: index("idx_parts_catalog_manufacturer").on(table.manufacturer),
+  activeIdx: index("idx_parts_catalog_active").on(table.isActive)
+}));
+
+export const partsInventory = pgTable("parts_inventory", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partId: varchar("part_id").notNull().references(() => partsCatalog.id),
+  warehouseId: varchar("warehouse_id", { length: 50 }).notNull(), // Can be location code, contractor id, or main warehouse
+  quantity: integer("quantity").notNull().default(0),
+  reorderLevel: integer("reorder_level").notNull().default(5),
+  reorderQuantity: integer("reorder_quantity").notNull().default(10),
+  location: varchar("location", { length: 100 }), // Shelf/bin location
+  lastRestocked: timestamp("last_restocked"),
+  expirationDate: timestamp("expiration_date"),
+  averageCost: decimal("average_cost", { precision: 10, scale: 2 }), // For FIFO/LIFO tracking
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  partWarehouseIdx: uniqueIndex("idx_parts_inventory_part_warehouse").on(table.partId, table.warehouseId),
+  warehouseIdx: index("idx_parts_inventory_warehouse").on(table.warehouseId),
+  reorderIdx: index("idx_parts_inventory_reorder").on(table.quantity, table.reorderLevel),
+  expirationIdx: index("idx_parts_inventory_expiration").on(table.expirationDate)
+}));
+
+export const partsTransactions = pgTable("parts_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partId: varchar("part_id").notNull().references(() => partsCatalog.id),
+  jobId: varchar("job_id").references(() => jobs.id),
+  contractorId: varchar("contractor_id").references(() => users.id),
+  orderId: varchar("order_id").references(() => partsOrders.id),
+  transactionType: partsTransactionTypeEnum("transaction_type").notNull(),
+  quantity: integer("quantity").notNull(),
+  unitCost: decimal("unit_cost", { precision: 10, scale: 2 }).notNull(),
+  totalCost: decimal("total_cost", { precision: 10, scale: 2 }).notNull(),
+  warehouseId: varchar("warehouse_id", { length: 50 }).notNull(),
+  notes: text("notes"),
+  metadata: jsonb("metadata"), // Additional transaction-specific data
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: varchar("created_by").references(() => users.id)
+}, (table) => ({
+  partIdx: index("idx_parts_transactions_part").on(table.partId),
+  jobIdx: index("idx_parts_transactions_job").on(table.jobId),
+  contractorIdx: index("idx_parts_transactions_contractor").on(table.contractorId),
+  orderIdx: index("idx_parts_transactions_order").on(table.orderId),
+  typeIdx: index("idx_parts_transactions_type").on(table.transactionType),
+  createdIdx: index("idx_parts_transactions_created").on(table.createdAt),
+  warehouseIdx: index("idx_parts_transactions_warehouse").on(table.warehouseId)
+}));
+
+export const partsOrders = pgTable("parts_orders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  supplierName: text("supplier_name").notNull(),
+  supplierContact: text("supplier_contact"),
+  orderNumber: varchar("order_number", { length: 50 }).unique(),
+  status: partsOrderStatusEnum("status").notNull().default('pending'),
+  items: jsonb("items").notNull(), // [{partId, partNumber, name, quantity, unitCost, totalCost}]
+  subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
+  tax: decimal("tax", { precision: 10, scale: 2 }).default('0'),
+  shipping: decimal("shipping", { precision: 10, scale: 2 }).default('0'),
+  totalCost: decimal("total_cost", { precision: 10, scale: 2 }).notNull(),
+  orderedAt: timestamp("ordered_at"),
+  expectedDelivery: timestamp("expected_delivery"),
+  receivedAt: timestamp("received_at"),
+  trackingNumber: varchar("tracking_number", { length: 100 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdBy: varchar("created_by").references(() => users.id)
+}, (table) => ({
+  orderNumberIdx: uniqueIndex("idx_parts_orders_order_number").on(table.orderNumber),
+  statusIdx: index("idx_parts_orders_status").on(table.status),
+  supplierIdx: index("idx_parts_orders_supplier").on(table.supplierName),
+  orderedIdx: index("idx_parts_orders_ordered").on(table.orderedAt),
+  expectedIdx: index("idx_parts_orders_expected").on(table.expectedDelivery)
+}));
+
+export const jobParts = pgTable("job_parts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  partId: varchar("part_id").notNull().references(() => partsCatalog.id),
+  quantity: integer("quantity").notNull(),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  totalPrice: decimal("total_price", { precision: 10, scale: 2 }).notNull(),
+  warrantyMonths: integer("warranty_months").default(0),
+  warrantyExpiresAt: timestamp("warranty_expires_at"),
+  installedAt: timestamp("installed_at"),
+  installedBy: varchar("installed_by").references(() => users.id),
+  serialNumber: varchar("serial_number", { length: 100 }),
+  notes: text("notes"),
+  isWarrantyClaim: boolean("is_warranty_claim").notNull().default(false),
+  originalInstallJobId: varchar("original_install_job_id").references(() => jobs.id), // For warranty replacements
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  jobPartIdx: uniqueIndex("idx_job_parts_job_part").on(table.jobId, table.partId),
+  jobIdx: index("idx_job_parts_job").on(table.jobId),
+  partIdx: index("idx_job_parts_part").on(table.partId),
+  warrantyIdx: index("idx_job_parts_warranty").on(table.warrantyExpiresAt),
+  installedByIdx: index("idx_job_parts_installed_by").on(table.installedBy)
+}));
+
+// ====================
 // NOTIFICATIONS
 // ====================
 
@@ -3673,4 +3802,44 @@ export const insertAssignmentPreferencesSchema = createInsertSchema(assignmentPr
 });
 export type InsertAssignmentPreferences = z.infer<typeof insertAssignmentPreferencesSchema>;
 export type AssignmentPreferences = typeof assignmentPreferences.$inferSelect;
+
+// Parts Inventory schemas and types
+export const insertPartsCatalogSchema = createInsertSchema(partsCatalog).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertPartsCatalog = z.infer<typeof insertPartsCatalogSchema>;
+export type PartsCatalog = typeof partsCatalog.$inferSelect;
+
+export const insertPartsInventorySchema = createInsertSchema(partsInventory).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertPartsInventory = z.infer<typeof insertPartsInventorySchema>;
+export type PartsInventory = typeof partsInventory.$inferSelect;
+
+export const insertPartsTransactionSchema = createInsertSchema(partsTransactions).omit({
+  id: true,
+  createdAt: true
+});
+export type InsertPartsTransaction = z.infer<typeof insertPartsTransactionSchema>;
+export type PartsTransaction = typeof partsTransactions.$inferSelect;
+
+export const insertPartsOrderSchema = createInsertSchema(partsOrders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertPartsOrder = z.infer<typeof insertPartsOrderSchema>;
+export type PartsOrder = typeof partsOrders.$inferSelect;
+
+export const insertJobPartSchema = createInsertSchema(jobParts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertJobPart = z.infer<typeof insertJobPartSchema>;
+export type JobPart = typeof jobParts.$inferSelect;
 
