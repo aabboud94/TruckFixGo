@@ -7008,6 +7008,182 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
   
+  // ==================== NEW FLEET ANALYTICS API ROUTES ====================
+  
+  // Get fleet analytics overview
+  app.get('/api/fleet/:fleetId/analytics/overview',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.fleetId;
+        
+        // Verify fleet access
+        if (req.session.role === 'fleet_manager') {
+          const user = await storage.getUser(req.session.userId!);
+          const fleetAccount = await storage.getFleetAccountByEmail(user?.email || '');
+          if (!fleetAccount || fleetAccount.id !== fleetId) {
+            return res.status(403).json({ 
+              message: 'Access denied to this fleet analytics' 
+            });
+          }
+        }
+        
+        const overview = await storage.getFleetAnalyticsOverview(fleetId);
+        res.json(overview);
+      } catch (error) {
+        console.error('Failed to get fleet analytics overview:', error);
+        res.status(500).json({ 
+          message: 'Failed to retrieve fleet analytics overview',
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+  );
+  
+  // Get fleet cost analytics
+  app.get('/api/fleet/:fleetId/analytics/costs',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.fleetId;
+        const { startDate, endDate, groupBy } = req.query;
+        
+        // Verify fleet access
+        if (req.session.role === 'fleet_manager') {
+          const user = await storage.getUser(req.session.userId!);
+          const fleetAccount = await storage.getFleetAccountByEmail(user?.email || '');
+          if (!fleetAccount || fleetAccount.id !== fleetId) {
+            return res.status(403).json({ 
+              message: 'Access denied to this fleet analytics' 
+            });
+          }
+        }
+        
+        const options = {
+          startDate: startDate ? new Date(startDate as string) : undefined,
+          endDate: endDate ? new Date(endDate as string) : undefined,
+          groupBy: (groupBy as 'day' | 'week' | 'month') || 'month'
+        };
+        
+        const costAnalytics = await storage.getFleetCostAnalytics(fleetId, options);
+        res.json(costAnalytics);
+      } catch (error) {
+        console.error('Failed to get fleet cost analytics:', error);
+        res.status(500).json({ 
+          message: 'Failed to retrieve fleet cost analytics',
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+  );
+  
+  // Get fleet vehicle analytics
+  app.get('/api/fleet/:fleetId/analytics/vehicles',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.fleetId;
+        
+        // Verify fleet access
+        if (req.session.role === 'fleet_manager') {
+          const user = await storage.getUser(req.session.userId!);
+          const fleetAccount = await storage.getFleetAccountByEmail(user?.email || '');
+          if (!fleetAccount || fleetAccount.id !== fleetId) {
+            return res.status(403).json({ 
+              message: 'Access denied to this fleet analytics' 
+            });
+          }
+        }
+        
+        const vehicleAnalytics = await storage.getFleetVehicleAnalytics(fleetId);
+        res.json(vehicleAnalytics);
+      } catch (error) {
+        console.error('Failed to get fleet vehicle analytics:', error);
+        res.status(500).json({ 
+          message: 'Failed to retrieve fleet vehicle analytics',
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+  );
+  
+  // Get fleet service analytics
+  app.get('/api/fleet/:fleetId/analytics/services',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.fleetId;
+        const { startDate, endDate } = req.query;
+        
+        // Verify fleet access
+        if (req.session.role === 'fleet_manager') {
+          const user = await storage.getUser(req.session.userId!);
+          const fleetAccount = await storage.getFleetAccountByEmail(user?.email || '');
+          if (!fleetAccount || fleetAccount.id !== fleetId) {
+            return res.status(403).json({ 
+              message: 'Access denied to this fleet analytics' 
+            });
+          }
+        }
+        
+        const options = {
+          startDate: startDate ? new Date(startDate as string) : undefined,
+          endDate: endDate ? new Date(endDate as string) : undefined
+        };
+        
+        const serviceAnalytics = await storage.getFleetServiceAnalytics(fleetId, options);
+        res.json(serviceAnalytics);
+      } catch (error) {
+        console.error('Failed to get fleet service analytics:', error);
+        res.status(500).json({ 
+          message: 'Failed to retrieve fleet service analytics',
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+  );
+  
+  // Get fleet contractor analytics
+  app.get('/api/fleet/:fleetId/analytics/contractors',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.fleetId;
+        const { startDate, endDate } = req.query;
+        
+        // Verify fleet access
+        if (req.session.role === 'fleet_manager') {
+          const user = await storage.getUser(req.session.userId!);
+          const fleetAccount = await storage.getFleetAccountByEmail(user?.email || '');
+          if (!fleetAccount || fleetAccount.id !== fleetId) {
+            return res.status(403).json({ 
+              message: 'Access denied to this fleet analytics' 
+            });
+          }
+        }
+        
+        const options = {
+          startDate: startDate ? new Date(startDate as string) : undefined,
+          endDate: endDate ? new Date(endDate as string) : undefined
+        };
+        
+        const contractorAnalytics = await storage.getFleetContractorAnalytics(fleetId, options);
+        res.json(contractorAnalytics);
+      } catch (error) {
+        console.error('Failed to get fleet contractor analytics:', error);
+        res.status(500).json({ 
+          message: 'Failed to retrieve fleet contractor analytics',
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+  );
+  
   // Get fleet alerts
   app.get('/api/fleet/:id/alerts',
     requireAuth,

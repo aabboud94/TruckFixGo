@@ -1123,6 +1123,92 @@ export interface IStorage {
     processedCount: number;
     createdJobs: Job[];
   }>;
+
+  // ==================== FLEET ANALYTICS API ====================
+  
+  // Get fleet overview statistics
+  getFleetAnalyticsOverview(fleetAccountId: string): Promise<{
+    totalVehicles: number;
+    activeJobs: number;
+    completedJobsThisMonth: number;
+    totalSpentThisMonth: number;
+    avgResponseTime: number;
+    satisfactionRating: number;
+  }>;
+  
+  // Get cost analytics with time series data
+  getFleetCostAnalytics(
+    fleetAccountId: string,
+    options: {
+      startDate?: Date;
+      endDate?: Date;
+      groupBy?: 'day' | 'week' | 'month';
+    }
+  ): Promise<Array<{
+    date: string;
+    maintenanceCost: number;
+    fuelCost: number;
+    totalCost: number;
+    serviceTypeBreakdown?: Record<string, number>;
+  }>>;
+  
+  // Get vehicle-specific analytics with maintenance history
+  getFleetVehicleAnalytics(fleetAccountId: string): Promise<Array<{
+    vehicleId: string;
+    unitNumber: string;
+    make: string;
+    model: string;
+    year: number;
+    healthScore: number;
+    maintenanceHistory: Array<{
+      date: Date;
+      service: string;
+      cost: number;
+    }>;
+    totalCost: number;
+    upcomingPM: Array<{
+      date: Date;
+      service: string;
+      estimatedCost: number;
+    }>;
+    breakdownFrequency: number;
+  }>>;
+  
+  // Get service type breakdown analytics
+  getFleetServiceAnalytics(
+    fleetAccountId: string,
+    options?: { 
+      startDate?: Date; 
+      endDate?: Date; 
+    }
+  ): Promise<Array<{
+    serviceType: string;
+    serviceTypeId: string;
+    jobCount: number;
+    totalCost: number;
+    avgCost: number;
+    percentOfTotal: number;
+    trend: 'up' | 'down' | 'stable';
+  }>>;
+  
+  // Get contractor performance analytics
+  getFleetContractorAnalytics(
+    fleetAccountId: string,
+    options?: { 
+      startDate?: Date; 
+      endDate?: Date; 
+    }
+  ): Promise<Array<{
+    contractorId: string;
+    contractorName: string;
+    jobCount: number;
+    avgRating: number;
+    avgResponseTime: number;
+    avgCost: number;
+    totalCost: number;
+    completionRate: number;
+    onTimeRate: number;
+  }>>;
 }
 
 // PostgreSQL implementation using Drizzle ORM
@@ -9353,6 +9439,481 @@ export class PostgreSQLStorage implements IStorage {
       email: r.email,
       name: `${r.firstName || ''} ${r.lastName || ''}`.trim() || r.company || 'Contractor'
     }));
+  }
+
+  // ==================== FLEET ANALYTICS API IMPLEMENTATION ====================
+  
+  async getFleetAnalyticsOverview(fleetAccountId: string): Promise<{
+    totalVehicles: number;
+    activeJobs: number;
+    completedJobsThisMonth: number;
+    totalSpentThisMonth: number;
+    avgResponseTime: number;
+    satisfactionRating: number;
+  }> {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    // Get total vehicles
+    const vehiclesCount = await db.select({ count: sql<number>`count(*)` })
+      .from(fleetVehicles)
+      .where(
+        and(
+          eq(fleetVehicles.fleetAccountId, fleetAccountId),
+          eq(fleetVehicles.isActive, true)
+        )
+      );
+    
+    // Get active jobs
+    const activeJobsCount = await db.select({ count: sql<number>`count(*)` })
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetAccountId),
+          inArray(jobs.status, ['assigned', 'en_route', 'on_site'])
+        )
+      );
+    
+    // Get completed jobs this month
+    const completedJobsCount = await db.select({ count: sql<number>`count(*)` })
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetAccountId),
+          eq(jobs.status, 'completed'),
+          gte(jobs.completedAt, startOfMonth)
+        )
+      );
+    
+    // Get total spent this month
+    const totalSpent = await db.select({ 
+      total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)` 
+    })
+      .from(transactions)
+      .innerJoin(jobs, eq(transactions.jobId, jobs.id))
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetAccountId),
+          eq(transactions.status, 'completed'),
+          gte(transactions.createdAt, startOfMonth)
+        )
+      );
+    
+    // Get average response time (in minutes)
+    const avgResponse = await db.select({ 
+      avgTime: sql<number>`AVG(EXTRACT(EPOCH FROM (${jobs.assignedAt} - ${jobs.createdAt})) / 60)` 
+    })
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetAccountId),
+          sql`${jobs.assignedAt} IS NOT NULL`
+        )
+      );
+    
+    // Get satisfaction rating
+    const avgRating = await db.select({ 
+      rating: sql<number>`COALESCE(AVG(${reviews.rating}), 0)` 
+    })
+      .from(reviews)
+      .innerJoin(jobs, eq(reviews.jobId, jobs.id))
+      .where(eq(jobs.fleetAccountId, fleetAccountId));
+    
+    return {
+      totalVehicles: Number(vehiclesCount[0]?.count) || 0,
+      activeJobs: Number(activeJobsCount[0]?.count) || 0,
+      completedJobsThisMonth: Number(completedJobsCount[0]?.count) || 0,
+      totalSpentThisMonth: Number(totalSpent[0]?.total) || 0,
+      avgResponseTime: Math.round(Number(avgResponse[0]?.avgTime) || 0),
+      satisfactionRating: Number(avgRating[0]?.rating) || 0
+    };
+  }
+  
+  async getFleetCostAnalytics(
+    fleetAccountId: string,
+    options: {
+      startDate?: Date;
+      endDate?: Date;
+      groupBy?: 'day' | 'week' | 'month';
+    }
+  ): Promise<Array<{
+    date: string;
+    maintenanceCost: number;
+    fuelCost: number;
+    totalCost: number;
+    serviceTypeBreakdown?: Record<string, number>;
+  }>> {
+    const startDate = options.startDate || new Date(new Date().setMonth(new Date().getMonth() - 6));
+    const endDate = options.endDate || new Date();
+    const groupBy = options.groupBy || 'month';
+    
+    let dateFormat: string;
+    switch (groupBy) {
+      case 'day':
+        dateFormat = 'YYYY-MM-DD';
+        break;
+      case 'week':
+        dateFormat = 'YYYY-IW';
+        break;
+      case 'month':
+      default:
+        dateFormat = 'YYYY-MM';
+        break;
+    }
+    
+    const costData = await db.select({
+      date: sql<string>`TO_CHAR(${transactions.createdAt}, ${dateFormat})`,
+      serviceType: serviceTypes.name,
+      totalCost: sql<number>`SUM(${transactions.amount})`
+    })
+      .from(transactions)
+      .innerJoin(jobs, eq(transactions.jobId, jobs.id))
+      .leftJoin(serviceTypes, eq(jobs.serviceTypeId, serviceTypes.id))
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetAccountId),
+          eq(transactions.status, 'completed'),
+          gte(transactions.createdAt, startDate),
+          sql`${transactions.createdAt} <= ${endDate}`
+        )
+      )
+      .groupBy(sql`TO_CHAR(${transactions.createdAt}, ${dateFormat})`, serviceTypes.name)
+      .orderBy(sql`TO_CHAR(${transactions.createdAt}, ${dateFormat})`);
+    
+    // Group data by date and aggregate service types
+    const groupedData = new Map<string, any>();
+    
+    for (const row of costData) {
+      if (!groupedData.has(row.date)) {
+        groupedData.set(row.date, {
+          date: row.date,
+          maintenanceCost: 0,
+          fuelCost: 0,
+          totalCost: 0,
+          serviceTypeBreakdown: {}
+        });
+      }
+      
+      const data = groupedData.get(row.date);
+      const cost = Number(row.totalCost);
+      
+      // Categorize costs
+      if (row.serviceType?.toLowerCase().includes('fuel')) {
+        data.fuelCost += cost;
+      } else {
+        data.maintenanceCost += cost;
+      }
+      
+      data.totalCost += cost;
+      
+      if (row.serviceType) {
+        data.serviceTypeBreakdown[row.serviceType] = 
+          (data.serviceTypeBreakdown[row.serviceType] || 0) + cost;
+      }
+    }
+    
+    return Array.from(groupedData.values());
+  }
+  
+  async getFleetVehicleAnalytics(fleetAccountId: string): Promise<Array<{
+    vehicleId: string;
+    unitNumber: string;
+    make: string;
+    model: string;
+    year: number;
+    healthScore: number;
+    maintenanceHistory: Array<{
+      date: Date;
+      service: string;
+      cost: number;
+    }>;
+    totalCost: number;
+    upcomingPM: Array<{
+      date: Date;
+      service: string;
+      estimatedCost: number;
+    }>;
+    breakdownFrequency: number;
+  }>> {
+    // Get fleet vehicles
+    const vehicles = await db.select()
+      .from(fleetVehicles)
+      .where(
+        and(
+          eq(fleetVehicles.fleetAccountId, fleetAccountId),
+          eq(fleetVehicles.isActive, true)
+        )
+      );
+    
+    const results = [];
+    
+    for (const vehicle of vehicles) {
+      // Get maintenance history
+      const history = await db.select({
+        date: jobs.completedAt,
+        service: serviceTypes.name,
+        cost: transactions.amount
+      })
+        .from(jobs)
+        .innerJoin(transactions, eq(jobs.id, transactions.jobId))
+        .leftJoin(serviceTypes, eq(jobs.serviceTypeId, serviceTypes.id))
+        .where(
+          and(
+            eq(jobs.vehicleId, vehicle.id),
+            eq(jobs.status, 'completed'),
+            eq(transactions.status, 'completed')
+          )
+        )
+        .orderBy(desc(jobs.completedAt))
+        .limit(10);
+      
+      // Get upcoming PM schedules
+      const upcomingPM = await db.select({
+        date: pmSchedules.nextServiceDate,
+        service: pmSchedules.serviceType,
+        estimatedCost: pmSchedules.estimatedCost
+      })
+        .from(pmSchedules)
+        .where(
+          and(
+            eq(pmSchedules.vehicleId, vehicle.id),
+            eq(pmSchedules.isActive, true)
+          )
+        )
+        .orderBy(asc(pmSchedules.nextServiceDate))
+        .limit(5);
+      
+      // Calculate total cost
+      const totalCostResult = await db.select({
+        total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
+      })
+        .from(transactions)
+        .innerJoin(jobs, eq(transactions.jobId, jobs.id))
+        .where(
+          and(
+            eq(jobs.vehicleId, vehicle.id),
+            eq(transactions.status, 'completed')
+          )
+        );
+      
+      // Get breakdown frequency (count of emergency jobs)
+      const breakdownCount = await db.select({
+        count: sql<number>`count(*)`
+      })
+        .from(jobs)
+        .where(
+          and(
+            eq(jobs.vehicleId, vehicle.id),
+            eq(jobs.jobType, 'emergency')
+          )
+        );
+      
+      // Get health score from vehicle analytics if available
+      const vehicleAnalyticsData = await db.select()
+        .from(vehicleAnalytics)
+        .where(eq(vehicleAnalytics.vehicleId, vehicle.id))
+        .limit(1);
+      
+      const healthScore = vehicleAnalyticsData[0]?.healthScore || 
+        Math.max(0, 100 - (Number(breakdownCount[0]?.count) || 0) * 10);
+      
+      results.push({
+        vehicleId: vehicle.id,
+        unitNumber: vehicle.unitNumber,
+        make: vehicle.make || 'Unknown',
+        model: vehicle.model || 'Unknown',
+        year: vehicle.year || 0,
+        healthScore,
+        maintenanceHistory: history.map(h => ({
+          date: h.date || new Date(),
+          service: h.service || 'Service',
+          cost: Number(h.cost) || 0
+        })),
+        totalCost: Number(totalCostResult[0]?.total) || 0,
+        upcomingPM: upcomingPM.map(pm => ({
+          date: pm.date,
+          service: pm.service,
+          estimatedCost: Number(pm.estimatedCost) || 0
+        })),
+        breakdownFrequency: Number(breakdownCount[0]?.count) || 0
+      });
+    }
+    
+    return results;
+  }
+  
+  async getFleetServiceAnalytics(
+    fleetAccountId: string,
+    options?: { 
+      startDate?: Date; 
+      endDate?: Date; 
+    }
+  ): Promise<Array<{
+    serviceType: string;
+    serviceTypeId: string;
+    jobCount: number;
+    totalCost: number;
+    avgCost: number;
+    percentOfTotal: number;
+    trend: 'up' | 'down' | 'stable';
+  }>> {
+    const startDate = options?.startDate || new Date(new Date().setMonth(new Date().getMonth() - 3));
+    const endDate = options?.endDate || new Date();
+    
+    // Get service analytics
+    const serviceData = await db.select({
+      serviceTypeId: serviceTypes.id,
+      serviceType: serviceTypes.name,
+      jobCount: sql<number>`count(distinct ${jobs.id})`,
+      totalCost: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`,
+      avgCost: sql<number>`COALESCE(AVG(${transactions.amount}), 0)`
+    })
+      .from(jobs)
+      .innerJoin(serviceTypes, eq(jobs.serviceTypeId, serviceTypes.id))
+      .leftJoin(transactions, and(
+        eq(jobs.id, transactions.jobId),
+        eq(transactions.status, 'completed')
+      ))
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetAccountId),
+          gte(jobs.createdAt, startDate),
+          sql`${jobs.createdAt} <= ${endDate}`
+        )
+      )
+      .groupBy(serviceTypes.id, serviceTypes.name)
+      .orderBy(desc(sql`count(distinct ${jobs.id})`));
+    
+    // Calculate total for percentage
+    const total = serviceData.reduce((sum, item) => sum + Number(item.totalCost), 0);
+    
+    // Calculate trends (simplified - comparing to previous period)
+    const results = await Promise.all(serviceData.map(async (service) => {
+      // Get previous period count
+      const previousPeriodStart = new Date(startDate);
+      previousPeriodStart.setMonth(previousPeriodStart.getMonth() - 3);
+      
+      const previousCount = await db.select({
+        count: sql<number>`count(*)`
+      })
+        .from(jobs)
+        .where(
+          and(
+            eq(jobs.fleetAccountId, fleetAccountId),
+            eq(jobs.serviceTypeId, service.serviceTypeId),
+            gte(jobs.createdAt, previousPeriodStart),
+            sql`${jobs.createdAt} < ${startDate}`
+          )
+        );
+      
+      const prevCount = Number(previousCount[0]?.count) || 0;
+      const currCount = Number(service.jobCount);
+      
+      let trend: 'up' | 'down' | 'stable';
+      if (currCount > prevCount * 1.1) trend = 'up';
+      else if (currCount < prevCount * 0.9) trend = 'down';
+      else trend = 'stable';
+      
+      return {
+        serviceType: service.serviceType || 'Unknown',
+        serviceTypeId: service.serviceTypeId,
+        jobCount: Number(service.jobCount),
+        totalCost: Number(service.totalCost),
+        avgCost: Number(service.avgCost),
+        percentOfTotal: total > 0 ? (Number(service.totalCost) / total) * 100 : 0,
+        trend
+      };
+    }));
+    
+    return results;
+  }
+  
+  async getFleetContractorAnalytics(
+    fleetAccountId: string,
+    options?: { 
+      startDate?: Date; 
+      endDate?: Date; 
+    }
+  ): Promise<Array<{
+    contractorId: string;
+    contractorName: string;
+    jobCount: number;
+    avgRating: number;
+    avgResponseTime: number;
+    avgCost: number;
+    totalCost: number;
+    completionRate: number;
+    onTimeRate: number;
+  }>> {
+    const startDate = options?.startDate || new Date(new Date().setMonth(new Date().getMonth() - 3));
+    const endDate = options?.endDate || new Date();
+    
+    // Get contractor performance data
+    const contractorData = await db.select({
+      contractorId: jobs.contractorId,
+      contractorName: sql<string>`CONCAT(${users.firstName}, ' ', ${users.lastName})`,
+      jobCount: sql<number>`count(distinct ${jobs.id})`,
+      totalCost: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`,
+      avgCost: sql<number>`COALESCE(AVG(${transactions.amount}), 0)`,
+      completedCount: sql<number>`count(distinct case when ${jobs.status} = 'completed' then ${jobs.id} end)`,
+      avgResponseTime: sql<number>`AVG(EXTRACT(EPOCH FROM (${jobs.assignedAt} - ${jobs.createdAt})) / 60)`,
+      avgRating: sql<number>`AVG(${reviews.rating})`
+    })
+      .from(jobs)
+      .innerJoin(contractorProfiles, eq(jobs.contractorId, contractorProfiles.id))
+      .innerJoin(users, eq(contractorProfiles.userId, users.id))
+      .leftJoin(transactions, and(
+        eq(jobs.id, transactions.jobId),
+        eq(transactions.status, 'completed')
+      ))
+      .leftJoin(reviews, eq(jobs.id, reviews.jobId))
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetAccountId),
+          gte(jobs.createdAt, startDate),
+          sql`${jobs.createdAt} <= ${endDate}`,
+          sql`${jobs.contractorId} IS NOT NULL`
+        )
+      )
+      .groupBy(jobs.contractorId, users.firstName, users.lastName)
+      .orderBy(desc(sql`count(distinct ${jobs.id})`));
+    
+    // Calculate on-time rate
+    const results = await Promise.all(contractorData.map(async (contractor) => {
+      // Get on-time completion rate
+      const onTimeJobs = await db.select({
+        count: sql<number>`count(*)`
+      })
+        .from(jobs)
+        .where(
+          and(
+            eq(jobs.contractorId, contractor.contractorId),
+            eq(jobs.fleetAccountId, fleetAccountId),
+            eq(jobs.status, 'completed'),
+            sql`${jobs.completedAt} <= ${jobs.estimatedCompletionTime}`,
+            gte(jobs.createdAt, startDate),
+            sql`${jobs.createdAt} <= ${endDate}`
+          )
+        );
+      
+      const jobCount = Number(contractor.jobCount);
+      const completedCount = Number(contractor.completedCount);
+      const onTimeCount = Number(onTimeJobs[0]?.count) || 0;
+      
+      return {
+        contractorId: contractor.contractorId || '',
+        contractorName: contractor.contractorName || 'Unknown',
+        jobCount,
+        avgRating: Number(contractor.avgRating) || 0,
+        avgResponseTime: Math.round(Number(contractor.avgResponseTime) || 0),
+        avgCost: Number(contractor.avgCost) || 0,
+        totalCost: Number(contractor.totalCost) || 0,
+        completionRate: jobCount > 0 ? (completedCount / jobCount) * 100 : 0,
+        onTimeRate: completedCount > 0 ? (onTimeCount / completedCount) * 100 : 0
+      };
+    }));
+    
+    return results;
   }
 }
 

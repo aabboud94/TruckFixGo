@@ -95,61 +95,218 @@ export default function FleetAnalytics() {
   const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('overview');
   const [showSettings, setShowSettings] = useState(false);
-
-  // Get fleet ID from session/auth context (mocked for now)
-  const fleetId = 'fleet-123';
-
-  // Fetch comprehensive analytics data (mocked for now)
-  const { data: analytics, isLoading, refetch } = useQuery({
-    queryKey: [`/api/fleet/${fleetId}/analytics`],
-    enabled: false // Mock data for now
+  const [dateRange, setDateRange] = useState<{ startDate?: Date; endDate?: Date }>({
+    startDate: new Date(new Date().setMonth(new Date().getMonth() - 3)),
+    endDate: new Date()
   });
 
-  // Calculate metrics with mock data
+  // Get fleet ID from session
+  const { data: session } = useQuery({ queryKey: ['/api/auth/session'] });
+  const fleetId = session?.fleetId || session?.user?.fleetAccountId || 'fleet-123';
+
+  // Fetch overview data
+  const { data: overviewData, isLoading: isOverviewLoading, refetch: refetchOverview } = useQuery({
+    queryKey: [`/api/fleet/${fleetId}/analytics/overview`],
+    enabled: !!fleetId
+  });
+
+  // Fetch cost analytics
+  const { data: costDataRaw, isLoading: isCostLoading, refetch: refetchCosts } = useQuery({
+    queryKey: [`/api/fleet/${fleetId}/analytics/costs`, {
+      startDate: dateRange.startDate?.toISOString(),
+      endDate: dateRange.endDate?.toISOString(),
+      groupBy: selectedPeriod === 'yearly' ? 'month' : selectedPeriod === 'monthly' ? 'month' : 'day'
+    }],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        ...(dateRange.startDate && { startDate: dateRange.startDate.toISOString() }),
+        ...(dateRange.endDate && { endDate: dateRange.endDate.toISOString() }),
+        groupBy: selectedPeriod === 'yearly' ? 'month' : selectedPeriod === 'monthly' ? 'month' : 'day'
+      });
+      const response = await fetch(`/api/fleet/${fleetId}/analytics/costs?${params}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch cost analytics');
+      return response.json();
+    },
+    enabled: !!fleetId
+  });
+
+  // Fetch vehicle analytics
+  const { data: vehicleDataRaw, isLoading: isVehicleLoading, refetch: refetchVehicles } = useQuery({
+    queryKey: [`/api/fleet/${fleetId}/analytics/vehicles`],
+    enabled: !!fleetId
+  });
+
+  // Fetch service analytics
+  const { data: serviceDataRaw, isLoading: isServiceLoading } = useQuery({
+    queryKey: [`/api/fleet/${fleetId}/analytics/services`, {
+      startDate: dateRange.startDate?.toISOString(),
+      endDate: dateRange.endDate?.toISOString()
+    }],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        ...(dateRange.startDate && { startDate: dateRange.startDate.toISOString() }),
+        ...(dateRange.endDate && { endDate: dateRange.endDate.toISOString() })
+      });
+      const response = await fetch(`/api/fleet/${fleetId}/analytics/services?${params}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch service analytics');
+      return response.json();
+    },
+    enabled: !!fleetId
+  });
+
+  // Fetch contractor analytics
+  const { data: contractorDataRaw, isLoading: isContractorLoading } = useQuery({
+    queryKey: [`/api/fleet/${fleetId}/analytics/contractors`, {
+      startDate: dateRange.startDate?.toISOString(),
+      endDate: dateRange.endDate?.toISOString()
+    }],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        ...(dateRange.startDate && { startDate: dateRange.startDate.toISOString() }),
+        ...(dateRange.endDate && { endDate: dateRange.endDate.toISOString() })
+      });
+      const response = await fetch(`/api/fleet/${fleetId}/analytics/contractors?${params}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch contractor analytics');
+      return response.json();
+    },
+    enabled: !!fleetId
+  });
+
+  // Fetch alerts (existing endpoint)
+  const { data: alertsData, isLoading: isAlertsLoading } = useQuery({
+    queryKey: [`/api/fleet/${fleetId}/alerts`, { active: true }],
+    queryFn: async () => {
+      const response = await fetch(`/api/fleet/${fleetId}/alerts?active=true`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch alerts');
+      return response.json();
+    },
+    enabled: !!fleetId
+  });
+
+  const isLoading = isOverviewLoading || isCostLoading || isVehicleLoading || isServiceLoading || isContractorLoading;
+
+  const refetch = () => {
+    refetchOverview();
+    refetchCosts();
+    refetchVehicles();
+  };
+
+  // Calculate metrics from real data
   const metrics = useMemo(() => {
+    if (!overviewData || !vehicleDataRaw) {
+      // Return default values if data not loaded
+      return {
+        fleetHealthScore: 0,
+        totalMaintenanceCost: 0,
+        avgCostPerMile: 0,
+        vehiclesAtRisk: 0,
+        totalVehicles: 0,
+        upcomingMaintenance: []
+      };
+    }
+
+    // Calculate fleet health score (average of vehicle health scores)
+    const avgHealthScore = vehicleDataRaw?.length > 0 
+      ? Math.round(vehicleDataRaw.reduce((sum: number, v: any) => sum + v.healthScore, 0) / vehicleDataRaw.length)
+      : 0;
+
+    // Calculate vehicles at risk (health score < 50)
+    const atRiskCount = vehicleDataRaw?.filter((v: any) => v.healthScore < 50).length || 0;
+
+    // Get upcoming maintenance from vehicle data
+    const upcomingMaintenance = vehicleDataRaw?.flatMap((v: any) => 
+      v.upcomingPM?.map((pm: any) => ({
+        vehicleId: v.unitNumber,
+        date: new Date(pm.date),
+        service: pm.service
+      })) || []
+    ).sort((a: any, b: any) => a.date - b.date).slice(0, 5) || [];
+
     return {
-      fleetHealthScore: 78,
-      totalMaintenanceCost: 45230,
-      avgCostPerMile: 0.82,
-      vehiclesAtRisk: 3,
-      totalVehicles: 24,
-      upcomingMaintenance: [
-        { vehicleId: 'T-101', date: new Date('2024-02-15'), service: 'A-Service PM' },
-        { vehicleId: 'T-102', date: new Date('2024-02-18'), service: 'B-Service PM' },
-        { vehicleId: 'T-103', date: new Date('2024-02-20'), service: 'Tire Rotation' },
-        { vehicleId: 'T-104', date: new Date('2024-02-22'), service: 'Oil Change' },
-        { vehicleId: 'T-105', date: new Date('2024-02-25'), service: 'Brake Inspection' }
-      ]
+      fleetHealthScore: avgHealthScore,
+      totalMaintenanceCost: overviewData.totalSpentThisMonth || 0,
+      avgCostPerMile: 0.82, // This would need mileage data
+      vehiclesAtRisk: atRiskCount,
+      totalVehicles: overviewData.totalVehicles || 0,
+      upcomingMaintenance
     };
-  }, [analytics]);
+  }, [overviewData, vehicleDataRaw]);
 
-  // Mock data for charts
-  const costTrendData = [
-    { month: 'Jan', maintenance: 8500, fuel: 12000, total: 20500 },
-    { month: 'Feb', maintenance: 9200, fuel: 11500, total: 20700 },
-    { month: 'Mar', maintenance: 7800, fuel: 13200, total: 21000 },
-    { month: 'Apr', maintenance: 10500, fuel: 12800, total: 23300 },
-    { month: 'May', maintenance: 8900, fuel: 13500, total: 22400 },
-    { month: 'Jun', maintenance: 9500, fuel: 14000, total: 23500 }
-  ];
+  // Format cost data for charts
+  const costTrendData = useMemo(() => {
+    if (!costDataRaw || costDataRaw.length === 0) {
+      // Return mock data if no real data
+      return [
+        { month: 'Jan', maintenance: 8500, fuel: 12000, total: 20500 },
+        { month: 'Feb', maintenance: 9200, fuel: 11500, total: 20700 },
+        { month: 'Mar', maintenance: 7800, fuel: 13200, total: 21000 },
+        { month: 'Apr', maintenance: 10500, fuel: 12800, total: 23300 },
+        { month: 'May', maintenance: 8900, fuel: 13500, total: 22400 },
+        { month: 'Jun', maintenance: 9500, fuel: 14000, total: 23500 }
+      ];
+    }
 
-  const breakdownFrequencyData = [
-    { issueType: 'Brake System', frequency: 18, avgCost: 850 },
-    { issueType: 'Engine Cooling', frequency: 15, avgCost: 1200 },
-    { issueType: 'Tire Wear', frequency: 12, avgCost: 450 },
-    { issueType: 'Electrical', frequency: 10, avgCost: 650 },
-    { issueType: 'Transmission', frequency: 8, avgCost: 2500 },
-    { issueType: 'Other', frequency: 5, avgCost: 350 }
-  ];
+    return costDataRaw.map((item: any) => ({
+      month: format(new Date(item.date), 'MMM'),
+      maintenance: item.maintenanceCost || 0,
+      fuel: item.fuelCost || 0,
+      total: item.totalCost || 0
+    }));
+  }, [costDataRaw]);
 
-  const vehicleHealthData = [
-    { unitNumber: 'T-101', healthScore: 85, riskScore: 15, status: 'Good' },
-    { unitNumber: 'T-102', healthScore: 72, riskScore: 28, status: 'Fair' },
-    { unitNumber: 'T-103', healthScore: 45, riskScore: 55, status: 'At Risk' },
-    { unitNumber: 'T-104', healthScore: 90, riskScore: 10, status: 'Excellent' },
-    { unitNumber: 'T-105', healthScore: 68, riskScore: 32, status: 'Fair' }
-  ];
+  // Format breakdown frequency data from service analytics
+  const breakdownFrequencyData = useMemo(() => {
+    if (!serviceDataRaw || serviceDataRaw.length === 0) {
+      // Return mock data if no real data
+      return [
+        { issueType: 'Brake System', frequency: 18, avgCost: 850 },
+        { issueType: 'Engine Cooling', frequency: 15, avgCost: 1200 },
+        { issueType: 'Tire Wear', frequency: 12, avgCost: 450 },
+        { issueType: 'Electrical', frequency: 10, avgCost: 650 },
+        { issueType: 'Transmission', frequency: 8, avgCost: 2500 },
+        { issueType: 'Other', frequency: 5, avgCost: 350 }
+      ];
+    }
 
+    return serviceDataRaw.slice(0, 6).map((item: any) => ({
+      issueType: item.serviceType,
+      frequency: item.jobCount,
+      avgCost: Math.round(item.avgCost)
+    }));
+  }, [serviceDataRaw]);
+
+  // Format vehicle health data
+  const vehicleHealthData = useMemo(() => {
+    if (!vehicleDataRaw || vehicleDataRaw.length === 0) {
+      // Return mock data if no real data
+      return [
+        { unitNumber: 'T-101', healthScore: 85, riskScore: 15, status: 'Good' },
+        { unitNumber: 'T-102', healthScore: 72, riskScore: 28, status: 'Fair' },
+        { unitNumber: 'T-103', healthScore: 45, riskScore: 55, status: 'At Risk' },
+        { unitNumber: 'T-104', healthScore: 90, riskScore: 10, status: 'Excellent' },
+        { unitNumber: 'T-105', healthScore: 68, riskScore: 32, status: 'Fair' }
+      ];
+    }
+
+    return vehicleDataRaw.slice(0, 5).map((v: any) => ({
+      unitNumber: v.unitNumber,
+      healthScore: v.healthScore,
+      riskScore: 100 - v.healthScore,
+      status: v.healthScore >= 80 ? 'Excellent' :
+              v.healthScore >= 60 ? 'Good' :
+              v.healthScore >= 40 ? 'Fair' : 'At Risk'
+    }));
+  }, [vehicleDataRaw]);
+
+  // Simulated seasonal pattern data (would need historical data)
   const seasonalPatternData = [
     { season: 'Spring', breakdowns: 12, avgCost: 850 },
     { season: 'Summer', breakdowns: 25, avgCost: 1100 },
@@ -157,11 +314,19 @@ export default function FleetAnalytics() {
     { season: 'Winter', breakdowns: 35, avgCost: 1400 }
   ];
 
-  const mockAlerts = [
-    { id: '1', alertTitle: 'T-103 High Risk - Immediate Maintenance Needed', severity: 'critical', alertType: 'breakdown_risk' },
-    { id: '2', alertTitle: 'Cost threshold exceeded for T-102', severity: 'high', alertType: 'cost_threshold' },
-    { id: '3', alertTitle: 'DOT compliance due for 2 vehicles', severity: 'medium', alertType: 'compliance' }
-  ];
+  // Format alerts
+  const mockAlerts = useMemo(() => {
+    if (!alertsData?.alerts || alertsData.alerts.length === 0) {
+      // Return mock alerts if no real data
+      return [
+        { id: '1', alertTitle: 'T-103 High Risk - Immediate Maintenance Needed', severity: 'critical', alertType: 'breakdown_risk' },
+        { id: '2', alertTitle: 'Cost threshold exceeded for T-102', severity: 'high', alertType: 'cost_threshold' },
+        { id: '3', alertTitle: 'DOT compliance due for 2 vehicles', severity: 'medium', alertType: 'compliance' }
+      ];
+    }
+
+    return alertsData.alerts.slice(0, 3);
+  }, [alertsData]);
 
   const getHealthBadge = (score: number) => {
     if (score >= 80) return <Badge className="bg-green-500">Excellent</Badge>;
@@ -254,84 +419,128 @@ export default function FleetAnalytics() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Loading State */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <RefreshCcw className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+              <p className="text-muted-foreground">Loading analytics data...</p>
+            </div>
+          </div>
+        )}
+
         {/* Fleet Health Score */}
-        <Card className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold flex items-center gap-2">
-                  Fleet Health Score
-                  <Info className="h-4 w-4 text-muted-foreground" />
-                </h2>
-                <p className="text-muted-foreground">Overall fleet performance indicator</p>
-              </div>
-              <div className="text-right">
-                <div className="text-5xl font-bold">{metrics?.fleetHealthScore}/100</div>
-                <div className="flex items-center justify-end gap-1 mt-2">
-                  <TrendingUp className="h-4 w-4 text-green-600" />
-                  <span className="text-sm text-green-600">+5% from last month</span>
+        {!isLoading && (
+          <Card className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold flex items-center gap-2">
+                    Fleet Health Score
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </h2>
+                  <p className="text-muted-foreground">Overall fleet performance indicator</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-5xl font-bold">{metrics?.fleetHealthScore || 0}/100</div>
+                  <div className="flex items-center justify-end gap-1 mt-2">
+                    {metrics?.fleetHealthScore > 70 ? (
+                      <>
+                        <TrendingUp className="h-4 w-4 text-green-600" />
+                        <span className="text-sm text-green-600">Good Performance</span>
+                      </>
+                    ) : (
+                      <>
+                        <TrendingDown className="h-4 w-4 text-yellow-600" />
+                        <span className="text-sm text-yellow-600">Needs Attention</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-            <Progress value={metrics?.fleetHealthScore} className="mt-4 h-3" />
-          </CardContent>
-        </Card>
-
-        {/* Key Metrics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card data-testid="metric-maintenance">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Maintenance</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                ${metrics?.totalMaintenanceCost.toLocaleString()}
-              </div>
-              <div className="flex items-center gap-1 text-sm">
-                <TrendingDown className="h-3 w-3 text-green-600" />
-                <span className="text-green-600">-12% vs last month</span>
-              </div>
+              <Progress value={metrics?.fleetHealthScore || 0} className="mt-4 h-3" />
             </CardContent>
           </Card>
+        )}
 
-          <Card data-testid="metric-cpm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg Cost/Mile</CardTitle>
-              <TrendingUpDown className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">${metrics?.avgCostPerMile}</div>
-              <p className="text-sm text-muted-foreground">Industry avg: $1.25</p>
-            </CardContent>
-          </Card>
+        {/* Key Metrics Cards - from Real Data */}
+        {!isLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Total Vehicles & Active Jobs */}
+            <Card data-testid="metric-vehicles">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Fleet Status</CardTitle>
+                <Truck className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{overviewData?.totalVehicles || 0}</div>
+                <p className="text-sm text-muted-foreground">
+                  Total vehicles
+                </p>
+                <div className="mt-2 pt-2 border-t">
+                  <p className="text-sm font-medium">{overviewData?.activeJobs || 0} active jobs</p>
+                </div>
+              </CardContent>
+            </Card>
 
-          <Card data-testid="metric-risk">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Vehicles at Risk</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-yellow-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{metrics?.vehiclesAtRisk}</div>
-              <p className="text-sm text-muted-foreground">
-                of {metrics?.totalVehicles} total vehicles
-              </p>
-            </CardContent>
-          </Card>
+            {/* Monthly Spend */}
+            <Card data-testid="metric-spend">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Monthly Spend</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  ${(overviewData?.totalSpentThisMonth || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {overviewData?.completedJobsThisMonth || 0} completed jobs
+                </p>
+              </CardContent>
+            </Card>
 
-          <Card data-testid="metric-upcoming">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Upcoming PM</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {metrics?.upcomingMaintenance?.length || 5}
-              </div>
-              <p className="text-sm text-muted-foreground">Next 7 days</p>
-            </CardContent>
-          </Card>
-        </div>
+            {/* Response Time */}
+            <Card data-testid="metric-response">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Avg Response Time</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{overviewData?.avgResponseTime || 0} min</div>
+                <p className="text-sm text-muted-foreground">
+                  Time to contractor assignment
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Satisfaction Rating */}
+            <Card data-testid="metric-rating">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Satisfaction</CardTitle>
+                <CheckCircle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {(overviewData?.satisfactionRating || 0).toFixed(1)} / 5.0
+                </div>
+                <div className="flex gap-1 mt-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <span
+                      key={star}
+                      className={`text-lg ${
+                        star <= (overviewData?.satisfactionRating || 0)
+                          ? 'text-yellow-400'
+                          : 'text-gray-300'
+                      }`}
+                    >
+                      ★
+                    </span>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Active Alerts */}
         {mockAlerts?.length > 0 && (
