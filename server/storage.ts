@@ -59,6 +59,9 @@ import {
   contractPerformanceMetrics,
   bookingSettings,
   bookingBlacklist,
+  contractorRoutes,
+  routeStops,
+  routeWaypoints,
   type User,
   type InsertUser,
   type Session,
@@ -204,6 +207,12 @@ import {
   type InsertBookingSettings,
   type BookingBlacklist,
   type InsertBookingBlacklist,
+  type ContractorRoute,
+  type InsertContractorRoute,
+  type RouteStop,
+  type InsertRouteStop,
+  type RouteWaypoint,
+  type InsertRouteWaypoint,
   notifications,
   type Notification,
   type InsertNotification,
@@ -328,6 +337,116 @@ export interface IStorage {
   getSessionRoute(sessionId: string): Promise<{
     polyline: string;
     points: Array<{ lat: number; lng: number; timestamp: Date }>;
+  }>;
+  
+  // ==================== ROUTE MANAGEMENT ====================
+  
+  // Create a new multi-stop route
+  createRoute(route: InsertContractorRoute): Promise<ContractorRoute>;
+  
+  // Get route by ID
+  getRoute(routeId: string): Promise<ContractorRoute | null>;
+  
+  // Update route
+  updateRoute(routeId: string, updates: Partial<InsertContractorRoute>): Promise<ContractorRoute | null>;
+  
+  // Delete route
+  deleteRoute(routeId: string): Promise<boolean>;
+  
+  // Get active route for contractor
+  getActiveRoute(contractorId: string): Promise<ContractorRoute | null>;
+  
+  // Get all routes for contractor
+  getContractorRoutes(contractorId: string, options?: {
+    status?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+  }): Promise<ContractorRoute[]>;
+  
+  // Add stop to route
+  addRouteStop(routeId: string, stop: InsertRouteStop): Promise<RouteStop>;
+  
+  // Update route stop
+  updateRouteStop(stopId: string, updates: Partial<InsertRouteStop>): Promise<RouteStop | null>;
+  
+  // Remove stop from route
+  removeRouteStop(stopId: string): Promise<boolean>;
+  
+  // Get route stops
+  getRouteStops(routeId: string): Promise<RouteStop[]>;
+  
+  // Update route progress (current position and stop)
+  updateRouteProgress(routeId: string, currentStopId: string, location: {
+    lat: number;
+    lng: number;
+    timestamp: string;
+  }): Promise<ContractorRoute | null>;
+  
+  // Optimize route (reorder stops)
+  optimizeRoute(routeId: string, strategy?: 'shortest' | 'fastest' | 'most_profitable'): Promise<{
+    optimized: boolean;
+    newOrder: RouteStop[];
+    estimatedSavings: {
+      distance: number;
+      time: number;
+    };
+  }>;
+  
+  // Record waypoint for route tracking
+  recordWaypoint(routeId: string, waypoint: InsertRouteWaypoint): Promise<RouteWaypoint>;
+  
+  // Get waypoints for route
+  getRouteWaypoints(routeId: string, options?: {
+    fromTimestamp?: Date;
+    toTimestamp?: Date;
+    limit?: number;
+  }): Promise<RouteWaypoint[]>;
+  
+  // Mark stop as arrived
+  markStopArrived(stopId: string, arrivalTime: Date): Promise<RouteStop | null>;
+  
+  // Mark stop as completed
+  markStopCompleted(stopId: string, departureTime: Date): Promise<RouteStop | null>;
+  
+  // Skip a stop
+  skipStop(stopId: string, reason: string): Promise<RouteStop | null>;
+  
+  // Reorder stops in a route
+  reorderStops(routeId: string, stopIds: string[]): Promise<boolean>;
+  
+  // Calculate route metrics
+  calculateRouteMetrics(routeId: string): Promise<{
+    totalDistance: number;
+    estimatedDuration: number;
+    totalStops: number;
+    completedStops: number;
+    remainingDistance: number;
+    remainingDuration: number;
+  }>;
+  
+  // Get customer's job position in route
+  getJobRoutePosition(jobId: string): Promise<{
+    routeId: string;
+    stopOrder: number;
+    totalStops: number;
+    currentStopOrder: number;
+    estimatedArrival: Date;
+    contractorLocation?: { lat: number; lng: number };
+  } | null>;
+  
+  // Get all active routes (for monitoring)
+  getActiveRoutes(): Promise<Array<{
+    route: ContractorRoute;
+    currentStop: RouteStop | null;
+    progress: number;
+  }>>;
+  
+  // Handle route deviation
+  handleRouteDeviation(routeId: string, currentLocation: { lat: number; lng: number }): Promise<{
+    isDeviated: boolean;
+    deviationDistance: number;
+    recommendedAction?: string;
   }>;
   
   // ==================== BULK OPERATIONS ====================

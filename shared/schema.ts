@@ -68,6 +68,12 @@ export const pmScheduleStatusEnum = pgEnum('pm_schedule_status', ['active', 'pau
 export const notificationTypeEnum = pgEnum('notification_type', ['job_update', 'payment', 'system', 'bid_received', 'fleet_update', 'maintenance', 'alert']);
 export const notificationPriorityEnum = pgEnum('notification_priority', ['low', 'medium', 'high', 'urgent']);
 
+// Route management related enums
+export const routeOptimizationStrategyEnum = pgEnum('route_optimization_strategy', ['shortest', 'fastest', 'most_profitable']);
+export const routeStatusEnum = pgEnum('route_status', ['planned', 'active', 'completed', 'cancelled']);
+export const routeStopTypeEnum = pgEnum('route_stop_type', ['pickup', 'dropoff', 'service']);
+export const routeStopStatusEnum = pgEnum('route_stop_status', ['pending', 'arrived', 'in_progress', 'completed', 'skipped']);
+
 // ====================
 // USERS & AUTH
 // ====================
@@ -798,6 +804,137 @@ export const geofenceEvents = pgTable("geofence_events", {
   sessionIdx: index("idx_geofence_events_session").on(table.sessionId),
   eventIdx: index("idx_geofence_events_type").on(table.eventType),
   triggeredIdx: index("idx_geofence_events_triggered").on(table.triggeredAt)
+}));
+
+// ====================
+// ROUTE MANAGEMENT
+// ====================
+
+export const contractorRoutes = pgTable("contractor_routes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  
+  // Route information
+  name: text("name").notNull(),
+  description: text("description"),
+  
+  // Timing
+  startTime: timestamp("start_time"),
+  endTime: timestamp("end_time"),
+  plannedStartTime: timestamp("planned_start_time"),
+  plannedEndTime: timestamp("planned_end_time"),
+  
+  // Distance and duration
+  totalDistance: decimal("total_distance", { precision: 10, scale: 2 }), // In miles
+  estimatedDuration: integer("estimated_duration"), // In minutes
+  actualDuration: integer("actual_duration"), // In minutes
+  
+  // Optimization settings
+  optimizationStrategy: routeOptimizationStrategyEnum("optimization_strategy").notNull().default('shortest'),
+  
+  // Route statistics
+  totalStops: integer("total_stops").notNull().default(0),
+  completedStops: integer("completed_stops").notNull().default(0),
+  totalRevenue: decimal("total_revenue", { precision: 10, scale: 2 }).default('0'),
+  
+  // Current position
+  currentStopId: varchar("current_stop_id"),
+  currentLocation: jsonb("current_location"), // {lat, lng, timestamp}
+  
+  // Status
+  status: routeStatusEnum("status").notNull().default('planned'),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  contractorIdx: index("idx_contractor_routes_contractor").on(table.contractorId),
+  statusIdx: index("idx_contractor_routes_status").on(table.status),
+  startTimeIdx: index("idx_contractor_routes_start_time").on(table.startTime)
+}));
+
+export const routeStops = pgTable("route_stops", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  routeId: varchar("route_id").notNull().references(() => contractorRoutes.id, { onDelete: 'cascade' }),
+  jobId: varchar("job_id").references(() => jobs.id),
+  
+  // Stop information
+  stopOrder: integer("stop_order").notNull(),
+  stopType: routeStopTypeEnum("stop_type").notNull().default('service'),
+  stopName: text("stop_name"),
+  
+  // Location
+  location: jsonb("location").notNull(), // {lat, lng, address}
+  
+  // Timing - Planned
+  plannedArrivalTime: timestamp("planned_arrival_time"),
+  plannedDepartureTime: timestamp("planned_departure_time"),
+  plannedDuration: integer("planned_duration"), // In minutes
+  
+  // Timing - Actual
+  actualArrival: timestamp("actual_arrival"),
+  actualDeparture: timestamp("actual_departure"),
+  actualDuration: integer("actual_duration"), // In minutes
+  
+  // Distance from previous stop
+  distanceFromPrevious: decimal("distance_from_previous", { precision: 10, scale: 2 }), // In miles
+  timeFromPrevious: integer("time_from_previous"), // In minutes
+  
+  // Service details
+  serviceNotes: text("service_notes"),
+  customerContact: jsonb("customer_contact"), // {name, phone, email}
+  
+  // Status and tracking
+  status: routeStopStatusEnum("status").notNull().default('pending'),
+  completedAt: timestamp("completed_at"),
+  skippedReason: text("skipped_reason"),
+  
+  // Notifications
+  notificationsSent: jsonb("notifications_sent"), // Track which notifications have been sent
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  routeIdx: index("idx_route_stops_route").on(table.routeId),
+  jobIdx: index("idx_route_stops_job").on(table.jobId),
+  orderIdx: index("idx_route_stops_order").on(table.routeId, table.stopOrder),
+  statusIdx: index("idx_route_stops_status").on(table.status)
+}));
+
+export const routeWaypoints = pgTable("route_waypoints", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  routeId: varchar("route_id").notNull().references(() => contractorRoutes.id, { onDelete: 'cascade' }),
+  
+  // Waypoint data
+  sequenceNumber: integer("sequence_number").notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
+  
+  // Navigation data
+  heading: decimal("heading", { precision: 5, scale: 2 }), // In degrees (0-360)
+  speed: decimal("speed", { precision: 6, scale: 2 }), // In mph
+  altitude: decimal("altitude", { precision: 8, scale: 2 }), // In meters
+  
+  // Accuracy
+  horizontalAccuracy: decimal("horizontal_accuracy", { precision: 6, scale: 2 }), // In meters
+  verticalAccuracy: decimal("vertical_accuracy", { precision: 6, scale: 2 }), // In meters
+  
+  // Associated stop
+  nearestStopId: varchar("nearest_stop_id").references(() => routeStops.id),
+  distanceToNearestStop: decimal("distance_to_nearest_stop", { precision: 10, scale: 2 }), // In meters
+  
+  // Metadata
+  batteryLevel: integer("battery_level"), // Percentage
+  isCharging: boolean("is_charging"),
+  networkType: varchar("network_type", { length: 20 }),
+  
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  routeIdx: index("idx_route_waypoints_route").on(table.routeId),
+  sequenceIdx: index("idx_route_waypoints_sequence").on(table.routeId, table.sequenceNumber),
+  timestampIdx: index("idx_route_waypoints_timestamp").on(table.timestamp),
+  locationIdx: index("idx_route_waypoints_location").on(table.latitude, table.longitude)
 }));
 
 // ====================
@@ -3169,4 +3306,31 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 });
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
+
+// Route management schemas and types
+export const insertContractorRouteSchema = createInsertSchema(contractorRoutes).omit({
+  id: true,
+  totalStops: true,
+  completedStops: true,
+  totalRevenue: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertContractorRoute = z.infer<typeof insertContractorRouteSchema>;
+export type ContractorRoute = typeof contractorRoutes.$inferSelect;
+
+export const insertRouteStopSchema = createInsertSchema(routeStops).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertRouteStop = z.infer<typeof insertRouteStopSchema>;
+export type RouteStop = typeof routeStops.$inferSelect;
+
+export const insertRouteWaypointSchema = createInsertSchema(routeWaypoints).omit({
+  id: true,
+  createdAt: true
+});
+export type InsertRouteWaypoint = z.infer<typeof insertRouteWaypointSchema>;
+export type RouteWaypoint = typeof routeWaypoints.$inferSelect;
 
