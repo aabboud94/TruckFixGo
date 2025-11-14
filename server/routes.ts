@@ -115,7 +115,9 @@ import {
   insertMaintenanceAlertSchema,
   maintenanceRiskLevelEnum,
   maintenanceAlertTypeEnum,
-  maintenanceSeverityEnum
+  maintenanceSeverityEnum,
+  insertPerformanceGoalSchema,
+  kpiDefinitions
 } from "@shared/schema";
 
 // Extend Express Request to include user
@@ -19872,6 +19874,425 @@ The TruckFixGo Team
       }
     }
   );
+
+  // ==================== PERFORMANCE METRICS ROUTES ====================
+  
+  // Initialize KPIs on server start
+  await storage.initializePerformanceKPIs().catch(console.error);
+
+  // GET /api/metrics/dashboard - Main metrics dashboard data
+  app.get('/api/metrics/dashboard',
+    requireAuth,
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { period = '30d' } = req.query;
+        
+        // Calculate date range
+        const endDate = new Date();
+        const startDate = new Date();
+        if (period === '7d') {
+          startDate.setDate(startDate.getDate() - 7);
+        } else if (period === '30d') {
+          startDate.setDate(startDate.getDate() - 30);
+        } else if (period === '90d') {
+          startDate.setDate(startDate.getDate() - 90);
+        } else if (period === '1y') {
+          startDate.setFullYear(startDate.getFullYear() - 1);
+        }
+
+        // Get system-wide KPIs
+        const kpis = await storage.generatePerformanceScorecard('system', 'all', { startDate, endDate });
+        
+        // Get top performers for various metrics
+        const topContractors = await storage.getTopPerformers('completion_rate', 10);
+        const fastestResponse = await storage.getTopPerformers('response_time', 10);
+        const highestRevenue = await storage.getTopPerformers('revenue', 10);
+        
+        // Get recent performance trends
+        const completionTrend = await storage.getPerformanceTrends('completion_rate', { startDate, endDate });
+        const revenueTrend = await storage.getPerformanceTrends('revenue', { startDate, endDate });
+        const satisfactionTrend = await storage.getPerformanceTrends('satisfaction', { startDate, endDate });
+        
+        res.json({
+          period,
+          dateRange: { startDate, endDate },
+          kpis,
+          leaderboards: {
+            topContractors,
+            fastestResponse,
+            highestRevenue
+          },
+          trends: {
+            completion: completionTrend,
+            revenue: revenueTrend,
+            satisfaction: satisfactionTrend
+          }
+        });
+      } catch (error) {
+        console.error('Error fetching metrics dashboard:', error);
+        res.status(500).json({ message: 'Failed to fetch metrics dashboard' });
+      }
+    }
+  );
+
+  // GET /api/metrics/:entityType/:entityId - Entity-specific metrics
+  app.get('/api/metrics/:entityType/:entityId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { entityType, entityId } = req.params;
+        const { startDate, endDate } = req.query;
+        
+        // Validate entity type
+        if (!['contractor', 'fleet', 'vehicle', 'job'].includes(entityType)) {
+          return res.status(400).json({ message: 'Invalid entity type' });
+        }
+        
+        // Check authorization
+        if (entityType === 'contractor' && req.session.role === 'contractor') {
+          const contractor = await storage.getContractorProfile(req.session.userId!);
+          if (contractor?.userId !== entityId) {
+            return res.status(403).json({ message: 'Access denied' });
+          }
+        } else if (entityType === 'fleet' && req.session.role === 'fleet_manager') {
+          const user = await storage.getUser(req.session.userId!);
+          const fleetAccount = await storage.getFleetAccountByEmail(user?.email || '');
+          if (fleetAccount?.id !== entityId) {
+            return res.status(403).json({ message: 'Access denied' });
+          }
+        }
+        
+        const dateRange = startDate && endDate ? {
+          startDate: new Date(startDate as string),
+          endDate: new Date(endDate as string)
+        } : undefined;
+        
+        // Get performance metrics
+        const metrics = await storage.getPerformanceMetrics(entityType, entityId, dateRange);
+        
+        // Calculate KPIs
+        const scorecard = await storage.generatePerformanceScorecard(entityType, entityId, dateRange);
+        
+        res.json({
+          entityType,
+          entityId,
+          dateRange,
+          metrics,
+          scorecard
+        });
+      } catch (error) {
+        console.error('Error fetching entity metrics:', error);
+        res.status(500).json({ message: 'Failed to fetch entity metrics' });
+      }
+    }
+  );
+
+  // GET /api/metrics/kpis - All KPI definitions and values
+  app.get('/api/metrics/kpis',
+    requireAuth,
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const kpiDefinitions = await db
+          .select()
+          .from(kpiDefinitions)
+          .where(eq(kpiDefinitions.isActive, true))
+          .orderBy(asc(kpiDefinitions.category), asc(kpiDefinitions.name));
+        
+        // Calculate current values for each KPI
+        const kpisWithValues = await Promise.all(
+          kpiDefinitions.map(async (kpi) => {
+            const currentValue = await storage.calculateKPI(
+              kpi.id,
+              'system',
+              {
+                startDate: new Date(new Date().setHours(0, 0, 0, 0)),
+                endDate: new Date()
+              }
+            );
+            return { ...kpi, currentValue };
+          })
+        );
+        
+        res.json({
+          kpis: kpisWithValues
+        });
+      } catch (error) {
+        console.error('Error fetching KPIs:', error);
+        res.status(500).json({ message: 'Failed to fetch KPIs' });
+      }
+    }
+  );
+
+  // POST /api/metrics/goals - Set performance goals
+  app.post('/api/metrics/goals',
+    requireAuth,
+    requireAdmin,
+    validateRequest(insertPerformanceGoalSchema),
+    async (req: Request, res: Response) => {
+      try {
+        const goal = await storage.setPerformanceGoal(
+          req.body.entityType,
+          req.body.entityId,
+          req.body.kpiId,
+          {
+            targetValue: req.body.targetValue,
+            deadline: new Date(req.body.deadline),
+            notes: req.body.notes
+          }
+        );
+        
+        res.json({
+          success: true,
+          goal
+        });
+      } catch (error) {
+        console.error('Error setting performance goal:', error);
+        res.status(500).json({ message: 'Failed to set performance goal' });
+      }
+    }
+  );
+
+  // GET /api/metrics/trends - Performance trends
+  app.get('/api/metrics/trends',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { metricType, startDate, endDate } = req.query;
+        
+        if (!metricType) {
+          return res.status(400).json({ message: 'Metric type is required' });
+        }
+        
+        const dateRange = {
+          startDate: startDate ? new Date(startDate as string) : new Date(new Date().setMonth(new Date().getMonth() - 3)),
+          endDate: endDate ? new Date(endDate as string) : new Date()
+        };
+        
+        const trends = await storage.getPerformanceTrends(metricType as string, dateRange);
+        
+        res.json({
+          metricType,
+          dateRange,
+          trends
+        });
+      } catch (error) {
+        console.error('Error fetching performance trends:', error);
+        res.status(500).json({ message: 'Failed to fetch performance trends' });
+      }
+    }
+  );
+
+  // GET /api/metrics/leaderboard - Top performers
+  app.get('/api/metrics/leaderboard',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { metricType = 'completion_rate', limit = '10' } = req.query;
+        
+        const topPerformers = await storage.getTopPerformers(
+          metricType as string, 
+          parseInt(limit as string)
+        );
+        
+        res.json({
+          metricType,
+          topPerformers
+        });
+      } catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        res.status(500).json({ message: 'Failed to fetch leaderboard' });
+      }
+    }
+  );
+
+  // GET /api/metrics/compare - Period comparisons
+  app.get('/api/metrics/compare',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { entityId, periods } = req.query;
+        
+        if (!entityId || !periods) {
+          return res.status(400).json({ message: 'Entity ID and periods are required' });
+        }
+        
+        const periodRanges = JSON.parse(periods as string).map((p: any) => ({
+          startDate: new Date(p.startDate),
+          endDate: new Date(p.endDate)
+        }));
+        
+        const comparison = await storage.getPerformanceComparison(
+          entityId as string,
+          periodRanges
+        );
+        
+        res.json(comparison);
+      } catch (error) {
+        console.error('Error fetching performance comparison:', error);
+        res.status(500).json({ message: 'Failed to fetch performance comparison' });
+      }
+    }
+  );
+
+  // GET /api/reports/performance - Detailed performance report
+  app.get('/api/reports/performance',
+    requireAuth,
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { entityType, entityId, startDate, endDate, format = 'json' } = req.query;
+        
+        const dateRange = {
+          startDate: startDate ? new Date(startDate as string) : new Date(new Date().setMonth(new Date().getMonth() - 1)),
+          endDate: endDate ? new Date(endDate as string) : new Date()
+        };
+        
+        // Generate comprehensive report data
+        const reportData: any = {
+          generatedAt: new Date(),
+          dateRange,
+          entityType: entityType || 'system',
+          entityId: entityId || 'all'
+        };
+        
+        // Get KPIs and scorecard
+        reportData.scorecard = await storage.generatePerformanceScorecard(
+          entityType as string || 'system',
+          entityId as string || 'all',
+          dateRange
+        );
+        
+        // Get detailed metrics
+        if (entityType && entityId) {
+          reportData.metrics = await storage.getPerformanceMetrics(
+            entityType as string,
+            entityId as string,
+            dateRange
+          );
+          
+          // Calculate specific KPIs
+          reportData.responseTime = await storage.calculateResponseTimeMetrics(
+            entityType as string,
+            entityId as string,
+            dateRange
+          );
+          
+          reportData.completionRates = await storage.calculateCompletionRates(
+            entityType as string,
+            entityId as string,
+            dateRange
+          );
+          
+          reportData.revenue = await storage.calculateRevenue(
+            entityType as string,
+            entityId as string,
+            dateRange
+          );
+          
+          reportData.satisfaction = await storage.calculateSatisfactionScore(
+            entityType as string,
+            entityId as string,
+            dateRange
+          );
+          
+          if (entityType === 'fleet') {
+            reportData.utilization = await storage.calculateFleetUtilization(
+              entityId as string,
+              dateRange
+            );
+          }
+          
+          reportData.onTimeDelivery = await storage.calculateOnTimeDelivery(
+            entityType as string,
+            entityId as string,
+            dateRange
+          );
+        }
+        
+        // Get comparison with previous period
+        const previousPeriod = {
+          startDate: new Date(dateRange.startDate.getTime() - (dateRange.endDate.getTime() - dateRange.startDate.getTime())),
+          endDate: dateRange.startDate
+        };
+        
+        if (entityId) {
+          reportData.comparison = await storage.getPerformanceComparison(
+            entityId as string,
+            [previousPeriod, dateRange]
+          );
+        }
+        
+        // Get trends
+        reportData.trends = {
+          completion: await storage.getPerformanceTrends('completion_rate', dateRange),
+          revenue: await storage.getPerformanceTrends('revenue', dateRange),
+          satisfaction: await storage.getPerformanceTrends('satisfaction', dateRange)
+        };
+        
+        // Get top performers
+        reportData.leaderboards = {
+          topByCompletion: await storage.getTopPerformers('completion_rate', 10),
+          topByRevenue: await storage.getTopPerformers('revenue', 10),
+          topBySatisfaction: await storage.getTopPerformers('satisfaction', 10),
+          topByResponseTime: await storage.getTopPerformers('response_time', 10)
+        };
+        
+        if (format === 'csv') {
+          // Convert to CSV format
+          const csvData = convertToCSV(reportData);
+          res.header('Content-Type', 'text/csv');
+          res.header('Content-Disposition', `attachment; filename="performance-report-${Date.now()}.csv"`);
+          res.send(csvData);
+        } else {
+          res.json(reportData);
+        }
+      } catch (error) {
+        console.error('Error generating performance report:', error);
+        res.status(500).json({ message: 'Failed to generate performance report' });
+      }
+    }
+  );
+
+  // Helper function to convert report data to CSV
+  function convertToCSV(data: any): string {
+    const lines: string[] = [];
+    
+    // Add header
+    lines.push('Performance Report');
+    lines.push(`Generated: ${data.generatedAt}`);
+    lines.push(`Period: ${data.dateRange.startDate} to ${data.dateRange.endDate}`);
+    lines.push('');
+    
+    // Add scorecard
+    if (data.scorecard) {
+      lines.push('KPI,Value,Unit,Status,Trend');
+      data.scorecard.scorecard.forEach((kpi: any) => {
+        lines.push(`${kpi.name},${kpi.value},${kpi.unit},${kpi.status || ''},${kpi.trend || ''}`);
+      });
+      lines.push('');
+    }
+    
+    // Add metrics summary
+    if (data.completionRates) {
+      lines.push('Metric,Value');
+      lines.push(`Completion Rate,${data.completionRates.completionRate}%`);
+      lines.push(`Success Rate,${data.completionRates.successRate}%`);
+      lines.push(`Total Jobs,${data.completionRates.totalJobs}`);
+      lines.push('');
+    }
+    
+    if (data.revenue) {
+      lines.push('Revenue Metrics,Value');
+      lines.push(`Total Revenue,$${data.revenue.total}`);
+      lines.push(`Average Revenue,$${data.revenue.average}`);
+      lines.push(`Jobs Completed,${data.revenue.jobCount}`);
+      lines.push('');
+    }
+    
+    return lines.join('\n');
+  }
 
   // Create and return the HTTP server
   const server = createServer(app);
