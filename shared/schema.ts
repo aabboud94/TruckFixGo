@@ -4781,3 +4781,253 @@ export const insertFuelPriceAggregateSchema = createInsertSchema(fuelPriceAggreg
 export type InsertFuelPriceAggregate = z.infer<typeof insertFuelPriceAggregateSchema>;
 export type FuelPriceAggregate = typeof fuelPriceAggregates.$inferSelect;
 
+// ====================
+// PAYMENT RECONCILIATION & COMMISSIONS
+// ====================
+
+// Enums for commission and reconciliation
+export const commissionUserTypeEnum = pgEnum('commission_user_type', ['contractor', 'fleet', 'admin', 'platform']);
+export const commissionStatusEnum = pgEnum('commission_status', ['pending', 'calculated', 'approved', 'paid', 'disputed', 'adjusted']);
+export const reconciliationStatusEnum = pgEnum('reconciliation_status', ['pending', 'processing', 'completed', 'failed', 'disputed']);
+export const reconciliationPeriodEnum = pgEnum('reconciliation_period', ['daily', 'weekly', 'monthly', 'quarterly']);
+export const payoutBatchStatusEnum = pgEnum('payout_batch_status', ['pending', 'processing', 'sent', 'completed', 'failed', 'cancelled']);
+
+// Commission rules for different user types and tiers
+export const commissionRules = pgTable("commission_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Rule configuration
+  userType: commissionUserTypeEnum("user_type").notNull(),
+  ruleName: varchar("rule_name", { length: 100 }).notNull(),
+  description: text("description"),
+  
+  // Commission percentages and fees
+  commissionPercentage: decimal("commission_percentage", { precision: 5, scale: 2 }).notNull(), // e.g., 15.00 for 15%
+  flatFee: decimal("flat_fee", { precision: 10, scale: 2 }).default('0'),
+  
+  // Tiered commission based on volume
+  minAmount: decimal("min_amount", { precision: 10, scale: 2 }).default('0'),
+  maxAmount: decimal("max_amount", { precision: 10, scale: 2 }),
+  
+  // Volume-based tier thresholds (monthly volume)
+  minMonthlyVolume: decimal("min_monthly_volume", { precision: 12, scale: 2 }),
+  maxMonthlyVolume: decimal("max_monthly_volume", { precision: 12, scale: 2 }),
+  
+  // Surge pricing adjustments
+  surgeMultiplier: decimal("surge_multiplier", { precision: 4, scale: 2 }).default('1.00'),
+  surgeCap: decimal("surge_cap", { precision: 10, scale: 2 }), // Maximum commission during surge
+  
+  // Priority and status
+  priority: integer("priority").notNull().default(0), // Higher priority rules apply first
+  isActive: boolean("is_active").notNull().default(true),
+  
+  // Applicable date range
+  effectiveFrom: timestamp("effective_from").notNull().defaultNow(),
+  effectiveTo: timestamp("effective_to"),
+  
+  // Metadata
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdBy: varchar("created_by").references(() => users.id)
+}, (table) => ({
+  userTypeIdx: index("idx_commission_rules_user_type").on(table.userType),
+  activeIdx: index("idx_commission_rules_active").on(table.isActive),
+  priorityIdx: index("idx_commission_rules_priority").on(table.priority),
+  effectiveIdx: index("idx_commission_rules_effective").on(table.effectiveFrom, table.effectiveTo),
+  volumeIdx: index("idx_commission_rules_volume").on(table.minMonthlyVolume, table.maxMonthlyVolume)
+}));
+
+// Individual commission transactions
+export const commissionTransactions = pgTable("commission_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Related entities
+  jobId: varchar("job_id").notNull().references(() => jobs.id),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  ruleId: varchar("rule_id").references(() => commissionRules.id),
+  
+  // Transaction amounts
+  baseAmount: decimal("base_amount", { precision: 10, scale: 2 }).notNull(), // Job total before commission
+  commissionAmount: decimal("commission_amount", { precision: 10, scale: 2 }).notNull(),
+  platformFeeAmount: decimal("platform_fee_amount", { precision: 10, scale: 2 }).notNull(),
+  netPayoutAmount: decimal("net_payout_amount", { precision: 10, scale: 2 }).notNull(), // Amount contractor receives
+  
+  // Commission details
+  commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }).notNull(), // Percentage applied
+  flatFeeApplied: decimal("flat_fee_applied", { precision: 10, scale: 2 }).default('0'),
+  surgeMultiplierApplied: decimal("surge_multiplier_applied", { precision: 4, scale: 2 }).default('1.00'),
+  
+  // Status tracking
+  status: commissionStatusEnum("status").notNull().default('pending'),
+  calculatedAt: timestamp("calculated_at"),
+  approvedAt: timestamp("approved_at"),
+  paidAt: timestamp("paid_at"),
+  
+  // Reconciliation reference
+  reconciliationId: varchar("reconciliation_id").references(() => paymentReconciliation.id),
+  payoutBatchId: varchar("payout_batch_id").references(() => payoutBatches.id),
+  
+  // Dispute/adjustment tracking
+  isDisputed: boolean("is_disputed").notNull().default(false),
+  disputeReason: text("dispute_reason"),
+  adjustmentAmount: decimal("adjustment_amount", { precision: 10, scale: 2 }).default('0'),
+  adjustmentReason: text("adjustment_reason"),
+  
+  // Metadata
+  metadata: jsonb("metadata"), // Additional transaction details
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  processedAt: timestamp("processed_at")
+}, (table) => ({
+  jobIdx: uniqueIndex("idx_commission_transactions_job").on(table.jobId),
+  contractorIdx: index("idx_commission_transactions_contractor").on(table.contractorId),
+  statusIdx: index("idx_commission_transactions_status").on(table.status),
+  reconciliationIdx: index("idx_commission_transactions_reconciliation").on(table.reconciliationId),
+  batchIdx: index("idx_commission_transactions_batch").on(table.payoutBatchId),
+  createdIdx: index("idx_commission_transactions_created").on(table.createdAt),
+  disputedIdx: index("idx_commission_transactions_disputed").on(table.isDisputed)
+}));
+
+// Payment reconciliation periods
+export const paymentReconciliation = pgTable("payment_reconciliation", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Period information
+  periodType: reconciliationPeriodEnum("period_type").notNull(),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Financial totals
+  totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).notNull(),
+  totalCommissions: decimal("total_commissions", { precision: 12, scale: 2 }).notNull(),
+  totalPlatformFees: decimal("total_platform_fees", { precision: 12, scale: 2 }).notNull(),
+  totalPayouts: decimal("total_payouts", { precision: 12, scale: 2 }).notNull(),
+  totalAdjustments: decimal("total_adjustments", { precision: 12, scale: 2 }).default('0'),
+  totalRefunds: decimal("total_refunds", { precision: 12, scale: 2 }).default('0'),
+  
+  // Job and transaction counts
+  jobCount: integer("job_count").notNull().default(0),
+  transactionCount: integer("transaction_count").notNull().default(0),
+  contractorCount: integer("contractor_count").notNull().default(0),
+  
+  // Status
+  status: reconciliationStatusEnum("status").notNull().default('pending'),
+  
+  // Processing timestamps
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  reconciledAt: timestamp("reconciled_at"),
+  
+  // Report generation
+  reportUrl: text("report_url"),
+  reportGeneratedAt: timestamp("report_generated_at"),
+  csvExportUrl: text("csv_export_url"),
+  
+  // Error tracking
+  errorMessage: text("error_message"),
+  retryCount: integer("retry_count").default(0),
+  
+  // Metadata
+  notes: text("notes"),
+  metadata: jsonb("metadata"), // Additional reconciliation data
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdBy: varchar("created_by").references(() => users.id)
+}, (table) => ({
+  periodIdx: uniqueIndex("idx_payment_reconciliation_period").on(table.periodType, table.periodStart, table.periodEnd),
+  statusIdx: index("idx_payment_reconciliation_status").on(table.status),
+  periodStartIdx: index("idx_payment_reconciliation_start").on(table.periodStart),
+  periodEndIdx: index("idx_payment_reconciliation_end").on(table.periodEnd)
+}));
+
+// Payout batches for contractors
+export const payoutBatches = pgTable("payout_batches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Batch information
+  batchNumber: varchar("batch_number", { length: 50 }).unique(),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  reconciliationId: varchar("reconciliation_id").references(() => paymentReconciliation.id),
+  
+  // Period
+  periodType: reconciliationPeriodEnum("period_type").notNull(),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Financial details
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
+  commissionAmount: decimal("commission_amount", { precision: 10, scale: 2 }).notNull(),
+  adjustmentAmount: decimal("adjustment_amount", { precision: 10, scale: 2 }).default('0'),
+  netPayoutAmount: decimal("net_payout_amount", { precision: 10, scale: 2 }).notNull(),
+  
+  // Job details
+  jobCount: integer("job_count").notNull().default(0),
+  jobIds: jsonb("job_ids"), // Array of job IDs included in this batch
+  
+  // Payment method
+  paymentMethod: varchar("payment_method", { length: 50 }), // 'bank_transfer', 'check', 'stripe', etc.
+  paymentReference: varchar("payment_reference", { length: 100 }), // Transaction ID, check number, etc.
+  
+  // Status
+  status: payoutBatchStatusEnum("status").notNull().default('pending'),
+  
+  // Processing timestamps
+  processedAt: timestamp("processed_at"),
+  paidAt: timestamp("paid_at"),
+  failedAt: timestamp("failed_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  
+  // Error handling
+  failureReason: text("failure_reason"),
+  retryCount: integer("retry_count").default(0),
+  lastRetryAt: timestamp("last_retry_at"),
+  
+  // Metadata
+  notes: text("notes"),
+  metadata: jsonb("metadata"), // Additional batch data
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdBy: varchar("created_by").references(() => users.id)
+}, (table) => ({
+  batchNumberIdx: uniqueIndex("idx_payout_batches_batch_number").on(table.batchNumber),
+  contractorIdx: index("idx_payout_batches_contractor").on(table.contractorId),
+  reconciliationIdx: index("idx_payout_batches_reconciliation").on(table.reconciliationId),
+  statusIdx: index("idx_payout_batches_status").on(table.status),
+  periodIdx: index("idx_payout_batches_period").on(table.periodStart, table.periodEnd),
+  createdIdx: index("idx_payout_batches_created").on(table.createdAt)
+}));
+
+// Commission and reconciliation schemas and types
+export const insertCommissionRuleSchema = createInsertSchema(commissionRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertCommissionRule = z.infer<typeof insertCommissionRuleSchema>;
+export type CommissionRule = typeof commissionRules.$inferSelect;
+
+export const insertCommissionTransactionSchema = createInsertSchema(commissionTransactions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  processedAt: true
+});
+export type InsertCommissionTransaction = z.infer<typeof insertCommissionTransactionSchema>;
+export type CommissionTransaction = typeof commissionTransactions.$inferSelect;
+
+export const insertPaymentReconciliationSchema = createInsertSchema(paymentReconciliation).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertPaymentReconciliation = z.infer<typeof insertPaymentReconciliationSchema>;
+export type PaymentReconciliation = typeof paymentReconciliation.$inferSelect;
+
+export const insertPayoutBatchSchema = createInsertSchema(payoutBatches).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertPayoutBatch = z.infer<typeof insertPayoutBatchSchema>;
+export type PayoutBatch = typeof payoutBatches.$inferSelect;
+

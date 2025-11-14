@@ -71,6 +71,18 @@ import {
   weatherData,
   weatherAlerts,
   jobWeatherImpacts,
+  commissionRules,
+  commissionTransactions,
+  paymentReconciliation,
+  payoutBatches,
+  type CommissionRule,
+  type InsertCommissionRule,
+  type CommissionTransaction,
+  type InsertCommissionTransaction,
+  type PaymentReconciliation,
+  type InsertPaymentReconciliation,
+  type PayoutBatch,
+  type InsertPayoutBatch,
   type User,
   type InsertUser,
   type Session,
@@ -2139,6 +2151,75 @@ export interface IStorage {
     price: FuelPrice;
     distance: number;
   }>>;
+  
+  // ==================== PAYMENT RECONCILIATION & COMMISSIONS ====================
+  
+  // Commission rule management
+  saveCommissionRule(rule: InsertCommissionRule): Promise<CommissionRule>;
+  updateCommissionRule(ruleId: string, updates: Partial<InsertCommissionRule>): Promise<CommissionRule | null>;
+  getCommissionRules(userType?: 'contractor' | 'fleet', isActive?: boolean): Promise<CommissionRule[]>;
+  getCommissionRuleById(ruleId: string): Promise<CommissionRule | null>;
+  deleteCommissionRule(ruleId: string): Promise<boolean>;
+  
+  // Commission calculation and transactions
+  calculateCommission(jobId: string, contractorId: string, baseAmount: number, surgeMultiplier?: number): Promise<InsertCommissionTransaction>;
+  saveCommissionTransaction(transaction: InsertCommissionTransaction): Promise<CommissionTransaction>;
+  getCommissionTransactionByJobId(jobId: string): Promise<CommissionTransaction | null>;
+  getCommissionTransactions(contractorId?: string, status?: string, limit?: number): Promise<CommissionTransaction[]>;
+  updateCommissionTransaction(transactionId: string, updates: Partial<InsertCommissionTransaction>): Promise<CommissionTransaction | null>;
+  
+  // Payment reconciliation
+  processReconciliation(
+    periodType: 'daily' | 'weekly' | 'monthly' | 'quarterly',
+    periodStart: Date,
+    periodEnd: Date,
+    createdBy?: string
+  ): Promise<PaymentReconciliation>;
+  getReconciliationReport(
+    periodType?: 'daily' | 'weekly' | 'monthly' | 'quarterly',
+    startDate?: Date,
+    endDate?: Date,
+    status?: string
+  ): Promise<PaymentReconciliation[]>;
+  getReconciliationById(reconciliationId: string): Promise<PaymentReconciliation | null>;
+  updateReconciliationStatus(reconciliationId: string, status: string, notes?: string): Promise<PaymentReconciliation | null>;
+  
+  // Payout batch management
+  createPayoutBatch(
+    contractorId: string,
+    periodStart: Date,
+    periodEnd: Date,
+    reconciliationId?: string,
+    createdBy?: string
+  ): Promise<PayoutBatch>;
+  processPayoutBatch(batchId: string, paymentMethod: string, paymentReference?: string): Promise<PayoutBatch>;
+  getPendingPayouts(contractorId?: string): Promise<PayoutBatch[]>;
+  getPayoutBatchById(batchId: string): Promise<PayoutBatch | null>;
+  updatePayoutBatchStatus(batchId: string, status: string, failureReason?: string): Promise<PayoutBatch | null>;
+  
+  // Contractor earnings
+  getContractorEarnings(
+    contractorId: string,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<{
+    totalEarnings: number;
+    totalCommissions: number;
+    netPayout: number;
+    pendingPayouts: number;
+    completedPayouts: number;
+    transactions: CommissionTransaction[];
+  }>;
+  getContractorMonthlyVolume(contractorId: string, month?: Date): Promise<number>;
+  
+  // Commission disputes and adjustments
+  handleCommissionDispute(
+    transactionId: string,
+    disputeReason: string,
+    adjustmentAmount?: number
+  ): Promise<CommissionTransaction>;
+  getDisputedCommissions(contractorId?: string): Promise<CommissionTransaction[]>;
+  resolveCommissionDispute(transactionId: string, resolution: string): Promise<CommissionTransaction>;
 }
 
 // PostgreSQL implementation using Drizzle ORM
@@ -13906,6 +13987,293 @@ export class PostgreSQLStorage implements IStorage {
     results.sort((a, b) => Number(a.price.pricePerGallon) - Number(b.price.pricePerGallon));
     
     return results.slice(0, limit);
+  }
+  
+  // ==================== PAYMENT RECONCILIATION & COMMISSIONS ====================
+  
+  // Commission rule management
+  async saveCommissionRule(rule: InsertCommissionRule): Promise<CommissionRule> {
+    const result = await db.insert(commissionRules).values(rule).returning();
+    return result[0];
+  }
+  
+  async updateCommissionRule(ruleId: string, updates: Partial<InsertCommissionRule>): Promise<CommissionRule | null> {
+    const result = await db
+      .update(commissionRules)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(commissionRules.id, ruleId))
+      .returning();
+    return result[0] || null;
+  }
+  
+  async getCommissionRules(userType?: 'contractor' | 'fleet', isActive?: boolean): Promise<CommissionRule[]> {
+    const conditions = [];
+    
+    if (userType) {
+      conditions.push(eq(commissionRules.userType, userType));
+    }
+    if (isActive !== undefined) {
+      conditions.push(eq(commissionRules.isActive, isActive));
+    }
+    
+    const query = conditions.length > 0
+      ? db.select().from(commissionRules).where(and(...conditions))
+      : db.select().from(commissionRules);
+    
+    return await query.orderBy(desc(commissionRules.priority), asc(commissionRules.commissionPercentage));
+  }
+  
+  async getCommissionRuleById(ruleId: string): Promise<CommissionRule | null> {
+    const result = await db
+      .select()
+      .from(commissionRules)
+      .where(eq(commissionRules.id, ruleId))
+      .limit(1);
+    return result[0] || null;
+  }
+  
+  async deleteCommissionRule(ruleId: string): Promise<boolean> {
+    const result = await db
+      .update(commissionRules)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(commissionRules.id, ruleId));
+    return result.rowCount > 0;
+  }
+  
+  // Commission calculation and transactions
+  async calculateCommission(jobId: string, contractorId: string, baseAmount: number, surgeMultiplier: number = 1.0): Promise<InsertCommissionTransaction> {
+    // Import payment reconciliation service to avoid circular dependency
+    const { default: paymentReconciliationService } = await import('./services/payment-reconciliation-service');
+    return await paymentReconciliationService.calculateCommission(jobId, contractorId, baseAmount, surgeMultiplier);
+  }
+  
+  async saveCommissionTransaction(transaction: InsertCommissionTransaction): Promise<CommissionTransaction> {
+    const result = await db.insert(commissionTransactions).values(transaction).returning();
+    return result[0];
+  }
+  
+  async getCommissionTransactionByJobId(jobId: string): Promise<CommissionTransaction | null> {
+    const result = await db
+      .select()
+      .from(commissionTransactions)
+      .where(eq(commissionTransactions.jobId, jobId))
+      .limit(1);
+    return result[0] || null;
+  }
+  
+  async getCommissionTransactions(contractorId?: string, status?: string, limit: number = 100): Promise<CommissionTransaction[]> {
+    const conditions = [];
+    
+    if (contractorId) {
+      conditions.push(eq(commissionTransactions.contractorId, contractorId));
+    }
+    if (status) {
+      conditions.push(eq(commissionTransactions.status, status as any));
+    }
+    
+    const query = conditions.length > 0
+      ? db.select().from(commissionTransactions).where(and(...conditions))
+      : db.select().from(commissionTransactions);
+    
+    return await query
+      .orderBy(desc(commissionTransactions.createdAt))
+      .limit(limit);
+  }
+  
+  async updateCommissionTransaction(transactionId: string, updates: Partial<InsertCommissionTransaction>): Promise<CommissionTransaction | null> {
+    const result = await db
+      .update(commissionTransactions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(commissionTransactions.id, transactionId))
+      .returning();
+    return result[0] || null;
+  }
+  
+  // Payment reconciliation
+  async processReconciliation(
+    periodType: 'daily' | 'weekly' | 'monthly' | 'quarterly',
+    periodStart: Date,
+    periodEnd: Date,
+    createdBy?: string
+  ): Promise<PaymentReconciliation> {
+    const { default: paymentReconciliationService } = await import('./services/payment-reconciliation-service');
+    return await paymentReconciliationService.processReconciliation(periodType, periodStart, periodEnd, createdBy);
+  }
+  
+  async getReconciliationReport(
+    periodType?: 'daily' | 'weekly' | 'monthly' | 'quarterly',
+    startDate?: Date,
+    endDate?: Date,
+    status?: string
+  ): Promise<PaymentReconciliation[]> {
+    const { default: paymentReconciliationService } = await import('./services/payment-reconciliation-service');
+    return await paymentReconciliationService.getReconciliationReport(periodType, startDate, endDate, status);
+  }
+  
+  async getReconciliationById(reconciliationId: string): Promise<PaymentReconciliation | null> {
+    const result = await db
+      .select()
+      .from(paymentReconciliation)
+      .where(eq(paymentReconciliation.id, reconciliationId))
+      .limit(1);
+    return result[0] || null;
+  }
+  
+  async updateReconciliationStatus(reconciliationId: string, status: string, notes?: string): Promise<PaymentReconciliation | null> {
+    const updateData: any = {
+      status,
+      updatedAt: new Date()
+    };
+    
+    if (notes) {
+      updateData.notes = notes;
+    }
+    
+    if (status === 'completed') {
+      updateData.completedAt = new Date();
+      updateData.reconciledAt = new Date();
+    }
+    
+    const result = await db
+      .update(paymentReconciliation)
+      .set(updateData)
+      .where(eq(paymentReconciliation.id, reconciliationId))
+      .returning();
+    return result[0] || null;
+  }
+  
+  // Payout batch management
+  async createPayoutBatch(
+    contractorId: string,
+    periodStart: Date,
+    periodEnd: Date,
+    reconciliationId?: string,
+    createdBy?: string
+  ): Promise<PayoutBatch> {
+    const { default: paymentReconciliationService } = await import('./services/payment-reconciliation-service');
+    return await paymentReconciliationService.createPayoutBatch(contractorId, periodStart, periodEnd, reconciliationId, createdBy);
+  }
+  
+  async processPayoutBatch(batchId: string, paymentMethod: string, paymentReference?: string): Promise<PayoutBatch> {
+    const { default: paymentReconciliationService } = await import('./services/payment-reconciliation-service');
+    return await paymentReconciliationService.processPayoutBatch(batchId, paymentMethod, paymentReference);
+  }
+  
+  async getPendingPayouts(contractorId?: string): Promise<PayoutBatch[]> {
+    const { default: paymentReconciliationService } = await import('./services/payment-reconciliation-service');
+    return await paymentReconciliationService.getPendingPayouts(contractorId);
+  }
+  
+  async getPayoutBatchById(batchId: string): Promise<PayoutBatch | null> {
+    const result = await db
+      .select()
+      .from(payoutBatches)
+      .where(eq(payoutBatches.id, batchId))
+      .limit(1);
+    return result[0] || null;
+  }
+  
+  async updatePayoutBatchStatus(batchId: string, status: string, failureReason?: string): Promise<PayoutBatch | null> {
+    const updateData: any = {
+      status,
+      updatedAt: new Date()
+    };
+    
+    if (status === 'completed') {
+      updateData.paidAt = new Date();
+    } else if (status === 'failed') {
+      updateData.failedAt = new Date();
+      updateData.failureReason = failureReason;
+      updateData.retryCount = sql`${payoutBatches.retryCount} + 1`;
+      updateData.lastRetryAt = new Date();
+    } else if (status === 'processing') {
+      updateData.processedAt = new Date();
+    } else if (status === 'cancelled') {
+      updateData.cancelledAt = new Date();
+    }
+    
+    const result = await db
+      .update(payoutBatches)
+      .set(updateData)
+      .where(eq(payoutBatches.id, batchId))
+      .returning();
+    return result[0] || null;
+  }
+  
+  // Contractor earnings
+  async getContractorEarnings(
+    contractorId: string,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<{
+    totalEarnings: number;
+    totalCommissions: number;
+    netPayout: number;
+    pendingPayouts: number;
+    completedPayouts: number;
+    transactions: CommissionTransaction[];
+  }> {
+    const { default: paymentReconciliationService } = await import('./services/payment-reconciliation-service');
+    return await paymentReconciliationService.getContractorEarnings(contractorId, startDate, endDate);
+  }
+  
+  async getContractorMonthlyVolume(contractorId: string, month?: Date): Promise<number> {
+    const targetMonth = month || new Date();
+    const startOfMonth = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1);
+    const endOfMonth = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0, 23, 59, 59, 999);
+    
+    const result = await db
+      .select({
+        totalVolume: sql<number>`COALESCE(SUM(CAST(${commissionTransactions.baseAmount} AS DECIMAL)), 0)`
+      })
+      .from(commissionTransactions)
+      .where(
+        and(
+          eq(commissionTransactions.contractorId, contractorId),
+          between(commissionTransactions.createdAt, startOfMonth, endOfMonth),
+          ne(commissionTransactions.status, 'disputed')
+        )
+      );
+    
+    return result[0]?.totalVolume || 0;
+  }
+  
+  // Commission disputes and adjustments
+  async handleCommissionDispute(
+    transactionId: string,
+    disputeReason: string,
+    adjustmentAmount?: number
+  ): Promise<CommissionTransaction> {
+    const { default: paymentReconciliationService } = await import('./services/payment-reconciliation-service');
+    return await paymentReconciliationService.handleCommissionDispute(transactionId, disputeReason, adjustmentAmount);
+  }
+  
+  async getDisputedCommissions(contractorId?: string): Promise<CommissionTransaction[]> {
+    const conditions = [eq(commissionTransactions.isDisputed, true)];
+    
+    if (contractorId) {
+      conditions.push(eq(commissionTransactions.contractorId, contractorId));
+    }
+    
+    return await db
+      .select()
+      .from(commissionTransactions)
+      .where(and(...conditions))
+      .orderBy(desc(commissionTransactions.createdAt));
+  }
+  
+  async resolveCommissionDispute(transactionId: string, resolution: string): Promise<CommissionTransaction> {
+    const result = await db
+      .update(commissionTransactions)
+      .set({
+        isDisputed: false,
+        adjustmentReason: resolution,
+        status: 'adjusted',
+        updatedAt: new Date()
+      })
+      .where(eq(commissionTransactions.id, transactionId))
+      .returning();
+    return result[0];
   }
 }
 
