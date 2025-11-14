@@ -19878,7 +19878,8 @@ The TruckFixGo Team
   // ==================== PERFORMANCE METRICS ROUTES ====================
   
   // Initialize KPIs on server start
-  await storage.initializePerformanceKPIs().catch(console.error);
+  // NOTE: Temporarily disabled - performance tables need migration
+  // await storage.initializePerformanceKPIs().catch(console.error);
 
   // GET /api/metrics/dashboard - Main metrics dashboard data
   app.get('/api/metrics/dashboard',
@@ -20293,6 +20294,295 @@ The TruckFixGo Team
     
     return lines.join('\n');
   }
+
+  // ==================== EMERGENCY SOS ENDPOINTS ====================
+  
+  // POST /api/emergency/sos - Trigger SOS alert
+  app.post('/api/emergency/sos', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const { location, alertType, message, severity, jobId } = req.body;
+      
+      if (!location || !alertType || !message) {
+        return res.status(400).json({ message: 'Location, alert type, and message are required' });
+      }
+      
+      const alert = await storage.createSOSAlert(
+        userId,
+        location,
+        alertType,
+        message,
+        severity || 'high',
+        jobId
+      );
+      
+      // Broadcast emergency via WebSocket
+      const wsMessage = {
+        type: 'EMERGENCY_SOS',
+        data: {
+          alertId: alert.id,
+          initiatorId: alert.initiatorId,
+          location: alert.location,
+          severity: alert.severity,
+          alertType: alert.alertType,
+          message: alert.message,
+          timestamp: alert.createdAt
+        }
+      };
+      
+      // Broadcast to all connected clients
+      trackingWSServer.handleBroadcast(wsMessage);
+      
+      res.json({ success: true, alert });
+    } catch (error) {
+      console.error('Error creating SOS alert:', error);
+      res.status(500).json({ message: 'Failed to create SOS alert' });
+    }
+  });
+  
+  // PATCH /api/emergency/sos/:id/acknowledge - Acknowledge SOS alert
+  app.patch('/api/emergency/sos/:id/acknowledge', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const { id } = req.params;
+      const alert = await storage.acknowledgeSOSAlert(id, userId);
+      
+      // Log the acknowledgment
+      await storage.logEmergencyResponse(id, 'acknowledged', 'Alert acknowledged by responder', userId);
+      
+      // Broadcast acknowledgment
+      trackingWSServer.handleBroadcast({
+        type: 'EMERGENCY_ACKNOWLEDGED',
+        data: {
+          alertId: id,
+          responderId: userId,
+          timestamp: new Date()
+        }
+      });
+      
+      res.json({ success: true, alert });
+    } catch (error) {
+      console.error('Error acknowledging SOS alert:', error);
+      res.status(500).json({ message: 'Failed to acknowledge SOS alert' });
+    }
+  });
+  
+  // PATCH /api/emergency/sos/:id/resolve - Resolve SOS alert
+  app.patch('/api/emergency/sos/:id/resolve', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const { id } = req.params;
+      const { resolution, notes } = req.body;
+      
+      if (!resolution) {
+        return res.status(400).json({ message: 'Resolution status is required' });
+      }
+      
+      const alert = await storage.resolveSOSAlert(id, resolution, notes, userId);
+      
+      // Log the resolution
+      await storage.logEmergencyResponse(id, 'resolved', `Alert resolved: ${resolution}. ${notes || ''}`, userId);
+      
+      // Broadcast resolution
+      trackingWSServer.handleBroadcast({
+        type: 'EMERGENCY_RESOLVED',
+        data: {
+          alertId: id,
+          resolution,
+          responderId: userId,
+          timestamp: new Date()
+        }
+      });
+      
+      res.json({ success: true, alert });
+    } catch (error) {
+      console.error('Error resolving SOS alert:', error);
+      res.status(500).json({ message: 'Failed to resolve SOS alert' });
+    }
+  });
+  
+  // GET /api/emergency/sos/active - Get all active SOS alerts
+  app.get('/api/emergency/sos/active', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const alerts = await storage.getActiveSOSAlerts();
+      res.json(alerts);
+    } catch (error) {
+      console.error('Error fetching active SOS alerts:', error);
+      res.status(500).json({ message: 'Failed to fetch active SOS alerts' });
+    }
+  });
+  
+  // GET /api/emergency/contacts - Get user's emergency contacts
+  app.get('/api/emergency/contacts', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const contacts = await storage.getEmergencyContacts(userId);
+      res.json(contacts);
+    } catch (error) {
+      console.error('Error fetching emergency contacts:', error);
+      res.status(500).json({ message: 'Failed to fetch emergency contacts' });
+    }
+  });
+  
+  // POST /api/emergency/contacts - Add/update emergency contact
+  app.post('/api/emergency/contacts', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const { contactName, contactPhone, contactEmail, relationship, isPrimary, notificationPreference } = req.body;
+      
+      if (!contactName || (!contactPhone && !contactEmail)) {
+        return res.status(400).json({ message: 'Contact name and at least phone or email are required' });
+      }
+      
+      const contact = await storage.upsertEmergencyContact({
+        userId,
+        contactName,
+        contactPhone,
+        contactEmail,
+        relationship,
+        isPrimary: isPrimary || false,
+        notificationPreference: notificationPreference || 'both'
+      });
+      
+      res.json({ success: true, contact });
+    } catch (error) {
+      console.error('Error saving emergency contact:', error);
+      res.status(500).json({ message: 'Failed to save emergency contact' });
+    }
+  });
+  
+  // DELETE /api/emergency/contacts/:id - Delete emergency contact
+  app.delete('/api/emergency/contacts/:id', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteEmergencyContact(id);
+      
+      if (!success) {
+        return res.status(404).json({ message: 'Contact not found' });
+      }
+      
+      res.json({ success: true, message: 'Contact deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting emergency contact:', error);
+      res.status(500).json({ message: 'Failed to delete emergency contact' });
+    }
+  });
+  
+  // POST /api/emergency/test - Test the SOS system (for drills)
+  app.post('/api/emergency/test', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const result = await storage.testSOSSystem(userId);
+      res.json(result);
+    } catch (error) {
+      console.error('Error testing SOS system:', error);
+      res.status(500).json({ message: 'Failed to test SOS system' });
+    }
+  });
+  
+  // GET /api/emergency/nearest-help - Find nearest available help
+  app.get('/api/emergency/nearest-help', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { lat, lng, radius } = req.query;
+      
+      if (!lat || !lng) {
+        return res.status(400).json({ message: 'Location coordinates are required' });
+      }
+      
+      const location = {
+        lat: parseFloat(lat as string),
+        lng: parseFloat(lng as string)
+      };
+      
+      const radiusMiles = radius ? parseFloat(radius as string) : 50; // Default 50 mile radius
+      
+      const responders = await storage.findNearbyResponders(location, radiusMiles);
+      res.json(responders);
+    } catch (error) {
+      console.error('Error finding nearest help:', error);
+      res.status(500).json({ message: 'Failed to find nearest help' });
+    }
+  });
+  
+  // GET /api/emergency/sos/history - Get user's SOS alert history
+  app.get('/api/emergency/sos/history', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      const history = await storage.getSOSAlertHistory(userId, limit);
+      
+      res.json(history);
+    } catch (error) {
+      console.error('Error fetching SOS history:', error);
+      res.status(500).json({ message: 'Failed to fetch SOS history' });
+    }
+  });
+  
+  // GET /api/emergency/sos/:id - Get specific SOS alert details
+  app.get('/api/emergency/sos/:id', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const alert = await storage.getSOSAlertById(id);
+      
+      if (!alert) {
+        return res.status(404).json({ message: 'Alert not found' });
+      }
+      
+      // Also get response logs
+      const logs = await storage.getEmergencyResponseLogs(id);
+      
+      res.json({ alert, logs });
+    } catch (error) {
+      console.error('Error fetching SOS alert:', error);
+      res.status(500).json({ message: 'Failed to fetch SOS alert' });
+    }
+  });
+  
+  // PATCH /api/emergency/sos/:id/location - Update SOS alert location (for live tracking)
+  app.patch('/api/emergency/sos/:id/location', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const { id } = req.params;
+      const { location } = req.body;
+      
+      if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
+        return res.status(400).json({ message: 'Valid location coordinates are required' });
+      }
+      
+      await storage.updateSOSAlertLocation(id, location);
+      
+      // Broadcast location update
+      trackingWSServer.handleBroadcast({
+        type: 'EMERGENCY_LOCATION_UPDATE',
+        data: {
+          alertId: id,
+          location,
+          timestamp: new Date()
+        }
+      });
+      
+      res.json({ success: true, message: 'Location updated' });
+    } catch (error) {
+      console.error('Error updating SOS location:', error);
+      res.status(500).json({ message: 'Failed to update SOS location' });
+    }
+  });
 
   // Create and return the HTTP server
   const server = createServer(app);
