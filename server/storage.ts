@@ -383,7 +383,19 @@ import {
   type WeatherAlert,
   type InsertWeatherAlert,
   type JobWeatherImpact,
-  type InsertJobWeatherImpact
+  type InsertJobWeatherImpact,
+  bookingPreferences,
+  contractorBlacklist,
+  favoriteContractors,
+  bookingTemplates,
+  type BookingPreferences,
+  type InsertBookingPreferences,
+  type ContractorBlacklist,
+  type InsertContractorBlacklist,
+  type FavoriteContractor,
+  type InsertFavoriteContractor,
+  type BookingTemplate,
+  type InsertBookingTemplate
 } from "@shared/schema";
 import { partsInventoryService } from "./services/parts-inventory-service";
 
@@ -1071,6 +1083,56 @@ export interface IStorage {
 
   // Check if service history exists for job
   serviceHistoryExistsForJob(jobId: string): Promise<boolean>;
+  
+  // ==================== BOOKING PREFERENCES ====================
+  
+  // Save or update booking preferences
+  saveBookingPreferences(userId: string, preferences: InsertBookingPreferences): Promise<BookingPreferences>;
+  
+  // Get booking preferences for a user
+  getBookingPreferences(userId: string): Promise<BookingPreferences | null>;
+  
+  // Add a contractor to favorites
+  addFavoriteContractor(userId: string, contractorId: string, notes?: string): Promise<FavoriteContractor>;
+  
+  // Remove a contractor from favorites
+  removeFavoriteContractor(userId: string, contractorId: string): Promise<boolean>;
+  
+  // Get favorite contractors for a user
+  getFavoriteContractors(userId: string): Promise<FavoriteContractor[]>;
+  
+  // Blacklist a contractor
+  blacklistContractor(userId: string, contractorId: string, reason?: string): Promise<ContractorBlacklist>;
+  
+  // Remove contractor from blacklist
+  unblacklistContractor(userId: string, contractorId: string): Promise<boolean>;
+  
+  // Get blacklisted contractors for a user
+  getBlacklistedContractors(userId: string): Promise<ContractorBlacklist[]>;
+  
+  // Check if contractor is blacklisted
+  isContractorBlacklisted(userId: string, contractorId: string): Promise<boolean>;
+  
+  // Create booking template
+  createBookingTemplate(template: InsertBookingTemplate): Promise<BookingTemplate>;
+  
+  // Update booking template
+  updateBookingTemplate(templateId: string, updates: Partial<InsertBookingTemplate>): Promise<BookingTemplate | null>;
+  
+  // Delete booking template
+  deleteBookingTemplate(templateId: string): Promise<boolean>;
+  
+  // Get booking templates for a user
+  getBookingTemplates(userId: string): Promise<BookingTemplate[]>;
+  
+  // Get specific booking template
+  getBookingTemplate(templateId: string): Promise<BookingTemplate | null>;
+  
+  // Apply booking template to job
+  applyBookingTemplate(templateId: string): Promise<Partial<Job>>;
+  
+  // Record template usage
+  recordTemplateUsage(templateId: string): Promise<void>;
 }
 
 import { db } from "./db";
@@ -14690,6 +14752,294 @@ export class PostgreSQLStorage implements IStorage {
       .limit(1);
     
     return result.length > 0;
+  }
+  
+  // ==================== BOOKING PREFERENCES IMPLEMENTATION ====================
+  
+  async saveBookingPreferences(userId: string, preferences: InsertBookingPreferences): Promise<BookingPreferences> {
+    // Check if preferences already exist
+    const existing = await this.getBookingPreferences(userId);
+    
+    if (existing) {
+      // Update existing preferences
+      const [updated] = await db
+        .update(bookingPreferences)
+        .set({
+          ...preferences,
+          updatedAt: new Date()
+        })
+        .where(eq(bookingPreferences.userId, userId))
+        .returning();
+      return updated;
+    }
+    
+    // Create new preferences
+    const [created] = await db
+      .insert(bookingPreferences)
+      .values({
+        ...preferences,
+        userId
+      })
+      .returning();
+    return created;
+  }
+  
+  async getBookingPreferences(userId: string): Promise<BookingPreferences | null> {
+    const [prefs] = await db
+      .select()
+      .from(bookingPreferences)
+      .where(eq(bookingPreferences.userId, userId))
+      .limit(1);
+    
+    return prefs || null;
+  }
+  
+  async addFavoriteContractor(userId: string, contractorId: string, notes?: string): Promise<FavoriteContractor> {
+    // Check if already favorited
+    const [existing] = await db
+      .select()
+      .from(favoriteContractors)
+      .where(
+        and(
+          eq(favoriteContractors.userId, userId),
+          eq(favoriteContractors.contractorId, contractorId)
+        )
+      )
+      .limit(1);
+    
+    if (existing) {
+      // Update existing favorite
+      const [updated] = await db
+        .update(favoriteContractors)
+        .set({ notes })
+        .where(eq(favoriteContractors.id, existing.id))
+        .returning();
+      return updated;
+    }
+    
+    // Add new favorite
+    const [favorite] = await db
+      .insert(favoriteContractors)
+      .values({
+        userId,
+        contractorId,
+        notes
+      })
+      .returning();
+    
+    return favorite;
+  }
+  
+  async removeFavoriteContractor(userId: string, contractorId: string): Promise<boolean> {
+    const result = await db
+      .delete(favoriteContractors)
+      .where(
+        and(
+          eq(favoriteContractors.userId, userId),
+          eq(favoriteContractors.contractorId, contractorId)
+        )
+      );
+    
+    return !!result.rowCount;
+  }
+  
+  async getFavoriteContractors(userId: string): Promise<FavoriteContractor[]> {
+    return await db
+      .select()
+      .from(favoriteContractors)
+      .where(eq(favoriteContractors.userId, userId))
+      .orderBy(desc(favoriteContractors.priority));
+  }
+  
+  async blacklistContractor(userId: string, contractorId: string, reason?: string): Promise<ContractorBlacklist> {
+    // Check if already blacklisted
+    const [existing] = await db
+      .select()
+      .from(contractorBlacklist)
+      .where(
+        and(
+          eq(contractorBlacklist.userId, userId),
+          eq(contractorBlacklist.contractorId, contractorId),
+          isNull(contractorBlacklist.unblockedAt)
+        )
+      )
+      .limit(1);
+    
+    if (existing) {
+      return existing;
+    }
+    
+    // Add to blacklist
+    const [blacklisted] = await db
+      .insert(contractorBlacklist)
+      .values({
+        userId,
+        contractorId,
+        reason
+      })
+      .returning();
+    
+    // Remove from favorites if exists
+    await this.removeFavoriteContractor(userId, contractorId);
+    
+    return blacklisted;
+  }
+  
+  async unblacklistContractor(userId: string, contractorId: string): Promise<boolean> {
+    const result = await db
+      .update(contractorBlacklist)
+      .set({ unblockedAt: new Date() })
+      .where(
+        and(
+          eq(contractorBlacklist.userId, userId),
+          eq(contractorBlacklist.contractorId, contractorId),
+          isNull(contractorBlacklist.unblockedAt)
+        )
+      );
+    
+    return !!result.rowCount;
+  }
+  
+  async getBlacklistedContractors(userId: string): Promise<ContractorBlacklist[]> {
+    return await db
+      .select()
+      .from(contractorBlacklist)
+      .where(
+        and(
+          eq(contractorBlacklist.userId, userId),
+          isNull(contractorBlacklist.unblockedAt)
+        )
+      );
+  }
+  
+  async isContractorBlacklisted(userId: string, contractorId: string): Promise<boolean> {
+    const [blacklisted] = await db
+      .select()
+      .from(contractorBlacklist)
+      .where(
+        and(
+          eq(contractorBlacklist.userId, userId),
+          eq(contractorBlacklist.contractorId, contractorId),
+          isNull(contractorBlacklist.unblockedAt)
+        )
+      )
+      .limit(1);
+    
+    return !!blacklisted;
+  }
+  
+  async createBookingTemplate(template: InsertBookingTemplate): Promise<BookingTemplate> {
+    // If this is set as default, unset other defaults
+    if (template.isDefault) {
+      await db
+        .update(bookingTemplates)
+        .set({ isDefault: false })
+        .where(eq(bookingTemplates.userId, template.userId));
+    }
+    
+    const [created] = await db
+      .insert(bookingTemplates)
+      .values(template)
+      .returning();
+    
+    return created;
+  }
+  
+  async updateBookingTemplate(templateId: string, updates: Partial<InsertBookingTemplate>): Promise<BookingTemplate | null> {
+    // Handle default flag
+    if (updates.isDefault) {
+      const [template] = await db
+        .select()
+        .from(bookingTemplates)
+        .where(eq(bookingTemplates.id, templateId))
+        .limit(1);
+      
+      if (template) {
+        await db
+          .update(bookingTemplates)
+          .set({ isDefault: false })
+          .where(
+            and(
+              eq(bookingTemplates.userId, template.userId),
+              ne(bookingTemplates.id, templateId)
+            )
+          );
+      }
+    }
+    
+    const [updated] = await db
+      .update(bookingTemplates)
+      .set({
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(eq(bookingTemplates.id, templateId))
+      .returning();
+    
+    return updated || null;
+  }
+  
+  async deleteBookingTemplate(templateId: string): Promise<boolean> {
+    const result = await db
+      .delete(bookingTemplates)
+      .where(eq(bookingTemplates.id, templateId));
+    
+    return !!result.rowCount;
+  }
+  
+  async getBookingTemplates(userId: string): Promise<BookingTemplate[]> {
+    return await db
+      .select()
+      .from(bookingTemplates)
+      .where(eq(bookingTemplates.userId, userId))
+      .orderBy(desc(bookingTemplates.isDefault), desc(bookingTemplates.usageCount));
+  }
+  
+  async getBookingTemplate(templateId: string): Promise<BookingTemplate | null> {
+    const [template] = await db
+      .select()
+      .from(bookingTemplates)
+      .where(eq(bookingTemplates.id, templateId))
+      .limit(1);
+    
+    return template || null;
+  }
+  
+  async applyBookingTemplate(templateId: string): Promise<Partial<Job>> {
+    const template = await this.getBookingTemplate(templateId);
+    if (!template) {
+      throw new Error('Template not found');
+    }
+    
+    // Record usage
+    await this.recordTemplateUsage(templateId);
+    
+    // Convert template to job data
+    const jobData: Partial<Job> = {
+      serviceTypeId: template.serviceType || undefined,
+      vehicleId: template.vehicleId || undefined,
+      specialInstructions: template.specialInstructions || undefined
+    };
+    
+    // Add location data if available
+    if (template.locationPreferences && typeof template.locationPreferences === 'object') {
+      const locPrefs = template.locationPreferences as any;
+      if (locPrefs.lat) jobData.locationLat = String(locPrefs.lat);
+      if (locPrefs.lng) jobData.locationLng = String(locPrefs.lng);
+      if (locPrefs.address) jobData.locationAddress = locPrefs.address;
+    }
+    
+    return jobData;
+  }
+  
+  async recordTemplateUsage(templateId: string): Promise<void> {
+    await db
+      .update(bookingTemplates)
+      .set({
+        usageCount: sql`${bookingTemplates.usageCount} + 1`,
+        lastUsedAt: new Date()
+      })
+      .where(eq(bookingTemplates.id, templateId));
   }
 }
 

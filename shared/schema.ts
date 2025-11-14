@@ -5186,6 +5186,99 @@ export const vehicleMaintenanceLogs = pgTable("vehicle_maintenance_logs", {
   createdByIdx: index("idx_vehicle_maintenance_logs_created_by").on(table.createdBy)
 }));
 
+// ====================
+// BOOKING PREFERENCES
+// ====================
+
+export const bookingPreferences = pgTable("booking_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  
+  // Preferred contractors and services
+  preferredContractorIds: text("preferred_contractor_ids").array(),
+  preferredServiceTimes: jsonb("preferred_service_times"), // { mornings: boolean, afternoons: boolean, evenings: boolean, weekends: boolean, preferredHours: string[] }
+  preferredPaymentMethods: text("preferred_payment_methods").array(), // array of payment method types
+  
+  // Auto-accept settings
+  autoAcceptBids: boolean("auto_accept_bids").notNull().default(false),
+  maxAutoAcceptPrice: decimal("max_auto_accept_price", { precision: 10, scale: 2 }),
+  minContractorRating: decimal("min_contractor_rating", { precision: 3, scale: 2 }),
+  maxResponseTimeMinutes: integer("max_response_time_minutes"),
+  
+  // Notification preferences
+  notificationPreferences: jsonb("notification_preferences"), // { email: boolean, sms: boolean, push: boolean, frequency: string, types: string[] }
+  notificationEmail: text("notification_email"),
+  notificationPhone: varchar("notification_phone", { length: 20 }),
+  
+  // Location preferences
+  defaultLocationLat: decimal("default_location_lat", { precision: 9, scale: 6 }),
+  defaultLocationLng: decimal("default_location_lng", { precision: 9, scale: 6 }),
+  defaultLocationAddress: text("default_location_address"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  userIdx: uniqueIndex("idx_booking_preferences_user").on(table.userId)
+}));
+
+export const contractorBlacklist = pgTable("contractor_blacklist", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  reason: text("reason"),
+  blockedAt: timestamp("blocked_at").notNull().defaultNow(),
+  unblockedAt: timestamp("unblocked_at")
+}, (table) => ({
+  userContractorIdx: uniqueIndex("idx_contractor_blacklist_user_contractor").on(table.userId, table.contractorId),
+  contractorIdx: index("idx_contractor_blacklist_contractor").on(table.contractorId)
+}));
+
+export const favoriteContractors = pgTable("favorite_contractors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  notes: text("notes"),
+  priority: integer("priority").notNull().default(0), // Higher number = higher priority
+  favoritedAt: timestamp("favorited_at").notNull().defaultNow()
+}, (table) => ({
+  userContractorIdx: uniqueIndex("idx_favorite_contractors_user_contractor").on(table.userId, table.contractorId),
+  userPriorityIdx: index("idx_favorite_contractors_user_priority").on(table.userId, table.priority)
+}));
+
+export const bookingTemplates = pgTable("booking_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  templateName: text("template_name").notNull(),
+  serviceType: varchar("service_type").references(() => serviceTypes.id),
+  vehicleId: varchar("vehicle_id").references(() => fleetVehicles.id),
+  
+  // Location preferences
+  locationPreferences: jsonb("location_preferences"), // { lat, lng, address, landmark }
+  
+  // Service details
+  specialInstructions: text("special_instructions"),
+  urgencyLevel: varchar("urgency_level", { length: 20 }), // 'low', 'normal', 'high', 'urgent'
+  preferredTimeSlots: jsonb("preferred_time_slots"), // Array of preferred time windows
+  
+  // Payment preferences
+  preferredPaymentMethod: varchar("preferred_payment_method", { length: 50 }),
+  maxBudget: decimal("max_budget", { precision: 10, scale: 2 }),
+  
+  // Contractor preferences
+  preferredContractorIds: text("preferred_contractor_ids").array(),
+  autoSelectContractor: boolean("auto_select_contractor").notNull().default(false),
+  
+  isDefault: boolean("is_default").notNull().default(false),
+  usageCount: integer("usage_count").notNull().default(0),
+  lastUsedAt: timestamp("last_used_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  userIdx: index("idx_booking_templates_user").on(table.userId),
+  userDefaultIdx: index("idx_booking_templates_user_default").on(table.userId, table.isDefault)
+}));
+
 // Service History schemas and types
 export const insertServiceHistorySchema = createInsertSchema(serviceHistory).omit({
   id: true,
@@ -5252,4 +5345,37 @@ export const insertPayoutBatchSchema = createInsertSchema(payoutBatches).omit({
 });
 export type InsertPayoutBatch = z.infer<typeof insertPayoutBatchSchema>;
 export type PayoutBatch = typeof payoutBatches.$inferSelect;
+
+// Booking Preferences schemas and types
+export const insertBookingPreferencesSchema = createInsertSchema(bookingPreferences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertBookingPreferences = z.infer<typeof insertBookingPreferencesSchema>;
+export type BookingPreferences = typeof bookingPreferences.$inferSelect;
+
+export const insertContractorBlacklistSchema = createInsertSchema(contractorBlacklist).omit({
+  id: true,
+  blockedAt: true
+});
+export type InsertContractorBlacklist = z.infer<typeof insertContractorBlacklistSchema>;
+export type ContractorBlacklist = typeof contractorBlacklist.$inferSelect;
+
+export const insertFavoriteContractorsSchema = createInsertSchema(favoriteContractors).omit({
+  id: true,
+  favoritedAt: true
+});
+export type InsertFavoriteContractor = z.infer<typeof insertFavoriteContractorsSchema>;
+export type FavoriteContractor = typeof favoriteContractors.$inferSelect;
+
+export const insertBookingTemplateSchema = createInsertSchema(bookingTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  usageCount: true,
+  lastUsedAt: true
+});
+export type InsertBookingTemplate = z.infer<typeof insertBookingTemplateSchema>;
+export type BookingTemplate = typeof bookingTemplates.$inferSelect;
 
