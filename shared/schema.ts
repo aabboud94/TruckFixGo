@@ -4454,3 +4454,330 @@ export const insertEmergencyResponseLogSchema = createInsertSchema(emergencyResp
 export type InsertEmergencyResponseLog = z.infer<typeof insertEmergencyResponseLogSchema>;
 export type EmergencyResponseLog = typeof emergencyResponseLog.$inferSelect;
 
+// ====================
+// FUEL TRACKING SYSTEM
+// ====================
+
+// Fuel tracking enums
+export const fuelTypeEnum = pgEnum('fuel_type', ['diesel', 'regular', 'premium', 'def']);
+export const fuelBrandEnum = pgEnum('fuel_brand', ['pilot', 'flying_j', 'loves', 'ta_travel', 'petro', 'speedway', 'shell', 'chevron', 'exxon', 'bp', 'other']);
+export const fuelPriceSourceEnum = pgEnum('fuel_price_source', ['manual', 'api', 'crowdsourced', 'mock']);
+export const fuelAlertTypeEnum = pgEnum('fuel_alert_type', ['price_drop', 'price_surge', 'low_price_nearby', 'route_savings']);
+export const fuelAlertSeverityEnum = pgEnum('fuel_alert_severity', ['info', 'warning', 'critical']);
+
+// Fuel stations table
+export const fuelStations = pgTable("fuel_stations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Station information
+  name: varchar("name", { length: 200 }).notNull(),
+  brand: fuelBrandEnum("brand").notNull(),
+  stationCode: varchar("station_code", { length: 50 }).unique(),
+  
+  // Location
+  address: text("address").notNull(),
+  city: varchar("city", { length: 100 }).notNull(),
+  state: varchar("state", { length: 2 }).notNull(),
+  zipCode: varchar("zip_code", { length: 10 }).notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
+  
+  // Services available
+  hasDiesel: boolean("has_diesel").notNull().default(true),
+  hasRegular: boolean("has_regular").notNull().default(true),
+  hasPremium: boolean("has_premium").notNull().default(false),
+  hasDef: boolean("has_def").notNull().default(true),
+  hasTruckParking: boolean("has_truck_parking").notNull().default(false),
+  hasShowers: boolean("has_showers").notNull().default(false),
+  hasRestaurant: boolean("has_restaurant").notNull().default(false),
+  hasScales: boolean("has_scales").notNull().default(false),
+  hasRepairShop: boolean("has_repair_shop").notNull().default(false),
+  
+  // Operating hours
+  is24Hours: boolean("is_24_hours").notNull().default(true),
+  openingTime: varchar("opening_time", { length: 5 }), // HH:MM format
+  closingTime: varchar("closing_time", { length: 5 }), // HH:MM format
+  
+  // Contact
+  phone: varchar("phone", { length: 20 }),
+  
+  // Status
+  isActive: boolean("is_active").notNull().default(true),
+  
+  // Metadata
+  amenities: jsonb("amenities").default('[]'), // Array of available amenities
+  metadata: jsonb("metadata").default('{}'),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  locationIdx: index("idx_fuel_stations_location").on(table.latitude, table.longitude),
+  brandIdx: index("idx_fuel_stations_brand").on(table.brand),
+  stateIdx: index("idx_fuel_stations_state").on(table.state),
+  cityIdx: index("idx_fuel_stations_city").on(table.city),
+  activeIdx: index("idx_fuel_stations_active").on(table.isActive)
+}));
+
+// Fuel prices table
+export const fuelPrices = pgTable("fuel_prices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Station reference
+  stationId: varchar("station_id").notNull().references(() => fuelStations.id),
+  
+  // Price information
+  fuelType: fuelTypeEnum("fuel_type").notNull(),
+  pricePerGallon: decimal("price_per_gallon", { precision: 6, scale: 3 }).notNull(),
+  
+  // Source and validity
+  source: fuelPriceSourceEnum("source").notNull().default('mock'),
+  reportedBy: varchar("reported_by").references(() => users.id),
+  validFrom: timestamp("valid_from").notNull().defaultNow(),
+  validTo: timestamp("valid_to"),
+  
+  // Price changes
+  previousPrice: decimal("previous_price", { precision: 6, scale: 3 }),
+  priceChange: decimal("price_change", { precision: 6, scale: 3 }),
+  priceChangePercent: decimal("price_change_percent", { precision: 5, scale: 2 }),
+  
+  // Status
+  isCurrent: boolean("is_current").notNull().default(true),
+  isVerified: boolean("is_verified").notNull().default(false),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  stationFuelIdx: uniqueIndex("idx_fuel_prices_station_fuel_current").on(
+    table.stationId, 
+    table.fuelType, 
+    table.isCurrent
+  ).where(sql`is_current = true`),
+  stationIdx: index("idx_fuel_prices_station").on(table.stationId),
+  fuelTypeIdx: index("idx_fuel_prices_fuel_type").on(table.fuelType),
+  validFromIdx: index("idx_fuel_prices_valid_from").on(table.validFrom)
+}));
+
+// Fuel price history table for tracking historical prices
+export const fuelPriceHistory = pgTable("fuel_price_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Station and fuel info
+  stationId: varchar("station_id").notNull().references(() => fuelStations.id),
+  fuelType: fuelTypeEnum("fuel_type").notNull(),
+  
+  // Price at specific time
+  pricePerGallon: decimal("price_per_gallon", { precision: 6, scale: 3 }).notNull(),
+  timestamp: timestamp("timestamp").notNull(),
+  
+  // Aggregated stats for the period
+  hourlyAvg: decimal("hourly_avg", { precision: 6, scale: 3 }),
+  dailyAvg: decimal("daily_avg", { precision: 6, scale: 3 }),
+  dailyMin: decimal("daily_min", { precision: 6, scale: 3 }),
+  dailyMax: decimal("daily_max", { precision: 6, scale: 3 }),
+  
+  // Source
+  source: fuelPriceSourceEnum("source").notNull().default('mock'),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  stationFuelTimestampIdx: index("idx_fuel_price_history_station_fuel_time").on(
+    table.stationId,
+    table.fuelType,
+    table.timestamp
+  ),
+  timestampIdx: index("idx_fuel_price_history_timestamp").on(table.timestamp)
+}));
+
+// Route fuel stops table for recommended fuel stops along routes
+export const routeFuelStops = pgTable("route_fuel_stops", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Route information
+  routeId: varchar("route_id").references(() => contractorRoutes.id),
+  jobId: varchar("job_id").references(() => jobs.id),
+  
+  // Station info
+  stationId: varchar("station_id").notNull().references(() => fuelStations.id),
+  sequenceNumber: integer("sequence_number").notNull(), // Order in route
+  
+  // Distance and timing
+  distanceFromStart: decimal("distance_from_start", { precision: 8, scale: 2 }), // miles
+  distanceFromPrevious: decimal("distance_from_previous", { precision: 8, scale: 2 }), // miles
+  estimatedArrivalTime: timestamp("estimated_arrival_time"),
+  
+  // Fuel requirements
+  recommendedFuelType: fuelTypeEnum("recommended_fuel_type").notNull(),
+  estimatedGallonsNeeded: decimal("estimated_gallons_needed", { precision: 8, scale: 2 }),
+  
+  // Cost analysis
+  estimatedCost: decimal("estimated_cost", { precision: 10, scale: 2 }),
+  savingsVsAverage: decimal("savings_vs_average", { precision: 10, scale: 2 }),
+  savingsVsNearby: decimal("savings_vs_nearby", { precision: 10, scale: 2 }),
+  
+  // Optimization score
+  optimizationScore: decimal("optimization_score", { precision: 5, scale: 2 }), // 0-100
+  scoreFactors: jsonb("score_factors").default('{}'), // { price: 85, detour: 10, amenities: 5 }
+  
+  // Stop details
+  isRecommended: boolean("is_recommended").notNull().default(true),
+  isMandatory: boolean("is_mandatory").notNull().default(false),
+  skipReason: text("skip_reason"),
+  
+  // User interaction
+  wasSelected: boolean("was_selected").notNull().default(false),
+  selectedAt: timestamp("selected_at"),
+  selectedBy: varchar("selected_by").references(() => users.id),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  routeIdx: index("idx_route_fuel_stops_route").on(table.routeId),
+  jobIdx: index("idx_route_fuel_stops_job").on(table.jobId),
+  stationIdx: index("idx_route_fuel_stops_station").on(table.stationId),
+  sequenceIdx: index("idx_route_fuel_stops_sequence").on(table.routeId, table.sequenceNumber)
+}));
+
+// Fuel price alerts table
+export const fuelPriceAlerts = pgTable("fuel_price_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Alert configuration
+  userId: varchar("user_id").references(() => users.id),
+  fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id),
+  
+  // Alert type and criteria
+  alertType: fuelAlertTypeEnum("alert_type").notNull(),
+  fuelType: fuelTypeEnum("fuel_type").notNull(),
+  
+  // Location criteria
+  latitude: decimal("latitude", { precision: 10, scale: 8 }),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }),
+  radius: decimal("radius", { precision: 6, scale: 2 }), // miles
+  state: varchar("state", { length: 2 }),
+  
+  // Price thresholds
+  priceThreshold: decimal("price_threshold", { precision: 6, scale: 3 }),
+  percentChangeThreshold: decimal("percent_change_threshold", { precision: 5, scale: 2 }),
+  
+  // Alert details
+  severity: fuelAlertSeverityEnum("severity").notNull().default('info'),
+  message: text("message"),
+  
+  // Trigger information
+  triggeredAt: timestamp("triggered_at"),
+  triggeredByStationId: varchar("triggered_by_station_id").references(() => fuelStations.id),
+  triggeredPrice: decimal("triggered_price", { precision: 6, scale: 3 }),
+  
+  // Notification status
+  notificationSent: boolean("notification_sent").notNull().default(false),
+  notificationSentAt: timestamp("notification_sent_at"),
+  acknowledged: boolean("acknowledged").notNull().default(false),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  
+  // Alert settings
+  isActive: boolean("is_active").notNull().default(true),
+  expiresAt: timestamp("expires_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  userIdx: index("idx_fuel_price_alerts_user").on(table.userId),
+  fleetIdx: index("idx_fuel_price_alerts_fleet").on(table.fleetAccountId),
+  activeIdx: index("idx_fuel_price_alerts_active").on(table.isActive),
+  alertTypeIdx: index("idx_fuel_price_alerts_type").on(table.alertType),
+  locationIdx: index("idx_fuel_price_alerts_location").on(table.latitude, table.longitude)
+}));
+
+// Regional fuel price aggregates for trend analysis
+export const fuelPriceAggregates = pgTable("fuel_price_aggregates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Region information
+  state: varchar("state", { length: 2 }).notNull(),
+  city: varchar("city", { length: 100 }),
+  zipCode: varchar("zip_code", { length: 10 }),
+  
+  // Time period
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  periodType: varchar("period_type", { length: 20 }).notNull(), // hourly, daily, weekly, monthly
+  
+  // Fuel type
+  fuelType: fuelTypeEnum("fuel_type").notNull(),
+  
+  // Aggregated prices
+  avgPrice: decimal("avg_price", { precision: 6, scale: 3 }).notNull(),
+  minPrice: decimal("min_price", { precision: 6, scale: 3 }).notNull(),
+  maxPrice: decimal("max_price", { precision: 6, scale: 3 }).notNull(),
+  medianPrice: decimal("median_price", { precision: 6, scale: 3 }),
+  
+  // Statistics
+  priceStdDev: decimal("price_std_dev", { precision: 6, scale: 3 }),
+  sampleSize: integer("sample_size").notNull(),
+  stationCount: integer("station_count").notNull(),
+  
+  // Trends
+  priceChange: decimal("price_change", { precision: 6, scale: 3 }),
+  priceChangePercent: decimal("price_change_percent", { precision: 5, scale: 2 }),
+  trend: varchar("trend", { length: 20 }), // rising, falling, stable
+  
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  regionPeriodIdx: uniqueIndex("idx_fuel_price_aggregates_unique").on(
+    table.state,
+    table.city,
+    table.periodStart,
+    table.periodType,
+    table.fuelType
+  ),
+  stateIdx: index("idx_fuel_price_aggregates_state").on(table.state),
+  periodIdx: index("idx_fuel_price_aggregates_period").on(table.periodStart, table.periodEnd),
+  fuelTypeIdx: index("idx_fuel_price_aggregates_fuel_type").on(table.fuelType)
+}));
+
+// Fuel schemas and types
+export const insertFuelStationSchema = createInsertSchema(fuelStations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertFuelStation = z.infer<typeof insertFuelStationSchema>;
+export type FuelStation = typeof fuelStations.$inferSelect;
+
+export const insertFuelPriceSchema = createInsertSchema(fuelPrices).omit({
+  id: true,
+  createdAt: true,
+  validFrom: true
+});
+export type InsertFuelPrice = z.infer<typeof insertFuelPriceSchema>;
+export type FuelPrice = typeof fuelPrices.$inferSelect;
+
+export const insertFuelPriceHistorySchema = createInsertSchema(fuelPriceHistory).omit({
+  id: true,
+  createdAt: true
+});
+export type InsertFuelPriceHistory = z.infer<typeof insertFuelPriceHistorySchema>;
+export type FuelPriceHistory = typeof fuelPriceHistory.$inferSelect;
+
+export const insertRouteFuelStopSchema = createInsertSchema(routeFuelStops).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertRouteFuelStop = z.infer<typeof insertRouteFuelStopSchema>;
+export type RouteFuelStop = typeof routeFuelStops.$inferSelect;
+
+export const insertFuelPriceAlertSchema = createInsertSchema(fuelPriceAlerts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertFuelPriceAlert = z.infer<typeof insertFuelPriceAlertSchema>;
+export type FuelPriceAlert = typeof fuelPriceAlerts.$inferSelect;
+
+export const insertFuelPriceAggregateSchema = createInsertSchema(fuelPriceAggregates).omit({
+  id: true,
+  createdAt: true
+});
+export type InsertFuelPriceAggregate = z.infer<typeof insertFuelPriceAggregateSchema>;
+export type FuelPriceAggregate = typeof fuelPriceAggregates.$inferSelect;
+

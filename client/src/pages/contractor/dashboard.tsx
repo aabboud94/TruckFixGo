@@ -61,6 +61,8 @@ import {
 import { format, formatDistanceToNow } from "date-fns";
 import PerformanceWidget from "@/components/performance-widget";
 import { SOSButton } from "@/components/sos-button";
+import { FuelPriceWidget } from "@/components/fuel-price-widget";
+import { FuelCalculator } from "@/components/fuel-calculator";
 
 interface QueuedJob {
   id: string;
@@ -982,10 +984,11 @@ export default function ContractorDashboard() {
 
         {/* Rating and Reviews Section */}
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Rating Overview</TabsTrigger>
             <TabsTrigger value="reviews">Recent Reviews</TabsTrigger>
             <TabsTrigger value="performance">Performance</TabsTrigger>
+            <TabsTrigger value="fuel">Fuel Tracking</TabsTrigger>
           </TabsList>
           
           <TabsContent value="overview" className="space-y-4">
@@ -1324,6 +1327,90 @@ export default function ContractorDashboard() {
                       No category ratings available yet
                     </p>
                   )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="fuel" className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Fuel Price Widget */}
+              <FuelPriceWidget
+                latitude={currentLocation?.coords.latitude}
+                longitude={currentLocation?.coords.longitude}
+                radius={15}
+                fuelType="diesel"
+                showTrends={true}
+                showAlerts={true}
+                maxStations={5}
+                className="h-fit"
+              />
+              
+              {/* Fuel Calculator */}
+              <FuelCalculator
+                origin={
+                  currentLocation 
+                    ? { lat: currentLocation.coords.latitude, lng: currentLocation.coords.longitude }
+                    : undefined
+                }
+                destination={
+                  activeJob?.location 
+                    ? { lat: activeJob.location.lat, lng: activeJob.location.lng }
+                    : undefined
+                }
+                vehicleId={dashboardData?.contractor?.vehicleId}
+                defaultMpg={6.5}
+                defaultTankCapacity={150}
+                className="h-fit"
+                onCalculate={(result) => {
+                  toast({
+                    title: "Fuel Cost Calculated",
+                    description: `Estimated cost: $${result.estimatedCost?.toFixed(2) || 'N/A'}`,
+                    data-testid: "toast-fuel-calculated"
+                  });
+                }}
+              />
+            </div>
+            
+            {/* Quick Fuel Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Avg Local Price</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">$4.12</p>
+                  <p className="text-xs text-muted-foreground">per gallon</p>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Weekly Change</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold text-green-600">-2.3%</p>
+                  <p className="text-xs text-muted-foreground">vs last week</p>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Cheapest Nearby</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">$3.89</p>
+                  <p className="text-xs text-muted-foreground">2.3 mi away</p>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Est. Monthly Fuel</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">$2,847</p>
+                  <p className="text-xs text-muted-foreground">based on usage</p>
                 </CardContent>
               </Card>
             </div>

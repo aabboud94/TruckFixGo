@@ -2420,6 +2420,306 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== FUEL TRACKING API ENDPOINTS ====================
+
+  // Get fuel prices near location
+  app.get('/api/fuel/prices/:lat/:lng/:radius',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const lat = parseFloat(req.params.lat);
+        const lng = parseFloat(req.params.lng);
+        const radius = parseFloat(req.params.radius);
+        const fuelType = req.query.fuelType as string | undefined;
+        const limit = parseInt(req.query.limit as string) || 10;
+        
+        if (isNaN(lat) || isNaN(lng) || isNaN(radius)) {
+          return res.status(400).json({ message: 'Invalid coordinates or radius' });
+        }
+        
+        // Import fuel price service
+        const { fuelPriceService } = await import('./services/fuel-price-service');
+        
+        // Get prices near location
+        const prices = await fuelPriceService.getNearbyFuelPrices(
+          lat, 
+          lng, 
+          radius,
+          fuelType,
+          limit
+        );
+        
+        res.json(prices);
+      } catch (error) {
+        console.error('Get nearby fuel prices error:', error);
+        res.status(500).json({ message: 'Failed to get fuel prices' });
+      }
+    }
+  );
+
+  // Get price history for a station
+  app.get('/api/fuel/station/:stationId/history',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { stationId } = req.params;
+        const fuelType = req.query.fuelType as string | undefined;
+        const days = parseInt(req.query.days as string) || 30;
+        
+        const history = await storage.getFuelPriceHistory(stationId, fuelType, days);
+        
+        res.json(history);
+      } catch (error) {
+        console.error('Get fuel price history error:', error);
+        res.status(500).json({ message: 'Failed to get price history' });
+      }
+    }
+  );
+
+  // Get recommended fuel stops for route
+  app.get('/api/fuel/route/:routeId/stops',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { routeId } = req.params;
+        
+        const stops = await storage.getRouteFuelStops(routeId);
+        
+        // Get full station details for each stop
+        const stopsWithDetails = await Promise.all(
+          stops.map(async (stop) => {
+            const station = stop.stationId ? await storage.getFuelStationById(stop.stationId) : null;
+            const currentPrices = station ? await storage.getStationCurrentPrices(station.id) : [];
+            
+            return {
+              ...stop,
+              station,
+              prices: currentPrices
+            };
+          })
+        );
+        
+        res.json(stopsWithDetails);
+      } catch (error) {
+        console.error('Get route fuel stops error:', error);
+        res.status(500).json({ message: 'Failed to get route fuel stops' });
+      }
+    }
+  );
+
+  // Get regional price trends
+  app.get('/api/fuel/trends/:region',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { region } = req.params;
+        const fuelType = req.query.fuelType as string | undefined;
+        
+        // Import fuel price service
+        const { fuelPriceService } = await import('./services/fuel-price-service');
+        
+        const trends = await fuelPriceService.getRegionalPriceTrends(region, fuelType);
+        
+        res.json(trends);
+      } catch (error) {
+        console.error('Get regional price trends error:', error);
+        res.status(500).json({ message: 'Failed to get price trends' });
+      }
+    }
+  );
+
+  // Calculate fuel cost for route
+  app.post('/api/fuel/calculate-cost',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const calculateCostSchema = z.object({
+          origin: z.object({
+            lat: z.number(),
+            lng: z.number()
+          }),
+          destination: z.object({
+            lat: z.number(),
+            lng: z.number()
+          }),
+          vehicleId: z.string().optional(),
+          fuelType: z.enum(['diesel', 'regular', 'premium']).default('diesel'),
+          distanceMiles: z.number().optional(),
+          mpg: z.number().default(6.5), // Default truck MPG
+          tankCapacity: z.number().default(150), // Default truck tank capacity
+          currentFuelLevel: z.number().default(0.25) // 25% full
+        });
+        
+        const data = calculateCostSchema.parse(req.body);
+        
+        // Import fuel price service
+        const { fuelPriceService } = await import('./services/fuel-price-service');
+        
+        // Calculate route fuel cost and stops
+        const calculation = await fuelPriceService.calculateRouteFuelCost(
+          data.origin,
+          data.destination,
+          {
+            vehicleId: data.vehicleId,
+            fuelType: data.fuelType,
+            distanceMiles: data.distanceMiles,
+            mpg: data.mpg,
+            tankCapacity: data.tankCapacity,
+            currentFuelLevel: data.currentFuelLevel
+          }
+        );
+        
+        res.json(calculation);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ 
+            message: 'Invalid input data', 
+            errors: error.errors 
+          });
+        }
+        console.error('Calculate fuel cost error:', error);
+        res.status(500).json({ message: 'Failed to calculate fuel cost' });
+      }
+    }
+  );
+
+  // Get fuel price alerts
+  app.get('/api/fuel/alerts',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const userId = req.session.userId;
+        const user = await storage.getUser(userId);
+        
+        if (!user) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+        
+        // Get fleet account if user is a fleet manager
+        let fleetAccountId: string | undefined;
+        if (user.role === 'fleet_manager') {
+          const fleetAccounts = await storage.getFleetAccounts();
+          const userFleet = fleetAccounts.find(fa => fa.managerId === userId);
+          fleetAccountId = userFleet?.id;
+        }
+        
+        const alerts = await storage.getUserFuelAlerts(userId, fleetAccountId);
+        
+        res.json(alerts);
+      } catch (error) {
+        console.error('Get fuel alerts error:', error);
+        res.status(500).json({ message: 'Failed to get fuel alerts' });
+      }
+    }
+  );
+
+  // Create fuel price alert
+  app.post('/api/fuel/alerts',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const createAlertSchema = z.object({
+          alertType: z.enum(['price_drop', 'price_spike', 'threshold', 'comparison', 'route_optimization']),
+          severity: z.enum(['low', 'medium', 'high', 'critical']),
+          fuelType: z.enum(['diesel', 'regular', 'premium']).optional(),
+          stationId: z.string().optional(),
+          state: z.string().optional(),
+          thresholdPrice: z.string().optional(),
+          thresholdPercent: z.string().optional(),
+          radius: z.number().optional(),
+          location: z.object({
+            lat: z.number(),
+            lng: z.number()
+          }).optional(),
+          expiresAt: z.string().optional()
+        });
+        
+        const data = createAlertSchema.parse(req.body);
+        const userId = req.session.userId;
+        const user = await storage.getUser(userId);
+        
+        if (!user) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+        
+        // Get fleet account if user is a fleet manager
+        let fleetAccountId: string | undefined;
+        if (user.role === 'fleet_manager') {
+          const fleetAccounts = await storage.getFleetAccounts();
+          const userFleet = fleetAccounts.find(fa => fa.managerId === userId);
+          fleetAccountId = userFleet?.id;
+        }
+        
+        const alert = await storage.saveFuelPriceAlert({
+          ...data,
+          userId,
+          fleetAccountId,
+          isActive: true,
+          notificationSent: false,
+          expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined
+        });
+        
+        res.json(alert);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ 
+            message: 'Invalid alert data', 
+            errors: error.errors 
+          });
+        }
+        console.error('Create fuel alert error:', error);
+        res.status(500).json({ message: 'Failed to create fuel alert' });
+      }
+    }
+  );
+
+  // Get all fuel stations
+  app.get('/api/fuel/stations',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const state = req.query.state as string | undefined;
+        
+        let stations;
+        if (state) {
+          stations = await storage.getFuelStationsByState(state);
+        } else {
+          stations = await storage.getAllFuelStations();
+        }
+        
+        res.json(stations);
+      } catch (error) {
+        console.error('Get fuel stations error:', error);
+        res.status(500).json({ message: 'Failed to get fuel stations' });
+      }
+    }
+  );
+
+  // Get station details with current prices
+  app.get('/api/fuel/station/:stationId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { stationId } = req.params;
+        
+        const station = await storage.getFuelStationById(stationId);
+        if (!station) {
+          return res.status(404).json({ message: 'Station not found' });
+        }
+        
+        const currentPrices = await storage.getStationCurrentPrices(stationId);
+        
+        res.json({
+          ...station,
+          prices: currentPrices
+        });
+      } catch (error) {
+        console.error('Get fuel station error:', error);
+        res.status(500).json({ message: 'Failed to get station details' });
+      }
+    }
+  );
+
   // ==================== CONTRACTOR QUEUE MANAGEMENT ENDPOINTS ====================
 
   // Smart Assignment Endpoint - Assign job to contractor with queue management

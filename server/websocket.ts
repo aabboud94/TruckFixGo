@@ -61,7 +61,12 @@ const MessageTypeEnum = z.enum([
   'EMERGENCY_RESOLVED',
   'EMERGENCY_LOCATION_UPDATE',
   'JOIN_EMERGENCY',
-  'LEAVE_EMERGENCY'
+  'LEAVE_EMERGENCY',
+  // Fuel tracking message types
+  'FUEL_PRICE_UPDATE',
+  'FUEL_ALERT',
+  'JOIN_FUEL_TRACKING',
+  'LEAVE_FUEL_TRACKING'
 ]);
 
 const LocationSchema = z.object({
@@ -1858,6 +1863,55 @@ class TrackingWebSocketServer {
       console.error('Error removing reaction:', error);
       this.sendError(ws, 'Failed to remove reaction');
     }
+  }
+  
+  // ==================== FUEL TRACKING METHODS ====================
+  
+  public async broadcastFuelPriceUpdate(update: {
+    stationId: string;
+    fuelType: string;
+    oldPrice: number;
+    newPrice: number;
+    changePercent: number;
+    location: { lat: number; lng: number };
+  }) {
+    const message = {
+      type: 'FUEL_PRICE_UPDATE',
+      payload: update
+    };
+    
+    // Broadcast to all connected clients
+    this.wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(message));
+      }
+    });
+  }
+  
+  public async broadcastFuelAlert(alert: {
+    id: string;
+    type: string;
+    severity: string;
+    message: string;
+    stationId?: string;
+    location?: { lat: number; lng: number };
+    priceInfo?: {
+      fuelType: string;
+      price: number;
+      previousPrice?: number;
+    };
+  }) {
+    const message = {
+      type: 'FUEL_ALERT',
+      payload: alert
+    };
+    
+    // Broadcast to all connected clients
+    this.wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(message));
+      }
+    });
   }
 }
 
