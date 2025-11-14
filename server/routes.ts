@@ -2311,11 +2311,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== WEATHER API ENDPOINTS ====================
 
+  // Get weather service status
+  app.get('/api/weather/status',
+    async (req: Request, res: Response) => {
+      const status = weatherService.getStatus();
+      res.json(status);
+    }
+  );
+
   // Get current weather for coordinates
   app.get('/api/weather/current/:lat/:lng',
     requireAuth,
     async (req: Request, res: Response) => {
       try {
+        // Check if weather service is configured
+        const status = weatherService.getStatus();
+        if (!status.configured) {
+          return res.status(503).json({ 
+            message: 'Weather service unavailable', 
+            error: 'API key not configured',
+            details: status.message 
+          });
+        }
+        
         const lat = parseFloat(req.params.lat);
         const lng = parseFloat(req.params.lng);
         
@@ -2327,6 +2345,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json(weather);
       } catch (error) {
         console.error('Get current weather error:', error);
+        // Check if this is a configuration error
+        if (error instanceof Error && error.message.includes('not configured')) {
+          return res.status(503).json({ 
+            message: 'Weather service unavailable', 
+            error: error.message 
+          });
+        }
         res.status(500).json({ message: 'Failed to get weather data' });
       }
     }
@@ -2337,6 +2362,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     async (req: Request, res: Response) => {
       try {
+        // Check if weather service is configured
+        const status = weatherService.getStatus();
+        if (!status.configured) {
+          return res.status(503).json({ 
+            message: 'Weather service unavailable', 
+            error: 'API key not configured',
+            details: status.message 
+          });
+        }
+        
         const lat = parseFloat(req.params.lat);
         const lng = parseFloat(req.params.lng);
         
@@ -2348,6 +2383,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json(forecast);
       } catch (error) {
         console.error('Get weather forecast error:', error);
+        if (error instanceof Error && error.message.includes('not configured')) {
+          return res.status(503).json({ 
+            message: 'Weather service unavailable', 
+            error: error.message 
+          });
+        }
         res.status(500).json({ message: 'Failed to get weather forecast' });
       }
     }
@@ -2426,6 +2467,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== FUEL TRACKING API ENDPOINTS ====================
 
+  // Get fuel service status
+  app.get('/api/fuel/status',
+    async (req: Request, res: Response) => {
+      // Import fuel price service
+      const fuelPriceService = (await import('./services/fuel-price-service')).default;
+      const status = fuelPriceService.getStatus();
+      res.json(status);
+    }
+  );
+
   // Get fuel prices near location
   app.get('/api/fuel/prices/:lat/:lng/:radius',
     requireAuth,
@@ -2442,20 +2493,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Import fuel price service
-        const { fuelPriceService } = await import('./services/fuel-price-service');
+        const fuelPriceService = (await import('./services/fuel-price-service')).default;
+        
+        // Check if service is configured
+        const status = fuelPriceService.getStatus();
+        if (!status.configured) {
+          return res.status(503).json({ 
+            message: 'Fuel price service unavailable', 
+            error: 'API key not configured',
+            details: status.message,
+            recommendedProviders: (await import('./services/fuel-price-service')).FuelPriceService.getRecommendedProviders()
+          });
+        }
         
         // Get prices near location
-        const prices = await fuelPriceService.getNearbyFuelPrices(
-          lat, 
-          lng, 
-          radius,
-          fuelType,
-          limit
-        );
+        const prices = await fuelPriceService.getFuelPricesNearLocation(lat, lng, radius);
         
         res.json(prices);
       } catch (error) {
         console.error('Get nearby fuel prices error:', error);
+        if (error instanceof Error && error.message.includes('not configured')) {
+          return res.status(503).json({ 
+            message: 'Fuel price service unavailable', 
+            error: error.message 
+          });
+        }
         res.status(500).json({ message: 'Failed to get fuel prices' });
       }
     }
@@ -2520,7 +2582,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const fuelType = req.query.fuelType as string | undefined;
         
         // Import fuel price service
-        const { fuelPriceService } = await import('./services/fuel-price-service');
+        const fuelPriceService = (await import('./services/fuel-price-service')).default;
+        
+        // Check if service is configured
+        const status = fuelPriceService.getStatus();
+        if (!status.configured) {
+          return res.status(503).json({ 
+            message: 'Fuel price service unavailable', 
+            error: 'API key not configured',
+            details: status.message 
+          });
+        }
         
         const trends = await fuelPriceService.getRegionalPriceTrends(region, fuelType);
         
@@ -2557,20 +2629,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const data = calculateCostSchema.parse(req.body);
         
         // Import fuel price service
-        const { fuelPriceService } = await import('./services/fuel-price-service');
+        const fuelPriceService = (await import('./services/fuel-price-service')).default;
         
-        // Calculate route fuel cost and stops
+        // Check if service is configured
+        const status = fuelPriceService.getStatus();
+        if (!status.configured) {
+          // Return estimated cost with disclaimer
+          const estimatedGallons = (data.distanceMiles || 200) / data.mpg;
+          const estimatedCost = estimatedGallons * 3.50; // Default estimate
+          
+          return res.status(503).json({ 
+            message: 'Fuel price service unavailable - using estimates',
+            error: 'API key not configured',
+            details: status.message,
+            estimation: {
+              gallonsNeeded: estimatedGallons,
+              averagePricePerGallon: 3.50,
+              totalCost: estimatedCost,
+              dataAvailable: false,
+              disclaimer: 'These are estimates only. Real-time pricing requires API configuration.'
+            }
+          });
+        }
+        
+        // Calculate route fuel cost
         const calculation = await fuelPriceService.calculateRouteFuelCost(
-          data.origin,
-          data.destination,
-          {
-            vehicleId: data.vehicleId,
-            fuelType: data.fuelType,
-            distanceMiles: data.distanceMiles,
-            mpg: data.mpg,
-            tankCapacity: data.tankCapacity,
-            currentFuelLevel: data.currentFuelLevel
-          }
+          data.distanceMiles || 200,
+          data.mpg,
+          data.fuelType,
+          undefined // state
         );
         
         res.json(calculation);

@@ -78,7 +78,7 @@ export function FuelPriceWidget({
       toast({
         title: 'Fuel Price Update',
         description: `${update.fuelType} at ${update.stationId}: $${update.newPrice} (${update.changePercent > 0 ? '+' : ''}${update.changePercent}%)`,
-        data-testid: 'toast-fuel-update'
+        "data-testid": 'toast-fuel-update'
       });
     },
     (alert) => {
@@ -87,7 +87,7 @@ export function FuelPriceWidget({
         title: 'Fuel Price Alert',
         description: alert.message,
         variant: alert.severity === 'critical' ? 'destructive' : 'default',
-        data-testid: 'toast-fuel-alert'
+        "data-testid": 'toast-fuel-alert'
       });
     }
   );
@@ -121,7 +121,7 @@ export function FuelPriceWidget({
       toast({
         title: 'Alert Created',
         description: `You'll be notified when ${fuelType} drops below $${(Number(cheapestStation.price.pricePerGallon) - 0.10).toFixed(2)}`,
-        data-testid: 'toast-alert-created'
+        "data-testid": 'toast-alert-created'
       });
     }
   };

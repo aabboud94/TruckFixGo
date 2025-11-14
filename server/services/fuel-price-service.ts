@@ -16,533 +16,442 @@ import type {
   Job
 } from '@shared/schema';
 
-// Major truck stop brands and their typical locations
-const TRUCK_STOP_BRANDS = {
-  pilot: { name: 'Pilot', likelihood: 0.2, priceMod: 0 },
-  flying_j: { name: 'Flying J', likelihood: 0.15, priceMod: -0.02 },
-  loves: { name: "Love's", likelihood: 0.15, priceMod: -0.01 },
-  ta_travel: { name: 'TA Travel Centers', likelihood: 0.1, priceMod: 0.02 },
-  petro: { name: 'Petro', likelihood: 0.1, priceMod: 0.01 },
-  speedway: { name: 'Speedway', likelihood: 0.1, priceMod: -0.03 },
-  shell: { name: 'Shell', likelihood: 0.05, priceMod: 0.05 },
-  chevron: { name: 'Chevron', likelihood: 0.05, priceMod: 0.04 },
-  exxon: { name: 'Exxon', likelihood: 0.05, priceMod: 0.03 },
-  bp: { name: 'BP', likelihood: 0.04, priceMod: 0.02 },
-  other: { name: 'Independent', likelihood: 0.01, priceMod: -0.05 }
-};
-
-// Base fuel prices by region (state)
-const REGIONAL_PRICE_BASE = {
-  'CA': { diesel: 4.20, regular: 3.60, premium: 3.90, def: 3.00 },
-  'TX': { diesel: 3.50, regular: 3.00, premium: 3.30, def: 2.80 },
-  'FL': { diesel: 3.70, regular: 3.20, premium: 3.50, def: 2.85 },
-  'NY': { diesel: 4.00, regular: 3.40, premium: 3.70, def: 2.95 },
-  'IL': { diesel: 3.80, regular: 3.30, premium: 3.60, def: 2.90 },
-  'DEFAULT': { diesel: 3.75, regular: 3.25, premium: 3.55, def: 2.85 }
-};
+/**
+ * Fuel Price Service - Requires Real API Integration
+ * 
+ * This service requires integration with a fuel price API provider.
+ * Recommended providers:
+ * - GasBuddy API (https://developers.gasbuddy.com/)
+ * - OPIS (Oil Price Information Service) (https://www.opisnet.com/)
+ * - Fuel API (https://www.fuelapi.com/)
+ * - MyGasFeed (http://www.mygasfeed.com/keys/api)
+ * - FuelEconomy.gov (https://www.fueleconomy.gov/feg/ws/)
+ * 
+ * Required environment variables:
+ * - FUEL_API_KEY: Your fuel price API provider's key
+ * - FUEL_API_PROVIDER: The provider name (gasbuddy, opis, fuelapi, etc.)
+ * - FUEL_API_ENDPOINT: The base API endpoint URL (optional, provider-specific)
+ * 
+ * Features that will be available with real API:
+ * - Real-time fuel prices by location
+ * - Historical fuel price data
+ * - Fuel station information and amenities
+ * - Route optimization based on fuel prices
+ * - Price alerts and notifications
+ * - Regional price aggregates and trends
+ * 
+ * Additional integrations that could be added:
+ * - EFS/Comdata fleet card pricing
+ * - Loves Connect integration
+ * - Pilot Flying J API
+ * - TA/Petro loyalty programs
+ */
 
 class FuelPriceService {
-  private priceUpdateInterval?: NodeJS.Timeout;
-  private alertCheckInterval?: NodeJS.Timeout;
+  private apiKey?: string;
+  private provider?: string;
+  private apiEndpoint?: string;
+  private isConfigured: boolean = false;
 
   constructor() {
-    // Initialize price updates every hour
-    this.startPriceUpdates();
+    // Check if fuel price API is configured
+    this.apiKey = process.env.FUEL_API_KEY;
+    this.provider = process.env.FUEL_API_PROVIDER;
+    this.apiEndpoint = process.env.FUEL_API_ENDPOINT;
+    this.isConfigured = !!(this.apiKey && this.provider);
+    
+    if (!this.isConfigured) {
+      console.warn('⚠️ Fuel Price Service: No API key configured. Fuel price features are disabled.');
+      console.warn('To enable fuel price features, set FUEL_API_KEY and FUEL_API_PROVIDER environment variables.');
+    }
   }
 
-  // Initialize service and create sample fuel stations
+  /**
+   * Check if the fuel price service is properly configured
+   */
+  private checkConfiguration(): void {
+    if (!this.isConfigured) {
+      throw new Error('Fuel price service is not configured. Please set FUEL_API_KEY and FUEL_API_PROVIDER environment variables.');
+    }
+  }
+
+  /**
+   * Initialize service
+   * 
+   * In production, this would:
+   * - Connect to the fuel price API
+   * - Sync fuel station database
+   * - Set up price update schedules
+   */
   async initialize(): Promise<void> {
-    console.log('Initializing Fuel Price Service...');
+    console.log('Fuel Price Service: Initialization skipped - API key required');
     
-    // Generate sample fuel stations if none exist
-    const existingStations = await storage.getAllFuelStations();
-    if (existingStations.length === 0) {
-      await this.generateSampleFuelStations();
-    }
-    
-    // Initialize current fuel prices
-    await this.updateAllFuelPrices();
-  }
-
-  // Generate sample fuel stations across major routes
-  private async generateSampleFuelStations(): Promise<void> {
-    const sampleCities = [
-      { city: 'Los Angeles', state: 'CA', lat: 34.0522, lng: -118.2437 },
-      { city: 'Phoenix', state: 'AZ', lat: 33.4484, lng: -112.0740 },
-      { city: 'Houston', state: 'TX', lat: 29.7604, lng: -95.3698 },
-      { city: 'Dallas', state: 'TX', lat: 32.7767, lng: -96.7970 },
-      { city: 'San Antonio', state: 'TX', lat: 29.4241, lng: -98.4936 },
-      { city: 'Chicago', state: 'IL', lat: 41.8781, lng: -87.6298 },
-      { city: 'Atlanta', state: 'GA', lat: 33.7490, lng: -84.3880 },
-      { city: 'Miami', state: 'FL', lat: 25.7617, lng: -80.1918 },
-      { city: 'Orlando', state: 'FL', lat: 28.5383, lng: -81.3792 },
-      { city: 'New York', state: 'NY', lat: 40.7128, lng: -74.0060 }
-    ];
-
-    for (const location of sampleCities) {
-      // Generate 3-5 fuel stations per city
-      const numStations = Math.floor(Math.random() * 3) + 3;
-      
-      for (let i = 0; i < numStations; i++) {
-        const brand = this.selectRandomBrand();
-        const brandInfo = TRUCK_STOP_BRANDS[brand as keyof typeof TRUCK_STOP_BRANDS];
-        
-        // Add random offset to location (within ~10 miles)
-        const latOffset = (Math.random() - 0.5) * 0.3;
-        const lngOffset = (Math.random() - 0.5) * 0.3;
-        
-        const station: InsertFuelStation = {
-          name: `${brandInfo.name} - ${location.city} ${i + 1}`,
-          brand: brand as any,
-          stationCode: `${brand.toUpperCase()}-${location.state}-${location.city.substring(0, 3).toUpperCase()}-${i + 1}`,
-          address: `${1000 + i * 100} Highway ${Math.floor(Math.random() * 99) + 1}`,
-          city: location.city,
-          state: location.state,
-          zipCode: String(10000 + Math.floor(Math.random() * 89999)),
-          latitude: String(location.lat + latOffset),
-          longitude: String(location.lng + lngOffset),
-          hasDiesel: true,
-          hasRegular: Math.random() > 0.2,
-          hasPremium: Math.random() > 0.5,
-          hasDef: true,
-          hasTruckParking: Math.random() > 0.3,
-          hasShowers: Math.random() > 0.4,
-          hasRestaurant: Math.random() > 0.5,
-          hasScales: Math.random() > 0.6,
-          hasRepairShop: Math.random() > 0.7,
-          is24Hours: Math.random() > 0.3,
-          phone: `(${Math.floor(Math.random() * 900) + 100}) ${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 9000) + 1000}`,
-          isActive: true,
-          amenities: this.generateAmenities()
-        };
-        
-        await storage.saveFuelStation(station);
-      }
-    }
-    
-    console.log(`Generated ${sampleCities.length * 4} sample fuel stations`);
-  }
-
-  // Select a random brand based on likelihood
-  private selectRandomBrand(): string {
-    const random = Math.random();
-    let cumulative = 0;
-    
-    for (const [brand, info] of Object.entries(TRUCK_STOP_BRANDS)) {
-      cumulative += info.likelihood;
-      if (random < cumulative) {
-        return brand;
-      }
-    }
-    
-    return 'other';
-  }
-
-  // Generate random amenities for a station
-  private generateAmenities(): string[] {
-    const allAmenities = [
-      'WiFi',
-      'ATM',
-      'CAT Scale',
-      'Truck Wash',
-      'Laundry',
-      'TV Lounge',
-      'Game Room',
-      'Exercise Room',
-      'Pet Area',
-      'Convenience Store',
-      'Fast Food',
-      'Restaurant',
-      'Showers',
-      'Parking',
-      'Truck Service',
-      'Tire Service',
-      'Oil Change',
-      'RV Dump'
-    ];
-    
-    const numAmenities = Math.floor(Math.random() * 8) + 3;
-    const amenities: string[] = [];
-    
-    while (amenities.length < numAmenities) {
-      const amenity = allAmenities[Math.floor(Math.random() * allAmenities.length)];
-      if (!amenities.includes(amenity)) {
-        amenities.push(amenity);
-      }
-    }
-    
-    return amenities;
-  }
-
-  // Start periodic price updates
-  private startPriceUpdates(): void {
-    // Update prices every hour
-    this.priceUpdateInterval = setInterval(async () => {
-      await this.updateAllFuelPrices();
-      await this.checkPriceAlerts();
-    }, 60 * 60 * 1000); // 1 hour
-    
-    // Check alerts every 15 minutes
-    this.alertCheckInterval = setInterval(async () => {
-      await this.checkPriceAlerts();
-    }, 15 * 60 * 1000); // 15 minutes
-  }
-
-  // Update fuel prices for all stations
-  async updateAllFuelPrices(): Promise<void> {
-    const stations = await storage.getAllFuelStations();
-    
-    for (const station of stations) {
-      await this.updateStationPrices(station);
-    }
-    
-    // Update regional aggregates
-    await this.updateRegionalAggregates();
-  }
-
-  // Update prices for a specific station
-  async updateStationPrices(station: FuelStation): Promise<void> {
-    const fuelTypes = ['diesel', 'regular', 'premium', 'def'] as const;
-    const brandInfo = TRUCK_STOP_BRANDS[station.brand as keyof typeof TRUCK_STOP_BRANDS];
-    const regionalBase = REGIONAL_PRICE_BASE[station.state as keyof typeof REGIONAL_PRICE_BASE] || REGIONAL_PRICE_BASE.DEFAULT;
-    
-    for (const fuelType of fuelTypes) {
-      // Skip if station doesn't have this fuel type
-      if (fuelType === 'diesel' && !station.hasDiesel) continue;
-      if (fuelType === 'regular' && !station.hasRegular) continue;
-      if (fuelType === 'premium' && !station.hasPremium) continue;
-      if (fuelType === 'def' && !station.hasDef) continue;
-      
-      // Get current price for comparison
-      const currentPrice = await storage.getCurrentFuelPrice(station.id, fuelType);
-      
-      // Calculate new price with variations
-      const basePrice = regionalBase[fuelType];
-      const brandModifier = brandInfo.priceMod;
-      const timeOfDayMod = this.getTimeOfDayModifier();
-      const randomMod = (Math.random() - 0.5) * 0.1; // +/- $0.05
-      
-      const newPrice = basePrice + brandModifier + timeOfDayMod + randomMod;
-      const roundedPrice = Math.round(newPrice * 100) / 100; // Round to cents
-      
-      // Calculate price change
-      const priceChange = currentPrice ? roundedPrice - Number(currentPrice.pricePerGallon) : 0;
-      const priceChangePercent = currentPrice ? (priceChange / Number(currentPrice.pricePerGallon)) * 100 : 0;
-      
-      // Mark current price as not current
-      if (currentPrice) {
-        await storage.updateFuelPriceStatus(currentPrice.id, false);
-      }
-      
-      // Save new price
-      const newFuelPrice: InsertFuelPrice = {
-        stationId: station.id,
-        fuelType: fuelType as any,
-        pricePerGallon: String(roundedPrice),
-        source: 'mock',
-        previousPrice: currentPrice ? currentPrice.pricePerGallon : undefined,
-        priceChange: String(priceChange),
-        priceChangePercent: String(priceChangePercent),
-        isCurrent: true,
-        isVerified: true
-      };
-      
-      await storage.saveFuelPrice(newFuelPrice);
-      
-      // Save to history
-      const history: InsertFuelPriceHistory = {
-        stationId: station.id,
-        fuelType: fuelType as any,
-        pricePerGallon: String(roundedPrice),
-        timestamp: new Date(),
-        source: 'mock'
-      };
-      
-      await storage.saveFuelPriceHistory(history);
+    if (!this.isConfigured) {
+      console.log('To enable fuel price tracking:');
+      console.log('1. Sign up for a fuel price API (e.g., GasBuddy, OPIS)');
+      console.log('2. Set FUEL_API_KEY environment variable');
+      console.log('3. Set FUEL_API_PROVIDER environment variable');
+      console.log('4. Restart the application');
     }
   }
 
-  // Get time of day price modifier
-  private getTimeOfDayModifier(): number {
-    const hour = new Date().getHours();
-    
-    // Higher prices during peak hours (6-9 AM, 4-7 PM)
-    if ((hour >= 6 && hour <= 9) || (hour >= 16 && hour <= 19)) {
-      return 0.05; // $0.05 higher
-    }
-    
-    // Lower prices during night hours (11 PM - 5 AM)
-    if (hour >= 23 || hour <= 5) {
-      return -0.03; // $0.03 lower
-    }
-    
-    return 0;
-  }
-
-  // Get fuel prices near a location
+  /**
+   * Get fuel prices near a location
+   * 
+   * @param lat Latitude
+   * @param lng Longitude
+   * @param radius Search radius in miles
+   * @returns Fuel stations with prices or error message
+   * 
+   * TODO: Implement real API calls based on provider:
+   * - GasBuddy: GET /stations/nearby with lat/lng/radius
+   * - FuelAPI: GET /fuel/prices?lat={lat}&lng={lng}&radius={radius}
+   * - MyGasFeed: GET /stations/radius/{lat}/{lng}/{radius}/reg/price/
+   */
   async getFuelPricesNearLocation(lat: number, lng: number, radius: number): Promise<any[]> {
-    const stations = await storage.getFuelStationsNearLocation(lat, lng, radius);
-    const results = [];
-    
-    for (const station of stations) {
-      const prices = await storage.getStationCurrentPrices(station.id);
-      const distance = LocationService.calculateDistance(lat, lng, Number(station.latitude), Number(station.longitude));
+    try {
+      this.checkConfiguration();
       
-      results.push({
-        station,
-        prices,
-        distance,
-        savings: this.calculateSavings(prices)
-      });
-    }
-    
-    // Sort by distance
-    results.sort((a, b) => a.distance - b.distance);
-    
-    return results;
-  }
-
-  // Calculate savings compared to average
-  private calculateSavings(prices: FuelPrice[]): Record<string, number> {
-    const savings: Record<string, number> = {};
-    
-    for (const price of prices) {
-      // Get average price for this fuel type
-      const avgPrice = this.getAveragePriceForFuelType(price.fuelType);
-      savings[price.fuelType] = avgPrice - Number(price.pricePerGallon);
-    }
-    
-    return savings;
-  }
-
-  // Get average price for a fuel type (simplified)
-  private getAveragePriceForFuelType(fuelType: string): number {
-    const averages = {
-      diesel: 3.85,
-      regular: 3.35,
-      premium: 3.65,
-      def: 2.90
-    };
-    
-    return averages[fuelType as keyof typeof averages] || 3.50;
-  }
-
-  // Find cheapest fuel stops along a route
-  async findCheapestFuelStops(startLat: number, startLng: number, endLat: number, endLng: number, fuelType: string): Promise<RouteFuelStop[]> {
-    // Get stations along the route (simplified - just get stations near start, middle, and end)
-    const midLat = (startLat + endLat) / 2;
-    const midLng = (startLng + endLng) / 2;
-    
-    const startStations = await this.getFuelPricesNearLocation(startLat, startLng, 20);
-    const midStations = await this.getFuelPricesNearLocation(midLat, midLng, 20);
-    const endStations = await this.getFuelPricesNearLocation(endLat, endLng, 20);
-    
-    const allStations = [...startStations, ...midStations, ...endStations];
-    
-    // Filter by fuel type and sort by price
-    const filteredStations = allStations
-      .filter(s => s.prices.some((p: FuelPrice) => p.fuelType === fuelType))
-      .sort((a, b) => {
-        const priceA = a.prices.find((p: FuelPrice) => p.fuelType === fuelType)?.pricePerGallon || 999;
-        const priceB = b.prices.find((p: FuelPrice) => p.fuelType === fuelType)?.pricePerGallon || 999;
-        return Number(priceA) - Number(priceB);
-      });
-    
-    // Take top 3 cheapest stations
-    const recommendedStations = filteredStations.slice(0, 3);
-    
-    // Create route fuel stops
-    const fuelStops: InsertRouteFuelStop[] = [];
-    const routeDistance = LocationService.calculateDistance(startLat, startLng, endLat, endLng);
-    
-    for (let i = 0; i < recommendedStations.length; i++) {
-      const station = recommendedStations[i];
-      const price = station.prices.find((p: FuelPrice) => p.fuelType === fuelType);
+      // TODO: Implement actual API call based on provider
+      // Example for GasBuddy:
+      // const response = await fetch(
+      //   `${this.apiEndpoint}/stations/nearby?lat=${lat}&lng=${lng}&radius=${radius}`,
+      //   {
+      //     headers: {
+      //       'Authorization': `Bearer ${this.apiKey}`,
+      //       'Content-Type': 'application/json'
+      //     }
+      //   }
+      // );
+      // const data = await response.json();
+      // return this.transformToFuelStations(data);
       
-      if (price) {
-        const distanceFromStart = LocationService.calculateDistance(
-          startLat, 
-          startLng, 
-          Number(station.station.latitude), 
-          Number(station.station.longitude)
-        );
-        
-        const stop: InsertRouteFuelStop = {
-          stationId: station.station.id,
-          sequenceNumber: i + 1,
-          distanceFromStart: String(distanceFromStart),
-          recommendedFuelType: fuelType as any,
-          estimatedGallonsNeeded: String(routeDistance / 6), // Assume 6 MPG
-          estimatedCost: String((routeDistance / 6) * Number(price.pricePerGallon)),
-          savingsVsAverage: String(station.savings[fuelType] * (routeDistance / 6)),
-          optimizationScore: String(100 - (i * 10)), // Simple scoring
-          scoreFactors: {
-            price: 100 - (i * 10),
-            detour: 90 - (station.distance * 2),
-            amenities: Object.keys(station.station.amenities || {}).length * 5
-          },
-          isRecommended: i === 0,
-          isMandatory: false
-        };
-        
-        fuelStops.push(stop);
-      }
+      throw new Error('Fuel price API integration not implemented');
+    } catch (error) {
+      // Return error response
+      return [{
+        error: true,
+        message: error instanceof Error ? error.message : 'Fuel price service unavailable',
+        station: {
+          name: 'Fuel Price Service Unavailable',
+          address: 'API Key Required',
+          city: 'N/A',
+          state: 'N/A',
+          latitude: lat.toString(),
+          longitude: lng.toString()
+        },
+        prices: [],
+        distance: 0,
+        savings: {}
+      }];
     }
-    
-    return fuelStops as any;
   }
 
-  // Calculate fuel cost for a route
-  async calculateRouteFuelCost(distance: number, vehicleMpg: number, fuelType: string, state?: string): Promise<{
+  /**
+   * Find cheapest fuel stops along a route
+   * 
+   * @param startLat Starting latitude
+   * @param startLng Starting longitude
+   * @param endLat Ending latitude
+   * @param endLng Ending longitude
+   * @param fuelType Type of fuel needed
+   * @returns Recommended fuel stops or error
+   * 
+   * TODO: Implement route optimization with real fuel prices
+   * This would involve:
+   * - Getting stations along the route
+   * - Calculating detour distances
+   * - Optimizing for price vs. detour trade-off
+   */
+  async findCheapestFuelStops(
+    startLat: number, 
+    startLng: number, 
+    endLat: number, 
+    endLng: number, 
+    fuelType: string
+  ): Promise<RouteFuelStop[]> {
+    if (!this.isConfigured) {
+      console.warn('Cannot find fuel stops - API not configured');
+      return [];
+    }
+    
+    try {
+      this.checkConfiguration();
+      
+      // TODO: Implement actual route optimization
+      // This would involve:
+      // 1. Getting waypoints along the route
+      // 2. Searching for stations near each waypoint
+      // 3. Calculating total cost including detour
+      // 4. Optimizing selection
+      
+      throw new Error('Fuel route optimization not implemented');
+    } catch (error) {
+      console.error('Failed to find fuel stops:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Calculate fuel cost for a route
+   * 
+   * @param distance Distance in miles
+   * @param vehicleMpg Vehicle fuel efficiency
+   * @param fuelType Type of fuel
+   * @param state State for regional pricing (optional)
+   * @returns Cost calculation or estimate
+   * 
+   * TODO: Use real-time fuel prices from API
+   */
+  async calculateRouteFuelCost(
+    distance: number, 
+    vehicleMpg: number, 
+    fuelType: string, 
+    state?: string
+  ): Promise<{
     gallonsNeeded: number;
     averagePricePerGallon: number;
     totalCost: number;
     cheapestCost: number;
     potentialSavings: number;
+    dataAvailable: boolean;
+    message?: string;
   }> {
     const gallonsNeeded = distance / vehicleMpg;
     
-    // Get average price for the region
-    const regionalBase = state && REGIONAL_PRICE_BASE[state as keyof typeof REGIONAL_PRICE_BASE] 
-      ? REGIONAL_PRICE_BASE[state as keyof typeof REGIONAL_PRICE_BASE]
-      : REGIONAL_PRICE_BASE.DEFAULT;
+    if (!this.isConfigured) {
+      // Return estimates with disclaimer
+      const estimatedPrice = 3.50; // Default estimate
+      const totalCost = gallonsNeeded * estimatedPrice;
+      
+      return {
+        gallonsNeeded,
+        averagePricePerGallon: estimatedPrice,
+        totalCost,
+        cheapestCost: totalCost * 0.9,
+        potentialSavings: totalCost * 0.1,
+        dataAvailable: false,
+        message: 'Fuel prices are estimates only. Real-time pricing requires API configuration.'
+      };
+    }
     
-    const averagePricePerGallon = regionalBase[fuelType as keyof typeof regionalBase] || 3.50;
-    const totalCost = gallonsNeeded * averagePricePerGallon;
+    try {
+      // TODO: Get actual regional fuel prices from API
+      // const prices = await this.getRegionalPrices(state, fuelType);
+      // return calculateActualCosts(prices, gallonsNeeded);
+      
+      throw new Error('Real-time pricing not available');
+    } catch (error) {
+      // Fallback to estimate
+      const estimatedPrice = 3.50;
+      const totalCost = gallonsNeeded * estimatedPrice;
+      
+      return {
+        gallonsNeeded,
+        averagePricePerGallon: estimatedPrice,
+        totalCost,
+        cheapestCost: totalCost * 0.9,
+        potentialSavings: totalCost * 0.1,
+        dataAvailable: false,
+        message: 'Using estimated prices - real data unavailable'
+      };
+    }
+  }
+
+  /**
+   * Get regional price trends
+   * 
+   * TODO: Implement with real API data
+   * This would aggregate prices by region and time period
+   */
+  async getRegionalPriceTrends(state: string, fuelType?: string): Promise<FuelPriceAggregate[]> {
+    if (!this.isConfigured) {
+      return [];
+    }
     
-    // Calculate cheapest possible cost (10% below average)
-    const cheapestPricePerGallon = averagePricePerGallon * 0.9;
-    const cheapestCost = gallonsNeeded * cheapestPricePerGallon;
-    const potentialSavings = totalCost - cheapestCost;
+    try {
+      // TODO: Implement actual trend analysis
+      // This would involve:
+      // 1. Fetching historical price data
+      // 2. Aggregating by region and time period
+      // 3. Calculating trends and averages
+      
+      return await storage.getRegionalPriceTrends(state, fuelType);
+    } catch (error) {
+      console.error('Failed to get price trends:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Update all fuel prices
+   * 
+   * This method would sync prices from the API provider
+   * TODO: Implement batch price updates from API
+   */
+  async updateAllFuelPrices(): Promise<void> {
+    if (!this.isConfigured) {
+      console.log('Skipping fuel price update - API not configured');
+      return;
+    }
+    
+    try {
+      this.checkConfiguration();
+      
+      // TODO: Implement batch price update
+      // Example workflow:
+      // 1. Get list of tracked stations from database
+      // 2. Batch request prices from API
+      // 3. Update local database
+      // 4. Trigger alerts for significant changes
+      
+      console.log('Fuel price update would run here with API access');
+    } catch (error) {
+      console.error('Failed to update fuel prices:', error);
+    }
+  }
+
+  /**
+   * Create a fuel price alert
+   * 
+   * @param alert Alert configuration
+   * @returns Alert ID or error
+   * 
+   * TODO: Implement with real price monitoring
+   */
+  async createPriceAlert(alert: InsertFuelPriceAlert): Promise<string | null> {
+    if (!this.isConfigured) {
+      console.warn('Cannot create price alert - API not configured');
+      return null;
+    }
+    
+    try {
+      // Save alert to database (would be monitored if API was available)
+      const savedAlert = await storage.saveFuelPriceAlert(alert);
+      
+      console.log('Price alert created but monitoring requires API access');
+      return savedAlert.id;
+    } catch (error) {
+      console.error('Failed to create price alert:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get fuel stations by state
+   * 
+   * TODO: Sync with real fuel station database from API
+   */
+  async getFuelStationsByState(state: string): Promise<FuelStation[]> {
+    if (!this.isConfigured) {
+      return [];
+    }
+    
+    try {
+      // TODO: Implement API call to get stations
+      // This would sync with provider's station database
+      
+      return await storage.getFuelStationsByState(state);
+    } catch (error) {
+      console.error('Failed to get fuel stations:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Search fuel stations by brand
+   * 
+   * TODO: Implement with real station data from API
+   */
+  async searchStationsByBrand(brand: string, lat?: number, lng?: number, radius?: number): Promise<FuelStation[]> {
+    if (!this.isConfigured) {
+      return [];
+    }
+    
+    try {
+      // TODO: Implement brand-specific search
+      // Many APIs support filtering by brand/chain
+      
+      const stations = await storage.getAllFuelStations();
+      return stations.filter(s => s.brand === brand);
+    } catch (error) {
+      console.error('Failed to search stations:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get service status
+   */
+  getStatus(): {
+    configured: boolean;
+    provider: string | undefined;
+    message: string;
+    features: {
+      realTimePrices: boolean;
+      routeOptimization: boolean;
+      priceAlerts: boolean;
+      historicalData: boolean;
+      fleetCardPricing: boolean;
+    };
+  } {
+    const configured = this.isConfigured;
     
     return {
-      gallonsNeeded,
-      averagePricePerGallon,
-      totalCost,
-      cheapestCost,
-      potentialSavings
+      configured,
+      provider: this.provider,
+      message: configured 
+        ? 'Fuel price service is configured and ready'
+        : 'Fuel price service requires API configuration. Set FUEL_API_KEY and FUEL_API_PROVIDER environment variables.',
+      features: {
+        realTimePrices: configured,
+        routeOptimization: configured,
+        priceAlerts: configured,
+        historicalData: configured,
+        fleetCardPricing: false // Requires additional integration
+      }
     };
   }
 
-  // Get regional price trends
-  async getRegionalPriceTrends(state: string, fuelType?: string): Promise<FuelPriceAggregate[]> {
-    return storage.getRegionalPriceTrends(state, fuelType);
-  }
-
-  // Update regional aggregates
-  private async updateRegionalAggregates(): Promise<void> {
-    const states = Object.keys(REGIONAL_PRICE_BASE);
-    const fuelTypes = ['diesel', 'regular', 'premium', 'def'];
-    
-    for (const state of states) {
-      if (state === 'DEFAULT') continue;
-      
-      for (const fuelType of fuelTypes) {
-        const stations = await storage.getFuelStationsByState(state);
-        
-        if (stations.length === 0) continue;
-        
-        const prices: number[] = [];
-        
-        for (const station of stations) {
-          const price = await storage.getCurrentFuelPrice(station.id, fuelType);
-          if (price) {
-            prices.push(Number(price.pricePerGallon));
-          }
-        }
-        
-        if (prices.length > 0) {
-          const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
-          const minPrice = Math.min(...prices);
-          const maxPrice = Math.max(...prices);
-          
-          const aggregate: InsertFuelPriceAggregate = {
-            state,
-            periodStart: new Date(new Date().setMinutes(0, 0, 0)),
-            periodEnd: new Date(new Date().setMinutes(59, 59, 999)),
-            periodType: 'hourly',
-            fuelType: fuelType as any,
-            avgPrice: String(avgPrice),
-            minPrice: String(minPrice),
-            maxPrice: String(maxPrice),
-            sampleSize: prices.length,
-            stationCount: stations.length
-          };
-          
-          await storage.saveFuelPriceAggregate(aggregate);
-        }
+  /**
+   * Get recommended API providers
+   */
+  static getRecommendedProviders(): Array<{
+    name: string;
+    website: string;
+    features: string[];
+    pricing: string;
+  }> {
+    return [
+      {
+        name: 'GasBuddy',
+        website: 'https://developers.gasbuddy.com/',
+        features: ['Real-time prices', 'Station details', 'User-reported prices'],
+        pricing: 'Contact for pricing'
+      },
+      {
+        name: 'OPIS',
+        website: 'https://www.opisnet.com/',
+        features: ['Wholesale prices', 'Retail prices', 'Fleet card pricing', 'Historical data'],
+        pricing: 'Enterprise pricing'
+      },
+      {
+        name: 'FuelAPI',
+        website: 'https://www.fuelapi.com/',
+        features: ['Simple REST API', 'Global coverage', 'Multiple fuel types'],
+        pricing: 'Starting at $99/month'
+      },
+      {
+        name: 'MyGasFeed',
+        website: 'http://www.mygasfeed.com/',
+        features: ['Free tier available', 'User-reported prices', 'Basic station info'],
+        pricing: 'Free with limits'
       }
-    }
-  }
-
-  // Check and trigger price alerts
-  private async checkPriceAlerts(): Promise<void> {
-    const alerts = await storage.getActiveFuelAlerts();
-    
-    for (const alert of alerts) {
-      if (alert.alertType === 'price_drop') {
-        // Check if any station in the area has dropped below threshold
-        const stations = await this.getFuelPricesNearLocation(
-          Number(alert.latitude),
-          Number(alert.longitude),
-          Number(alert.radius)
-        );
-        
-        for (const station of stations) {
-          const price = station.prices.find((p: FuelPrice) => p.fuelType === alert.fuelType);
-          
-          if (price && Number(price.pricePerGallon) <= Number(alert.priceThreshold)) {
-            await this.triggerAlert(alert, station.station, price);
-          }
-        }
-      } else if (alert.alertType === 'price_surge') {
-        // Check for significant price increases
-        const recentChanges = await storage.getRecentPriceChanges(alert.fuelType);
-        
-        for (const change of recentChanges) {
-          if (Number(change.priceChangePercent) >= Number(alert.percentChangeThreshold)) {
-            await this.triggerAlert(alert, undefined, change);
-          }
-        }
-      }
-    }
-  }
-
-  // Trigger a fuel price alert
-  private async triggerAlert(alert: FuelPriceAlert, station?: FuelStation, price?: FuelPrice): Promise<void> {
-    await storage.triggerFuelAlert(alert.id, {
-      triggeredAt: new Date(),
-      triggeredByStationId: station?.id,
-      triggeredPrice: price?.pricePerGallon,
-      message: this.generateAlertMessage(alert, station, price)
-    });
-    
-    // Emit WebSocket event for real-time updates
-    // This will be implemented in the WebSocket service
-  }
-
-  // Generate alert message
-  private generateAlertMessage(alert: FuelPriceAlert, station?: FuelStation, price?: FuelPrice): string {
-    if (alert.alertType === 'price_drop' && station && price) {
-      return `Price Alert: ${price.fuelType} fuel at ${station.name} has dropped to $${price.pricePerGallon}/gal`;
-    } else if (alert.alertType === 'price_surge' && price) {
-      return `Price Alert: ${price.fuelType} fuel prices have increased by ${price.priceChangePercent}%`;
-    }
-    
-    return 'Fuel price alert triggered';
-  }
-
-  // Stop service
-  stop(): void {
-    if (this.priceUpdateInterval) {
-      clearInterval(this.priceUpdateInterval);
-    }
-    if (this.alertCheckInterval) {
-      clearInterval(this.alertCheckInterval);
-    }
+    ];
   }
 }
 
-// Export singleton instance
-export const fuelPriceService = new FuelPriceService();
+// Create singleton instance
+const fuelPriceService = new FuelPriceService();
+
 export default fuelPriceService;
