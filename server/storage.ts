@@ -331,6 +331,29 @@ import {
   sosAlertTypeEnum,
   sosInitiatorTypeEnum,
   sosResponseActionEnum,
+  fuelStations,
+  fuelPrices,
+  fuelPriceHistory,
+  routeFuelStops,
+  fuelPriceAlerts,
+  fuelPriceAggregates,
+  type FuelStation,
+  type InsertFuelStation,
+  type FuelPrice,
+  type InsertFuelPrice,
+  type FuelPriceHistory,
+  type InsertFuelPriceHistory,
+  type RouteFuelStop,
+  type InsertRouteFuelStop,
+  type FuelPriceAlert,
+  type InsertFuelPriceAlert,
+  type FuelPriceAggregate,
+  type InsertFuelPriceAggregate,
+  fuelTypeEnum,
+  fuelBrandEnum,
+  fuelPriceSourceEnum,
+  fuelAlertTypeEnum,
+  fuelAlertSeverityEnum,
   type WeatherData,
   type InsertWeatherData,
   type WeatherAlert,
@@ -2075,6 +2098,47 @@ export interface IStorage {
   
   // Test the SOS system (for drills)
   testSOSSystem(userId: string): Promise<{ success: boolean; message: string }>;
+
+  // ==================== FUEL TRACKING ====================
+  
+  // Fuel station management
+  saveFuelStation(station: InsertFuelStation): Promise<FuelStation>;
+  updateFuelStation(stationId: string, updates: Partial<InsertFuelStation>): Promise<FuelStation | null>;
+  getAllFuelStations(): Promise<FuelStation[]>;
+  getFuelStationById(stationId: string): Promise<FuelStation | null>;
+  getFuelStationsNearLocation(lat: number, lng: number, radius: number): Promise<FuelStation[]>;
+  getFuelStationsByState(state: string): Promise<FuelStation[]>;
+  
+  // Fuel price management
+  saveFuelPrice(price: InsertFuelPrice): Promise<FuelPrice>;
+  updateFuelPriceStatus(priceId: string, isCurrent: boolean): Promise<void>;
+  getCurrentFuelPrice(stationId: string, fuelType: string): Promise<FuelPrice | null>;
+  getStationCurrentPrices(stationId: string): Promise<FuelPrice[]>;
+  getRecentPriceChanges(fuelType?: string): Promise<FuelPrice[]>;
+  
+  // Fuel price history
+  saveFuelPriceHistory(history: InsertFuelPriceHistory): Promise<FuelPriceHistory>;
+  getFuelPriceHistory(stationId: string, fuelType?: string, days?: number): Promise<FuelPriceHistory[]>;
+  
+  // Route fuel stops
+  saveRouteFuelStop(stop: InsertRouteFuelStop): Promise<RouteFuelStop>;
+  getRouteFuelStops(routeId?: string, jobId?: string): Promise<RouteFuelStop[]>;
+  updateRouteFuelStop(stopId: string, updates: Partial<InsertRouteFuelStop>): Promise<RouteFuelStop | null>;
+  
+  // Fuel price alerts
+  saveFuelPriceAlert(alert: InsertFuelPriceAlert): Promise<FuelPriceAlert>;
+  getActiveFuelAlerts(): Promise<FuelPriceAlert[]>;
+  triggerFuelAlert(alertId: string, updates: Partial<InsertFuelPriceAlert>): Promise<FuelPriceAlert | null>;
+  getUserFuelAlerts(userId?: string, fleetAccountId?: string): Promise<FuelPriceAlert[]>;
+  
+  // Fuel price aggregates
+  saveFuelPriceAggregate(aggregate: InsertFuelPriceAggregate): Promise<FuelPriceAggregate>;
+  getRegionalPriceTrends(state: string, fuelType?: string): Promise<FuelPriceAggregate[]>;
+  getLowestFuelPrices(lat: number, lng: number, radius: number, fuelType?: string, limit?: number): Promise<Array<{
+    station: FuelStation;
+    price: FuelPrice;
+    distance: number;
+  }>>;
 }
 
 // PostgreSQL implementation using Drizzle ORM
@@ -13555,6 +13619,293 @@ export class PostgreSQLStorage implements IStorage {
   async testSOSSystem(userId: string): Promise<{ success: boolean; message: string }> {
     const { emergencySOSService } = await import('./services/emergency-sos-service');
     return emergencySOSService.testSOSSystem(userId);
+  }
+
+  // ==================== FUEL TRACKING METHODS ====================
+  
+  async saveFuelStation(station: InsertFuelStation): Promise<FuelStation> {
+    const result = await db.insert(fuelStations).values(station).returning();
+    return result[0];
+  }
+  
+  async updateFuelStation(stationId: string, updates: Partial<InsertFuelStation>): Promise<FuelStation | null> {
+    const result = await db
+      .update(fuelStations)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(fuelStations.id, stationId))
+      .returning();
+    return result[0] || null;
+  }
+  
+  async getAllFuelStations(): Promise<FuelStation[]> {
+    return await db.select().from(fuelStations).where(eq(fuelStations.isActive, true));
+  }
+  
+  async getFuelStationById(stationId: string): Promise<FuelStation | null> {
+    const result = await db
+      .select()
+      .from(fuelStations)
+      .where(eq(fuelStations.id, stationId))
+      .limit(1);
+    return result[0] || null;
+  }
+  
+  async getFuelStationsNearLocation(lat: number, lng: number, radius: number): Promise<FuelStation[]> {
+    // Get all active stations and filter by distance in memory
+    // (In production, you'd use PostGIS for efficient geographic queries)
+    const allStations = await this.getAllFuelStations();
+    
+    const nearbyStations = allStations.filter(station => {
+      const distance = this.calculateDistance(
+        lat, 
+        lng, 
+        Number(station.latitude), 
+        Number(station.longitude)
+      );
+      return distance <= radius;
+    });
+    
+    // Sort by distance
+    nearbyStations.sort((a, b) => {
+      const distA = this.calculateDistance(lat, lng, Number(a.latitude), Number(a.longitude));
+      const distB = this.calculateDistance(lat, lng, Number(b.latitude), Number(b.longitude));
+      return distA - distB;
+    });
+    
+    return nearbyStations;
+  }
+  
+  async getFuelStationsByState(state: string): Promise<FuelStation[]> {
+    return await db
+      .select()
+      .from(fuelStations)
+      .where(and(
+        eq(fuelStations.state, state),
+        eq(fuelStations.isActive, true)
+      ));
+  }
+  
+  async saveFuelPrice(price: InsertFuelPrice): Promise<FuelPrice> {
+    const result = await db.insert(fuelPrices).values(price).returning();
+    return result[0];
+  }
+  
+  async updateFuelPriceStatus(priceId: string, isCurrent: boolean): Promise<void> {
+    await db
+      .update(fuelPrices)
+      .set({ isCurrent })
+      .where(eq(fuelPrices.id, priceId));
+  }
+  
+  async getCurrentFuelPrice(stationId: string, fuelType: string): Promise<FuelPrice | null> {
+    const result = await db
+      .select()
+      .from(fuelPrices)
+      .where(and(
+        eq(fuelPrices.stationId, stationId),
+        eq(fuelPrices.fuelType, fuelType as any),
+        eq(fuelPrices.isCurrent, true)
+      ))
+      .limit(1);
+    return result[0] || null;
+  }
+  
+  async getStationCurrentPrices(stationId: string): Promise<FuelPrice[]> {
+    return await db
+      .select()
+      .from(fuelPrices)
+      .where(and(
+        eq(fuelPrices.stationId, stationId),
+        eq(fuelPrices.isCurrent, true)
+      ));
+  }
+  
+  async getRecentPriceChanges(fuelType?: string): Promise<FuelPrice[]> {
+    const conditions = [
+      eq(fuelPrices.isCurrent, true),
+      gt(fuelPrices.priceChangePercent, '0')
+    ];
+    
+    if (fuelType) {
+      conditions.push(eq(fuelPrices.fuelType, fuelType as any));
+    }
+    
+    return await db
+      .select()
+      .from(fuelPrices)
+      .where(and(...conditions))
+      .orderBy(desc(fuelPrices.createdAt))
+      .limit(50);
+  }
+  
+  async saveFuelPriceHistory(history: InsertFuelPriceHistory): Promise<FuelPriceHistory> {
+    const result = await db.insert(fuelPriceHistory).values(history).returning();
+    return result[0];
+  }
+  
+  async getFuelPriceHistory(stationId: string, fuelType?: string, days: number = 30): Promise<FuelPriceHistory[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    
+    const conditions = [
+      eq(fuelPriceHistory.stationId, stationId),
+      gte(fuelPriceHistory.timestamp, startDate)
+    ];
+    
+    if (fuelType) {
+      conditions.push(eq(fuelPriceHistory.fuelType, fuelType as any));
+    }
+    
+    return await db
+      .select()
+      .from(fuelPriceHistory)
+      .where(and(...conditions))
+      .orderBy(desc(fuelPriceHistory.timestamp));
+  }
+  
+  async saveRouteFuelStop(stop: InsertRouteFuelStop): Promise<RouteFuelStop> {
+    const result = await db.insert(routeFuelStops).values(stop).returning();
+    return result[0];
+  }
+  
+  async getRouteFuelStops(routeId?: string, jobId?: string): Promise<RouteFuelStop[]> {
+    const conditions = [];
+    
+    if (routeId) {
+      conditions.push(eq(routeFuelStops.routeId, routeId));
+    }
+    if (jobId) {
+      conditions.push(eq(routeFuelStops.jobId, jobId));
+    }
+    
+    if (conditions.length === 0) {
+      return [];
+    }
+    
+    return await db
+      .select()
+      .from(routeFuelStops)
+      .where(and(...conditions))
+      .orderBy(asc(routeFuelStops.sequenceNumber));
+  }
+  
+  async updateRouteFuelStop(stopId: string, updates: Partial<InsertRouteFuelStop>): Promise<RouteFuelStop | null> {
+    const result = await db
+      .update(routeFuelStops)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(routeFuelStops.id, stopId))
+      .returning();
+    return result[0] || null;
+  }
+  
+  async saveFuelPriceAlert(alert: InsertFuelPriceAlert): Promise<FuelPriceAlert> {
+    const result = await db.insert(fuelPriceAlerts).values(alert).returning();
+    return result[0];
+  }
+  
+  async getActiveFuelAlerts(): Promise<FuelPriceAlert[]> {
+    return await db
+      .select()
+      .from(fuelPriceAlerts)
+      .where(and(
+        eq(fuelPriceAlerts.isActive, true),
+        or(
+          isNull(fuelPriceAlerts.expiresAt),
+          gt(fuelPriceAlerts.expiresAt, new Date())
+        )
+      ));
+  }
+  
+  async triggerFuelAlert(alertId: string, updates: Partial<InsertFuelPriceAlert>): Promise<FuelPriceAlert | null> {
+    const result = await db
+      .update(fuelPriceAlerts)
+      .set({ 
+        ...updates,
+        notificationSent: true,
+        notificationSentAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(fuelPriceAlerts.id, alertId))
+      .returning();
+    return result[0] || null;
+  }
+  
+  async getUserFuelAlerts(userId?: string, fleetAccountId?: string): Promise<FuelPriceAlert[]> {
+    const conditions = [eq(fuelPriceAlerts.isActive, true)];
+    
+    if (userId) {
+      conditions.push(eq(fuelPriceAlerts.userId, userId));
+    }
+    if (fleetAccountId) {
+      conditions.push(eq(fuelPriceAlerts.fleetAccountId, fleetAccountId));
+    }
+    
+    return await db
+      .select()
+      .from(fuelPriceAlerts)
+      .where(and(...conditions))
+      .orderBy(desc(fuelPriceAlerts.createdAt));
+  }
+  
+  async saveFuelPriceAggregate(aggregate: InsertFuelPriceAggregate): Promise<FuelPriceAggregate> {
+    const result = await db.insert(fuelPriceAggregates).values(aggregate).returning();
+    return result[0];
+  }
+  
+  async getRegionalPriceTrends(state: string, fuelType?: string): Promise<FuelPriceAggregate[]> {
+    const conditions = [
+      eq(fuelPriceAggregates.state, state),
+      gte(fuelPriceAggregates.periodStart, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) // Last 30 days
+    ];
+    
+    if (fuelType) {
+      conditions.push(eq(fuelPriceAggregates.fuelType, fuelType as any));
+    }
+    
+    return await db
+      .select()
+      .from(fuelPriceAggregates)
+      .where(and(...conditions))
+      .orderBy(desc(fuelPriceAggregates.periodStart));
+  }
+  
+  async getLowestFuelPrices(
+    lat: number, 
+    lng: number, 
+    radius: number, 
+    fuelType?: string, 
+    limit: number = 10
+  ): Promise<Array<{
+    station: FuelStation;
+    price: FuelPrice;
+    distance: number;
+  }>> {
+    // Get nearby stations
+    const nearbyStations = await this.getFuelStationsNearLocation(lat, lng, radius);
+    
+    const results = [];
+    
+    for (const station of nearbyStations) {
+      const prices = await this.getStationCurrentPrices(station.id);
+      
+      for (const price of prices) {
+        if (!fuelType || price.fuelType === fuelType) {
+          const distance = this.calculateDistance(
+            lat,
+            lng,
+            Number(station.latitude),
+            Number(station.longitude)
+          );
+          
+          results.push({ station, price, distance });
+        }
+      }
+    }
+    
+    // Sort by price
+    results.sort((a, b) => Number(a.price.pricePerGallon) - Number(b.price.pricePerGallon));
+    
+    return results.slice(0, limit);
   }
 }
 
