@@ -9668,6 +9668,483 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== PARTS INVENTORY ROUTES ====================
+  
+  // GET /api/parts/catalog - Browse parts catalog with search
+  app.get('/api/parts/catalog', async (req: Request, res: Response) => {
+    try {
+      const { 
+        query,
+        category,
+        manufacturer,
+        minPrice,
+        maxPrice,
+        isActive,
+        compatibleMake,
+        compatibleModel,
+        compatibleYear,
+        limit = 50,
+        offset = 0
+      } = req.query;
+      
+      const filters = {
+        query: query as string,
+        category: category as string,
+        manufacturer: manufacturer as string,
+        minPrice: minPrice ? parseFloat(minPrice as string) : undefined,
+        maxPrice: maxPrice ? parseFloat(maxPrice as string) : undefined,
+        isActive: isActive === 'true',
+        compatibleMake: compatibleMake as string,
+        compatibleModel: compatibleModel as string,
+        compatibleYear: compatibleYear ? parseInt(compatibleYear as string) : undefined,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string)
+      };
+      
+      const parts = await storage.searchPartsCatalog(filters);
+      res.json({ success: true, parts });
+    } catch (error: any) {
+      console.error('Error fetching parts catalog:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to fetch parts catalog' 
+      });
+    }
+  });
+  
+  // POST /api/parts - Add new part to catalog
+  app.post('/api/parts', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const partData = {
+        ...req.body,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      const newPart = await storage.addPartToCatalog(partData);
+      res.json({ success: true, part: newPart });
+    } catch (error: any) {
+      console.error('Error adding part to catalog:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to add part to catalog' 
+      });
+    }
+  });
+  
+  // PUT /api/parts/:id - Update part in catalog
+  app.put('/api/parts/:id', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const updates = {
+        ...req.body,
+        updatedAt: new Date()
+      };
+      
+      const updatedPart = await storage.updatePartInCatalog(id, updates);
+      if (!updatedPart) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Part not found' 
+        });
+      }
+      
+      res.json({ success: true, part: updatedPart });
+    } catch (error: any) {
+      console.error('Error updating part:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to update part' 
+      });
+    }
+  });
+  
+  // GET /api/parts/:id - Get specific part details
+  app.get('/api/parts/:id', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const part = await storage.getPartById(id);
+      
+      if (!part) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Part not found' 
+        });
+      }
+      
+      res.json({ success: true, part });
+    } catch (error: any) {
+      console.error('Error fetching part:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to fetch part' 
+      });
+    }
+  });
+  
+  // GET /api/parts/inventory - Current inventory levels
+  app.get('/api/parts/inventory', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { warehouseId, includeInactive } = req.query;
+      
+      const inventory = await storage.getInventoryLevels(
+        warehouseId as string,
+        includeInactive === 'true'
+      );
+      
+      res.json({ success: true, inventory });
+    } catch (error: any) {
+      console.error('Error fetching inventory levels:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to fetch inventory levels' 
+      });
+    }
+  });
+  
+  // PUT /api/parts/:id/stock - Adjust inventory level
+  app.put('/api/parts/:id/stock', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { warehouseId, quantity, transactionType, notes } = req.body;
+      
+      if (!warehouseId || quantity === undefined) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Warehouse ID and quantity are required' 
+        });
+      }
+      
+      const updatedInventory = await storage.updateInventoryLevel(
+        id,
+        warehouseId,
+        quantity,
+        transactionType,
+        notes
+      );
+      
+      res.json({ success: true, inventory: updatedInventory });
+    } catch (error: any) {
+      console.error('Error updating inventory level:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to update inventory level' 
+      });
+    }
+  });
+  
+  // POST /api/jobs/:jobId/parts - Add parts to job
+  app.post('/api/jobs/:jobId/parts', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { jobId } = req.params;
+      const { partId, quantity, warehouseId, warrantyMonths } = req.body;
+      
+      if (!partId || !quantity) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Part ID and quantity are required' 
+        });
+      }
+      
+      // Get contractor ID from session or job
+      const job = await storage.getJob(jobId);
+      if (!job) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Job not found' 
+        });
+      }
+      
+      const contractorId = job.contractorId || req.session.userId;
+      if (!contractorId) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Contractor ID required' 
+        });
+      }
+      
+      const jobPart = await storage.recordPartUsage(
+        jobId,
+        partId,
+        quantity,
+        contractorId,
+        warehouseId || 'main',
+        warrantyMonths || 12
+      );
+      
+      res.json({ success: true, jobPart });
+    } catch (error: any) {
+      console.error('Error adding parts to job:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to add parts to job' 
+      });
+    }
+  });
+  
+  // GET /api/jobs/:jobId/parts - Get parts used in a job
+  app.get('/api/jobs/:jobId/parts', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { jobId } = req.params;
+      const jobParts = await storage.getJobParts(jobId);
+      
+      res.json({ success: true, parts: jobParts });
+    } catch (error: any) {
+      console.error('Error fetching job parts:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to fetch job parts' 
+      });
+    }
+  });
+  
+  // GET /api/parts/reorder - Parts needing reorder
+  app.get('/api/parts/reorder', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { warehouseId } = req.query;
+      const reorderNeeded = await storage.checkReorderNeeded(warehouseId as string);
+      
+      res.json({ success: true, parts: reorderNeeded });
+    } catch (error: any) {
+      console.error('Error checking reorder needs:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to check reorder needs' 
+      });
+    }
+  });
+  
+  // POST /api/parts/orders - Create purchase order
+  app.post('/api/parts/orders', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { supplierName, items, supplierContact, expectedDeliveryDays } = req.body;
+      
+      if (!supplierName || !items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Supplier name and items are required' 
+        });
+      }
+      
+      const order = await storage.createPartsOrder(
+        supplierName,
+        items,
+        supplierContact,
+        expectedDeliveryDays,
+        req.session.userId
+      );
+      
+      res.json({ success: true, order });
+    } catch (error: any) {
+      console.error('Error creating parts order:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to create parts order' 
+      });
+    }
+  });
+  
+  // GET /api/parts/orders - Get purchase orders
+  app.get('/api/parts/orders', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { status, supplierName, fromDate, toDate } = req.query;
+      
+      const filters: any = {};
+      if (status) filters.status = status;
+      if (supplierName) filters.supplierName = supplierName;
+      if (fromDate) filters.fromDate = new Date(fromDate as string);
+      if (toDate) filters.toDate = new Date(toDate as string);
+      
+      const orders = await storage.getPartsOrders(filters);
+      res.json({ success: true, orders });
+    } catch (error: any) {
+      console.error('Error fetching parts orders:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to fetch parts orders' 
+      });
+    }
+  });
+  
+  // PUT /api/parts/orders/:id/receive - Receive parts order
+  app.put('/api/parts/orders/:id/receive', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { receivedItems, trackingNumber } = req.body;
+      
+      if (!receivedItems || !Array.isArray(receivedItems) || receivedItems.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Received items are required' 
+        });
+      }
+      
+      const updatedOrder = await storage.receivePartsOrder(
+        id,
+        receivedItems,
+        trackingNumber
+      );
+      
+      res.json({ success: true, order: updatedOrder });
+    } catch (error: any) {
+      console.error('Error receiving parts order:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to receive parts order' 
+      });
+    }
+  });
+  
+  // GET /api/reports/inventory-value - Inventory valuation
+  app.get('/api/reports/inventory-value', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { warehouseId, method } = req.query;
+      
+      const valuation = await storage.getInventoryValue(
+        warehouseId as string,
+        (method as 'FIFO' | 'LIFO' | 'AVERAGE') || 'AVERAGE'
+      );
+      
+      res.json({ success: true, valuation });
+    } catch (error: any) {
+      console.error('Error calculating inventory value:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to calculate inventory value' 
+      });
+    }
+  });
+  
+  // GET /api/parts/compatibility - Check part compatibility
+  app.get('/api/parts/compatibility', async (req: Request, res: Response) => {
+    try {
+      const { make, model, year } = req.query;
+      
+      if (!make || !model || !year) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Make, model, and year are required' 
+        });
+      }
+      
+      const compatibleParts = await storage.getPartsForVehicle(
+        make as string,
+        model as string,
+        parseInt(year as string)
+      );
+      
+      res.json({ success: true, parts: compatibleParts });
+    } catch (error: any) {
+      console.error('Error checking part compatibility:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to check part compatibility' 
+      });
+    }
+  });
+  
+  // GET /api/parts/:id/history - Get part usage history
+  app.get('/api/parts/:id/history', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { startDate, endDate } = req.query;
+      
+      const dateRange = startDate && endDate ? {
+        startDate: new Date(startDate as string),
+        endDate: new Date(endDate as string)
+      } : undefined;
+      
+      const history = await storage.getPartUsageHistory(id, dateRange);
+      res.json({ success: true, history });
+    } catch (error: any) {
+      console.error('Error fetching part usage history:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to fetch part usage history' 
+      });
+    }
+  });
+  
+  // GET /api/parts/warranties/expiring - Get expiring warranties
+  app.get('/api/parts/warranties/expiring', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { daysAhead } = req.query;
+      const report = await storage.getWarrantyReport(
+        daysAhead ? parseInt(daysAhead as string) : 30
+      );
+      
+      res.json({ success: true, report });
+    } catch (error: any) {
+      console.error('Error fetching warranty report:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to fetch warranty report' 
+      });
+    }
+  });
+  
+  // GET /api/parts/:id/forecast - Forecast parts demand
+  app.get('/api/parts/:id/forecast', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { daysToForecast } = req.query;
+      
+      const forecast = await storage.forecastPartsDemand(
+        id,
+        daysToForecast ? parseInt(daysToForecast as string) : 30
+      );
+      
+      res.json({ success: true, forecast });
+    } catch (error: any) {
+      console.error('Error forecasting demand:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to forecast demand' 
+      });
+    }
+  });
+  
+  // GET /api/reports/supplier-performance - Get supplier performance
+  app.get('/api/reports/supplier-performance', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { supplierName } = req.query;
+      const performance = await storage.getSupplierPerformance(supplierName as string);
+      
+      res.json({ success: true, performance });
+    } catch (error: any) {
+      console.error('Error fetching supplier performance:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to fetch supplier performance' 
+      });
+    }
+  });
+  
+  // GET /api/parts/transactions - Get parts transactions
+  app.get('/api/parts/transactions', requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { partId, jobId, contractorId, transactionType, warehouseId, fromDate, toDate } = req.query;
+      
+      const filters: any = {};
+      if (partId) filters.partId = partId;
+      if (jobId) filters.jobId = jobId;
+      if (contractorId) filters.contractorId = contractorId;
+      if (transactionType) filters.transactionType = transactionType;
+      if (warehouseId) filters.warehouseId = warehouseId;
+      if (fromDate) filters.fromDate = new Date(fromDate as string);
+      if (toDate) filters.toDate = new Date(toDate as string);
+      
+      const transactions = await storage.getPartsTransactions(filters);
+      res.json({ success: true, transactions });
+    } catch (error: any) {
+      console.error('Error fetching parts transactions:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to fetch parts transactions' 
+      });
+    }
+  });
+
   // ==================== SPLIT PAYMENT ROUTES ====================
   
   // Create split payment configuration template

@@ -268,10 +268,207 @@ import {
   queueStatusEnum,
   timeOffRequestTypeEnum,
   timeOffStatusEnum,
-  coverageStatusEnum
+  coverageStatusEnum,
+  partsCatalog,
+  partsInventory,
+  partsTransactions,
+  partsOrders,
+  jobParts,
+  type PartsCatalog,
+  type InsertPartsCatalog,
+  type PartsInventory,
+  type InsertPartsInventory,
+  type PartsTransaction,
+  type InsertPartsTransaction,
+  type PartsOrder,
+  type InsertPartsOrder,
+  type JobPart,
+  type InsertJobPart,
+  partsTransactionTypeEnum,
+  partsOrderStatusEnum,
+  partsCategoryEnum
 } from "@shared/schema";
+import { partsInventoryService } from "./services/parts-inventory-service";
 
 export interface IStorage {
+  // ==================== PARTS INVENTORY ====================
+  
+  // Add new part to catalog
+  addPartToCatalog(part: InsertPartsCatalog): Promise<PartsCatalog>;
+  
+  // Update part in catalog
+  updatePartInCatalog(partId: string, updates: Partial<InsertPartsCatalog>): Promise<PartsCatalog | null>;
+  
+  // Get part by ID
+  getPartById(partId: string): Promise<PartsCatalog | null>;
+  
+  // Search parts catalog
+  searchPartsCatalog(filters: {
+    query?: string;
+    category?: string;
+    manufacturer?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    isActive?: boolean;
+    compatibleMake?: string;
+    compatibleModel?: string;
+    compatibleYear?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<PartsCatalog[]>;
+  
+  // Get parts for specific vehicle
+  getPartsForVehicle(make: string, model: string, year: number): Promise<PartsCatalog[]>;
+  
+  // Update inventory level
+  updateInventoryLevel(
+    partId: string,
+    warehouseId: string,
+    quantity: number,
+    transactionType?: string,
+    notes?: string
+  ): Promise<PartsInventory>;
+  
+  // Record part usage on job
+  recordPartUsage(
+    jobId: string,
+    partId: string,
+    quantity: number,
+    contractorId: string,
+    warehouseId?: string,
+    warrantyMonths?: number
+  ): Promise<JobPart>;
+  
+  // Get job parts
+  getJobParts(jobId: string): Promise<Array<{
+    jobPart: JobPart;
+    part: PartsCatalog;
+  }>>;
+  
+  // Check parts needing reorder
+  checkReorderNeeded(warehouseId?: string): Promise<Array<{
+    inventory: PartsInventory;
+    part: PartsCatalog;
+    quantityToOrder: number;
+    currentStock: number;
+    estimatedCost: number;
+    urgency: string;
+  }>>;
+  
+  // Create parts order
+  createPartsOrder(
+    supplierName: string,
+    items: Array<{
+      partId: string;
+      quantity: number;
+      unitCost?: number;
+    }>,
+    supplierContact?: string,
+    expectedDeliveryDays?: number,
+    createdBy?: string
+  ): Promise<PartsOrder>;
+  
+  // Receive parts order
+  receivePartsOrder(
+    orderId: string,
+    receivedItems: Array<{
+      partId: string;
+      quantityReceived: number;
+      warehouseId?: string;
+    }>,
+    trackingNumber?: string
+  ): Promise<PartsOrder>;
+  
+  // Get parts orders
+  getPartsOrders(filters?: {
+    status?: string;
+    supplierName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<PartsOrder[]>;
+  
+  // Get inventory value
+  getInventoryValue(warehouseId?: string, method?: 'FIFO' | 'LIFO' | 'AVERAGE'): Promise<{
+    method: string;
+    totalValue: string;
+    totalRetailValue: string;
+    potentialProfit: string;
+    profitMargin: string;
+    itemCount: number;
+    breakdown: any[];
+  }>;
+  
+  // Get part usage history
+  getPartUsageHistory(
+    partId: string,
+    dateRange?: { startDate: Date; endDate: Date }
+  ): Promise<{
+    partId: string;
+    totalUsed: number;
+    totalCost: string;
+    transactionCount: number;
+    avgMonthlyUsage: string;
+    avgMonthlyCost: string;
+    monthlyBreakdown: any[];
+    recentTransactions: PartsTransaction[];
+  }>;
+  
+  // Get current inventory levels
+  getInventoryLevels(warehouseId?: string, includeInactive?: boolean): Promise<Array<{
+    inventory: PartsInventory;
+    part: PartsCatalog;
+    stockStatus: string;
+    needsReorder: boolean;
+    isExpired: boolean;
+    daysUntilExpiration: number | null;
+  }>>;
+  
+  // Get warranty report
+  getWarrantyReport(daysAhead?: number): Promise<{
+    expiringCount: number;
+    warranties: Array<{
+      jobPart: JobPart;
+      part: PartsCatalog;
+      daysUntilExpiration: number;
+    }>;
+  }>;
+  
+  // Forecast parts demand
+  forecastPartsDemand(partId: string, daysToForecast?: number): Promise<{
+    partId: string;
+    historicalDailyAverage: string;
+    forecastedUsage: number;
+    currentStock: number;
+    daysOfStockRemaining: number;
+    willNeedReorderBy: string | null;
+    recommendedOrderQuantity: number;
+  }>;
+  
+  // Get supplier performance
+  getSupplierPerformance(supplierName?: string): Promise<Array<{
+    supplier: string;
+    orderCount: number;
+    totalValue: string;
+    onTimeCount: number;
+    delayedCount: number;
+    avgDeliveryDays: string;
+    onTimeRate: string;
+  }>>;
+  
+  // Create parts transaction
+  createPartsTransaction(transaction: InsertPartsTransaction): Promise<PartsTransaction>;
+  
+  // Get parts transactions
+  getPartsTransactions(filters?: {
+    partId?: string;
+    jobId?: string;
+    contractorId?: string;
+    transactionType?: string;
+    warehouseId?: string;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<PartsTransaction[]>;
+  
   // ==================== JOB REASSIGNMENT ====================
   
   // Check and reassign staled jobs that haven't been accepted
@@ -12021,6 +12218,305 @@ export class PostgreSQLStorage implements IStorage {
       },
       details: revenueTransactions
     };
+  }
+
+  // ==================== PARTS INVENTORY ====================
+  
+  async addPartToCatalog(part: InsertPartsCatalog): Promise<PartsCatalog> {
+    return await partsInventoryService.addPartToCatalog(part);
+  }
+  
+  async updatePartInCatalog(partId: string, updates: Partial<InsertPartsCatalog>): Promise<PartsCatalog | null> {
+    return await partsInventoryService.updatePartInCatalog(partId, updates);
+  }
+  
+  async getPartById(partId: string): Promise<PartsCatalog | null> {
+    const [result] = await db
+      .select()
+      .from(partsCatalog)
+      .where(eq(partsCatalog.id, partId))
+      .limit(1);
+    return result || null;
+  }
+  
+  async searchPartsCatalog(filters: {
+    query?: string;
+    category?: string;
+    manufacturer?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    isActive?: boolean;
+    compatibleMake?: string;
+    compatibleModel?: string;
+    compatibleYear?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<PartsCatalog[]> {
+    return await partsInventoryService.searchPartsCatalog(filters);
+  }
+  
+  async getPartsForVehicle(make: string, model: string, year: number): Promise<PartsCatalog[]> {
+    return await partsInventoryService.searchPartsCatalog({
+      compatibleMake: make,
+      compatibleModel: model,
+      compatibleYear: year,
+      isActive: true
+    });
+  }
+  
+  async updateInventoryLevel(
+    partId: string,
+    warehouseId: string,
+    quantity: number,
+    transactionType?: string,
+    notes?: string
+  ): Promise<PartsInventory> {
+    return await partsInventoryService.updateInventoryLevel(
+      partId,
+      warehouseId,
+      quantity,
+      transactionType || 'adjustment',
+      undefined,
+      undefined,
+      notes
+    );
+  }
+  
+  async recordPartUsage(
+    jobId: string,
+    partId: string,
+    quantity: number,
+    contractorId: string,
+    warehouseId = 'main',
+    warrantyMonths = 12
+  ): Promise<JobPart> {
+    return await partsInventoryService.recordPartUsage(
+      jobId,
+      partId,
+      quantity,
+      contractorId,
+      warehouseId,
+      warrantyMonths
+    );
+  }
+  
+  async getJobParts(jobId: string): Promise<Array<{
+    jobPart: JobPart;
+    part: PartsCatalog;
+  }>> {
+    const result = await db
+      .select({
+        jobPart: jobParts,
+        part: partsCatalog
+      })
+      .from(jobParts)
+      .innerJoin(partsCatalog, eq(jobParts.partId, partsCatalog.id))
+      .where(eq(jobParts.jobId, jobId));
+    
+    return result;
+  }
+  
+  async checkReorderNeeded(warehouseId?: string): Promise<Array<{
+    inventory: PartsInventory;
+    part: PartsCatalog;
+    quantityToOrder: number;
+    currentStock: number;
+    estimatedCost: number;
+    urgency: string;
+  }>> {
+    return await partsInventoryService.checkReorderNeeded(warehouseId);
+  }
+  
+  async createPartsOrder(
+    supplierName: string,
+    items: Array<{
+      partId: string;
+      quantity: number;
+      unitCost?: number;
+    }>,
+    supplierContact?: string,
+    expectedDeliveryDays = 7,
+    createdBy?: string
+  ): Promise<PartsOrder> {
+    return await partsInventoryService.createPartsOrder(
+      supplierName,
+      items,
+      supplierContact,
+      expectedDeliveryDays,
+      createdBy
+    );
+  }
+  
+  async receivePartsOrder(
+    orderId: string,
+    receivedItems: Array<{
+      partId: string;
+      quantityReceived: number;
+      warehouseId?: string;
+    }>,
+    trackingNumber?: string
+  ): Promise<PartsOrder> {
+    return await partsInventoryService.receivePartsOrder(
+      orderId,
+      receivedItems,
+      trackingNumber
+    );
+  }
+  
+  async getPartsOrders(filters?: {
+    status?: string;
+    supplierName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<PartsOrder[]> {
+    let conditions = [];
+    
+    if (filters?.status) {
+      conditions.push(eq(partsOrders.status, filters.status as any));
+    }
+    
+    if (filters?.supplierName) {
+      conditions.push(eq(partsOrders.supplierName, filters.supplierName));
+    }
+    
+    if (filters?.fromDate) {
+      conditions.push(gte(partsOrders.createdAt, filters.fromDate));
+    }
+    
+    if (filters?.toDate) {
+      conditions.push(lte(partsOrders.createdAt, filters.toDate));
+    }
+    
+    return await db
+      .select()
+      .from(partsOrders)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(partsOrders.createdAt));
+  }
+  
+  async getInventoryValue(warehouseId?: string, method: 'FIFO' | 'LIFO' | 'AVERAGE' = 'AVERAGE'): Promise<{
+    method: string;
+    totalValue: string;
+    totalRetailValue: string;
+    potentialProfit: string;
+    profitMargin: string;
+    itemCount: number;
+    breakdown: any[];
+  }> {
+    return await partsInventoryService.getInventoryValue(warehouseId, method);
+  }
+  
+  async getPartUsageHistory(
+    partId: string,
+    dateRange?: { startDate: Date; endDate: Date }
+  ): Promise<{
+    partId: string;
+    totalUsed: number;
+    totalCost: string;
+    transactionCount: number;
+    avgMonthlyUsage: string;
+    avgMonthlyCost: string;
+    monthlyBreakdown: any[];
+    recentTransactions: PartsTransaction[];
+  }> {
+    return await partsInventoryService.getPartUsageHistory(partId, dateRange);
+  }
+  
+  async getInventoryLevels(warehouseId?: string, includeInactive = false): Promise<Array<{
+    inventory: PartsInventory;
+    part: PartsCatalog;
+    stockStatus: string;
+    needsReorder: boolean;
+    isExpired: boolean;
+    daysUntilExpiration: number | null;
+  }>> {
+    return await partsInventoryService.getInventoryLevels(warehouseId, includeInactive);
+  }
+  
+  async getWarrantyReport(daysAhead = 30): Promise<{
+    expiringCount: number;
+    warranties: Array<{
+      jobPart: JobPart;
+      part: PartsCatalog;
+      daysUntilExpiration: number;
+    }>;
+  }> {
+    return await partsInventoryService.getWarrantyReport(daysAhead);
+  }
+  
+  async forecastPartsDemand(partId: string, daysToForecast = 30): Promise<{
+    partId: string;
+    historicalDailyAverage: string;
+    forecastedUsage: number;
+    currentStock: number;
+    daysOfStockRemaining: number;
+    willNeedReorderBy: string | null;
+    recommendedOrderQuantity: number;
+  }> {
+    return await partsInventoryService.forecastDemand(partId, daysToForecast);
+  }
+  
+  async getSupplierPerformance(supplierName?: string): Promise<Array<{
+    supplier: string;
+    orderCount: number;
+    totalValue: string;
+    onTimeCount: number;
+    delayedCount: number;
+    avgDeliveryDays: string;
+    onTimeRate: string;
+  }>> {
+    return await partsInventoryService.getSupplierPerformance(supplierName);
+  }
+  
+  async createPartsTransaction(transaction: InsertPartsTransaction): Promise<PartsTransaction> {
+    const [result] = await db.insert(partsTransactions).values(transaction).returning();
+    return result;
+  }
+  
+  async getPartsTransactions(filters?: {
+    partId?: string;
+    jobId?: string;
+    contractorId?: string;
+    transactionType?: string;
+    warehouseId?: string;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<PartsTransaction[]> {
+    let conditions = [];
+    
+    if (filters?.partId) {
+      conditions.push(eq(partsTransactions.partId, filters.partId));
+    }
+    
+    if (filters?.jobId) {
+      conditions.push(eq(partsTransactions.jobId, filters.jobId));
+    }
+    
+    if (filters?.contractorId) {
+      conditions.push(eq(partsTransactions.contractorId, filters.contractorId));
+    }
+    
+    if (filters?.transactionType) {
+      conditions.push(eq(partsTransactions.transactionType, filters.transactionType as any));
+    }
+    
+    if (filters?.warehouseId) {
+      conditions.push(eq(partsTransactions.warehouseId, filters.warehouseId));
+    }
+    
+    if (filters?.fromDate) {
+      conditions.push(gte(partsTransactions.createdAt, filters.fromDate));
+    }
+    
+    if (filters?.toDate) {
+      conditions.push(lte(partsTransactions.createdAt, filters.toDate));
+    }
+    
+    return await db
+      .select()
+      .from(partsTransactions)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(partsTransactions.createdAt));
   }
 
   // ==================== AI DISPATCH SYSTEM ====================
