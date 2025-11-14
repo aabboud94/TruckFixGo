@@ -6,6 +6,27 @@ TruckFixGo is a comprehensive mobile mechanics platform for semi-trucks and trai
 
 It supports three main user types: Drivers/Dispatchers for booking services, Mechanics/Contractors for job management and bidding, and Fleet Managers for vehicle tracking, maintenance scheduling, and cost analysis. Key capabilities include live mechanic tracking, multi-service support (e.g., tire repair, fuel delivery, diagnostics), photo uploads for documentation, service history tracking, and integrated payment processing for various methods including fleet accounts. The business vision is to streamline repair and maintenance services for the trucking industry, offering a robust, efficient, and user-friendly solution.
 
+## November 2025 Enhancement - 17 New API Features Implemented
+
+### Completed Features:
+1. **Enhanced Live GPS Tracking** - Multi-stop route tracking with TSP optimization, real-time contractor location updates
+2. **Real-time Chat/Messaging** - WebSocket-based chat with reactions, typing indicators, read receipts, message history
+3. **Push Notifications** - Browser/mobile push with VAPID keys, service workers, multi-device support, analytics
+4. **Contractor Availability** - Vacation management, time-off requests, coverage assignments, availability calendar
+5. **AI-powered Dispatch** - OpenAI GPT-5 integration for intelligent job assignment, scoring algorithms, auto-dispatch
+6. **Parts Inventory** - Complete inventory management with stock tracking, purchase orders, FIFO/LIFO valuation
+7. **Fleet Maintenance Prediction** - AI-powered predictions using telemetry data, automated alerts, risk assessment
+8. **Performance Metrics** - Comprehensive KPIs, trends analysis, scorecards, customizable dashboards
+9. **Emergency SOS** - Panic button system with GPS location tracking, priority dispatch, response coordination
+10. **Weather Integration** (API Stub) - Ready for OpenWeatherMap/WeatherAPI integration (requires API keys)
+11. **Fuel Price Tracking** (API Stub) - Ready for GasBuddy integration (requires API keys)
+12. **Payment Reconciliation** - Commission calculations, batch processing, multi-tier commission rules, reporting
+13. **Service History** - Complete service tracking, timeline visualization, upcoming services, recommendations
+14. **Booking Preferences** - User preferences, favorite contractors, blacklist management, booking templates
+15. **Route Optimization** - TSP algorithm for multi-stop routes (integrated with GPS tracking)
+16. **Document Management** - Enhanced contractor document storage and verification
+17. **Feedback/Rating** - Enhanced review system with voting and moderation
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
