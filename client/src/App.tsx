@@ -83,6 +83,7 @@ import AdminHealth from "@/pages/admin/health";
 import AdminLiveMap from "@/pages/admin/live-map";
 import AdminInvoiceDefaults from "@/pages/admin/invoice-defaults";
 import AdminStatus from "@/pages/admin/status";
+import AIDispatchDashboard from "@/pages/admin/ai-dispatch-dashboard";
 
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
@@ -172,6 +173,7 @@ function Router() {
       <Route path="/admin/bidding" component={AdminBidding} />
       <Route path="/admin/bidding-config" component={AdminBiddingConfig} />
       <Route path="/admin/job-monitor" component={AdminJobMonitor} />
+      <Route path="/admin/ai-dispatch" component={AIDispatchDashboard} />
       <Route path="/admin/fleet-checks" component={AdminFleetChecks} />
       <Route path="/admin/billing" component={AdminBilling} />
       <Route path="/admin/contracts" component={AdminContracts} />

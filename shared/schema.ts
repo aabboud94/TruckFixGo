@@ -204,6 +204,30 @@ export const contractorProfiles = pgTable("contractor_profiles", {
   baseLocationLat: decimal("base_location_lat", { precision: 10, scale: 8 }),
   baseLocationLon: decimal("base_location_lon", { precision: 11, scale: 8 }),
   
+  // AI-enhanced fields for intelligent dispatch
+  specializations: jsonb("specializations"), // {
+    // engine_repair: { level: "expert", years: 10, certifications: ["ASE Engine"] },
+    // transmission: { level: "intermediate", years: 5, certifications: ["ASE Trans"] },
+    // electrical: { level: "advanced", years: 8, certifications: ["ASE Electrical"] },
+    // brakes: { level: "expert", years: 12, certifications: ["ASE Brakes"] },
+    // tires: { level: "expert", years: 15, certifications: [] },
+    // refrigeration: { level: "intermediate", years: 3, certifications: ["EPA 608"] }
+  // }
+  
+  certificationScores: jsonb("certification_scores"), // {
+    // ase_master: { score: 95, expiry: "2025-12-31" },
+    // dot_inspector: { score: 88, expiry: "2024-06-30" },
+    // epa_608: { score: 92, expiry: "2026-03-15" },
+    // hazmat: { score: 85, expiry: "2024-11-30" }
+  // }
+  
+  languageSkills: text("language_skills").array().default(sql`ARRAY['English']::text[]`), // ['English', 'Spanish', 'French']
+  
+  // Performance patterns for AI analysis
+  timeOfDayPerformance: jsonb("time_of_day_performance"), // { morning: 0.95, afternoon: 0.88, evening: 0.92, night: 0.85 }
+  weatherPerformance: jsonb("weather_performance"), // { clear: 0.92, rain: 0.88, snow: 0.75, extreme_heat: 0.85 }
+  jobComplexityHandling: jsonb("job_complexity_handling"), // { simple: 0.98, moderate: 0.92, complex: 0.85, emergency: 0.90 }
+  
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow()
 }, (table) => ({
@@ -967,6 +991,106 @@ export const routeWaypoints = pgTable("route_waypoints", {
   sequenceIdx: index("idx_route_waypoints_sequence").on(table.routeId, table.sequenceNumber),
   timestampIdx: index("idx_route_waypoints_timestamp").on(table.timestamp),
   locationIdx: index("idx_route_waypoints_location").on(table.latitude, table.longitude)
+}));
+
+// ====================
+// AI ASSIGNMENT SYSTEM
+// ====================
+
+// AI assignment scores table
+export const aiAssignmentScores = pgTable("ai_assignment_scores", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  
+  // Scoring
+  score: decimal("score", { precision: 5, scale: 2 }).notNull(), // 0-100 score
+  
+  // Scoring factors breakdown
+  factors: jsonb("factors").notNull(), // {
+    // skills_match: number (0-100),
+    // distance: number (0-100),
+    // response_time: number (0-100),
+    // completion_rate: number (0-100),
+    // customer_satisfaction: number (0-100),
+    // workload_balance: number (0-100),
+    // availability_score: number (0-100),
+    // equipment_match: number (0-100),
+    // price_competitiveness: number (0-100),
+    // time_of_day_performance: number (0-100),
+    // weather_suitability: number (0-100),
+    // complexity_handling: number (0-100)
+  // }
+  
+  // Metadata
+  assignmentRecommendation: text("assignment_recommendation"), // AI-generated explanation
+  confidenceLevel: decimal("confidence_level", { precision: 3, scale: 2 }), // 0-1 confidence
+  
+  calculatedAt: timestamp("calculated_at").notNull().defaultNow(),
+  
+  // Assignment outcome tracking
+  wasAssigned: boolean("was_assigned").notNull().default(false),
+  assignmentOutcome: varchar("assignment_outcome", { length: 50 }), // 'success', 'declined', 'no_response', 'failed'
+  outcomeRecordedAt: timestamp("outcome_recorded_at"),
+  performanceScore: decimal("performance_score", { precision: 5, scale: 2 }) // Actual performance if assigned
+}, (table) => ({
+  jobIdx: index("idx_ai_assignment_scores_job").on(table.jobId),
+  contractorIdx: index("idx_ai_assignment_scores_contractor").on(table.contractorId),
+  scoreIdx: index("idx_ai_assignment_scores_score").on(table.score),
+  calculatedIdx: index("idx_ai_assignment_scores_calculated").on(table.calculatedAt),
+  jobContractorIdx: uniqueIndex("idx_ai_assignment_scores_unique").on(table.jobId, table.contractorId, table.calculatedAt)
+}));
+
+// Assignment preferences table
+export const assignmentPreferences = pgTable("assignment_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractorId: varchar("contractor_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  
+  // Service preferences
+  preferredServiceTypes: text("preferred_service_types").array().default(sql`ARRAY[]::text[]`), // Array of service type IDs
+  avoidServiceTypes: text("avoid_service_types").array().default(sql`ARRAY[]::text[]`), // Services to avoid
+  
+  // Geographic preferences
+  preferredAreas: jsonb("preferred_areas"), // {
+    // zones: [{lat, lng, radius}],
+    // zipcodes: string[],
+    // cities: string[],
+    // highways: string[]
+  // }
+  
+  // Workload preferences
+  maxDailyJobs: integer("max_daily_jobs").notNull().default(10),
+  maxWeeklyJobs: integer("max_weekly_jobs").notNull().default(50),
+  maxDistance: integer("max_distance").notNull().default(100), // Miles from base
+  minJobPrice: decimal("min_job_price", { precision: 8, scale: 2 }), // Minimum acceptable job price
+  
+  // Time preferences
+  preferredTimeSlots: jsonb("preferred_time_slots"), // {
+    // monday: [{start: "08:00", end: "17:00"}],
+    // tuesday: [{start: "08:00", end: "17:00"}],
+    // ...
+  // }
+  
+  // Work preferences
+  preferEmergencyJobs: boolean("prefer_emergency_jobs").notNull().default(true),
+  preferScheduledJobs: boolean("prefer_scheduled_jobs").notNull().default(true),
+  preferFleetJobs: boolean("prefer_fleet_jobs").notNull().default(true),
+  preferRepeatCustomers: boolean("prefer_repeat_customers").notNull().default(true),
+  
+  // Assignment preferences
+  autoAcceptHighScores: boolean("auto_accept_high_scores").notNull().default(false),
+  autoAcceptThreshold: decimal("auto_accept_threshold", { precision: 5, scale: 2 }), // Score threshold for auto-accept
+  
+  // Notification preferences
+  notifyForAllJobs: boolean("notify_for_all_jobs").notNull().default(false),
+  notifyMinScore: decimal("notify_min_score", { precision: 5, scale: 2 }).default('70'), // Only notify if score > this
+  
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  contractorIdx: uniqueIndex("idx_assignment_preferences_contractor").on(table.contractorId),
+  activeIdx: index("idx_assignment_preferences_active").on(table.isActive)
 }));
 
 // ====================
@@ -3529,4 +3653,24 @@ export const insertRouteWaypointSchema = createInsertSchema(routeWaypoints).omit
 });
 export type InsertRouteWaypoint = z.infer<typeof insertRouteWaypointSchema>;
 export type RouteWaypoint = typeof routeWaypoints.$inferSelect;
+
+// AI Assignment schemas and types
+export const insertAiAssignmentScoreSchema = createInsertSchema(aiAssignmentScores).omit({
+  id: true,
+  calculatedAt: true,
+  wasAssigned: true,
+  assignmentOutcome: true,
+  outcomeRecordedAt: true,
+  performanceScore: true
+});
+export type InsertAiAssignmentScore = z.infer<typeof insertAiAssignmentScoreSchema>;
+export type AiAssignmentScore = typeof aiAssignmentScores.$inferSelect;
+
+export const insertAssignmentPreferencesSchema = createInsertSchema(assignmentPreferences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertAssignmentPreferences = z.infer<typeof insertAssignmentPreferencesSchema>;
+export type AssignmentPreferences = typeof assignmentPreferences.$inferSelect;
 

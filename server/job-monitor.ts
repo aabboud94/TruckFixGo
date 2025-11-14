@@ -130,7 +130,7 @@ class JobMonitor {
     }
   }
 
-  // Auto-assign jobs that have been waiting too long
+  // Auto-assign jobs that have been waiting too long using AI-based assignment
   public async autoAssignWaitingJobs() {
     console.log('[JobMonitor] Checking for jobs needing auto-assignment');
     
@@ -151,27 +151,93 @@ class JobMonitor {
         if (minutesWaiting >= 10) {
           console.log(`[JobMonitor] Auto-assigning job ${job.jobNumber} after ${minutesWaiting} minutes`);
           
-          // Extract coordinates from job location
-          let jobLat, jobLon;
-          if (job.location && typeof job.location === 'object') {
-            const location = job.location as any;
-            jobLat = location.lat || location.latitude;
-            jobLon = location.lon || location.lng || location.longitude;
+          let selectedContractorId: string | null = null;
+          let assignmentMethod: 'AI' | 'round-robin' = 'AI';
+          
+          // Try AI-based assignment first
+          try {
+            console.log(`[JobMonitor] Attempting AI-based assignment for job ${job.jobNumber}`);
+            
+            // Get AI recommendation for best contractor
+            const optimalContractor = await storage.getOptimalContractor(job.id);
+            
+            if (optimalContractor && optimalContractor.score >= 60) {
+              selectedContractorId = optimalContractor.contractorId;
+              console.log(`[JobMonitor] AI selected contractor: ${selectedContractorId} with score ${optimalContractor.score}`);
+              console.log(`[JobMonitor] AI recommendation: ${optimalContractor.recommendation}`);
+              
+              // Try next best contractors if first one doesn't accept
+              if (!selectedContractorId) {
+                const allScores = await storage.getAiAssignmentScores(job.id);
+                
+                // Progressive assignment - try top 3 contractors with good scores
+                const topContractors = allScores
+                  .filter(s => s.score >= 60)
+                  .slice(0, 3);
+                
+                for (const candidateScore of topContractors) {
+                  console.log(`[JobMonitor] Trying contractor ${candidateScore.contractorId} with score ${candidateScore.score}`);
+                  
+                  // Check if contractor is still available
+                  const profile = await storage.getContractorProfile(candidateScore.contractorId);
+                  if (profile?.isAvailable && profile?.isOnline) {
+                    selectedContractorId = candidateScore.contractorId;
+                    console.log(`[JobMonitor] Selected available contractor: ${selectedContractorId}`);
+                    break;
+                  }
+                }
+              }
+            } else {
+              console.log(`[JobMonitor] AI scoring insufficient or no suitable contractor found`);
+            }
+          } catch (aiError) {
+            console.error(`[JobMonitor] AI assignment failed, falling back to round-robin:`, aiError);
+            assignmentMethod = 'round-robin';
           }
           
-          // Get available contractors using round-robin
-          const availableContractors = await storage.getAvailableContractorsForAssignment(jobLat, jobLon);
+          // Fallback to round-robin if AI assignment failed or didn't find anyone
+          if (!selectedContractorId) {
+            assignmentMethod = 'round-robin';
+            console.log(`[JobMonitor] Using round-robin fallback for job ${job.jobNumber}`);
+            
+            // Extract coordinates from job location
+            let jobLat, jobLon;
+            if (job.location && typeof job.location === 'object') {
+              const location = job.location as any;
+              jobLat = location.lat || location.latitude;
+              jobLon = location.lon || location.lng || location.longitude;
+            }
+            
+            // Get available contractors using round-robin
+            const availableContractors = await storage.getAvailableContractorsForAssignment(jobLat, jobLon);
+            
+            if (availableContractors.length > 0) {
+              selectedContractorId = availableContractors[0].id;
+              console.log(`[JobMonitor] Round-robin selected contractor: ${availableContractors[0].name}`);
+            }
+          }
           
-          if (availableContractors.length > 0) {
-            const selectedContractor = availableContractors[0];
-            console.log(`[JobMonitor] Auto-assigning to contractor: ${selectedContractor.name}`);
+          if (selectedContractorId) {
+            console.log(`[JobMonitor] Auto-assigning job ${job.jobNumber} to contractor ${selectedContractorId} via ${assignmentMethod}`);
             
             // Assign the contractor
-            await storage.assignContractorToJob(job.id, selectedContractor.id);
+            await storage.assignContractorToJob(job.id, selectedContractorId);
+            
+            // Update AI assignment score if AI was used
+            if (assignmentMethod === 'AI') {
+              const scores = await storage.getAiAssignmentScores(job.id);
+              const assignedScore = scores.find(s => s.contractorId === selectedContractorId);
+              if (assignedScore) {
+                await storage.updateAiAssignmentScore(assignedScore.id, {
+                  wasAssigned: true,
+                  assignmentMethod: 'auto-AI'
+                });
+              }
+            }
             
             // Get contractor and customer details for emails
-            const contractor = await storage.getUser(selectedContractor.id);
-            const contractorProfile = await storage.getContractorProfile(selectedContractor.id);
+            const contractor = await storage.getUser(selectedContractorId);
+            const contractorProfile = await storage.getContractorProfile(selectedContractorId);
             
             let customer = null;
             if (job.customerId) {
@@ -199,7 +265,7 @@ class JobMonitor {
               );
             }
             
-            console.log(`[JobMonitor] Successfully auto-assigned job ${job.jobNumber}`);
+            console.log(`[JobMonitor] Successfully auto-assigned job ${job.jobNumber} using ${assignmentMethod}`);
           } else {
             console.log(`[JobMonitor] No contractors available for auto-assignment of job ${job.jobNumber}`);
           }

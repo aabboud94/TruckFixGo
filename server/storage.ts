@@ -234,6 +234,12 @@ import {
   notifications,
   type Notification,
   type InsertNotification,
+  aiAssignmentScores,
+  assignmentPreferences,
+  type AiAssignmentScore,
+  type InsertAiAssignmentScore,
+  type AssignmentPreferences,
+  type InsertAssignmentPreferences,
   notificationTypeEnum,
   notificationPriorityEnum,
   contractStatusEnum,
@@ -628,6 +634,68 @@ export interface IStorage {
       revenueByMonth: Array<{ month: string; revenue: number }>;
     };
     details: any[];
+  }>;
+
+  // ==================== AI DISPATCH SYSTEM ====================
+  
+  // Calculate AI assignment scores for all eligible contractors for a job
+  calculateAIAssignmentScores(jobId: string): Promise<AiAssignmentScore[]>;
+  
+  // Get the optimal contractor for a job using AI scoring
+  getOptimalContractor(jobId: string): Promise<{ contractorId: string; score: number; recommendation: string } | null>;
+  
+  // Save AI assignment score
+  saveAiAssignmentScore(data: InsertAiAssignmentScore): Promise<AiAssignmentScore>;
+  
+  // Get AI assignment scores for a job
+  getAiAssignmentScores(jobId: string): Promise<AiAssignmentScore[]>;
+  
+  // Update AI assignment score
+  updateAiAssignmentScore(scoreId: string, updates: Partial<AiAssignmentScore>): Promise<void>;
+  
+  // Get AI assignment scores in a time period
+  getAiAssignmentScoresInPeriod(fromDate: Date, toDate: Date): Promise<AiAssignmentScore[]>;
+  
+  // Update contractor specializations
+  updateContractorSpecializations(contractorId: string, specializations: any): Promise<void>;
+  
+  // Get contractor performance pattern
+  getContractorPerformancePattern(contractorId: string): Promise<{
+    timeOfDayPerformance: any;
+    weatherPerformance: any;
+    jobComplexityHandling: any;
+  }>;
+  
+  // Record assignment outcome for learning
+  recordAssignmentOutcome(jobId: string, success: boolean, metrics: {
+    responseTime?: number;
+    completionTime?: number;
+    customerRating?: number;
+    issuesEncountered?: string[];
+  }): Promise<void>;
+  
+  // Get assignment preferences for a contractor
+  getAssignmentPreferences(contractorId: string): Promise<AssignmentPreferences | null>;
+  
+  // Save or update assignment preferences
+  saveAssignmentPreferences(data: InsertAssignmentPreferences): Promise<AssignmentPreferences>;
+  
+  // Update assignment preferences
+  updateAssignmentPreferences(contractorId: string, updates: Partial<AssignmentPreferences>): Promise<void>;
+  
+  // Get available contractors (for AI dispatch)
+  getAvailableContractors(): Promise<ContractorProfile[]>;
+  
+  // Update contractor profile with AI-enhanced fields
+  updateContractorProfile(contractorId: string, updates: Partial<ContractorProfile>): Promise<void>;
+  
+  // Get assignment effectiveness metrics
+  getAssignmentEffectiveness(period: 'day' | 'week' | 'month'): Promise<{
+    totalAssignments: number;
+    successfulAssignments: number;
+    failedAssignments: number;
+    successRate: number;
+    averageScore: number;
   }>;
 }
 
@@ -11952,6 +12020,169 @@ export class PostgreSQLStorage implements IStorage {
         }))
       },
       details: revenueTransactions
+    };
+  }
+
+  // ==================== AI DISPATCH SYSTEM ====================
+
+  async calculateAIAssignmentScores(jobId: string): Promise<AiAssignmentScore[]> {
+    // This is implemented in ai-dispatch-service.ts
+    // Storage just provides data persistence
+    const { aiDispatchService } = await import('./services/ai-dispatch-service');
+    await aiDispatchService.calculateAIAssignmentScores(jobId);
+    return this.getAiAssignmentScores(jobId);
+  }
+
+  async getOptimalContractor(jobId: string): Promise<{ contractorId: string; score: number; recommendation: string } | null> {
+    const { aiDispatchService } = await import('./services/ai-dispatch-service');
+    const result = await aiDispatchService.getOptimalContractor(jobId);
+    if (result) {
+      return {
+        contractorId: result.contractorId,
+        score: result.score,
+        recommendation: result.recommendation
+      };
+    }
+    return null;
+  }
+
+  async saveAiAssignmentScore(data: InsertAiAssignmentScore): Promise<AiAssignmentScore> {
+    const [result] = await db.insert(aiAssignmentScores).values(data).returning();
+    return result;
+  }
+
+  async getAiAssignmentScores(jobId: string): Promise<AiAssignmentScore[]> {
+    return await db
+      .select()
+      .from(aiAssignmentScores)
+      .where(eq(aiAssignmentScores.jobId, jobId))
+      .orderBy(desc(aiAssignmentScores.score));
+  }
+
+  async updateAiAssignmentScore(scoreId: string, updates: Partial<AiAssignmentScore>): Promise<void> {
+    await db
+      .update(aiAssignmentScores)
+      .set(updates)
+      .where(eq(aiAssignmentScores.id, scoreId));
+  }
+
+  async getAiAssignmentScoresInPeriod(fromDate: Date, toDate: Date): Promise<AiAssignmentScore[]> {
+    return await db
+      .select()
+      .from(aiAssignmentScores)
+      .where(
+        and(
+          gte(aiAssignmentScores.calculatedAt, fromDate),
+          lte(aiAssignmentScores.calculatedAt, toDate)
+        )
+      )
+      .orderBy(desc(aiAssignmentScores.calculatedAt));
+  }
+
+  async updateContractorSpecializations(contractorId: string, specializations: any): Promise<void> {
+    await db
+      .update(contractorProfiles)
+      .set({ specializations })
+      .where(eq(contractorProfiles.userId, contractorId));
+  }
+
+  async getContractorPerformancePattern(contractorId: string): Promise<{
+    timeOfDayPerformance: any;
+    weatherPerformance: any;
+    jobComplexityHandling: any;
+  }> {
+    const profile = await this.getContractorProfile(contractorId);
+    return {
+      timeOfDayPerformance: profile?.timeOfDayPerformance || {},
+      weatherPerformance: profile?.weatherPerformance || {},
+      jobComplexityHandling: profile?.jobComplexityHandling || {}
+    };
+  }
+
+  async recordAssignmentOutcome(
+    jobId: string,
+    success: boolean,
+    metrics: {
+      responseTime?: number;
+      completionTime?: number;
+      customerRating?: number;
+      issuesEncountered?: string[];
+    }
+  ): Promise<void> {
+    const { aiDispatchService } = await import('./services/ai-dispatch-service');
+    await aiDispatchService.recordAssignmentOutcome(jobId, success, metrics);
+  }
+
+  async getAssignmentPreferences(contractorId: string): Promise<AssignmentPreferences | null> {
+    const result = await db
+      .select()
+      .from(assignmentPreferences)
+      .where(eq(assignmentPreferences.contractorId, contractorId))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async saveAssignmentPreferences(data: InsertAssignmentPreferences): Promise<AssignmentPreferences> {
+    // Check if preferences already exist
+    const existing = await this.getAssignmentPreferences(data.contractorId);
+    
+    if (existing) {
+      // Update existing preferences
+      const [result] = await db
+        .update(assignmentPreferences)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(assignmentPreferences.contractorId, data.contractorId))
+        .returning();
+      return result;
+    } else {
+      // Insert new preferences
+      const [result] = await db.insert(assignmentPreferences).values(data).returning();
+      return result;
+    }
+  }
+
+  async updateAssignmentPreferences(contractorId: string, updates: Partial<AssignmentPreferences>): Promise<void> {
+    await db
+      .update(assignmentPreferences)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(assignmentPreferences.contractorId, contractorId));
+  }
+
+  async getAvailableContractors(): Promise<ContractorProfile[]> {
+    return await db
+      .select()
+      .from(contractorProfiles)
+      .where(
+        and(
+          eq(contractorProfiles.isAvailable, true),
+          eq(contractorProfiles.isOnline, true)
+        )
+      );
+  }
+
+  async updateContractorProfile(contractorId: string, updates: Partial<ContractorProfile>): Promise<void> {
+    await db
+      .update(contractorProfiles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(contractorProfiles.userId, contractorId));
+  }
+
+  async getAssignmentEffectiveness(period: 'day' | 'week' | 'month'): Promise<{
+    totalAssignments: number;
+    successfulAssignments: number;
+    failedAssignments: number;
+    successRate: number;
+    averageScore: number;
+  }> {
+    const { aiDispatchService } = await import('./services/ai-dispatch-service');
+    const effectiveness = await aiDispatchService.getAssignmentEffectiveness(period);
+    
+    return {
+      totalAssignments: effectiveness.totalAssignments,
+      successfulAssignments: effectiveness.successfulAssignments,
+      failedAssignments: effectiveness.failedAssignments,
+      successRate: effectiveness.successRate,
+      averageScore: effectiveness.averageAssignedScore
     };
   }
 }

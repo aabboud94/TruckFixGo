@@ -3555,6 +3555,360 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== AI DISPATCH ENDPOINTS ====================
+  
+  // Use AI to assign job to best contractor
+  app.post('/api/jobs/:id/ai-assign',
+    requireAuth,
+    requireRole('admin', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        
+        console.log(`[AI-Assign] Starting AI assignment for job: ${jobId}`);
+        
+        // Get job details
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        if (job.status !== 'new') {
+          return res.status(400).json({ message: 'Job is not available for assignment' });
+        }
+        
+        // Get optimal contractor using AI
+        const optimalContractor = await storage.getOptimalContractor(jobId);
+        
+        if (!optimalContractor) {
+          console.log(`[AI-Assign] No suitable contractor found for job: ${jobId}`);
+          return res.status(404).json({ 
+            message: 'No suitable contractor found using AI scoring',
+            fallbackAvailable: true
+          });
+        }
+        
+        console.log(`[AI-Assign] Optimal contractor for job ${jobId}: ${optimalContractor.contractorId} with score ${optimalContractor.score}`);
+        
+        // Assign the job to the optimal contractor
+        await storage.updateJob(jobId, {
+          contractorId: optimalContractor.contractorId,
+          status: 'assigned',
+          assignedAt: new Date()
+        });
+        
+        // Update assignment score to mark as assigned
+        const scores = await storage.getAiAssignmentScores(jobId);
+        const assignedScore = scores.find(s => s.contractorId === optimalContractor.contractorId);
+        if (assignedScore) {
+          await storage.updateAiAssignmentScore(assignedScore.id, {
+            wasAssigned: true
+          });
+        }
+        
+        // Send notification to contractor
+        const contractor = await storage.getUser(optimalContractor.contractorId);
+        if (contractor?.phone) {
+          try {
+            const twilioClient = require('twilio')(
+              process.env.TWILIO_ACCOUNT_SID,
+              process.env.TWILIO_AUTH_TOKEN
+            );
+            
+            await twilioClient.messages.create({
+              body: `New job assigned! ${job.serviceType} at ${job.locationAddress}. Open TruckFixGo app to accept.`,
+              from: process.env.TWILIO_PHONE_NUMBER,
+              to: contractor.phone
+            });
+          } catch (twilioError) {
+            console.error('[AI-Assign] Failed to send SMS:', twilioError);
+          }
+        }
+        
+        res.json({
+          success: true,
+          jobId,
+          contractorId: optimalContractor.contractorId,
+          score: optimalContractor.score,
+          recommendation: optimalContractor.recommendation
+        });
+        
+      } catch (error) {
+        console.error('[AI-Assign] Error:', error);
+        res.status(500).json({ message: 'Failed to assign job using AI', error: error.message });
+      }
+    }
+  );
+  
+  // Get AI scoring details for a job
+  app.get('/api/jobs/:id/assignment-scores',
+    requireAuth,
+    requireRole('admin', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        
+        // Get all AI assignment scores for the job
+        const scores = await storage.getAiAssignmentScores(jobId);
+        
+        // Get contractor details for each score
+        const scoresWithDetails = await Promise.all(
+          scores.map(async (score) => {
+            const contractor = await storage.getContractorProfile(score.contractorId);
+            return {
+              ...score,
+              contractorName: contractor?.businessName || contractor?.legalName || 'Unknown',
+              contractorRating: contractor?.averageRating || 0,
+              contractorCompletedJobs: contractor?.totalCompletedJobs || 0
+            };
+          })
+        );
+        
+        res.json({
+          jobId,
+          scores: scoresWithDetails
+        });
+        
+      } catch (error) {
+        console.error('[AI-Scores] Error:', error);
+        res.status(500).json({ message: 'Failed to get assignment scores', error: error.message });
+      }
+    }
+  );
+  
+  // Update contractor assignment preferences
+  app.post('/api/contractor/preferences',
+    requireAuth,
+    requireRole('contractor'),
+    validateRequest(z.object({
+      preferredServiceTypes: z.array(z.string()).optional(),
+      avoidServiceTypes: z.array(z.string()).optional(),
+      preferredAreas: z.any().optional(),
+      maxDailyJobs: z.number().min(1).max(50).optional(),
+      maxWeeklyJobs: z.number().min(1).max(350).optional(),
+      maxDistance: z.number().min(1).max(500).optional(),
+      minJobPrice: z.number().min(0).optional(),
+      preferredTimeSlots: z.any().optional(),
+      preferEmergencyJobs: z.boolean().optional(),
+      preferScheduledJobs: z.boolean().optional(),
+      preferFleetJobs: z.boolean().optional(),
+      preferRepeatCustomers: z.boolean().optional(),
+      autoAcceptHighScores: z.boolean().optional(),
+      autoAcceptThreshold: z.number().min(0).max(100).optional(),
+      notifyForAllJobs: z.boolean().optional(),
+      notifyMinScore: z.number().min(0).max(100).optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        
+        // Save or update preferences
+        const preferences = await storage.saveAssignmentPreferences({
+          contractorId,
+          ...req.body,
+          isActive: true
+        });
+        
+        res.json({
+          success: true,
+          preferences
+        });
+        
+      } catch (error) {
+        console.error('[Preferences] Error:', error);
+        res.status(500).json({ message: 'Failed to update preferences', error: error.message });
+      }
+    }
+  );
+  
+  // Get contractor assignment preferences
+  app.get('/api/contractor/preferences',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const preferences = await storage.getAssignmentPreferences(contractorId);
+        
+        res.json({
+          preferences: preferences || {
+            contractorId,
+            preferredServiceTypes: [],
+            avoidServiceTypes: [],
+            maxDailyJobs: 10,
+            maxWeeklyJobs: 50,
+            maxDistance: 100,
+            preferEmergencyJobs: true,
+            preferScheduledJobs: true,
+            preferFleetJobs: true,
+            preferRepeatCustomers: true,
+            autoAcceptHighScores: false,
+            notifyForAllJobs: false,
+            notifyMinScore: 70,
+            isActive: true
+          }
+        });
+        
+      } catch (error) {
+        console.error('[Preferences] Error:', error);
+        res.status(500).json({ message: 'Failed to get preferences', error: error.message });
+      }
+    }
+  );
+  
+  // Get assignment effectiveness analytics
+  app.get('/api/analytics/assignment-effectiveness',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const period = (req.query.period as 'day' | 'week' | 'month') || 'week';
+        
+        const effectiveness = await storage.getAssignmentEffectiveness(period);
+        
+        res.json({
+          period,
+          metrics: effectiveness,
+          lastUpdated: new Date()
+        });
+        
+      } catch (error) {
+        console.error('[Analytics] Error:', error);
+        res.status(500).json({ message: 'Failed to get assignment effectiveness', error: error.message });
+      }
+    }
+  );
+  
+  // AI-based reassignment for failed assignments
+  app.post('/api/jobs/:id/reassign-ai',
+    requireAuth,
+    requireRole('admin', 'dispatcher'),
+    validateRequest(z.object({
+      reason: z.string().optional(),
+      excludeContractorId: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        const { reason, excludeContractorId } = req.body;
+        
+        console.log(`[AI-Reassign] Starting AI reassignment for job: ${jobId}, reason: ${reason}`);
+        
+        // Get job details
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        // Record failure of previous assignment if applicable
+        if (job.contractorId && job.status === 'assigned') {
+          await storage.recordAssignmentOutcome(jobId, false, {
+            issuesEncountered: [reason || 'Reassignment requested']
+          });
+        }
+        
+        // Reset job status for reassignment
+        await storage.updateJob(jobId, {
+          status: 'new',
+          contractorId: null,
+          assignedAt: null
+        });
+        
+        // Get new AI scores, excluding the previous contractor
+        let scores = await storage.calculateAIAssignmentScores(jobId);
+        
+        if (excludeContractorId || job.contractorId) {
+          scores = scores.filter(s => s.contractorId !== (excludeContractorId || job.contractorId));
+        }
+        
+        if (scores.length === 0 || scores[0].score < 60) {
+          return res.status(404).json({ 
+            message: 'No suitable contractor found for reassignment',
+            fallbackAvailable: true
+          });
+        }
+        
+        // Assign to the next best contractor
+        const nextBest = scores[0];
+        
+        await storage.updateJob(jobId, {
+          contractorId: nextBest.contractorId,
+          status: 'assigned',
+          assignedAt: new Date()
+        });
+        
+        // Update assignment score
+        await storage.updateAiAssignmentScore(nextBest.id, {
+          wasAssigned: true
+        });
+        
+        // Send notification
+        const contractor = await storage.getUser(nextBest.contractorId);
+        if (contractor?.phone) {
+          try {
+            const twilioClient = require('twilio')(
+              process.env.TWILIO_ACCOUNT_SID,
+              process.env.TWILIO_AUTH_TOKEN
+            );
+            
+            await twilioClient.messages.create({
+              body: `Urgent: Job reassigned to you! ${job.serviceType} at ${job.locationAddress}. Please respond ASAP.`,
+              from: process.env.TWILIO_PHONE_NUMBER,
+              to: contractor.phone
+            });
+          } catch (twilioError) {
+            console.error('[AI-Reassign] Failed to send SMS:', twilioError);
+          }
+        }
+        
+        res.json({
+          success: true,
+          jobId,
+          contractorId: nextBest.contractorId,
+          score: nextBest.score,
+          recommendation: nextBest.recommendation,
+          isReassignment: true
+        });
+        
+      } catch (error) {
+        console.error('[AI-Reassign] Error:', error);
+        res.status(500).json({ message: 'Failed to reassign job using AI', error: error.message });
+      }
+    }
+  );
+  
+  // Update contractor specializations
+  app.post('/api/contractor/specializations',
+    requireAuth,
+    requireRole('contractor', 'admin'),
+    validateRequest(z.object({
+      contractorId: z.string().optional(), // Admin can update any contractor
+      specializations: z.any() // JSONB field
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.body.contractorId || req.session.userId!;
+        
+        // If not admin, contractor can only update their own specializations
+        if (req.session.role !== 'admin' && contractorId !== req.session.userId) {
+          return res.status(403).json({ message: 'Unauthorized to update other contractor specializations' });
+        }
+        
+        await storage.updateContractorSpecializations(contractorId, req.body.specializations);
+        
+        res.json({
+          success: true,
+          contractorId,
+          specializations: req.body.specializations
+        });
+        
+      } catch (error) {
+        console.error('[Specializations] Error:', error);
+        res.status(500).json({ message: 'Failed to update specializations', error: error.message });
+      }
+    }
+  );
+  
   // Assign contractor to job with smart round-robin
   app.post('/api/jobs/:id/assign',
     requireAuth,
