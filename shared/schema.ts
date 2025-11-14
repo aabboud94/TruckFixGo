@@ -1985,6 +1985,13 @@ export const customerPreferences = pgTable("customer_preferences", {
   communicationChannel: communicationChannelEnum("communication_channel").notNull().default('both'),
   reminderOptIn: boolean("reminder_opt_in").notNull().default(true),
   marketingOptIn: boolean("marketing_opt_in").notNull().default(true),
+  pushNotifications: boolean("push_notifications").notNull().default(true),
+  notificationCategories: jsonb("notification_categories").default({
+    job_updates: true,
+    messages: true,
+    payments: true,
+    marketing: false
+  }),
   doNotDisturbStart: varchar("do_not_disturb_start", { length: 5 }),
   doNotDisturbEnd: varchar("do_not_disturb_end", { length: 5 }),
   language: varchar("language", { length: 5 }).notNull().default('en'),
@@ -2097,6 +2104,50 @@ export const reminderMetrics = pgTable("reminder_metrics", {
 }, (table) => ({
   dateChannelIdx: index("idx_reminder_metrics_date_channel").on(table.date, table.channel),
   messageTypeIdx: index("idx_reminder_metrics_type").on(table.messageType)
+}));
+
+// ====================
+// PUSH NOTIFICATIONS
+// ====================
+
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dhKey: text("p256dh_key").notNull(),
+  authKey: text("auth_key").notNull(),
+  deviceType: varchar("device_type", { length: 20 }).notNull(), // browser, ios, android
+  browserInfo: jsonb("browser_info"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastUsed: timestamp("last_used"),
+  isActive: boolean("is_active").notNull().default(true)
+}, (table) => ({
+  userIdx: index("idx_push_subscriptions_user").on(table.userId),
+  activeIdx: index("idx_push_subscriptions_active").on(table.isActive),
+  deviceTypeIdx: index("idx_push_subscriptions_device_type").on(table.deviceType)
+}));
+
+export const pushNotifications = pgTable("push_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  icon: text("icon"),
+  badge: text("badge"),
+  tag: varchar("tag", { length: 100 }),
+  data: jsonb("data"),
+  requireInteraction: boolean("require_interaction").notNull().default(false),
+  actions: jsonb("actions"),
+  sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  clickedAt: timestamp("clicked_at"),
+  failedAt: timestamp("failed_at"),
+  failureReason: text("failure_reason"),
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  userIdx: index("idx_push_notifications_user").on(table.userId),
+  tagIdx: index("idx_push_notifications_tag").on(table.tag),
+  sentAtIdx: index("idx_push_notifications_sent_at").on(table.sentAt)
 }));
 
 // ====================
@@ -2603,6 +2654,26 @@ export const insertReminderMetricsSchema = createInsertSchema(reminderMetrics).o
 });
 export type InsertReminderMetrics = z.infer<typeof insertReminderMetricsSchema>;
 export type ReminderMetrics = typeof reminderMetrics.$inferSelect;
+
+// Push Notifications
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({
+  id: true,
+  createdAt: true,
+  lastUsed: true
+});
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+
+export const insertPushNotificationSchema = createInsertSchema(pushNotifications).omit({
+  id: true,
+  createdAt: true,
+  sentAt: true,
+  deliveredAt: true,
+  clickedAt: true,
+  failedAt: true
+});
+export type InsertPushNotification = z.infer<typeof insertPushNotificationSchema>;
+export type PushNotification = typeof pushNotifications.$inferSelect;
 
 // ====================
 // CONTRACT MANAGEMENT

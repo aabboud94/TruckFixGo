@@ -17,6 +17,7 @@ import { emailService } from "./services/email-service";
 import LocationService from "./services/location-service";
 import { trackingWSServer } from "./websocket";
 import { healthMonitor } from "./health-monitor";
+import { pushNotificationService } from "./services/push-notification-service";
 import multer from "multer";
 import sharp from "sharp";
 import path from "path";
@@ -17077,6 +17078,259 @@ The TruckFixGo Team
       } catch (error) {
         console.error('Error getting active tracking:', error);
         res.status(500).json({ message: 'Failed to get active tracking' });
+      }
+    }
+  );
+
+  // ==================== PUSH NOTIFICATION ENDPOINTS ====================
+
+  // Get public VAPID key for client subscription
+  app.get('/api/push/vapid-key',
+    async (req: Request, res: Response) => {
+      try {
+        const publicKey = pushNotificationService.getPublicVAPIDKey();
+        
+        if (!publicKey) {
+          return res.status(503).json({ 
+            message: 'Push notification service not available' 
+          });
+        }
+        
+        res.json({ publicKey });
+      } catch (error) {
+        console.error('Error getting VAPID key:', error);
+        res.status(500).json({ message: 'Failed to get VAPID key' });
+      }
+    }
+  );
+
+  // Subscribe to push notifications
+  app.post('/api/push/subscribe',
+    requireAuth,
+    validateRequest(z.object({
+      subscription: z.object({
+        endpoint: z.string(),
+        keys: z.object({
+          p256dh: z.string(),
+          auth: z.string()
+        })
+      }),
+      deviceType: z.enum(['browser', 'ios', 'android']).default('browser'),
+      browserInfo: z.any().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const userId = req.session.userId!;
+        const { subscription, deviceType, browserInfo } = req.body;
+        
+        // Save subscription to database
+        const savedSubscription = await storage.savePushSubscription(userId, {
+          endpoint: subscription.endpoint,
+          p256dhKey: subscription.keys.p256dh,
+          authKey: subscription.keys.auth,
+          deviceType,
+          browserInfo
+        });
+        
+        // Send welcome notification
+        await pushNotificationService.sendTestNotification(userId);
+        
+        res.json({
+          success: true,
+          message: 'Successfully subscribed to push notifications',
+          subscriptionId: savedSubscription.id
+        });
+      } catch (error) {
+        console.error('Error subscribing to push notifications:', error);
+        res.status(500).json({ message: 'Failed to subscribe to push notifications' });
+      }
+    }
+  );
+
+  // Unsubscribe from push notifications
+  app.delete('/api/push/unsubscribe',
+    requireAuth,
+    validateRequest(z.object({
+      subscriptionId: z.string().optional(),
+      endpoint: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const userId = req.session.userId!;
+        const { subscriptionId, endpoint } = req.body;
+        
+        if (!subscriptionId && !endpoint) {
+          return res.status(400).json({ 
+            message: 'Either subscriptionId or endpoint is required' 
+          });
+        }
+        
+        if (subscriptionId) {
+          await storage.removePushSubscription(subscriptionId);
+        } else if (endpoint) {
+          // Find and remove subscription by endpoint
+          const subscriptions = await storage.getPushSubscriptions(userId);
+          const subscription = subscriptions.find(s => s.endpoint === endpoint);
+          
+          if (subscription) {
+            await storage.removePushSubscription(subscription.id);
+          }
+        }
+        
+        res.json({
+          success: true,
+          message: 'Successfully unsubscribed from push notifications'
+        });
+      } catch (error) {
+        console.error('Error unsubscribing from push notifications:', error);
+        res.status(500).json({ message: 'Failed to unsubscribe from push notifications' });
+      }
+    }
+  );
+
+  // Send test notification
+  app.post('/api/push/test',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const userId = req.session.userId!;
+        
+        const result = await pushNotificationService.sendTestNotification(userId);
+        
+        if (result.success) {
+          res.json({
+            success: true,
+            message: 'Test notification sent successfully',
+            sent: result.sent,
+            failed: result.failed
+          });
+        } else {
+          res.status(400).json({
+            success: false,
+            message: 'Failed to send test notification',
+            errors: result.errors
+          });
+        }
+      } catch (error) {
+        console.error('Error sending test notification:', error);
+        res.status(500).json({ message: 'Failed to send test notification' });
+      }
+    }
+  );
+
+  // Get notification history
+  app.get('/api/notifications/history',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const userId = req.session.userId!;
+        const days = parseInt(req.query.days as string) || 30;
+        
+        const notifications = await storage.getUserNotificationHistory(userId, days);
+        const stats = await pushNotificationService.getNotificationStats(userId, days);
+        
+        res.json({
+          notifications,
+          stats
+        });
+      } catch (error) {
+        console.error('Error getting notification history:', error);
+        res.status(500).json({ message: 'Failed to get notification history' });
+      }
+    }
+  );
+
+  // Update notification preferences
+  app.post('/api/notifications/settings',
+    requireAuth,
+    validateRequest(z.object({
+      pushNotifications: z.boolean().optional(),
+      notificationCategories: z.object({
+        job_updates: z.boolean().optional(),
+        messages: z.boolean().optional(),
+        payments: z.boolean().optional(),
+        marketing: z.boolean().optional()
+      }).optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const userId = req.session.userId!;
+        const { pushNotifications, notificationCategories } = req.body;
+        
+        // Get or create customer preferences
+        let preferences = await storage.getCustomerPreferences(userId);
+        
+        if (!preferences) {
+          // Create new preferences
+          await storage.createCustomerPreferences({
+            userId,
+            pushNotifications: pushNotifications ?? true,
+            notificationCategories: notificationCategories ?? {
+              job_updates: true,
+              messages: true,
+              payments: true,
+              marketing: false
+            },
+            communicationChannel: 'both',
+            reminderOptIn: true,
+            marketingOptIn: false,
+            language: 'en',
+            timezone: 'America/New_York',
+            maxDailyMessages: 10
+          });
+        } else {
+          // Update existing preferences
+          const updates: any = {};
+          
+          if (pushNotifications !== undefined) {
+            updates.pushNotifications = pushNotifications;
+          }
+          
+          if (notificationCategories) {
+            updates.notificationCategories = {
+              ...(preferences.notificationCategories as any || {}),
+              ...notificationCategories
+            };
+          }
+          
+          await storage.updateCustomerPreferences(userId, updates);
+        }
+        
+        res.json({
+          success: true,
+          message: 'Notification preferences updated successfully'
+        });
+      } catch (error) {
+        console.error('Error updating notification preferences:', error);
+        res.status(500).json({ message: 'Failed to update notification preferences' });
+      }
+    }
+  );
+
+  // Mark notification as delivered (called by service worker)
+  app.post('/api/push/delivered/:notificationId',
+    async (req: Request, res: Response) => {
+      try {
+        const { notificationId } = req.params;
+        await storage.markNotificationDelivered(notificationId);
+        res.json({ success: true });
+      } catch (error) {
+        console.error('Error marking notification delivered:', error);
+        res.status(500).json({ message: 'Failed to mark notification delivered' });
+      }
+    }
+  );
+
+  // Mark notification as clicked (called by service worker)
+  app.post('/api/push/clicked/:notificationId',
+    async (req: Request, res: Response) => {
+      try {
+        const { notificationId } = req.params;
+        await storage.markNotificationClicked(notificationId);
+        res.json({ success: true });
+      } catch (error) {
+        console.error('Error marking notification clicked:', error);
+        res.status(500).json({ message: 'Failed to mark notification clicked' });
       }
     }
   );

@@ -242,67 +242,228 @@ self.addEventListener('push', (event) => {
   
   let data = {};
   if (event.data) {
-    data = event.data.json();
+    try {
+      data = event.data.json();
+    } catch (e) {
+      console.error('[Service Worker] Error parsing push data:', e);
+      data = { title: 'TruckFixGo Update', body: event.data.text() };
+    }
   }
 
   const options = {
     title: data.title || 'TruckFixGo Update',
     body: data.body || 'You have a new notification',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/icon-192x192.png',
+    icon: data.icon || '/icons/icon-192x192.png',
+    badge: data.badge || '/icons/icon-96x96.png',
+    tag: data.tag || `notification-${Date.now()}`,
     vibrate: [200, 100, 200],
+    requireInteraction: data.requireInteraction || false,
     data: {
+      ...data.data,
       dateOfArrival: Date.now(),
-      primaryKey: data.id || '1',
-      url: data.url || '/'
+      notificationId: data.notificationId,
+      type: data.data?.type || 'general',
+      userId: data.data?.userId,
+      url: data.data?.url || '/'
     },
-    actions: [
-      {
-        action: 'view',
-        title: 'View',
-        icon: '/icons/icon-192x192.png'
-      },
-      {
-        action: 'close',
-        title: 'Close',
-        icon: '/icons/icon-192x192.png'
-      }
-    ]
+    actions: data.actions || []
   };
 
+  // Cache notification data for offline viewing
   event.waitUntil(
-    self.registration.showNotification(options.title, options)
+    Promise.all([
+      self.registration.showNotification(options.title, options),
+      cacheNotificationData(data),
+      trackNotificationDelivery(data.notificationId)
+    ])
   );
 });
 
-// Notification click handling
+// Enhanced notification click handling with action support
 self.addEventListener('notificationclick', (event) => {
   console.log('[Service Worker] Notification click:', event.action);
   
   event.notification.close();
 
-  if (event.action === 'view' || !event.action) {
-    const urlToOpen = event.notification.data.url || '/';
-    
-    event.waitUntil(
-      clients.matchAll({
+  const notificationData = event.notification.data;
+  const action = event.action;
+
+  event.waitUntil(
+    (async () => {
+      // Track notification click
+      if (notificationData.notificationId) {
+        await trackNotificationClick(notificationData.notificationId);
+      }
+
+      // Handle different actions
+      let urlToOpen = notificationData.url || '/';
+      
+      switch (action) {
+        case 'track':
+          urlToOpen = `/tracking?jobId=${notificationData.jobId}`;
+          break;
+        case 'message':
+          urlToOpen = `/jobs/${notificationData.jobId}#messages`;
+          break;
+        case 'view':
+          urlToOpen = `/jobs/${notificationData.jobId}`;
+          break;
+        case 'navigate':
+          urlToOpen = `/contractor/active-job?id=${notificationData.jobId}`;
+          break;
+        case 'call':
+          // Handle call action
+          urlToOpen = `tel:${notificationData.phone}`;
+          break;
+        case 'review':
+          urlToOpen = `/jobs/${notificationData.jobId}#review`;
+          break;
+        case 'invoice':
+          urlToOpen = `/jobs/${notificationData.jobId}#invoice`;
+          break;
+        case 'rebook':
+          urlToOpen = `/emergency`;
+          break;
+        case 'close':
+          // Just close the notification, no navigation
+          return;
+        default:
+          // Use the default URL or action URL if provided
+          if (notificationData.actions && notificationData.actions[action]) {
+            urlToOpen = notificationData.actions[action].url || urlToOpen;
+          }
+      }
+
+      // Handle special URL types
+      if (urlToOpen.startsWith('tel:')) {
+        // For phone calls, we can't open in the same way
+        return clients.openWindow(urlToOpen);
+      }
+
+      // Find or open window
+      const windowClients = await clients.matchAll({
         type: 'window',
         includeUncontrolled: true
-      }).then((windowClients) => {
-        // Check if there is already a window/tab open with the target URL
-        for (let client of windowClients) {
-          if (client.url === urlToOpen && 'focus' in client) {
-            return client.focus();
+      });
+
+      // Check if there is already a window/tab open
+      for (let client of windowClients) {
+        if ('focus' in client) {
+          await client.focus();
+          // Navigate the focused client to the URL
+          if ('navigate' in client) {
+            return client.navigate(urlToOpen);
           }
+          // Fallback: post message to client to navigate
+          client.postMessage({
+            type: 'NAVIGATE',
+            url: urlToOpen
+          });
+          return;
         }
-        // If not, open a new window/tab with the target URL
-        if (clients.openWindow) {
-          return clients.openWindow(urlToOpen);
-        }
-      })
-    );
+      }
+
+      // If not, open a new window/tab with the target URL
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
+    })()
+  );
+});
+
+// Cache notification data for offline viewing
+async function cacheNotificationData(data) {
+  try {
+    const cache = await caches.open('notifications-cache');
+    const request = new Request(`/api/notifications/${data.notificationId || Date.now()}`, {
+      method: 'GET'
+    });
+    const response = new Response(JSON.stringify(data), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    await cache.put(request, response);
+  } catch (error) {
+    console.error('[Service Worker] Failed to cache notification:', error);
+  }
+}
+
+// Track notification delivery
+async function trackNotificationDelivery(notificationId) {
+  if (!notificationId) return;
+  
+  try {
+    await fetch(`/api/push/delivered/${notificationId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('[Service Worker] Failed to track delivery:', error);
+    // Queue for later sync
+    await queueTrackingEvent('delivery', notificationId);
+  }
+}
+
+// Track notification click
+async function trackNotificationClick(notificationId) {
+  if (!notificationId) return;
+  
+  try {
+    await fetch(`/api/push/clicked/${notificationId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('[Service Worker] Failed to track click:', error);
+    // Queue for later sync
+    await queueTrackingEvent('click', notificationId);
+  }
+}
+
+// Queue tracking events for background sync
+async function queueTrackingEvent(type, notificationId) {
+  try {
+    const cache = await caches.open('tracking-queue');
+    const request = new Request(`/api/push/${type}/${notificationId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    await cache.put(request, new Response('queued'));
+    
+    // Register sync event
+    if ('sync' in self.registration) {
+      await self.registration.sync.register('sync-tracking');
+    }
+  } catch (error) {
+    console.error('[Service Worker] Failed to queue tracking:', error);
+  }
+}
+
+// Sync queued tracking events
+self.addEventListener('sync', async (event) => {
+  if (event.tag === 'sync-tracking') {
+    event.waitUntil(syncTrackingEvents());
   }
 });
+
+async function syncTrackingEvents() {
+  try {
+    const cache = await caches.open('tracking-queue');
+    const requests = await cache.keys();
+    
+    for (const request of requests) {
+      try {
+        const response = await fetch(request.clone());
+        if (response.ok) {
+          await cache.delete(request);
+        }
+      } catch (error) {
+        console.log('[Service Worker] Failed to sync tracking:', error);
+      }
+    }
+  } catch (error) {
+    console.error('[Service Worker] Sync tracking failed:', error);
+  }
+}
 
 // Message handling from clients
 self.addEventListener('message', (event) => {

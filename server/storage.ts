@@ -39,6 +39,8 @@ import {
   reminderLog,
   reminderBlacklist,
   reminderMetrics,
+  pushSubscriptions,
+  pushNotifications,
   contractorApplications,
   fleetApplications,
   applicationDocuments,
@@ -144,6 +146,10 @@ import {
   type InsertReminderBlacklist,
   type ReminderMetrics,
   type InsertReminderMetrics,
+  type PushSubscription,
+  type InsertPushSubscription,
+  type PushNotification,
+  type InsertPushNotification,
   type ContractorApplication,
   type InsertContractorApplication,
   type FleetApplication,
@@ -341,6 +347,50 @@ export interface IStorage {
     polyline: string;
     points: Array<{ lat: number; lng: number; timestamp: Date }>;
   }>;
+  
+  // ==================== PUSH NOTIFICATIONS ====================
+  
+  // Save push subscription
+  savePushSubscription(userId: string, subscription: {
+    endpoint: string;
+    p256dhKey: string;
+    authKey: string;
+    deviceType: string;
+    browserInfo?: any;
+  }): Promise<PushSubscription>;
+  
+  // Remove push subscription
+  removePushSubscription(subscriptionId: string): Promise<void>;
+  
+  // Get user's active push subscriptions
+  getPushSubscriptions(userId: string): Promise<PushSubscription[]>;
+  
+  // Update subscription last used timestamp
+  updatePushSubscriptionLastUsed(subscriptionId: string): Promise<void>;
+  
+  // Deactivate push subscription
+  deactivatePushSubscription(subscriptionId: string): Promise<void>;
+  
+  // Log push notification
+  logPushNotification(notification: InsertPushNotification): Promise<PushNotification>;
+  
+  // Mark notification as sent
+  markNotificationSent(notificationId: string): Promise<void>;
+  
+  // Mark notification as delivered
+  markNotificationDelivered(notificationId: string): Promise<void>;
+  
+  // Mark notification as clicked
+  markNotificationClicked(notificationId: string): Promise<void>;
+  
+  // Mark notification as failed
+  markNotificationFailed(notificationId: string, reason: string): Promise<void>;
+  
+  // Get user notification history
+  getUserNotificationHistory(userId: string, days: number): Promise<PushNotification[]>;
+  
+  // Delete old push notifications
+  deleteOldPushNotifications(daysToKeep: number): Promise<number>;
   
   // ==================== ROUTE MANAGEMENT ====================
   
@@ -9166,6 +9216,140 @@ export class PostgreSQLStorage implements IStorage {
       polyline,
       points: routePoints
     };
+  }
+  
+  // ==================== PUSH NOTIFICATIONS ====================
+  
+  async savePushSubscription(userId: string, subscription: {
+    endpoint: string;
+    p256dhKey: string;
+    authKey: string;
+    deviceType: string;
+    browserInfo?: any;
+  }): Promise<PushSubscription> {
+    // First check if this subscription already exists
+    const existing = await db.select()
+      .from(pushSubscriptions)
+      .where(eq(pushSubscriptions.endpoint, subscription.endpoint))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      // Update existing subscription
+      const [updated] = await db.update(pushSubscriptions)
+        .set({
+          p256dhKey: subscription.p256dhKey,
+          authKey: subscription.authKey,
+          deviceType: subscription.deviceType,
+          browserInfo: subscription.browserInfo,
+          isActive: true,
+          lastUsed: new Date()
+        })
+        .where(eq(pushSubscriptions.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+    
+    // Create new subscription
+    const [created] = await db.insert(pushSubscriptions)
+      .values({
+        userId,
+        endpoint: subscription.endpoint,
+        p256dhKey: subscription.p256dhKey,
+        authKey: subscription.authKey,
+        deviceType: subscription.deviceType,
+        browserInfo: subscription.browserInfo,
+        isActive: true
+      })
+      .returning();
+    
+    return created;
+  }
+  
+  async removePushSubscription(subscriptionId: string): Promise<void> {
+    await db.delete(pushSubscriptions)
+      .where(eq(pushSubscriptions.id, subscriptionId));
+  }
+  
+  async getPushSubscriptions(userId: string): Promise<PushSubscription[]> {
+    return await db.select()
+      .from(pushSubscriptions)
+      .where(
+        and(
+          eq(pushSubscriptions.userId, userId),
+          eq(pushSubscriptions.isActive, true)
+        )
+      );
+  }
+  
+  async updatePushSubscriptionLastUsed(subscriptionId: string): Promise<void> {
+    await db.update(pushSubscriptions)
+      .set({ lastUsed: new Date() })
+      .where(eq(pushSubscriptions.id, subscriptionId));
+  }
+  
+  async deactivatePushSubscription(subscriptionId: string): Promise<void> {
+    await db.update(pushSubscriptions)
+      .set({ isActive: false })
+      .where(eq(pushSubscriptions.id, subscriptionId));
+  }
+  
+  async logPushNotification(notification: InsertPushNotification): Promise<PushNotification> {
+    const [created] = await db.insert(pushNotifications)
+      .values(notification)
+      .returning();
+    return created;
+  }
+  
+  async markNotificationSent(notificationId: string): Promise<void> {
+    await db.update(pushNotifications)
+      .set({ sentAt: new Date() })
+      .where(eq(pushNotifications.id, notificationId));
+  }
+  
+  async markNotificationDelivered(notificationId: string): Promise<void> {
+    await db.update(pushNotifications)
+      .set({ deliveredAt: new Date() })
+      .where(eq(pushNotifications.id, notificationId));
+  }
+  
+  async markNotificationClicked(notificationId: string): Promise<void> {
+    await db.update(pushNotifications)
+      .set({ clickedAt: new Date() })
+      .where(eq(pushNotifications.id, notificationId));
+  }
+  
+  async markNotificationFailed(notificationId: string, reason: string): Promise<void> {
+    await db.update(pushNotifications)
+      .set({ 
+        failedAt: new Date(),
+        failureReason: reason
+      })
+      .where(eq(pushNotifications.id, notificationId));
+  }
+  
+  async getUserNotificationHistory(userId: string, days: number): Promise<PushNotification[]> {
+    const sinceDate = new Date();
+    sinceDate.setDate(sinceDate.getDate() - days);
+    
+    return await db.select()
+      .from(pushNotifications)
+      .where(
+        and(
+          eq(pushNotifications.userId, userId),
+          gte(pushNotifications.createdAt, sinceDate)
+        )
+      )
+      .orderBy(desc(pushNotifications.createdAt));
+  }
+  
+  async deleteOldPushNotifications(daysToKeep: number): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+    
+    const result = await db.delete(pushNotifications)
+      .where(lt(pushNotifications.createdAt, cutoffDate));
+    
+    return result.count || 0;
   }
   
   // Check and reassign staled jobs that haven't been accepted
