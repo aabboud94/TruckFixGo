@@ -595,10 +595,111 @@ export default function AdminBilling() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Billing history table would go here */}
-              <div className="text-center py-8 text-muted-foreground">
-                Billing history will be displayed here
-              </div>
+              {billingData?.invoices?.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice #</TableHead>
+                      <TableHead>Fleet/Customer</TableHead>
+                      <TableHead>Issue Date</TableHead>
+                      <TableHead>Due Date</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {billingData.invoices.map((invoice: any) => (
+                      <TableRow key={invoice.id}>
+                        <TableCell className="font-mono text-sm">
+                          {invoice.invoiceNumber}
+                        </TableCell>
+                        <TableCell>
+                          {invoice.fleetName || invoice.customerName || 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(invoice.issueDate), 'MMM d, yyyy')}
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(invoice.dueDate), 'MMM d, yyyy')}
+                        </TableCell>
+                        <TableCell>
+                          ${(invoice.totalAmount || 0).toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              invoice.status === 'paid' ? 'success' :
+                              invoice.status === 'overdue' ? 'destructive' :
+                              invoice.status === 'pending' ? 'secondary' : 'outline'
+                            }
+                          >
+                            {invoice.status?.toUpperCase()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={async () => {
+                                try {
+                                  // Download the invoice PDF
+                                  const response = await fetch(`/api/invoices/${invoice.id}/pdf`);
+                                  if (response.ok) {
+                                    const blob = await response.blob();
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `invoice-${invoice.invoiceNumber}.pdf`;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    URL.revokeObjectURL(url);
+                                    
+                                    toast({
+                                      title: "Invoice Downloaded",
+                                      description: `Invoice ${invoice.invoiceNumber} has been downloaded`
+                                    });
+                                  } else {
+                                    throw new Error('Failed to download invoice');
+                                  }
+                                } catch (error) {
+                                  toast({
+                                    title: "Download Failed",
+                                    description: "Failed to download invoice",
+                                    variant: "destructive"
+                                  });
+                                }
+                              }}
+                              title="Download Invoice"
+                              data-testid={`button-download-invoice-${invoice.id}`}
+                            >
+                              <Download className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                // Navigate to invoice details or preview
+                                window.open(`/admin/invoices/${invoice.id}`, '_blank');
+                              }}
+                              title="View Invoice"
+                              data-testid={`button-view-invoice-${invoice.id}`}
+                            >
+                              <FileText className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No billing history available
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

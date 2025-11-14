@@ -12,6 +12,7 @@ import { reminderService } from "./reminder-service";
 import { reminderScheduler } from "./reminder-scheduler";
 import efsComdataService from "./efs-comdata-service";
 import stripeService from "./stripe-service";
+import pdfService from "./pdf-service";
 import { emailService } from "./services/email-service";
 import LocationService from "./services/location-service";
 import { trackingWSServer } from "./websocket";
@@ -5419,7 +5420,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
 
         // Generate PDF using the PDF service
-        const pdfBuffer = await PDFService.generateInvoice({
+        const pdfBuffer = await pdfService.generateInvoice({
           invoice: {
             id: invoice.id,
             number: invoice.invoiceNumber,
@@ -5504,7 +5505,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Generate PDF
-        const pdfBuffer = await PDFService.generateEarningsStatement({
+        const pdfBuffer = await pdfService.generateEarningsStatement({
           contractor: {
             name: contractor.businessName || `${contractor.firstName} ${contractor.lastName}`,
             email: contractor.email,
@@ -5572,7 +5573,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
 
         // Generate 1099-NEC PDF
-        const pdfBuffer = await PDFService.generateTaxDocument({
+        const pdfBuffer = await pdfService.generateTaxDocument({
           year,
           contractor: {
             name: contractor.businessName || `${contractor.firstName} ${contractor.lastName}`,
@@ -8275,6 +8276,343 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Download invoice error:', error);
         res.status(500).json({ message: 'Failed to download invoice' });
+      }
+    }
+  );
+
+  // Download invoice as PDF (alternative endpoint)
+  app.get('/api/invoices/:invoiceId/pdf',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const invoice = await storage.getInvoice(req.params.invoiceId);
+        
+        if (!invoice) {
+          return res.status(404).json({ message: 'Invoice not found' });
+        }
+
+        // Check authorization
+        if (req.session.role !== 'admin' && 
+            req.session.role !== 'fleet_manager' &&
+            invoice.customerId !== req.session.userId) {
+          return res.status(403).json({ message: 'Unauthorized to download this invoice' });
+        }
+
+        // Get related data
+        const job = invoice.jobId ? await storage.getJob(invoice.jobId) : null;
+        const customer = await storage.getUser(invoice.customerId);
+        const contractor = invoice.contractorId ? 
+          await storage.getContractorProfile(invoice.contractorId) : undefined;
+        const transactions = await storage.getInvoiceTransactions(invoice.id);
+        
+        let fleetAccount = undefined;
+        if (invoice.fleetAccountId) {
+          fleetAccount = await storage.getFleetAccount(invoice.fleetAccountId);
+        } else if (customer) {
+          const driverProfile = await storage.getDriverProfile(customer.id);
+          if (driverProfile?.fleetAccountId) {
+            fleetAccount = await storage.getFleetAccount(driverProfile.fleetAccountId);
+          }
+        }
+
+        // Generate PDF
+        const pdfBuffer = await pdfService.generateInvoice({
+          invoice,
+          job: job!,
+          customer: customer!,
+          contractor,
+          fleetAccount,
+          transactions
+        });
+
+        // Set headers for PDF download
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 
+          `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`);
+        res.send(pdfBuffer);
+      } catch (error) {
+        console.error('Download invoice PDF error:', error);
+        res.status(500).json({ message: 'Failed to download invoice' });
+      }
+    }
+  );
+
+  // Generate invoice for a completed job
+  app.post('/api/jobs/:jobId/invoice',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const job = await storage.getJob(req.params.jobId);
+        
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        if (job.status !== 'completed') {
+          return res.status(400).json({ message: 'Job must be completed to generate invoice' });
+        }
+
+        // Check if invoice already exists
+        let invoice = await storage.getInvoiceByJobId(job.id);
+        
+        if (!invoice) {
+          // Generate new invoice
+          const invoiceNumber = pdfService.generateInvoiceNumber();
+          
+          // Calculate amounts
+          const subtotal = parseFloat(job.actualPrice || job.quotedPrice || '0');
+          const taxRate = 0.0825; // 8.25% tax rate
+          const taxAmount = subtotal * taxRate;
+          const totalAmount = subtotal + taxAmount;
+          
+          invoice = await storage.createInvoice({
+            jobId: job.id,
+            customerId: job.customerId,
+            fleetAccountId: job.fleetAccountId,
+            invoiceNumber,
+            issueDate: new Date(),
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            subtotal,
+            taxAmount,
+            totalAmount,
+            amountDue: totalAmount,
+            status: 'pending'
+          });
+
+          // Add line items
+          await storage.createInvoiceLineItem({
+            invoiceId: invoice.id,
+            type: 'labor',
+            description: `${job.jobType === 'emergency' ? 'Emergency' : 'Scheduled'} Service - ${job.issueDescription || 'Truck Repair'}`,
+            quantity: 1,
+            unitPrice: subtotal,
+            totalPrice: subtotal,
+            sortOrder: 0
+          });
+
+          // Add tax line item
+          if (taxAmount > 0) {
+            await storage.createInvoiceLineItem({
+              invoiceId: invoice.id,
+              type: 'tax',
+              description: 'Tax (8.25%)',
+              quantity: 1,
+              unitPrice: taxAmount,
+              totalPrice: taxAmount,
+              sortOrder: 1
+            });
+          }
+        }
+
+        const invoiceWithLineItems = await storage.getInvoiceWithLineItems(invoice.id);
+        res.json({
+          message: 'Invoice generated successfully',
+          invoice: invoiceWithLineItems
+        });
+      } catch (error) {
+        console.error('Generate job invoice error:', error);
+        res.status(500).json({ message: 'Failed to generate invoice' });
+      }
+    }
+  );
+
+  // Get all invoices for a fleet
+  app.get('/api/fleet/:fleetId/invoices',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const { startDate, endDate, status } = req.query;
+        
+        // Get fleet account
+        const fleetAccount = await storage.getFleetAccount(req.params.fleetId);
+        if (!fleetAccount) {
+          return res.status(404).json({ message: 'Fleet account not found' });
+        }
+
+        // Check authorization
+        if (req.session.role !== 'admin') {
+          const fleetContacts = await storage.getFleetContacts(req.params.fleetId);
+          const isFleetManager = fleetContacts.some(
+            contact => contact.userId === req.session.userId && contact.isPrimary
+          );
+          if (!isFleetManager) {
+            return res.status(403).json({ message: 'Unauthorized to view fleet invoices' });
+          }
+        }
+
+        // Get invoices
+        const filters: any = {
+          fleetAccountId: req.params.fleetId
+        };
+        
+        if (startDate) filters.startDate = new Date(startDate as string);
+        if (endDate) filters.endDate = new Date(endDate as string);
+        if (status) filters.status = status as string;
+
+        const invoices = await storage.getInvoices(filters);
+        
+        // Calculate statistics
+        const stats = {
+          totalInvoices: invoices.length,
+          totalAmount: invoices.reduce((sum, inv) => sum + parseFloat(inv.totalAmount.toString()), 0),
+          totalPaid: invoices.filter(inv => inv.status === 'paid').length,
+          totalPending: invoices.filter(inv => inv.status === 'pending').length,
+          totalOverdue: invoices.filter(inv => inv.status === 'overdue').length
+        };
+
+        res.json({
+          fleetAccount,
+          invoices,
+          stats
+        });
+      } catch (error) {
+        console.error('Get fleet invoices error:', error);
+        res.status(500).json({ message: 'Failed to get fleet invoices' });
+      }
+    }
+  );
+
+  // Generate monthly fleet invoice
+  app.post('/api/fleet/:fleetId/monthly-invoice',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const { month, year } = req.body;
+        const targetMonth = month || new Date().getMonth();
+        const targetYear = year || new Date().getFullYear();
+        
+        // Get fleet account
+        const fleetAccount = await storage.getFleetAccount(req.params.fleetId);
+        if (!fleetAccount) {
+          return res.status(404).json({ message: 'Fleet account not found' });
+        }
+
+        // Calculate date range for the month
+        const startDate = new Date(targetYear, targetMonth, 1);
+        const endDate = new Date(targetYear, targetMonth + 1, 0, 23, 59, 59, 999);
+        
+        // Get all completed jobs for the fleet in this month
+        const jobs = await storage.findJobs({
+          fleetAccountId: req.params.fleetId,
+          status: 'completed',
+          fromDate: startDate,
+          toDate: endDate
+        });
+
+        if (jobs.length === 0) {
+          return res.status(400).json({ 
+            message: 'No completed jobs found for the specified month' 
+          });
+        }
+
+        // Calculate totals
+        let subtotal = 0;
+        const jobDetails = jobs.map(job => {
+          const jobAmount = parseFloat(job.actualPrice || job.quotedPrice || '0');
+          subtotal += jobAmount;
+          return {
+            jobId: job.id,
+            date: job.completedAt,
+            description: job.issueDescription,
+            amount: jobAmount
+          };
+        });
+
+        // Apply fleet discount if applicable
+        let discountAmount = 0;
+        if (fleetAccount.pricingTier && fleetAccount.pricingTier !== 'standard') {
+          const discountRate = fleetAccount.pricingTier === 'platinum' ? 0.15 :
+                             fleetAccount.pricingTier === 'gold' ? 0.10 :
+                             fleetAccount.pricingTier === 'silver' ? 0.05 : 0;
+          discountAmount = subtotal * discountRate;
+        }
+
+        const afterDiscount = subtotal - discountAmount;
+        const taxAmount = afterDiscount * 0.0825; // 8.25% tax
+        const totalAmount = afterDiscount + taxAmount;
+
+        // Generate invoice number
+        const invoiceNumber = pdfService.generateInvoiceNumber('FLEET');
+        
+        // Create consolidated invoice
+        const invoice = await storage.createInvoice({
+          fleetAccountId: req.params.fleetId,
+          customerId: fleetAccount.primaryContactUserId || req.session.userId!,
+          invoiceNumber,
+          issueDate: new Date(),
+          dueDate: new Date(Date.now() + (fleetAccount.netTerms || 30) * 24 * 60 * 60 * 1000),
+          subtotal,
+          taxAmount,
+          totalAmount,
+          amountDue: totalAmount,
+          status: 'pending',
+          metadata: {
+            type: 'monthly_consolidated',
+            month: targetMonth,
+            year: targetYear,
+            jobCount: jobs.length,
+            discountAmount,
+            fleetDiscount: discountAmount > 0 ? (discountAmount / subtotal) : 0
+          }
+        });
+
+        // Add line items for each job
+        let sortOrder = 0;
+        for (const jobDetail of jobDetails) {
+          await storage.createInvoiceLineItem({
+            invoiceId: invoice.id,
+            type: 'labor',
+            description: `Job ${jobDetail.jobId.slice(0, 8)} - ${jobDetail.description}`,
+            quantity: 1,
+            unitPrice: jobDetail.amount,
+            totalPrice: jobDetail.amount,
+            sortOrder: sortOrder++
+          });
+        }
+
+        // Add discount line item if applicable
+        if (discountAmount > 0) {
+          await storage.createInvoiceLineItem({
+            invoiceId: invoice.id,
+            type: 'fee',
+            description: `Fleet Discount (${fleetAccount.pricingTier})`,
+            quantity: 1,
+            unitPrice: -discountAmount,
+            totalPrice: -discountAmount,
+            sortOrder: sortOrder++
+          });
+        }
+
+        // Add tax line item
+        await storage.createInvoiceLineItem({
+          invoiceId: invoice.id,
+          type: 'tax',
+          description: 'Tax (8.25%)',
+          quantity: 1,
+          unitPrice: taxAmount,
+          totalPrice: taxAmount,
+          sortOrder: sortOrder++
+        });
+
+        const invoiceWithLineItems = await storage.getInvoiceWithLineItems(invoice.id);
+        
+        res.json({
+          message: 'Monthly fleet invoice generated successfully',
+          invoice: invoiceWithLineItems,
+          summary: {
+            month: `${targetMonth + 1}/${targetYear}`,
+            jobCount: jobs.length,
+            subtotal,
+            discountAmount,
+            taxAmount,
+            totalAmount
+          }
+        });
+      } catch (error) {
+        console.error('Generate monthly fleet invoice error:', error);
+        res.status(500).json({ message: 'Failed to generate monthly invoice' });
       }
     }
   );

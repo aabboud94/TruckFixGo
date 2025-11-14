@@ -838,6 +838,7 @@ export interface IStorage {
   getInvoiceByJobId(jobId: string): Promise<Invoice | undefined>;
   getUnpaidInvoices(customerId: string): Promise<Invoice[]>;
   markInvoiceAsPaid(invoiceId: string, paidAt: Date): Promise<boolean>;
+  getInvoiceTransactions(invoiceId: string): Promise<Transaction[]>;
   
   // Invoice defaults management
   createInvoiceDefault(data: InsertInvoiceDefault): Promise<InvoiceDefault>;
@@ -4726,6 +4727,12 @@ export class PostgreSQLStorage implements IStorage {
         )
       )
       .orderBy(asc(invoices.dueDate));
+  }
+
+  async getInvoiceTransactions(invoiceId: string): Promise<Transaction[]> {
+    return await db.select().from(transactions)
+      .where(eq(transactions.invoiceId, invoiceId))
+      .orderBy(desc(transactions.createdAt));
   }
 
   async markInvoiceAsPaid(invoiceId: string, paidAt: Date): Promise<boolean> {

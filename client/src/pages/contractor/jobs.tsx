@@ -366,15 +366,64 @@ export default function ContractorJobs() {
               )}
 
               {activeTab === "completed" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(`/contractor/jobs/${job.id}`)}
-                  data-testid={`button-details-${job.id}`}
-                >
-                  View Details
-                  <ChevronRight className="w-3 h-3 ml-1" />
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/contractor/jobs/${job.id}`)}
+                    data-testid={`button-details-${job.id}`}
+                  >
+                    View Details
+                    <ChevronRight className="w-3 h-3 ml-1" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        // Create invoice if it doesn't exist
+                        const response = await fetch(`/api/jobs/${job.id}/invoice`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' }
+                        });
+                        
+                        if (response.ok) {
+                          const data = await response.json();
+                          const invoiceId = data.invoice.id;
+                          
+                          // Download the invoice PDF
+                          const pdfResponse = await fetch(`/api/invoices/${invoiceId}/pdf`);
+                          if (pdfResponse.ok) {
+                            const blob = await pdfResponse.blob();
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `invoice-${job.jobNumber}.pdf`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                            
+                            toast({
+                              title: "Invoice Downloaded",
+                              description: "The invoice PDF has been downloaded successfully"
+                            });
+                          }
+                        }
+                      } catch (error) {
+                        toast({
+                          title: "Download Failed",
+                          description: "Failed to download invoice",
+                          variant: "destructive"
+                        });
+                      }
+                    }}
+                    data-testid={`button-invoice-${job.id}`}
+                  >
+                    <Download className="w-3 h-3 mr-1" />
+                    Invoice
+                  </Button>
+                </>
               )}
 
               {job.location && (
