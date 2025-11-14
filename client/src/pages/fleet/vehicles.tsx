@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   ArrowLeft,
   Plus,
@@ -27,7 +29,9 @@ import {
   Calendar,
   AlertCircle,
   FileText,
-  Users
+  Users,
+  Clock,
+  Wrench
 } from "lucide-react";
 
 const vehicleSchema = z.object({
@@ -43,6 +47,30 @@ const vehicleSchema = z.object({
 });
 
 type VehicleForm = z.infer<typeof vehicleSchema>;
+
+// Batch scheduling schema
+const batchScheduleSchema = z.object({
+  vehicleIds: z.array(z.string()).min(1, "Select at least one vehicle"),
+  serviceType: z.string().min(1, "Service type is required"),
+  scheduledDate: z.string().min(1, "Scheduled date is required"),
+  urgency: z.enum(['routine', 'urgent', 'emergency']),
+  description: z.string().optional(),
+  estimatedDuration: z.string().optional()
+});
+
+type BatchScheduleForm = z.infer<typeof batchScheduleSchema>;
+
+// PM Schedule schema
+const pmScheduleSchema = z.object({
+  vehicleId: z.string().min(1, "Vehicle is required"),
+  serviceType: z.string().min(1, "Service type is required"),
+  frequency: z.enum(['weekly', 'monthly', 'quarterly', 'annually']),
+  nextServiceDate: z.string().min(1, "Next service date is required"),
+  lastServiceDate: z.string().optional(),
+  notes: z.string().optional()
+});
+
+type PmScheduleForm = z.infer<typeof pmScheduleSchema>;
 
 interface Vehicle {
   id: string;
@@ -69,6 +97,9 @@ export default function VehicleManagement() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [isBatchScheduleDialogOpen, setIsBatchScheduleDialogOpen] = useState(false);
+  const [isPmScheduleDialogOpen, setIsPmScheduleDialogOpen] = useState(false);
+  const [selectedVehicleIds, setSelectedVehicleIds] = useState<string[]>([]);
 
   // Get fleet account first
   const { data: fleetAccounts, isLoading: isLoadingFleet } = useQuery({
@@ -120,6 +151,30 @@ export default function VehicleManagement() {
       licensePlate: "",
       currentOdometer: "",
       assignedDriver: ""
+    }
+  });
+
+  const batchScheduleForm = useForm<BatchScheduleForm>({
+    resolver: zodResolver(batchScheduleSchema),
+    defaultValues: {
+      vehicleIds: [],
+      serviceType: "",
+      scheduledDate: "",
+      urgency: "routine",
+      description: "",
+      estimatedDuration: "120"
+    }
+  });
+
+  const pmScheduleForm = useForm<PmScheduleForm>({
+    resolver: zodResolver(pmScheduleSchema),
+    defaultValues: {
+      vehicleId: "",
+      serviceType: "",
+      frequency: "monthly",
+      nextServiceDate: "",
+      lastServiceDate: "",
+      notes: ""
     }
   });
 
@@ -206,6 +261,98 @@ export default function VehicleManagement() {
     }
   });
 
+  // Batch scheduling mutation
+  const batchScheduleMutation = useMutation({
+    mutationFn: async (data: BatchScheduleForm) => {
+      if (!fleetId) throw new Error('Fleet ID not available');
+      const payload = {
+        ...data,
+        estimatedDuration: data.estimatedDuration ? parseInt(data.estimatedDuration) : undefined
+      };
+      return await apiRequest('POST', `/api/fleet/${fleetId}/batch-jobs`, payload);
+    },
+    onSuccess: (response) => {
+      toast({
+        title: "Jobs Scheduled",
+        description: response.message || "Successfully scheduled maintenance jobs"
+      });
+      setIsBatchScheduleDialogOpen(false);
+      setSelectedVehicleIds([]);
+      batchScheduleForm.reset();
+      queryClient.invalidateQueries({ queryKey: ['/api/jobs'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Schedule Jobs",
+        description: error.message || "An error occurred. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Get PM schedules query
+  const { data: pmSchedulesData, refetch: refetchPmSchedules } = useQuery({
+    queryKey: [`/api/fleet/${fleetId}/pm-schedules`],
+    enabled: !!fleetId,
+    queryFn: async () => {
+      if (!fleetId) return { schedules: [] };
+      try {
+        return await apiRequest('GET', `/api/fleet/${fleetId}/pm-schedules`);
+      } catch (error) {
+        console.error('Failed to fetch PM schedules:', error);
+        return { schedules: [] };
+      }
+    }
+  });
+
+  const pmSchedules = pmSchedulesData?.schedules || [];
+
+  // Create PM schedule mutation
+  const createPmScheduleMutation = useMutation({
+    mutationFn: async (data: PmScheduleForm) => {
+      if (!fleetId) throw new Error('Fleet ID not available');
+      return await apiRequest('POST', `/api/fleet/${fleetId}/pm-schedules`, data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "PM Schedule Created",
+        description: "Successfully created preventive maintenance schedule"
+      });
+      setIsPmScheduleDialogOpen(false);
+      pmScheduleForm.reset();
+      refetchPmSchedules();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Create PM Schedule",
+        description: error.message || "An error occurred. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Delete PM schedule mutation
+  const deletePmScheduleMutation = useMutation({
+    mutationFn: async (scheduleId: string) => {
+      if (!fleetId) throw new Error('Fleet ID not available');
+      return await apiRequest('DELETE', `/api/fleet/${fleetId}/pm-schedules/${scheduleId}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "PM Schedule Deleted",
+        description: "Successfully deleted preventive maintenance schedule"
+      });
+      refetchPmSchedules();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Delete PM Schedule",
+        description: error.message || "An error occurred. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
   const onSubmit = async (data: VehicleForm) => {
     if (isEditDialogOpen && selectedVehicle) {
       updateVehicleMutation.mutate({ vehicleId: selectedVehicle.id, data });
@@ -233,6 +380,30 @@ export default function VehicleManagement() {
   const handleDelete = (vehicle: Vehicle) => {
     if (confirm(`Are you sure you want to delete vehicle ${vehicle.unitNumber}?`)) {
       deleteVehicleMutation.mutate(vehicle.id);
+    }
+  };
+
+  const handleBatchSchedule = async (data: BatchScheduleForm) => {
+    batchScheduleMutation.mutate(data);
+  };
+
+  const handlePmSchedule = async (data: PmScheduleForm) => {
+    createPmScheduleMutation.mutate(data);
+  };
+
+  const toggleVehicleSelection = (vehicleId: string) => {
+    setSelectedVehicleIds(prev => 
+      prev.includes(vehicleId)
+        ? prev.filter(id => id !== vehicleId)
+        : [...prev, vehicleId]
+    );
+  };
+
+  const selectAllVehicles = () => {
+    if (selectedVehicleIds.length === vehicles.length) {
+      setSelectedVehicleIds([]);
+    } else {
+      setSelectedVehicleIds(vehicles.map((v: Vehicle) => v.id));
     }
   };
 
@@ -329,6 +500,34 @@ export default function VehicleManagement() {
               <span className="ml-4 text-2xl font-bold text-primary">Vehicle Management</span>
             </div>
             <div className="flex items-center space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  if (selectedVehicleIds.length === 0) {
+                    toast({
+                      title: "No Vehicles Selected",
+                      description: "Please select vehicles from the table first",
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+                  batchScheduleForm.setValue('vehicleIds', selectedVehicleIds);
+                  setIsBatchScheduleDialogOpen(true);
+                }}
+                disabled={selectedVehicleIds.length === 0}
+                data-testid="button-batch-schedule"
+              >
+                <Calendar className="h-4 w-4 mr-2" />
+                Batch Schedule ({selectedVehicleIds.length})
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setIsPmScheduleDialogOpen(true)}
+                data-testid="button-pm-schedule"
+              >
+                <Clock className="h-4 w-4 mr-2" />
+                PM Schedule
+              </Button>
               <Button variant="outline" onClick={handleImportCSV} data-testid="button-import">
                 <Upload className="h-4 w-4 mr-2" />
                 Import CSV
@@ -611,6 +810,13 @@ export default function VehicleManagement() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[50px]">
+                          <Checkbox 
+                            checked={selectedVehicleIds.length === vehicles.length && vehicles.length > 0}
+                            onCheckedChange={selectAllVehicles}
+                            data-testid="checkbox-select-all"
+                          />
+                        </TableHead>
                         <TableHead>Unit #</TableHead>
                         <TableHead>VIN</TableHead>
                         <TableHead>Make/Model</TableHead>
@@ -624,6 +830,13 @@ export default function VehicleManagement() {
                     <TableBody>
                       {vehicles.map((vehicle: Vehicle) => (
                         <TableRow key={vehicle.id} data-testid={`vehicle-row-${vehicle.id}`}>
+                          <TableCell>
+                            <Checkbox 
+                              checked={selectedVehicleIds.includes(vehicle.id)}
+                              onCheckedChange={() => toggleVehicleSelection(vehicle.id)}
+                              data-testid={`checkbox-vehicle-${vehicle.id}`}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">{vehicle.unitNumber}</TableCell>
                           <TableCell className="font-mono text-xs">{vehicle.vin}</TableCell>
                           <TableCell>{vehicle.make} {vehicle.model}</TableCell>
@@ -952,6 +1165,299 @@ export default function VehicleManagement() {
                   disabled={updateVehicleMutation.isPending}
                 >
                   {updateVehicleMutation.isPending ? "Updating..." : "Update Vehicle"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch Scheduling Dialog */}
+      <Dialog open={isBatchScheduleDialogOpen} onOpenChange={setIsBatchScheduleDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Schedule Batch Maintenance</DialogTitle>
+            <DialogDescription>
+              Schedule maintenance for {selectedVehicleIds.length} selected vehicle(s)
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...batchScheduleForm}>
+            <form onSubmit={batchScheduleForm.handleSubmit(handleBatchSchedule)} className="space-y-4">
+              <FormField
+                control={batchScheduleForm.control}
+                name="serviceType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Service Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-batch-service-type">
+                          <SelectValue placeholder="Select service type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Oil Change">Oil Change</SelectItem>
+                        <SelectItem value="Tire Rotation">Tire Rotation</SelectItem>
+                        <SelectItem value="Brake Inspection">Brake Inspection</SelectItem>
+                        <SelectItem value="DOT Inspection">DOT Inspection</SelectItem>
+                        <SelectItem value="General Maintenance">General Maintenance</SelectItem>
+                        <SelectItem value="Engine Service">Engine Service</SelectItem>
+                        <SelectItem value="Transmission Service">Transmission Service</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={batchScheduleForm.control}
+                name="scheduledDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Scheduled Date</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="date" 
+                        {...field} 
+                        data-testid="input-batch-scheduled-date"
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={batchScheduleForm.control}
+                name="urgency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Urgency Level</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-batch-urgency">
+                          <SelectValue placeholder="Select urgency" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="routine">Routine</SelectItem>
+                        <SelectItem value="urgent">Urgent</SelectItem>
+                        <SelectItem value="emergency">Emergency</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={batchScheduleForm.control}
+                name="estimatedDuration"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Estimated Duration (minutes)</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        {...field} 
+                        placeholder="120" 
+                        data-testid="input-batch-duration"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={batchScheduleForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        {...field} 
+                        placeholder="Additional notes or special instructions..." 
+                        data-testid="textarea-batch-description"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsBatchScheduleDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  data-testid="button-submit-batch-schedule"
+                  disabled={batchScheduleMutation.isPending}
+                >
+                  {batchScheduleMutation.isPending ? "Scheduling..." : "Schedule Maintenance"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* PM Scheduling Dialog */}
+      <Dialog open={isPmScheduleDialogOpen} onOpenChange={setIsPmScheduleDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Create PM Schedule</DialogTitle>
+            <DialogDescription>
+              Set up a recurring preventive maintenance schedule for a vehicle
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...pmScheduleForm}>
+            <form onSubmit={pmScheduleForm.handleSubmit(handlePmSchedule)} className="space-y-4">
+              <FormField
+                control={pmScheduleForm.control}
+                name="vehicleId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Vehicle</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-pm-vehicle">
+                          <SelectValue placeholder="Select vehicle" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {vehicles.map((vehicle: Vehicle) => (
+                          <SelectItem key={vehicle.id} value={vehicle.id}>
+                            {vehicle.unitNumber} - {vehicle.make} {vehicle.model}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={pmScheduleForm.control}
+                name="serviceType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Service Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-pm-service-type">
+                          <SelectValue placeholder="Select service type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Oil Change">Oil Change</SelectItem>
+                        <SelectItem value="Tire Rotation">Tire Rotation</SelectItem>
+                        <SelectItem value="Brake Inspection">Brake Inspection</SelectItem>
+                        <SelectItem value="DOT Inspection">DOT Inspection</SelectItem>
+                        <SelectItem value="General Maintenance">General Maintenance</SelectItem>
+                        <SelectItem value="Engine Service">Engine Service</SelectItem>
+                        <SelectItem value="Transmission Service">Transmission Service</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={pmScheduleForm.control}
+                name="frequency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Frequency</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-pm-frequency">
+                          <SelectValue placeholder="Select frequency" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                        <SelectItem value="annually">Annually</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={pmScheduleForm.control}
+                name="nextServiceDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Next Service Date</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="date" 
+                        {...field} 
+                        data-testid="input-pm-next-date"
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={pmScheduleForm.control}
+                name="lastServiceDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Last Service Date (Optional)</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="date" 
+                        {...field} 
+                        data-testid="input-pm-last-date"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={pmScheduleForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notes (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        {...field} 
+                        placeholder="Additional notes about this PM schedule..." 
+                        data-testid="textarea-pm-notes"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsPmScheduleDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  data-testid="button-submit-pm-schedule"
+                  disabled={createPmScheduleMutation.isPending}
+                >
+                  {createPmScheduleMutation.isPending ? "Creating..." : "Create PM Schedule"}
                 </Button>
               </DialogFooter>
             </form>
