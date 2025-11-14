@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { 
   Camera, Upload, X, ZoomIn, Download, Trash2, 
-  Image as ImageIcon, ChevronLeft, ChevronRight, Loader2 
+  Image as ImageIcon, ChevronLeft, ChevronRight, Loader2, FileImage 
 } from "lucide-react";
 
 interface JobPhoto {
@@ -54,6 +54,9 @@ export default function JobPhotoGallery({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [photoType, setPhotoType] = useState<'before' | 'during' | 'after'>('before');
   const [description, setDescription] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Group photos by type
   const photosByType = {
@@ -85,6 +88,72 @@ export default function JobPhotoGallery({
     if (e.target.files) {
       const files = Array.from(e.target.files).slice(0, 5); // Max 5 files
       setSelectedFiles(files);
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    const imageFiles = droppedFiles.filter(file => file.type.startsWith('image/')).slice(0, 5);
+    
+    if (imageFiles.length > 0) {
+      setSelectedFiles(imageFiles);
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Invalid files",
+        description: "Please drop only image files (jpg, png, webp, etc.)",
+      });
+    }
+  };
+
+  const handleDeletePhoto = async (photoId: string) => {
+    if (!confirm('Are you sure you want to delete this photo?')) {
+      return;
+    }
+
+    setDeleting(photoId);
+    try {
+      await apiRequest(`/api/jobs/${jobId}/photos/${photoId}`, {
+        method: 'DELETE',
+      });
+
+      toast({
+        title: "Photo deleted",
+        description: "The photo has been removed successfully",
+      });
+
+      if (onPhotosChange) {
+        onPhotosChange();
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Failed to delete photo",
+      });
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -213,16 +282,41 @@ export default function JobPhotoGallery({
                     <div
                       key={photo.id}
                       className="relative group cursor-pointer rounded-lg overflow-hidden border"
-                      onClick={() => handlePhotoClick(photo, photos.indexOf(photo))}
                       data-testid={`photo-before-${index}`}
                     >
                       <img
                         src={photo.photoUrl}
                         alt={photo.description || `Before photo ${index + 1}`}
                         className="w-full h-32 object-cover transition-transform group-hover:scale-105"
+                        onClick={() => handlePhotoClick(photo, photos.indexOf(photo))}
                       />
-                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-opacity flex items-center justify-center">
-                        <ZoomIn className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-opacity flex items-center justify-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="secondary"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                          onClick={() => handlePhotoClick(photo, photos.indexOf(photo))}
+                        >
+                          <ZoomIn className="h-4 w-4" />
+                        </Button>
+                        {canUpload && (
+                          <Button
+                            size="icon"
+                            variant="destructive"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeletePhoto(photo.id);
+                            }}
+                            disabled={deleting === photo.id}
+                          >
+                            {deleting === photo.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -246,16 +340,41 @@ export default function JobPhotoGallery({
                     <div
                       key={photo.id}
                       className="relative group cursor-pointer rounded-lg overflow-hidden border"
-                      onClick={() => handlePhotoClick(photo, photos.indexOf(photo))}
                       data-testid={`photo-during-${index}`}
                     >
                       <img
                         src={photo.photoUrl}
                         alt={photo.description || `During photo ${index + 1}`}
                         className="w-full h-32 object-cover transition-transform group-hover:scale-105"
+                        onClick={() => handlePhotoClick(photo, photos.indexOf(photo))}
                       />
-                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-opacity flex items-center justify-center">
-                        <ZoomIn className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-opacity flex items-center justify-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="secondary"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                          onClick={() => handlePhotoClick(photo, photos.indexOf(photo))}
+                        >
+                          <ZoomIn className="h-4 w-4" />
+                        </Button>
+                        {canUpload && (
+                          <Button
+                            size="icon"
+                            variant="destructive"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeletePhoto(photo.id);
+                            }}
+                            disabled={deleting === photo.id}
+                          >
+                            {deleting === photo.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -279,16 +398,41 @@ export default function JobPhotoGallery({
                     <div
                       key={photo.id}
                       className="relative group cursor-pointer rounded-lg overflow-hidden border"
-                      onClick={() => handlePhotoClick(photo, photos.indexOf(photo))}
                       data-testid={`photo-after-${index}`}
                     >
                       <img
                         src={photo.photoUrl}
                         alt={photo.description || `After photo ${index + 1}`}
                         className="w-full h-32 object-cover transition-transform group-hover:scale-105"
+                        onClick={() => handlePhotoClick(photo, photos.indexOf(photo))}
                       />
-                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-opacity flex items-center justify-center">
-                        <ZoomIn className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-opacity flex items-center justify-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="secondary"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                          onClick={() => handlePhotoClick(photo, photos.indexOf(photo))}
+                        >
+                          <ZoomIn className="h-4 w-4" />
+                        </Button>
+                        {canUpload && (
+                          <Button
+                            size="icon"
+                            variant="destructive"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeletePhoto(photo.id);
+                            }}
+                            disabled={deleting === photo.id}
+                          >
+                            {deleting === photo.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -385,19 +529,56 @@ export default function JobPhotoGallery({
 
             <div>
               <Label htmlFor="photo-files">Select Photos (max 5)</Label>
-              <Input
-                id="photo-files"
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleFileSelect}
-                disabled={uploading}
-                data-testid="input-photo-files"
-              />
-              {selectedFiles.length > 0 && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  {selectedFiles.length} file(s) selected
+              <div
+                className={`relative border-2 border-dashed rounded-lg p-6 text-center ${
+                  isDragging ? 'border-primary bg-primary/10' : 'border-gray-300'
+                }`}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+              >
+                <FileImage className="mx-auto h-12 w-12 text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground mb-2">
+                  {isDragging ? 'Drop files here...' : 'Drag and drop photos here or click to browse'}
                 </p>
+                <Input
+                  ref={fileInputRef}
+                  id="photo-files"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFileSelect}
+                  disabled={uploading}
+                  className="hidden"
+                  data-testid="input-photo-files"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Browse Files
+                </Button>
+              </div>
+              {selectedFiles.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  <p className="text-sm font-medium">Selected files:</p>
+                  {selectedFiles.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>{file.name} ({(file.size / 1024 / 1024).toFixed(2)}MB)</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedFiles(files => files.filter((_, i) => i !== index))}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 

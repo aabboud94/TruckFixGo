@@ -630,6 +630,7 @@ export interface IStorage {
   
   addJobPhoto(photo: InsertJobPhoto): Promise<JobPhoto>;
   getJobPhotos(jobId: string): Promise<JobPhoto[]>;
+  deleteJobPhoto(photoId: string): Promise<boolean>;
   
   addJobMessage(message: InsertJobMessage): Promise<JobMessage>;
   getJobMessages(jobId: string, limit?: number): Promise<JobMessage[]>;
@@ -2536,6 +2537,13 @@ export class PostgreSQLStorage implements IStorage {
     return await db.select().from(jobPhotos)
       .where(eq(jobPhotos.jobId, jobId))
       .orderBy(desc(jobPhotos.createdAt));
+  }
+
+  async deleteJobPhoto(photoId: string): Promise<boolean> {
+    const result = await db.delete(jobPhotos)
+      .where(eq(jobPhotos.id, photoId))
+      .returning();
+    return result.length > 0;
   }
 
   async addJobMessage(message: InsertJobMessage): Promise<JobMessage> {
