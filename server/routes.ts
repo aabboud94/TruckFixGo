@@ -3528,6 +3528,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
   
+  // Delete a specific photo
+  app.delete('/api/jobs/:jobId/photos/:photoId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { jobId, photoId } = req.params;
+        
+        // Verify job exists and user has permission
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        // Check permissions
+        const userId = req.session.userId!;
+        const user = await storage.getUser(userId);
+        const isAdmin = user?.role === 'admin';
+        const isAssignedContractor = job.contractorId === userId;
+        const isCustomer = job.customerId === userId;
+        const isFleetManager = user?.role === 'fleet_manager' && job.fleetAccountId;
+        
+        if (!isAdmin && !isAssignedContractor && !isCustomer && !isFleetManager) {
+          return res.status(403).json({ message: 'Not authorized to delete photos for this job' });
+        }
+        
+        // Get photo to find filename before deletion
+        const photos = await storage.getJobPhotos(jobId);
+        const photo = photos.find(p => p.id === photoId);
+        
+        if (!photo) {
+          return res.status(404).json({ message: 'Photo not found' });
+        }
+        
+        // Delete from database
+        const deleted = await storage.deleteJobPhoto(photoId);
+        
+        if (deleted) {
+          // Also delete the physical file from object storage
+          try {
+            const privateDir = process.env.PRIVATE_OBJECT_DIR || '/replit-objstore-c279c855-0ac0-434d-9783-ad25c3b34e4d/.private';
+            // Extract filename from photoUrl (format: /api/jobs/{jobId}/photos/{filename})
+            const urlParts = photo.photoUrl.split('/');
+            const filename = urlParts[urlParts.length - 1];
+            const filepath = path.join(privateDir, 'jobs', jobId, filename);
+            
+            await fs.unlink(filepath);
+          } catch (fileError) {
+            console.error('Failed to delete physical file:', fileError);
+            // Continue even if file deletion fails (might already be deleted)
+          }
+        }
+        
+        res.json({
+          message: deleted ? 'Photo deleted successfully' : 'Photo not found',
+          success: deleted
+        });
+      } catch (error) {
+        console.error('Delete photo error:', error);
+        res.status(500).json({ message: 'Failed to delete photo' });
+      }
+    }
+  );
+  
   // LEGACY: Upload photos for job (URL-based, keeping for backward compatibility)
   app.post('/api/jobs/:id/photos',
     requireAuth,
