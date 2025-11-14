@@ -345,6 +345,101 @@ export interface IStorage {
   
   // Helper method to get contractor emails
   getContractorEmails(contractorIds: string[]): Promise<{ contractorId: string; email: string; name: string }[]>;
+  
+  // ==================== DATA EXPORT OPERATIONS ====================
+  
+  // Export fleet vehicles to CSV format
+  getFleetVehiclesForExport(fleetId: string, filters?: {
+    isActive?: boolean;
+    vehicleType?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<any[]>;
+  
+  // Export fleet jobs to CSV format
+  getFleetJobsForExport(fleetId: string, filters?: {
+    status?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+    vehicleId?: string;
+    contractorId?: string;
+  }): Promise<any[]>;
+  
+  // Export users list to CSV format
+  getUsersForExport(filters?: {
+    role?: string;
+    status?: string;
+    search?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<any[]>;
+  
+  // Export contractors list to CSV format
+  getContractorsForExport(filters?: {
+    status?: string;
+    tier?: string;
+    search?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<any[]>;
+  
+  // Export billing/transaction data to CSV format
+  getBillingDataForExport(filters?: {
+    fleetAccountId?: string;
+    status?: string;
+    type?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<any[]>;
+  
+  // Export fleet analytics data to CSV format
+  getFleetAnalyticsForExport(fleetId: string, filters?: {
+    metric?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+    groupBy?: 'day' | 'week' | 'month';
+  }): Promise<any[]>;
+  
+  // ==================== REPORT GENERATION ====================
+  
+  // Generate fleet maintenance report
+  getFleetMaintenanceReport(fleetId: string, dateFrom: Date, dateTo: Date): Promise<{
+    summary: {
+      totalVehicles: number;
+      totalMaintenanceJobs: number;
+      totalCost: number;
+      averageCostPerVehicle: number;
+      mostFrequentIssues: Array<{ issue: string; count: number; cost: number }>;
+    };
+    details: any[];
+  }>;
+  
+  // Generate fleet cost summary report
+  getFleetCostSummaryReport(fleetId: string, dateFrom: Date, dateTo: Date): Promise<{
+    summary: {
+      totalCost: number;
+      maintenanceCost: number;
+      emergencyRepairCost: number;
+      scheduledServiceCost: number;
+      costByMonth: Array<{ month: string; cost: number }>;
+      costByVehicle: Array<{ vehicle: string; cost: number }>;
+    };
+    details: any[];
+  }>;
+  
+  // Generate admin revenue report
+  getAdminRevenueReport(dateFrom: Date, dateTo: Date): Promise<{
+    summary: {
+      totalRevenue: number;
+      subscriptionRevenue: number;
+      transactionRevenue: number;
+      refunds: number;
+      netRevenue: number;
+      revenueByFleet: Array<{ fleetName: string; revenue: number }>;
+      revenueByMonth: Array<{ month: string; revenue: number }>;
+    };
+    details: any[];
+  }>;
 }
 
 import { db } from "./db";
@@ -9921,6 +10016,686 @@ export class PostgreSQLStorage implements IStorage {
     }));
     
     return results;
+  }
+
+  // ==================== DATA EXPORT OPERATIONS ====================
+  
+  async getFleetVehiclesForExport(fleetId: string, filters?: {
+    isActive?: boolean;
+    vehicleType?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<any[]> {
+    let query = db
+      .select({
+        id: fleetVehicles.id,
+        unitNumber: fleetVehicles.unitNumber,
+        vin: fleetVehicles.vin,
+        year: fleetVehicles.year,
+        make: fleetVehicles.make,
+        model: fleetVehicles.model,
+        vehicleType: fleetVehicles.vehicleType,
+        licensePlate: fleetVehicles.licensePlate,
+        currentOdometer: fleetVehicles.currentOdometer,
+        lastServiceDate: fleetVehicles.lastServiceDate,
+        nextServiceDue: fleetVehicles.nextServiceDue,
+        isActive: fleetVehicles.isActive,
+        notes: fleetVehicles.notes,
+        createdAt: fleetVehicles.createdAt,
+        updatedAt: fleetVehicles.updatedAt
+      })
+      .from(fleetVehicles)
+      .where(eq(fleetVehicles.fleetAccountId, fleetId));
+
+    const conditions: any[] = [eq(fleetVehicles.fleetAccountId, fleetId)];
+    
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(fleetVehicles.isActive, filters.isActive));
+    }
+    if (filters?.vehicleType) {
+      conditions.push(eq(fleetVehicles.vehicleType, filters.vehicleType));
+    }
+    if (filters?.dateFrom) {
+      conditions.push(gte(fleetVehicles.createdAt, filters.dateFrom));
+    }
+    if (filters?.dateTo) {
+      conditions.push(lte(fleetVehicles.createdAt, filters.dateTo));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query.orderBy(asc(fleetVehicles.unitNumber));
+  }
+
+  async getFleetJobsForExport(fleetId: string, filters?: {
+    status?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+    vehicleId?: string;
+    contractorId?: string;
+  }): Promise<any[]> {
+    let query = db
+      .select({
+        id: jobs.id,
+        jobNumber: jobs.jobNumber,
+        createdAt: jobs.createdAt,
+        serviceType: serviceTypes.name,
+        vehicleId: jobs.vehicleId,
+        vehicleUnit: fleetVehicles.unitNumber,
+        description: jobs.description,
+        status: jobs.status,
+        estimatedCost: jobs.estimatedCost,
+        actualCost: transactions.amount,
+        contractorName: sql<string>`COALESCE(CONCAT(${users.firstName}, ' ', ${users.lastName}), 'Unassigned')`,
+        completedAt: jobs.completedAt,
+        customerName: jobs.customerName,
+        location: jobs.location,
+        notes: jobs.notes
+      })
+      .from(jobs)
+      .leftJoin(serviceTypes, eq(jobs.serviceTypeId, serviceTypes.id))
+      .leftJoin(fleetVehicles, eq(jobs.vehicleId, fleetVehicles.id))
+      .leftJoin(contractorProfiles, eq(jobs.contractorId, contractorProfiles.id))
+      .leftJoin(users, eq(contractorProfiles.userId, users.id))
+      .leftJoin(transactions, and(
+        eq(jobs.id, transactions.jobId),
+        eq(transactions.status, 'completed')
+      ));
+
+    const conditions: any[] = [eq(jobs.fleetAccountId, fleetId)];
+    
+    if (filters?.status) {
+      conditions.push(eq(jobs.status, filters.status));
+    }
+    if (filters?.dateFrom) {
+      conditions.push(gte(jobs.createdAt, filters.dateFrom));
+    }
+    if (filters?.dateTo) {
+      conditions.push(lte(jobs.createdAt, filters.dateTo));
+    }
+    if (filters?.vehicleId) {
+      conditions.push(eq(jobs.vehicleId, filters.vehicleId));
+    }
+    if (filters?.contractorId) {
+      conditions.push(eq(jobs.contractorId, filters.contractorId));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query.orderBy(desc(jobs.createdAt));
+  }
+
+  async getUsersForExport(filters?: {
+    role?: string;
+    status?: string;
+    search?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<any[]> {
+    let query = db
+      .select({
+        id: users.id,
+        email: users.email,
+        phone: users.phone,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        name: sql<string>`CONCAT(${users.firstName}, ' ', ${users.lastName})`,
+        role: users.role,
+        isActive: users.isActive,
+        emailVerified: users.emailVerified,
+        phoneVerified: users.phoneVerified,
+        createdAt: users.createdAt,
+        lastLogin: users.lastLogin,
+        notificationsEnabled: users.notificationsEnabled
+      })
+      .from(users);
+
+    const conditions: any[] = [];
+    
+    if (filters?.role) {
+      conditions.push(eq(users.role, filters.role));
+    }
+    if (filters?.status === 'active') {
+      conditions.push(eq(users.isActive, true));
+    } else if (filters?.status === 'inactive') {
+      conditions.push(eq(users.isActive, false));
+    }
+    if (filters?.search) {
+      conditions.push(
+        or(
+          ilike(users.email, `%${filters.search}%`),
+          ilike(users.firstName, `%${filters.search}%`),
+          ilike(users.lastName, `%${filters.search}%`),
+          ilike(users.phone, `%${filters.search}%`)
+        )
+      );
+    }
+    if (filters?.dateFrom) {
+      conditions.push(gte(users.createdAt, filters.dateFrom));
+    }
+    if (filters?.dateTo) {
+      conditions.push(lte(users.createdAt, filters.dateTo));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query.orderBy(desc(users.createdAt));
+  }
+
+  async getContractorsForExport(filters?: {
+    status?: string;
+    tier?: string;
+    search?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<any[]> {
+    let query = db
+      .select({
+        id: contractorProfiles.id,
+        userId: contractorProfiles.userId,
+        businessName: contractorProfiles.businessName,
+        email: users.email,
+        phone: users.phone,
+        status: contractorProfiles.status,
+        performanceTier: contractorProfiles.performanceTier,
+        averageRating: contractorProfiles.averageRating,
+        totalJobsCompleted: contractorProfiles.totalJobsCompleted,
+        totalEarnings: contractorProfiles.totalEarnings,
+        serviceRadius: contractorProfiles.serviceRadius,
+        baseLocationLat: contractorProfiles.baseLocationLat,
+        baseLocationLon: contractorProfiles.baseLocationLon,
+        isAvailable: contractorProfiles.isAvailable,
+        isOnline: contractorProfiles.isOnline,
+        createdAt: contractorProfiles.createdAt,
+        verifiedAt: contractorProfiles.verifiedAt,
+        licenseNumber: contractorProfiles.licenseNumber,
+        insuranceProvider: contractorProfiles.insuranceProvider,
+        insurancePolicyNumber: contractorProfiles.insurancePolicyNumber,
+        insuranceExpiry: contractorProfiles.insuranceExpiry
+      })
+      .from(contractorProfiles)
+      .innerJoin(users, eq(contractorProfiles.userId, users.id));
+
+    const conditions: any[] = [];
+    
+    if (filters?.status) {
+      conditions.push(eq(contractorProfiles.status, filters.status));
+    }
+    if (filters?.tier) {
+      conditions.push(eq(contractorProfiles.performanceTier, filters.tier));
+    }
+    if (filters?.search) {
+      conditions.push(
+        or(
+          ilike(contractorProfiles.businessName, `%${filters.search}%`),
+          ilike(users.email, `%${filters.search}%`),
+          ilike(users.phone, `%${filters.search}%`)
+        )
+      );
+    }
+    if (filters?.dateFrom) {
+      conditions.push(gte(contractorProfiles.createdAt, filters.dateFrom));
+    }
+    if (filters?.dateTo) {
+      conditions.push(lte(contractorProfiles.createdAt, filters.dateTo));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query.orderBy(desc(contractorProfiles.createdAt));
+  }
+
+  async getBillingDataForExport(filters?: {
+    fleetAccountId?: string;
+    status?: string;
+    type?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<any[]> {
+    let query = db
+      .select({
+        id: transactions.id,
+        createdAt: transactions.createdAt,
+        type: transactions.type,
+        fleetAccountName: fleetAccounts.name,
+        fleetAccountId: transactions.fleetAccountId,
+        jobId: transactions.jobId,
+        jobNumber: jobs.jobNumber,
+        description: transactions.description,
+        amount: transactions.amount,
+        status: transactions.status,
+        paymentMethod: transactions.paymentMethod,
+        invoiceId: transactions.invoiceId,
+        invoiceNumber: invoices.invoiceNumber,
+        stripePaymentIntentId: transactions.stripePaymentIntentId,
+        failureReason: transactions.failureReason,
+        metadata: transactions.metadata
+      })
+      .from(transactions)
+      .leftJoin(fleetAccounts, eq(transactions.fleetAccountId, fleetAccounts.id))
+      .leftJoin(jobs, eq(transactions.jobId, jobs.id))
+      .leftJoin(invoices, eq(transactions.invoiceId, invoices.id));
+
+    const conditions: any[] = [];
+    
+    if (filters?.fleetAccountId) {
+      conditions.push(eq(transactions.fleetAccountId, filters.fleetAccountId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(transactions.status, filters.status));
+    }
+    if (filters?.type) {
+      conditions.push(eq(transactions.type, filters.type));
+    }
+    if (filters?.dateFrom) {
+      conditions.push(gte(transactions.createdAt, filters.dateFrom));
+    }
+    if (filters?.dateTo) {
+      conditions.push(lte(transactions.createdAt, filters.dateTo));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query.orderBy(desc(transactions.createdAt));
+  }
+
+  async getFleetAnalyticsForExport(fleetId: string, filters?: {
+    metric?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+    groupBy?: 'day' | 'week' | 'month';
+  }): Promise<any[]> {
+    const startDate = filters?.dateFrom || new Date(new Date().setMonth(new Date().getMonth() - 3));
+    const endDate = filters?.dateTo || new Date();
+    const groupBy = filters?.groupBy || 'month';
+
+    // Get job and cost metrics
+    const query = db
+      .select({
+        date: sql<Date>`DATE_TRUNC('${groupBy}', ${jobs.createdAt})`,
+        totalJobs: sql<number>`COUNT(DISTINCT ${jobs.id})`,
+        completedJobs: sql<number>`COUNT(DISTINCT CASE WHEN ${jobs.status} = 'completed' THEN ${jobs.id} END)`,
+        maintenanceJobs: sql<number>`COUNT(DISTINCT CASE WHEN ${jobs.jobType} = 'maintenance' THEN ${jobs.id} END)`,
+        emergencyJobs: sql<number>`COUNT(DISTINCT CASE WHEN ${jobs.jobType} = 'emergency' THEN ${jobs.id} END)`,
+        totalCost: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`,
+        maintenanceCost: sql<number>`COALESCE(SUM(CASE WHEN ${jobs.jobType} = 'maintenance' THEN ${transactions.amount} END), 0)`,
+        emergencyCost: sql<number>`COALESCE(SUM(CASE WHEN ${jobs.jobType} = 'emergency' THEN ${transactions.amount} END), 0)`,
+        avgCostPerJob: sql<number>`COALESCE(AVG(${transactions.amount}), 0)`,
+        avgCompletionTime: sql<number>`AVG(EXTRACT(EPOCH FROM (${jobs.completedAt} - ${jobs.createdAt})) / 3600)`
+      })
+      .from(jobs)
+      .leftJoin(transactions, and(
+        eq(jobs.id, transactions.jobId),
+        eq(transactions.status, 'completed')
+      ))
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetId),
+          gte(jobs.createdAt, startDate),
+          lte(jobs.createdAt, endDate)
+        )
+      )
+      .groupBy(sql`DATE_TRUNC('${groupBy}', ${jobs.createdAt})`)
+      .orderBy(sql`DATE_TRUNC('${groupBy}', ${jobs.createdAt})`);
+
+    return await query;
+  }
+
+  // ==================== REPORT GENERATION ====================
+
+  async getFleetMaintenanceReport(fleetId: string, dateFrom: Date, dateTo: Date): Promise<{
+    summary: {
+      totalVehicles: number;
+      totalMaintenanceJobs: number;
+      totalCost: number;
+      averageCostPerVehicle: number;
+      mostFrequentIssues: Array<{ issue: string; count: number; cost: number }>;
+    };
+    details: any[];
+  }> {
+    // Get maintenance jobs
+    const maintenanceJobs = await db
+      .select({
+        id: jobs.id,
+        jobNumber: jobs.jobNumber,
+        vehicleId: jobs.vehicleId,
+        vehicleUnit: fleetVehicles.unitNumber,
+        serviceType: serviceTypes.name,
+        description: jobs.description,
+        createdAt: jobs.createdAt,
+        completedAt: jobs.completedAt,
+        status: jobs.status,
+        cost: transactions.amount,
+        contractorName: sql<string>`CONCAT(${users.firstName}, ' ', ${users.lastName})`
+      })
+      .from(jobs)
+      .leftJoin(fleetVehicles, eq(jobs.vehicleId, fleetVehicles.id))
+      .leftJoin(serviceTypes, eq(jobs.serviceTypeId, serviceTypes.id))
+      .leftJoin(contractorProfiles, eq(jobs.contractorId, contractorProfiles.id))
+      .leftJoin(users, eq(contractorProfiles.userId, users.id))
+      .leftJoin(transactions, and(
+        eq(jobs.id, transactions.jobId),
+        eq(transactions.status, 'completed')
+      ))
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetId),
+          eq(jobs.jobType, 'maintenance'),
+          gte(jobs.createdAt, dateFrom),
+          lte(jobs.createdAt, dateTo)
+        )
+      )
+      .orderBy(desc(jobs.createdAt));
+
+    // Get vehicle count
+    const vehicleCount = await db
+      .select({ count: sql<number>`COUNT(DISTINCT ${fleetVehicles.id})` })
+      .from(fleetVehicles)
+      .where(eq(fleetVehicles.fleetAccountId, fleetId));
+
+    // Get issue frequency
+    const issueFrequency = await db
+      .select({
+        serviceType: serviceTypes.name,
+        count: sql<number>`COUNT(${jobs.id})`,
+        totalCost: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
+      })
+      .from(jobs)
+      .leftJoin(serviceTypes, eq(jobs.serviceTypeId, serviceTypes.id))
+      .leftJoin(transactions, and(
+        eq(jobs.id, transactions.jobId),
+        eq(transactions.status, 'completed')
+      ))
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetId),
+          eq(jobs.jobType, 'maintenance'),
+          gte(jobs.createdAt, dateFrom),
+          lte(jobs.createdAt, dateTo)
+        )
+      )
+      .groupBy(serviceTypes.name)
+      .orderBy(desc(sql`COUNT(${jobs.id})`))
+      .limit(5);
+
+    const totalCost = maintenanceJobs.reduce((sum, job) => sum + (job.cost || 0), 0);
+    const totalVehicles = vehicleCount[0]?.count || 0;
+
+    return {
+      summary: {
+        totalVehicles,
+        totalMaintenanceJobs: maintenanceJobs.length,
+        totalCost,
+        averageCostPerVehicle: totalVehicles > 0 ? totalCost / totalVehicles : 0,
+        mostFrequentIssues: issueFrequency.map(item => ({
+          issue: item.serviceType || 'Unknown',
+          count: Number(item.count),
+          cost: Number(item.totalCost)
+        }))
+      },
+      details: maintenanceJobs
+    };
+  }
+
+  async getFleetCostSummaryReport(fleetId: string, dateFrom: Date, dateTo: Date): Promise<{
+    summary: {
+      totalCost: number;
+      maintenanceCost: number;
+      emergencyRepairCost: number;
+      scheduledServiceCost: number;
+      costByMonth: Array<{ month: string; cost: number }>;
+      costByVehicle: Array<{ vehicle: string; cost: number }>;
+    };
+    details: any[];
+  }> {
+    // Get costs by job type
+    const costsByType = await db
+      .select({
+        jobType: jobs.jobType,
+        totalCost: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
+      })
+      .from(jobs)
+      .leftJoin(transactions, and(
+        eq(jobs.id, transactions.jobId),
+        eq(transactions.status, 'completed')
+      ))
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetId),
+          gte(jobs.createdAt, dateFrom),
+          lte(jobs.createdAt, dateTo)
+        )
+      )
+      .groupBy(jobs.jobType);
+
+    // Get costs by month
+    const costsByMonth = await db
+      .select({
+        month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${jobs.createdAt}), 'YYYY-MM')`,
+        totalCost: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
+      })
+      .from(jobs)
+      .leftJoin(transactions, and(
+        eq(jobs.id, transactions.jobId),
+        eq(transactions.status, 'completed')
+      ))
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetId),
+          gte(jobs.createdAt, dateFrom),
+          lte(jobs.createdAt, dateTo)
+        )
+      )
+      .groupBy(sql`DATE_TRUNC('month', ${jobs.createdAt})`)
+      .orderBy(sql`DATE_TRUNC('month', ${jobs.createdAt})`);
+
+    // Get costs by vehicle
+    const costsByVehicle = await db
+      .select({
+        vehicleUnit: fleetVehicles.unitNumber,
+        totalCost: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
+      })
+      .from(jobs)
+      .leftJoin(fleetVehicles, eq(jobs.vehicleId, fleetVehicles.id))
+      .leftJoin(transactions, and(
+        eq(jobs.id, transactions.jobId),
+        eq(transactions.status, 'completed')
+      ))
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetId),
+          gte(jobs.createdAt, dateFrom),
+          lte(jobs.createdAt, dateTo)
+        )
+      )
+      .groupBy(fleetVehicles.unitNumber)
+      .orderBy(desc(sql`COALESCE(SUM(${transactions.amount}), 0)`))
+      .limit(10);
+
+    // Get detailed transactions
+    const details = await db
+      .select({
+        date: jobs.createdAt,
+        jobNumber: jobs.jobNumber,
+        jobType: jobs.jobType,
+        vehicleUnit: fleetVehicles.unitNumber,
+        serviceType: serviceTypes.name,
+        description: jobs.description,
+        amount: transactions.amount,
+        status: transactions.status
+      })
+      .from(jobs)
+      .leftJoin(fleetVehicles, eq(jobs.vehicleId, fleetVehicles.id))
+      .leftJoin(serviceTypes, eq(jobs.serviceTypeId, serviceTypes.id))
+      .leftJoin(transactions, and(
+        eq(jobs.id, transactions.jobId),
+        eq(transactions.status, 'completed')
+      ))
+      .where(
+        and(
+          eq(jobs.fleetAccountId, fleetId),
+          gte(jobs.createdAt, dateFrom),
+          lte(jobs.createdAt, dateTo)
+        )
+      )
+      .orderBy(desc(jobs.createdAt));
+
+    const costByType = costsByType.reduce((acc, item) => {
+      acc[item.jobType || 'other'] = Number(item.totalCost);
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      summary: {
+        totalCost: Object.values(costByType).reduce((sum, cost) => sum + cost, 0),
+        maintenanceCost: costByType['maintenance'] || 0,
+        emergencyRepairCost: costByType['emergency'] || 0,
+        scheduledServiceCost: costByType['scheduled'] || 0,
+        costByMonth: costsByMonth.map(item => ({
+          month: item.month,
+          cost: Number(item.totalCost)
+        })),
+        costByVehicle: costsByVehicle.map(item => ({
+          vehicle: item.vehicleUnit || 'Unknown',
+          cost: Number(item.totalCost)
+        }))
+      },
+      details
+    };
+  }
+
+  async getAdminRevenueReport(dateFrom: Date, dateTo: Date): Promise<{
+    summary: {
+      totalRevenue: number;
+      subscriptionRevenue: number;
+      transactionRevenue: number;
+      refunds: number;
+      netRevenue: number;
+      revenueByFleet: Array<{ fleetName: string; revenue: number }>;
+      revenueByMonth: Array<{ month: string; revenue: number }>;
+    };
+    details: any[];
+  }> {
+    // Get all revenue transactions
+    const revenueTransactions = await db
+      .select({
+        id: transactions.id,
+        createdAt: transactions.createdAt,
+        type: transactions.type,
+        fleetAccountId: transactions.fleetAccountId,
+        fleetName: fleetAccounts.name,
+        amount: transactions.amount,
+        status: transactions.status,
+        description: transactions.description
+      })
+      .from(transactions)
+      .leftJoin(fleetAccounts, eq(transactions.fleetAccountId, fleetAccounts.id))
+      .where(
+        and(
+          eq(transactions.status, 'completed'),
+          gte(transactions.createdAt, dateFrom),
+          lte(transactions.createdAt, dateTo)
+        )
+      )
+      .orderBy(desc(transactions.createdAt));
+
+    // Get subscription revenue
+    const subscriptionRevenue = await db
+      .select({
+        totalRevenue: sql<number>`COALESCE(SUM(${billingHistory.amount}), 0)`
+      })
+      .from(billingHistory)
+      .where(
+        and(
+          eq(billingHistory.status, 'paid'),
+          gte(billingHistory.createdAt, dateFrom),
+          lte(billingHistory.createdAt, dateTo)
+        )
+      );
+
+    // Get refunds
+    const refundAmount = await db
+      .select({
+        totalRefunds: sql<number>`COALESCE(SUM(${refunds.amount}), 0)`
+      })
+      .from(refunds)
+      .where(
+        and(
+          eq(refunds.status, 'completed'),
+          gte(refunds.createdAt, dateFrom),
+          lte(refunds.createdAt, dateTo)
+        )
+      );
+
+    // Get revenue by fleet
+    const revenueByFleet = await db
+      .select({
+        fleetName: fleetAccounts.name,
+        totalRevenue: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
+      })
+      .from(transactions)
+      .leftJoin(fleetAccounts, eq(transactions.fleetAccountId, fleetAccounts.id))
+      .where(
+        and(
+          eq(transactions.status, 'completed'),
+          gte(transactions.createdAt, dateFrom),
+          lte(transactions.createdAt, dateTo)
+        )
+      )
+      .groupBy(fleetAccounts.name)
+      .orderBy(desc(sql`COALESCE(SUM(${transactions.amount}), 0)`))
+      .limit(10);
+
+    // Get revenue by month
+    const revenueByMonth = await db
+      .select({
+        month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${transactions.createdAt}), 'YYYY-MM')`,
+        totalRevenue: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.status, 'completed'),
+          gte(transactions.createdAt, dateFrom),
+          lte(transactions.createdAt, dateTo)
+        )
+      )
+      .groupBy(sql`DATE_TRUNC('month', ${transactions.createdAt})`)
+      .orderBy(sql`DATE_TRUNC('month', ${transactions.createdAt})`);
+
+    const transactionRevenue = revenueTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const subscriptionTotal = Number(subscriptionRevenue[0]?.totalRevenue) || 0;
+    const refundTotal = Number(refundAmount[0]?.totalRefunds) || 0;
+    const totalRevenue = transactionRevenue + subscriptionTotal;
+
+    return {
+      summary: {
+        totalRevenue,
+        subscriptionRevenue: subscriptionTotal,
+        transactionRevenue,
+        refunds: refundTotal,
+        netRevenue: totalRevenue - refundTotal,
+        revenueByFleet: revenueByFleet.map(item => ({
+          fleetName: item.fleetName || 'Unknown',
+          revenue: Number(item.totalRevenue)
+        })),
+        revenueByMonth: revenueByMonth.map(item => ({
+          month: item.month,
+          revenue: Number(item.totalRevenue)
+        }))
+      },
+      details: revenueTransactions
+    };
   }
 }
 

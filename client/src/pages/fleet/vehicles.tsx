@@ -414,46 +414,58 @@ export default function VehicleManagement() {
     });
   };
 
-  const handleExportCSV = () => {
-    if (vehicles.length === 0) {
+  const handleExportCSV = async () => {
+    if (!fleetId) {
       toast({
-        title: "No Data",
-        description: "No vehicles to export",
+        title: "Export Failed",
+        description: "No fleet account found",
         variant: "destructive"
       });
       return;
     }
-    
-    // Create CSV content
-    const headers = ['Unit Number', 'VIN', 'Year', 'Make', 'Model', 'Type', 'License Plate', 'Odometer'];
-    const rows = vehicles.map((v: Vehicle) => [
-      v.unitNumber,
-      v.vin,
-      v.year,
-      v.make,
-      v.model,
-      v.vehicleType,
-      v.licensePlate,
-      v.currentOdometer
-    ]);
-    
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
-    
-    // Download CSV
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `vehicles_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    
-    toast({
-      title: "Export Successful",
-      description: `Exported ${vehicles.length} vehicles to CSV`
-    });
+
+    try {
+      // Call server-side export endpoint
+      const response = await fetch(`/api/fleet/${fleetId}/vehicles/export`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Accept': 'text/csv'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+
+      // Get filename from Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const filenameMatch = contentDisposition?.match(/filename="?(.+?)"?$/);
+      const filename = filenameMatch ? filenameMatch[1] : `fleet-vehicles-${Date.now()}.csv`;
+
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Export Successful",
+        description: `Vehicles exported to ${filename}`,
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to export vehicles. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   // Calculate stats

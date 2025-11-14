@@ -347,27 +347,53 @@ export default function AdminUsers() {
 
   const handleExport = async () => {
     try {
-      const data = await apiRequest<string>('POST', '/api/admin/users/export', { 
-        format: 'csv',
-        filters: { role: roleFilter, status: statusFilter }
-      });
+      // Build query parameters for filtering
+      const params = new URLSearchParams();
+      if (roleFilter !== 'all') params.append('role', roleFilter);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (searchQuery) params.append('search', searchQuery);
       
-      const blob = new Blob([data], { type: 'text/csv' });
+      const queryString = params.toString() ? `?${params.toString()}` : '';
+      
+      // Call server-side export endpoint
+      const response = await fetch(`/api/admin/users/export${queryString}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Accept': 'text/csv'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+
+      // Get filename from Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const filenameMatch = contentDisposition?.match(/filename="?(.+?)"?$/);
+      const filename = filenameMatch ? filenameMatch[1] : `users-${Date.now()}.csv`;
+
+      // Create blob and download
+      const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `users-export-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      a.download = filename;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
       
       toast({
         title: "Export successful",
-        description: "User data has been exported",
+        description: `User data exported to ${filename}`,
       });
     } catch (error) {
+      console.error('Export error:', error);
       toast({
         variant: "destructive",
         title: "Export failed",
-        description: "Failed to export user data",
+        description: "Failed to export user data. Please try again.",
       });
     }
   };

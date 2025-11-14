@@ -50,6 +50,7 @@ import FleetBillingPortal from "@/pages/fleet/billing-portal";
 import FleetContracts from "@/pages/fleet/contracts";
 import FleetApplicationPending from "@/pages/fleet/application-pending";
 import FleetJobDetails from "@/pages/fleet/job-details";
+import FleetJobHistory from "@/pages/fleet/job-history";
 
 // Admin Pages
 import AdminLogin from "@/pages/admin/login";
@@ -155,6 +156,7 @@ function Router() {
       <Route path="/fleet/billing" component={FleetBillingPortal} />
       <Route path="/fleet/contracts" component={FleetContracts} />
       <Route path="/fleet/jobs/:id" component={FleetJobDetails} />
+      <Route path="/fleet/job-history" component={FleetJobHistory} />
       
       {/* Admin Pages - Protected Routes */}
       <Route path="/admin/login" component={AdminLogin} />

@@ -405,24 +405,53 @@ export default function AdminContractors() {
 
   const handleExport = async () => {
     try {
-      const response = await apiRequest('POST', '/api/admin/contractors/export', { format: 'csv' });
+      // Build query parameters for filtering
+      const params = new URLSearchParams();
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (tierFilter !== 'all') params.append('tier', tierFilter);
+      if (searchQuery) params.append('search', searchQuery);
       
-      const blob = new Blob([response.data], { type: 'text/csv' });
+      const queryString = params.toString() ? `?${params.toString()}` : '';
+      
+      // Call server-side export endpoint
+      const response = await fetch(`/api/admin/contractors/export${queryString}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Accept': 'text/csv'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+
+      // Get filename from Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const filenameMatch = contentDisposition?.match(/filename="?(.+?)"?$/);
+      const filename = filenameMatch ? filenameMatch[1] : `contractors-${Date.now()}.csv`;
+
+      // Create blob and download
+      const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `contractors-export-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      a.download = filename;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
       
       toast({
         title: "Export successful",
-        description: "Contractors data has been exported",
+        description: `Contractors data exported to ${filename}`,
       });
     } catch (error) {
+      console.error('Export error:', error);
       toast({
         variant: "destructive",
         title: "Export failed",
-        description: "Failed to export contractors data",
+        description: "Failed to export contractors data. Please try again.",
       });
     }
   };

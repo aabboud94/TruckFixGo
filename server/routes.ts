@@ -17040,6 +17040,494 @@ The TruckFixGo Team
     }
   );
 
+  // ==================== CSV EXPORT ENDPOINTS ====================
+  
+  // Import CSV service
+  const { CsvService } = await import('./csv-service.js');
+  
+  // Fleet vehicle export
+  app.get(
+    '/api/fleet/:fleetId/vehicles/export',
+    requireAuth,
+    requireRole('fleet', 'admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.fleetId;
+        
+        // Parse filters from query parameters
+        const filters = {
+          isActive: req.query.isActive ? req.query.isActive === 'true' : undefined,
+          vehicleType: req.query.vehicleType as string | undefined,
+          dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined,
+          dateTo: req.query.dateTo ? new Date(req.query.dateTo as string) : undefined
+        };
+        
+        // Get data from storage
+        const vehicles = await storage.getFleetVehiclesForExport(fleetId, filters);
+        
+        // Sanitize sensitive data
+        const sanitizedData = CsvService.sanitizeData(vehicles);
+        
+        // Generate CSV
+        const csv = CsvService.generateCsv(
+          sanitizedData,
+          CsvService.COLUMN_DEFINITIONS.FLEET_VEHICLES,
+          {
+            dateColumns: ['lastServiceDate', 'nextServiceDue', 'createdAt', 'updatedAt'],
+            booleanColumns: ['isActive']
+          }
+        );
+        
+        // Set response headers
+        const filename = CsvService.generateFilename('fleet-vehicles');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        
+        // Send CSV
+        res.send(csv);
+        
+        console.log(`Fleet vehicles exported: ${vehicles.length} records for fleet ${fleetId}`);
+      } catch (error) {
+        console.error('Fleet vehicles export error:', error);
+        res.status(500).json({ message: 'Failed to export vehicles' });
+      }
+    }
+  );
+  
+  // Fleet jobs export
+  app.get(
+    '/api/fleet/:fleetId/jobs/export',
+    requireAuth,
+    requireRole('fleet', 'admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.fleetId;
+        
+        // Parse filters
+        const filters = {
+          status: req.query.status as string | undefined,
+          dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined,
+          dateTo: req.query.dateTo ? new Date(req.query.dateTo as string) : undefined,
+          vehicleId: req.query.vehicleId as string | undefined,
+          contractorId: req.query.contractorId as string | undefined
+        };
+        
+        // Get data
+        const jobs = await storage.getFleetJobsForExport(fleetId, filters);
+        
+        // Sanitize data
+        const sanitizedData = CsvService.sanitizeData(jobs);
+        
+        // Generate CSV
+        const csv = CsvService.generateCsv(
+          sanitizedData,
+          CsvService.COLUMN_DEFINITIONS.FLEET_JOBS,
+          {
+            dateColumns: ['createdAt', 'completedAt'],
+            currencyColumns: ['estimatedCost', 'actualCost']
+          }
+        );
+        
+        // Set headers
+        const filename = CsvService.generateFilename('fleet-jobs');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        
+        res.send(csv);
+        
+        console.log(`Fleet jobs exported: ${jobs.length} records for fleet ${fleetId}`);
+      } catch (error) {
+        console.error('Fleet jobs export error:', error);
+        res.status(500).json({ message: 'Failed to export jobs' });
+      }
+    }
+  );
+  
+  // Admin users export
+  app.get(
+    '/api/admin/users/export',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        // Parse filters
+        const filters = {
+          role: req.query.role as string | undefined,
+          status: req.query.status as string | undefined,
+          search: req.query.search as string | undefined,
+          dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined,
+          dateTo: req.query.dateTo ? new Date(req.query.dateTo as string) : undefined
+        };
+        
+        // Get data
+        const users = await storage.getUsersForExport(filters);
+        
+        // Remove passwords and sensitive data
+        const sanitizedData = CsvService.sanitizeData(users, [
+          'password', 'passwordHash', 'sessionToken', 'resetToken'
+        ]);
+        
+        // Generate CSV
+        const csv = CsvService.generateCsv(
+          sanitizedData,
+          CsvService.COLUMN_DEFINITIONS.USERS,
+          {
+            dateColumns: ['createdAt', 'lastLogin'],
+            booleanColumns: ['isActive', 'emailVerified', 'phoneVerified', 'notificationsEnabled']
+          }
+        );
+        
+        // Set headers
+        const filename = CsvService.generateFilename('users');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        
+        res.send(csv);
+        
+        console.log(`Users exported: ${users.length} records`);
+      } catch (error) {
+        console.error('Users export error:', error);
+        res.status(500).json({ message: 'Failed to export users' });
+      }
+    }
+  );
+  
+  // Admin contractors export
+  app.get(
+    '/api/admin/contractors/export',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        // Parse filters
+        const filters = {
+          status: req.query.status as string | undefined,
+          tier: req.query.tier as string | undefined,
+          search: req.query.search as string | undefined,
+          dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined,
+          dateTo: req.query.dateTo ? new Date(req.query.dateTo as string) : undefined
+        };
+        
+        // Get data
+        const contractors = await storage.getContractorsForExport(filters);
+        
+        // Sanitize sensitive data
+        const sanitizedData = CsvService.sanitizeData(contractors, [
+          'bankAccountNumber', 'bankRoutingNumber', 'taxId', 'ssn'
+        ]);
+        
+        // Generate CSV
+        const csv = CsvService.generateCsv(
+          sanitizedData,
+          CsvService.COLUMN_DEFINITIONS.CONTRACTORS,
+          {
+            dateColumns: ['createdAt', 'verifiedAt', 'insuranceExpiry', 'joinedDate'],
+            currencyColumns: ['totalEarnings'],
+            booleanColumns: ['isAvailable', 'isOnline']
+          }
+        );
+        
+        // Set headers
+        const filename = CsvService.generateFilename('contractors');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        
+        res.send(csv);
+        
+        console.log(`Contractors exported: ${contractors.length} records`);
+      } catch (error) {
+        console.error('Contractors export error:', error);
+        res.status(500).json({ message: 'Failed to export contractors' });
+      }
+    }
+  );
+  
+  // Admin billing export
+  app.get(
+    '/api/admin/billing/export',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        // Parse filters
+        const filters = {
+          fleetAccountId: req.query.fleetAccountId as string | undefined,
+          status: req.query.status as string | undefined,
+          type: req.query.type as string | undefined,
+          dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined,
+          dateTo: req.query.dateTo ? new Date(req.query.dateTo as string) : undefined
+        };
+        
+        // Get data
+        const transactions = await storage.getBillingDataForExport(filters);
+        
+        // Sanitize sensitive data
+        const sanitizedData = CsvService.sanitizeData(transactions, [
+          'stripePaymentIntentId', 'stripeCustomerId', 'stripePaymentMethodId'
+        ]);
+        
+        // Generate CSV
+        const csv = CsvService.generateCsv(
+          sanitizedData,
+          CsvService.COLUMN_DEFINITIONS.BILLING,
+          {
+            dateColumns: ['createdAt', 'date'],
+            currencyColumns: ['amount']
+          }
+        );
+        
+        // Set headers
+        const filename = CsvService.generateFilename('billing-transactions');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        
+        res.send(csv);
+        
+        console.log(`Billing data exported: ${transactions.length} records`);
+      } catch (error) {
+        console.error('Billing export error:', error);
+        res.status(500).json({ message: 'Failed to export billing data' });
+      }
+    }
+  );
+  
+  // Fleet analytics export
+  app.get(
+    '/api/fleet/:fleetId/analytics/export',
+    requireAuth,
+    requireRole('fleet', 'admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.fleetId;
+        
+        // Parse filters
+        const filters = {
+          metric: req.query.metric as string | undefined,
+          dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined,
+          dateTo: req.query.dateTo ? new Date(req.query.dateTo as string) : undefined,
+          groupBy: req.query.groupBy as 'day' | 'week' | 'month' | undefined
+        };
+        
+        // Get data
+        const analytics = await storage.getFleetAnalyticsForExport(fleetId, filters);
+        
+        // Generate CSV
+        const csv = CsvService.generateCsv(
+          analytics,
+          CsvService.COLUMN_DEFINITIONS.ANALYTICS,
+          {
+            dateColumns: ['date'],
+            currencyColumns: ['totalCost', 'maintenanceCost', 'emergencyCost', 'avgCostPerJob']
+          }
+        );
+        
+        // Set headers
+        const filename = CsvService.generateFilename('fleet-analytics');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        
+        res.send(csv);
+        
+        console.log(`Analytics exported: ${analytics.length} records for fleet ${fleetId}`);
+      } catch (error) {
+        console.error('Analytics export error:', error);
+        res.status(500).json({ message: 'Failed to export analytics' });
+      }
+    }
+  );
+  
+  // ==================== REPORT GENERATION ENDPOINTS ====================
+  
+  // Fleet maintenance report
+  app.get(
+    '/api/reports/fleet/:fleetId/maintenance',
+    requireAuth,
+    requireRole('fleet', 'admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.fleetId;
+        const dateFrom = new Date(req.query.dateFrom as string || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+        const dateTo = new Date(req.query.dateTo as string || new Date());
+        
+        // Get report data
+        const report = await storage.getFleetMaintenanceReport(fleetId, dateFrom, dateTo);
+        
+        // Format as CSV or JSON based on format parameter
+        if (req.query.format === 'csv') {
+          // Generate detailed CSV report
+          const csvData = [
+            ['Fleet Maintenance Report'],
+            ['Report Period:', `${dateFrom.toLocaleDateString()} - ${dateTo.toLocaleDateString()}`],
+            [],
+            ['Summary'],
+            ['Total Vehicles:', report.summary.totalVehicles],
+            ['Total Maintenance Jobs:', report.summary.totalMaintenanceJobs],
+            ['Total Cost:', `$${report.summary.totalCost.toFixed(2)}`],
+            ['Average Cost Per Vehicle:', `$${report.summary.averageCostPerVehicle.toFixed(2)}`],
+            [],
+            ['Most Frequent Issues'],
+            ['Issue', 'Count', 'Total Cost'],
+            ...report.summary.mostFrequentIssues.map(issue => [
+              issue.issue,
+              issue.count,
+              `$${issue.cost.toFixed(2)}`
+            ]),
+            [],
+            ['Detailed Maintenance Records'],
+            ['Job Number', 'Vehicle', 'Service Type', 'Date', 'Cost', 'Status'],
+            ...report.details.map((job: any) => [
+              job.jobNumber,
+              job.vehicleUnit || 'N/A',
+              job.serviceType || 'N/A',
+              job.createdAt ? new Date(job.createdAt).toLocaleDateString() : 'N/A',
+              job.cost ? `$${job.cost.toFixed(2)}` : '$0.00',
+              job.status
+            ])
+          ];
+          
+          const csv = csvData.map(row => row.map(cell => 
+            typeof cell === 'string' && cell.includes(',') ? `"${cell}"` : cell
+          ).join(',')).join('\n');
+          
+          const filename = CsvService.generateFilename('maintenance-report');
+          res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+          res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+          res.send('\ufeff' + csv); // Add BOM for Excel
+        } else {
+          // Return JSON report
+          res.json(report);
+        }
+        
+        console.log(`Maintenance report generated for fleet ${fleetId}`);
+      } catch (error) {
+        console.error('Maintenance report error:', error);
+        res.status(500).json({ message: 'Failed to generate maintenance report' });
+      }
+    }
+  );
+  
+  // Fleet cost summary report
+  app.get(
+    '/api/reports/fleet/:fleetId/cost-summary',
+    requireAuth,
+    requireRole('fleet', 'admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const fleetId = req.params.fleetId;
+        const dateFrom = new Date(req.query.dateFrom as string || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+        const dateTo = new Date(req.query.dateTo as string || new Date());
+        
+        // Get report data
+        const report = await storage.getFleetCostSummaryReport(fleetId, dateFrom, dateTo);
+        
+        // Format as CSV or JSON
+        if (req.query.format === 'csv') {
+          const csvData = [
+            ['Fleet Cost Summary Report'],
+            ['Report Period:', `${dateFrom.toLocaleDateString()} - ${dateTo.toLocaleDateString()}`],
+            [],
+            ['Cost Summary'],
+            ['Total Cost:', `$${report.summary.totalCost.toFixed(2)}`],
+            ['Maintenance Cost:', `$${report.summary.maintenanceCost.toFixed(2)}`],
+            ['Emergency Repair Cost:', `$${report.summary.emergencyRepairCost.toFixed(2)}`],
+            ['Scheduled Service Cost:', `$${report.summary.scheduledServiceCost.toFixed(2)}`],
+            [],
+            ['Cost by Month'],
+            ['Month', 'Cost'],
+            ...report.summary.costByMonth.map(item => [
+              item.month,
+              `$${item.cost.toFixed(2)}`
+            ]),
+            [],
+            ['Top 10 Vehicles by Cost'],
+            ['Vehicle', 'Total Cost'],
+            ...report.summary.costByVehicle.map(item => [
+              item.vehicle,
+              `$${item.cost.toFixed(2)}`
+            ])
+          ];
+          
+          const csv = csvData.map(row => row.map(cell => 
+            typeof cell === 'string' && cell.includes(',') ? `"${cell}"` : cell
+          ).join(',')).join('\n');
+          
+          const filename = CsvService.generateFilename('cost-summary-report');
+          res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+          res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+          res.send('\ufeff' + csv);
+        } else {
+          res.json(report);
+        }
+        
+        console.log(`Cost summary report generated for fleet ${fleetId}`);
+      } catch (error) {
+        console.error('Cost summary report error:', error);
+        res.status(500).json({ message: 'Failed to generate cost summary report' });
+      }
+    }
+  );
+  
+  // Admin revenue report
+  app.get(
+    '/api/reports/admin/revenue',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const dateFrom = new Date(req.query.dateFrom as string || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+        const dateTo = new Date(req.query.dateTo as string || new Date());
+        
+        // Get report data
+        const report = await storage.getAdminRevenueReport(dateFrom, dateTo);
+        
+        // Format as CSV or JSON
+        if (req.query.format === 'csv') {
+          const csvData = [
+            ['Revenue Report'],
+            ['Report Period:', `${dateFrom.toLocaleDateString()} - ${dateTo.toLocaleDateString()}`],
+            [],
+            ['Revenue Summary'],
+            ['Total Revenue:', `$${report.summary.totalRevenue.toFixed(2)}`],
+            ['Subscription Revenue:', `$${report.summary.subscriptionRevenue.toFixed(2)}`],
+            ['Transaction Revenue:', `$${report.summary.transactionRevenue.toFixed(2)}`],
+            ['Refunds:', `$${report.summary.refunds.toFixed(2)}`],
+            ['Net Revenue:', `$${report.summary.netRevenue.toFixed(2)}`],
+            [],
+            ['Revenue by Month'],
+            ['Month', 'Revenue'],
+            ...report.summary.revenueByMonth.map(item => [
+              item.month,
+              `$${item.revenue.toFixed(2)}`
+            ]),
+            [],
+            ['Top 10 Fleets by Revenue'],
+            ['Fleet', 'Revenue'],
+            ...report.summary.revenueByFleet.map(item => [
+              item.fleetName,
+              `$${item.revenue.toFixed(2)}`
+            ])
+          ];
+          
+          const csv = csvData.map(row => row.map(cell => 
+            typeof cell === 'string' && cell.includes(',') ? `"${cell}"` : cell
+          ).join(',')).join('\n');
+          
+          const filename = CsvService.generateFilename('revenue-report');
+          res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+          res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+          res.send('\ufeff' + csv);
+        } else {
+          res.json(report);
+        }
+        
+        console.log('Revenue report generated');
+      } catch (error) {
+        console.error('Revenue report error:', error);
+        res.status(500).json({ message: 'Failed to generate revenue report' });
+      }
+    }
+  );
+
   // Create and return the HTTP server
   const server = createServer(app);
   return server;
