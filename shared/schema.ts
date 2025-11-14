@@ -60,6 +60,10 @@ export const trackingStatusEnum = pgEnum('tracking_status', ['active', 'paused',
 export const geofenceEventTypeEnum = pgEnum('geofence_event_type', ['arrived', 'departed', 'entered_zone', 'exited_zone']);
 export const trackingUpdateFrequencyEnum = pgEnum('tracking_update_frequency', ['high', 'normal', 'low', 'stationary']);
 
+// PM Scheduling related enums
+export const pmScheduleFrequencyEnum = pgEnum('pm_schedule_frequency', ['weekly', 'monthly', 'quarterly', 'annually']);
+export const pmScheduleStatusEnum = pgEnum('pm_schedule_status', ['active', 'paused', 'cancelled']);
+
 // ====================
 // USERS & AUTH
 // ====================
@@ -251,6 +255,26 @@ export const fleetVehicles = pgTable("fleet_vehicles", {
   fleetIdx: index("idx_fleet_vehicles_fleet").on(table.fleetAccountId),
   vinIdx: index("idx_fleet_vehicles_vin").on(table.vin),
   unitNumberIdx: index("idx_fleet_vehicles_unit").on(table.unitNumber)
+}));
+
+// PM Schedule Table
+export const pmSchedules = pgTable("pm_schedules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fleetAccountId: varchar("fleet_account_id").notNull().references(() => fleetAccounts.id),
+  vehicleId: varchar("vehicle_id").notNull().references(() => fleetVehicles.id),
+  serviceType: varchar("service_type", { length: 100 }).notNull(),
+  frequency: pmScheduleFrequencyEnum("frequency").notNull(),
+  nextServiceDate: timestamp("next_service_date").notNull(),
+  lastServiceDate: timestamp("last_service_date"),
+  isActive: boolean("is_active").notNull().default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  fleetIdx: index("idx_pm_schedules_fleet").on(table.fleetAccountId),
+  vehicleIdx: index("idx_pm_schedules_vehicle").on(table.vehicleId),
+  nextServiceIdx: index("idx_pm_schedules_next_service").on(table.nextServiceDate),
+  activeIdx: index("idx_pm_schedules_active").on(table.isActive)
 }));
 
 export const fleetContacts = pgTable("fleet_contacts", {
@@ -1969,6 +1993,14 @@ export const insertFleetContactSchema = createInsertSchema(fleetContacts).omit({
 });
 export type InsertFleetContact = z.infer<typeof insertFleetContactSchema>;
 export type FleetContact = typeof fleetContacts.$inferSelect;
+
+export const insertPmScheduleSchema = createInsertSchema(pmSchedules).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+export type InsertPmSchedule = z.infer<typeof insertPmScheduleSchema>;
+export type PmSchedule = typeof pmSchedules.$inferSelect;
 
 export const insertFleetPricingOverrideSchema = createInsertSchema(fleetPricingOverrides).omit({ 
   id: true, 

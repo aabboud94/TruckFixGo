@@ -73,6 +73,9 @@ import {
   type InsertFleetVehicle,
   type FleetContact,
   type InsertFleetContact,
+  type PmSchedule,
+  type InsertPmSchedule,
+  pmSchedules,
   type FleetPricingOverride,
   type InsertFleetPricingOverride,
   type ServiceType,
@@ -1058,6 +1061,46 @@ export interface IStorage {
     estimatedCost: number;
     priority: 'low' | 'medium' | 'high' | 'critical';
   }>>;
+
+  // ==================== BATCH JOB SCHEDULING ====================
+  
+  // Create batch jobs for multiple vehicles
+  createBatchJobs(data: {
+    fleetAccountId: string;
+    vehicleIds: string[];
+    serviceType: string;
+    scheduledDate: Date;
+    urgency: 'routine' | 'urgent' | 'emergency';
+    description?: string;
+    estimatedDuration?: number;
+    createdBy: string;
+  }): Promise<Job[]>;
+  
+  // ==================== PM SCHEDULING ====================
+  
+  // Get all PM schedules for a fleet
+  getPmSchedules(fleetAccountId: string, options?: {
+    vehicleId?: string;
+    isActive?: boolean;
+  }): Promise<PmSchedule[]>;
+  
+  // Get a single PM schedule
+  getPmSchedule(scheduleId: string, fleetAccountId: string): Promise<PmSchedule | null>;
+  
+  // Create a new PM schedule
+  createPmSchedule(data: InsertPmSchedule): Promise<PmSchedule>;
+  
+  // Update a PM schedule
+  updatePmSchedule(scheduleId: string, fleetAccountId: string, data: Partial<InsertPmSchedule>): Promise<PmSchedule | null>;
+  
+  // Delete a PM schedule
+  deletePmSchedule(scheduleId: string, fleetAccountId: string): Promise<boolean>;
+  
+  // Check and create jobs for due PM schedules
+  processDuePmSchedules(): Promise<{
+    processedCount: number;
+    createdJobs: Job[];
+  }>;
 }
 
 // PostgreSQL implementation using Drizzle ORM
@@ -8600,6 +8643,246 @@ export class PostgreSQLStorage implements IStorage {
     const distance = R * c;
     
     return Math.round(distance * 10) / 10; // Round to 1 decimal place
+  }
+
+  // ==================== BATCH JOB SCHEDULING ====================
+  
+  async createBatchJobs(data: {
+    fleetAccountId: string;
+    vehicleIds: string[];
+    serviceType: string;
+    scheduledDate: Date;
+    urgency: 'routine' | 'urgent' | 'emergency';
+    description?: string;
+    estimatedDuration?: number;
+    createdBy: string;
+  }): Promise<Job[]> {
+    const createdJobs: Job[] = [];
+    
+    // Get fleet vehicles to ensure they belong to the fleet
+    const vehicles = await db.select()
+      .from(fleetVehicles)
+      .where(
+        and(
+          eq(fleetVehicles.fleetAccountId, data.fleetAccountId),
+          inArray(fleetVehicles.id, data.vehicleIds),
+          eq(fleetVehicles.isActive, true)
+        )
+      );
+    
+    if (vehicles.length === 0) {
+      throw new Error('No valid vehicles found for batch scheduling');
+    }
+    
+    // Create a job for each vehicle
+    for (const vehicle of vehicles) {
+      const jobData: InsertJob = {
+        driverId: data.createdBy,
+        vehicleType: vehicle.vehicleType || 'truck',
+        serviceType: data.serviceType,
+        description: data.description || `Scheduled maintenance for ${vehicle.unitNumber}`,
+        urgency: data.urgency,
+        status: 'new',
+        fleetAccountId: data.fleetAccountId,
+        vehicleId: vehicle.id,
+        scheduledAt: data.scheduledDate,
+        estimatedDuration: data.estimatedDuration || 120, // Default 2 hours
+        location: null, // Will be set by fleet location
+        jobType: 'scheduled'
+      };
+      
+      const [job] = await db.insert(jobs).values(jobData).returning();
+      
+      // Add to job status history
+      await db.insert(jobStatusHistory).values({
+        jobId: job.id,
+        fromStatus: 'new',
+        toStatus: 'new',
+        notes: `Batch scheduled for vehicle ${vehicle.unitNumber}`
+      });
+      
+      createdJobs.push(job);
+    }
+    
+    return createdJobs;
+  }
+  
+  // ==================== PM SCHEDULING ====================
+  
+  async getPmSchedules(fleetAccountId: string, options?: {
+    vehicleId?: string;
+    isActive?: boolean;
+  }): Promise<PmSchedule[]> {
+    const conditions: any[] = [eq(pmSchedules.fleetAccountId, fleetAccountId)];
+    
+    if (options?.vehicleId) {
+      conditions.push(eq(pmSchedules.vehicleId, options.vehicleId));
+    }
+    
+    if (options?.isActive !== undefined) {
+      conditions.push(eq(pmSchedules.isActive, options.isActive));
+    }
+    
+    return await db.select()
+      .from(pmSchedules)
+      .where(and(...conditions))
+      .orderBy(asc(pmSchedules.nextServiceDate));
+  }
+  
+  async getPmSchedule(scheduleId: string, fleetAccountId: string): Promise<PmSchedule | null> {
+    const [schedule] = await db.select()
+      .from(pmSchedules)
+      .where(
+        and(
+          eq(pmSchedules.id, scheduleId),
+          eq(pmSchedules.fleetAccountId, fleetAccountId)
+        )
+      )
+      .limit(1);
+    
+    return schedule || null;
+  }
+  
+  async createPmSchedule(data: InsertPmSchedule): Promise<PmSchedule> {
+    // Validate vehicle belongs to the fleet
+    const [vehicle] = await db.select()
+      .from(fleetVehicles)
+      .where(
+        and(
+          eq(fleetVehicles.id, data.vehicleId),
+          eq(fleetVehicles.fleetAccountId, data.fleetAccountId),
+          eq(fleetVehicles.isActive, true)
+        )
+      )
+      .limit(1);
+    
+    if (!vehicle) {
+      throw new Error('Vehicle not found or does not belong to this fleet');
+    }
+    
+    const [schedule] = await db.insert(pmSchedules).values(data).returning();
+    return schedule;
+  }
+  
+  async updatePmSchedule(scheduleId: string, fleetAccountId: string, data: Partial<InsertPmSchedule>): Promise<PmSchedule | null> {
+    const [updated] = await db.update(pmSchedules)
+      .set({
+        ...data,
+        updatedAt: new Date()
+      })
+      .where(
+        and(
+          eq(pmSchedules.id, scheduleId),
+          eq(pmSchedules.fleetAccountId, fleetAccountId)
+        )
+      )
+      .returning();
+    
+    return updated || null;
+  }
+  
+  async deletePmSchedule(scheduleId: string, fleetAccountId: string): Promise<boolean> {
+    const result = await db.delete(pmSchedules)
+      .where(
+        and(
+          eq(pmSchedules.id, scheduleId),
+          eq(pmSchedules.fleetAccountId, fleetAccountId)
+        )
+      )
+      .returning();
+    
+    return result.length > 0;
+  }
+  
+  async processDuePmSchedules(): Promise<{
+    processedCount: number;
+    createdJobs: Job[];
+  }> {
+    const createdJobs: Job[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Find all active PM schedules that are due
+    const dueSchedules = await db.select()
+      .from(pmSchedules)
+      .where(
+        and(
+          eq(pmSchedules.isActive, true),
+          lte(pmSchedules.nextServiceDate, today)
+        )
+      );
+    
+    for (const schedule of dueSchedules) {
+      // Get the vehicle details
+      const [vehicle] = await db.select()
+        .from(fleetVehicles)
+        .where(eq(fleetVehicles.id, schedule.vehicleId))
+        .limit(1);
+      
+      if (!vehicle || !vehicle.isActive) continue;
+      
+      // Create a scheduled job
+      const jobData: InsertJob = {
+        vehicleType: vehicle.vehicleType || 'truck',
+        serviceType: schedule.serviceType,
+        description: `PM Service: ${schedule.serviceType} for ${vehicle.unitNumber}`,
+        urgency: 'routine',
+        status: 'new',
+        fleetAccountId: schedule.fleetAccountId,
+        vehicleId: vehicle.id,
+        scheduledAt: schedule.nextServiceDate,
+        estimatedDuration: 120, // Default 2 hours
+        location: null,
+        jobType: 'scheduled'
+      };
+      
+      const [job] = await db.insert(jobs).values(jobData).returning();
+      createdJobs.push(job);
+      
+      // Calculate next service date based on frequency
+      let nextDate = new Date(schedule.nextServiceDate);
+      switch (schedule.frequency) {
+        case 'weekly':
+          nextDate.setDate(nextDate.getDate() + 7);
+          break;
+        case 'monthly':
+          nextDate.setMonth(nextDate.getMonth() + 1);
+          break;
+        case 'quarterly':
+          nextDate.setMonth(nextDate.getMonth() + 3);
+          break;
+        case 'annually':
+          nextDate.setFullYear(nextDate.getFullYear() + 1);
+          break;
+      }
+      
+      // Update the PM schedule with new dates
+      await db.update(pmSchedules)
+        .set({
+          lastServiceDate: schedule.nextServiceDate,
+          nextServiceDate: nextDate,
+          updatedAt: new Date()
+        })
+        .where(eq(pmSchedules.id, schedule.id));
+    }
+    
+    return {
+      processedCount: dueSchedules.length,
+      createdJobs
+    };
+  }
+  
+  // Stub implementation for generateFleetMaintenanceSchedule
+  async generateFleetMaintenanceSchedule(fleetAccountId: string): Promise<Array<{
+    vehicleId: string;
+    scheduledDate: Date;
+    services: string[];
+    estimatedCost: number;
+    priority: 'low' | 'medium' | 'high' | 'critical';
+  }>> {
+    // This would use AI/ML or business logic to generate maintenance schedules
+    // For now, return empty array as a placeholder
+    return [];
   }
 }
 

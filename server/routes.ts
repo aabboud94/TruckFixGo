@@ -6066,6 +6066,241 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== BATCH JOB SCHEDULING ROUTES (NEW) ====================
+  
+  // Create batch jobs for multiple vehicles
+  app.post('/api/fleet/:fleetId/batch-jobs',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const { 
+          vehicleIds, 
+          serviceType, 
+          scheduledDate, 
+          urgency = 'routine',
+          description,
+          estimatedDuration
+        } = req.body;
+
+        // Validate input
+        if (!vehicleIds || !Array.isArray(vehicleIds) || vehicleIds.length === 0) {
+          return res.status(400).json({ message: 'Vehicle IDs are required' });
+        }
+        if (!serviceType) {
+          return res.status(400).json({ message: 'Service type is required' });
+        }
+        if (!scheduledDate) {
+          return res.status(400).json({ message: 'Scheduled date is required' });
+        }
+
+        // Create batch jobs
+        const jobs = await storage.createBatchJobs({
+          fleetAccountId: req.params.fleetId,
+          vehicleIds,
+          serviceType,
+          scheduledDate: new Date(scheduledDate),
+          urgency: urgency as 'routine' | 'urgent' | 'emergency',
+          description,
+          estimatedDuration,
+          createdBy: req.session.userId!
+        });
+
+        res.status(201).json({
+          message: `Successfully scheduled ${jobs.length} maintenance job(s)`,
+          jobs
+        });
+      } catch (error: any) {
+        console.error('Create batch jobs error:', error);
+        res.status(500).json({ 
+          message: error.message || 'Failed to create batch jobs' 
+        });
+      }
+    }
+  );
+
+  // ==================== PM SCHEDULING ROUTES ====================
+  
+  // Get all PM schedules for a fleet
+  app.get('/api/fleet/:fleetId/pm-schedules',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const { vehicleId, isActive } = req.query;
+        
+        const schedules = await storage.getPmSchedules(req.params.fleetId, {
+          vehicleId: vehicleId as string,
+          isActive: isActive === undefined ? undefined : isActive === 'true'
+        });
+
+        res.json({ schedules });
+      } catch (error) {
+        console.error('Get PM schedules error:', error);
+        res.status(500).json({ message: 'Failed to get PM schedules' });
+      }
+    }
+  );
+
+  // Get a single PM schedule
+  app.get('/api/fleet/:fleetId/pm-schedules/:scheduleId',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const schedule = await storage.getPmSchedule(
+          req.params.scheduleId,
+          req.params.fleetId
+        );
+
+        if (!schedule) {
+          return res.status(404).json({ message: 'PM schedule not found' });
+        }
+
+        res.json({ schedule });
+      } catch (error) {
+        console.error('Get PM schedule error:', error);
+        res.status(500).json({ message: 'Failed to get PM schedule' });
+      }
+    }
+  );
+
+  // Create a new PM schedule
+  app.post('/api/fleet/:fleetId/pm-schedules',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const { 
+          vehicleId,
+          serviceType,
+          frequency,
+          nextServiceDate,
+          lastServiceDate,
+          isActive = true,
+          notes
+        } = req.body;
+
+        // Validate required fields
+        if (!vehicleId) {
+          return res.status(400).json({ message: 'Vehicle ID is required' });
+        }
+        if (!serviceType) {
+          return res.status(400).json({ message: 'Service type is required' });
+        }
+        if (!frequency) {
+          return res.status(400).json({ message: 'Frequency is required' });
+        }
+        if (!nextServiceDate) {
+          return res.status(400).json({ message: 'Next service date is required' });
+        }
+        
+        // Validate frequency value
+        const validFrequencies = ['weekly', 'monthly', 'quarterly', 'annually'];
+        if (!validFrequencies.includes(frequency)) {
+          return res.status(400).json({ 
+            message: `Invalid frequency. Must be one of: ${validFrequencies.join(', ')}` 
+          });
+        }
+
+        const schedule = await storage.createPmSchedule({
+          fleetAccountId: req.params.fleetId,
+          vehicleId,
+          serviceType,
+          frequency: frequency as 'weekly' | 'monthly' | 'quarterly' | 'annually',
+          nextServiceDate: new Date(nextServiceDate),
+          lastServiceDate: lastServiceDate ? new Date(lastServiceDate) : null,
+          isActive,
+          notes
+        });
+
+        res.status(201).json({
+          message: 'PM schedule created successfully',
+          schedule
+        });
+      } catch (error: any) {
+        console.error('Create PM schedule error:', error);
+        res.status(500).json({ 
+          message: error.message || 'Failed to create PM schedule' 
+        });
+      }
+    }
+  );
+
+  // Update a PM schedule
+  app.put('/api/fleet/:fleetId/pm-schedules/:scheduleId',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const updates: any = {};
+        
+        // Only include fields that are provided
+        if (req.body.serviceType !== undefined) updates.serviceType = req.body.serviceType;
+        if (req.body.frequency !== undefined) {
+          const validFrequencies = ['weekly', 'monthly', 'quarterly', 'annually'];
+          if (!validFrequencies.includes(req.body.frequency)) {
+            return res.status(400).json({ 
+              message: `Invalid frequency. Must be one of: ${validFrequencies.join(', ')}` 
+            });
+          }
+          updates.frequency = req.body.frequency;
+        }
+        if (req.body.nextServiceDate !== undefined) {
+          updates.nextServiceDate = new Date(req.body.nextServiceDate);
+        }
+        if (req.body.lastServiceDate !== undefined) {
+          updates.lastServiceDate = req.body.lastServiceDate ? new Date(req.body.lastServiceDate) : null;
+        }
+        if (req.body.isActive !== undefined) updates.isActive = req.body.isActive;
+        if (req.body.notes !== undefined) updates.notes = req.body.notes;
+
+        const schedule = await storage.updatePmSchedule(
+          req.params.scheduleId,
+          req.params.fleetId,
+          updates
+        );
+
+        if (!schedule) {
+          return res.status(404).json({ message: 'PM schedule not found' });
+        }
+
+        res.json({
+          message: 'PM schedule updated successfully',
+          schedule
+        });
+      } catch (error: any) {
+        console.error('Update PM schedule error:', error);
+        res.status(500).json({ 
+          message: error.message || 'Failed to update PM schedule' 
+        });
+      }
+    }
+  );
+
+  // Delete a PM schedule
+  app.delete('/api/fleet/:fleetId/pm-schedules/:scheduleId',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const success = await storage.deletePmSchedule(
+          req.params.scheduleId,
+          req.params.fleetId
+        );
+
+        if (!success) {
+          return res.status(404).json({ message: 'PM schedule not found' });
+        }
+
+        res.json({ message: 'PM schedule deleted successfully' });
+      } catch (error) {
+        console.error('Delete PM schedule error:', error);
+        res.status(500).json({ message: 'Failed to delete PM schedule' });
+      }
+    }
+  );
+
   // Add authorized contact
   app.post('/api/fleet/accounts/:id/contacts',
     requireAuth,
