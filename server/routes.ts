@@ -124,7 +124,15 @@ import {
   insertPaymentReconciliationSchema,
   insertPayoutBatchSchema,
   insertServiceHistorySchema,
-  insertVehicleMaintenanceLogSchema
+  insertVehicleMaintenanceLogSchema,
+  bookingPreferences,
+  contractorBlacklist,
+  favoriteContractors,
+  bookingTemplates,
+  insertBookingPreferencesSchema,
+  insertContractorBlacklistSchema,
+  insertFavoriteContractorsSchema,
+  insertBookingTemplateSchema
 } from "@shared/schema";
 
 // Extend Express Request to include user
@@ -8221,6 +8229,406 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== BOOKING PREFERENCES ROUTES ====================
+  
+  // Get user booking preferences
+  app.get('/api/booking/preferences/:userId', 
+    requireAuth, 
+    async (req: Request, res: Response) => {
+      try {
+        // Check authorization - users can only view their own preferences or admin can view any
+        if (req.session.userId !== req.params.userId && req.session.role !== 'admin') {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+        
+        const preferences = await storage.getBookingPreferences(req.params.userId);
+        
+        if (!preferences) {
+          // Return default preferences if none exist
+          return res.json({
+            preferences: {
+              userId: req.params.userId,
+              autoAcceptBids: false,
+              notificationPreferences: {
+                email: true,
+                sms: true,
+                push: true,
+                frequency: 'immediate',
+                types: ['job_update', 'bid_received', 'payment']
+              }
+            }
+          });
+        }
+        
+        res.json({ preferences });
+      } catch (error) {
+        console.error('Get booking preferences error:', error);
+        res.status(500).json({ message: 'Failed to get booking preferences' });
+      }
+    }
+  );
+  
+  // Update booking preferences
+  app.put('/api/booking/preferences',
+    requireAuth,
+    validateRequest(insertBookingPreferencesSchema),
+    async (req: Request, res: Response) => {
+      try {
+        const preferences = await storage.saveBookingPreferences(
+          req.session.userId!,
+          req.body
+        );
+        
+        res.json({
+          message: 'Preferences updated successfully',
+          preferences
+        });
+      } catch (error) {
+        console.error('Update booking preferences error:', error);
+        res.status(500).json({ message: 'Failed to update booking preferences' });
+      }
+    }
+  );
+  
+  // Get favorite contractors
+  app.get('/api/booking/favorites',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const favorites = await storage.getFavoriteContractors(req.session.userId!);
+        
+        // Get contractor details for each favorite
+        const favoritesWithDetails = await Promise.all(
+          favorites.map(async (favorite) => {
+            const contractor = await storage.getUser(favorite.contractorId);
+            const profile = contractor ? 
+              await storage.getContractorProfile(contractor.id) : null;
+            
+            return {
+              ...favorite,
+              contractor: contractor ? {
+                id: contractor.id,
+                firstName: contractor.firstName,
+                lastName: contractor.lastName,
+                email: contractor.email,
+                phone: contractor.phone
+              } : null,
+              profile: profile ? {
+                companyName: profile.companyName,
+                averageRating: profile.averageRating,
+                totalJobsCompleted: profile.totalJobsCompleted,
+                performanceTier: profile.performanceTier
+              } : null
+            };
+          })
+        );
+        
+        res.json({ favorites: favoritesWithDetails });
+      } catch (error) {
+        console.error('Get favorite contractors error:', error);
+        res.status(500).json({ message: 'Failed to get favorite contractors' });
+      }
+    }
+  );
+  
+  // Add favorite contractor
+  app.post('/api/booking/favorites',
+    requireAuth,
+    validateRequest(z.object({
+      contractorId: z.string(),
+      notes: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { contractorId, notes } = req.body;
+        
+        // Verify contractor exists
+        const contractor = await storage.getUser(contractorId);
+        if (!contractor || contractor.role !== 'contractor') {
+          return res.status(404).json({ message: 'Contractor not found' });
+        }
+        
+        const favorite = await storage.addFavoriteContractor(
+          req.session.userId!,
+          contractorId,
+          notes
+        );
+        
+        res.status(201).json({
+          message: 'Contractor added to favorites',
+          favorite
+        });
+      } catch (error) {
+        console.error('Add favorite contractor error:', error);
+        res.status(500).json({ message: 'Failed to add favorite contractor' });
+      }
+    }
+  );
+  
+  // Remove favorite contractor
+  app.delete('/api/booking/favorites/:contractorId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const success = await storage.removeFavoriteContractor(
+          req.session.userId!,
+          req.params.contractorId
+        );
+        
+        if (!success) {
+          return res.status(404).json({ message: 'Favorite not found' });
+        }
+        
+        res.json({ message: 'Contractor removed from favorites' });
+      } catch (error) {
+        console.error('Remove favorite contractor error:', error);
+        res.status(500).json({ message: 'Failed to remove favorite contractor' });
+      }
+    }
+  );
+  
+  // Get blacklisted contractors
+  app.get('/api/booking/blacklist',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const blacklist = await storage.getBlacklistedContractors(req.session.userId!);
+        
+        // Get contractor details for each blacklisted contractor
+        const blacklistWithDetails = await Promise.all(
+          blacklist.map(async (item) => {
+            const contractor = await storage.getUser(item.contractorId);
+            
+            return {
+              ...item,
+              contractor: contractor ? {
+                id: contractor.id,
+                firstName: contractor.firstName,
+                lastName: contractor.lastName,
+                email: contractor.email,
+                phone: contractor.phone
+              } : null
+            };
+          })
+        );
+        
+        res.json({ blacklist: blacklistWithDetails });
+      } catch (error) {
+        console.error('Get blacklisted contractors error:', error);
+        res.status(500).json({ message: 'Failed to get blacklisted contractors' });
+      }
+    }
+  );
+  
+  // Blacklist contractor
+  app.post('/api/booking/blacklist',
+    requireAuth,
+    validateRequest(z.object({
+      contractorId: z.string(),
+      reason: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { contractorId, reason } = req.body;
+        
+        // Verify contractor exists
+        const contractor = await storage.getUser(contractorId);
+        if (!contractor || contractor.role !== 'contractor') {
+          return res.status(404).json({ message: 'Contractor not found' });
+        }
+        
+        const blacklisted = await storage.blacklistContractor(
+          req.session.userId!,
+          contractorId,
+          reason
+        );
+        
+        res.status(201).json({
+          message: 'Contractor blacklisted successfully',
+          blacklisted
+        });
+      } catch (error) {
+        console.error('Blacklist contractor error:', error);
+        res.status(500).json({ message: 'Failed to blacklist contractor' });
+      }
+    }
+  );
+  
+  // Remove contractor from blacklist
+  app.delete('/api/booking/blacklist/:contractorId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const success = await storage.unblacklistContractor(
+          req.session.userId!,
+          req.params.contractorId
+        );
+        
+        if (!success) {
+          return res.status(404).json({ message: 'Contractor not in blacklist' });
+        }
+        
+        res.json({ message: 'Contractor removed from blacklist' });
+      } catch (error) {
+        console.error('Remove from blacklist error:', error);
+        res.status(500).json({ message: 'Failed to remove contractor from blacklist' });
+      }
+    }
+  );
+  
+  // Get booking templates
+  app.get('/api/booking/templates',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const templates = await storage.getBookingTemplates(req.session.userId!);
+        
+        res.json({ templates });
+      } catch (error) {
+        console.error('Get booking templates error:', error);
+        res.status(500).json({ message: 'Failed to get booking templates' });
+      }
+    }
+  );
+  
+  // Create booking template
+  app.post('/api/booking/templates',
+    requireAuth,
+    validateRequest(insertBookingTemplateSchema),
+    async (req: Request, res: Response) => {
+      try {
+        const template = await storage.createBookingTemplate({
+          ...req.body,
+          userId: req.session.userId!
+        });
+        
+        res.status(201).json({
+          message: 'Template created successfully',
+          template
+        });
+      } catch (error) {
+        console.error('Create booking template error:', error);
+        res.status(500).json({ message: 'Failed to create booking template' });
+      }
+    }
+  );
+  
+  // Get specific booking template
+  app.get('/api/booking/templates/:id',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const template = await storage.getBookingTemplate(req.params.id);
+        
+        if (!template) {
+          return res.status(404).json({ message: 'Template not found' });
+        }
+        
+        // Verify ownership
+        if (template.userId !== req.session.userId && req.session.role !== 'admin') {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+        
+        res.json({ template });
+      } catch (error) {
+        console.error('Get booking template error:', error);
+        res.status(500).json({ message: 'Failed to get booking template' });
+      }
+    }
+  );
+  
+  // Update booking template
+  app.put('/api/booking/templates/:id',
+    requireAuth,
+    validateRequest(insertBookingTemplateSchema.partial()),
+    async (req: Request, res: Response) => {
+      try {
+        // Get template to verify ownership
+        const existing = await storage.getBookingTemplate(req.params.id);
+        
+        if (!existing) {
+          return res.status(404).json({ message: 'Template not found' });
+        }
+        
+        if (existing.userId !== req.session.userId && req.session.role !== 'admin') {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+        
+        const template = await storage.updateBookingTemplate(
+          req.params.id,
+          req.body
+        );
+        
+        res.json({
+          message: 'Template updated successfully',
+          template
+        });
+      } catch (error) {
+        console.error('Update booking template error:', error);
+        res.status(500).json({ message: 'Failed to update booking template' });
+      }
+    }
+  );
+  
+  // Delete booking template
+  app.delete('/api/booking/templates/:id',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        // Get template to verify ownership
+        const template = await storage.getBookingTemplate(req.params.id);
+        
+        if (!template) {
+          return res.status(404).json({ message: 'Template not found' });
+        }
+        
+        if (template.userId !== req.session.userId && req.session.role !== 'admin') {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+        
+        const success = await storage.deleteBookingTemplate(req.params.id);
+        
+        if (!success) {
+          return res.status(404).json({ message: 'Template not found' });
+        }
+        
+        res.json({ message: 'Template deleted successfully' });
+      } catch (error) {
+        console.error('Delete booking template error:', error);
+        res.status(500).json({ message: 'Failed to delete booking template' });
+      }
+    }
+  );
+  
+  // Apply booking template
+  app.post('/api/booking/templates/:id/apply',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        // Get template to verify ownership
+        const template = await storage.getBookingTemplate(req.params.id);
+        
+        if (!template) {
+          return res.status(404).json({ message: 'Template not found' });
+        }
+        
+        if (template.userId !== req.session.userId && req.session.role !== 'admin') {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+        
+        const jobData = await storage.applyBookingTemplate(req.params.id);
+        
+        res.json({
+          message: 'Template applied successfully',
+          jobData
+        });
+      } catch (error) {
+        console.error('Apply booking template error:', error);
+        res.status(500).json({ message: 'Failed to apply booking template' });
+      }
+    }
+  );
+  
   // ==================== SCHEDULED BOOKING ROUTES ====================
   
   // Get available time slots for a specific date and service
