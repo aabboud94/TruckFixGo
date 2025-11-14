@@ -51,6 +51,7 @@ import FleetContracts from "@/pages/fleet/contracts";
 import FleetApplicationPending from "@/pages/fleet/application-pending";
 import FleetJobDetails from "@/pages/fleet/job-details";
 import FleetJobHistory from "@/pages/fleet/job-history";
+import FleetMaintenancePredictor from "@/pages/fleet/maintenance-predictor";
 
 // Admin Pages
 import AdminLogin from "@/pages/admin/login";
@@ -158,6 +159,7 @@ function Router() {
       <Route path="/fleet/contracts" component={FleetContracts} />
       <Route path="/fleet/jobs/:id" component={FleetJobDetails} />
       <Route path="/fleet/job-history" component={FleetJobHistory} />
+      <Route path="/fleet/maintenance-predictor" component={FleetMaintenancePredictor} />
       
       {/* Admin Pages - Protected Routes */}
       <Route path="/admin/login" component={AdminLogin} />

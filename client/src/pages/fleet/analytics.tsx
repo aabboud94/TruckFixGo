@@ -110,6 +110,24 @@ export default function FleetAnalytics() {
     enabled: !!fleetId
   });
 
+  // Fetch maintenance predictions
+  const { data: maintenancePredictions, isLoading: isPredictionsLoading } = useQuery({
+    queryKey: [`/api/fleet/${fleetId}/maintenance-predictions`],
+    enabled: !!fleetId
+  });
+
+  // Fetch high-risk vehicles
+  const { data: highRiskVehicles, isLoading: isHighRiskLoading } = useQuery({
+    queryKey: [`/api/fleet/${fleetId}/high-risk-vehicles`],
+    enabled: !!fleetId
+  });
+
+  // Fetch maintenance alerts
+  const { data: maintenanceAlerts, isLoading: isAlertsLoading } = useQuery({
+    queryKey: [`/api/fleet/${fleetId}/maintenance-alerts`],
+    enabled: !!fleetId
+  });
+
   // Fetch cost analytics
   const { data: costDataRaw, isLoading: isCostLoading, refetch: refetchCosts } = useQuery({
     queryKey: [`/api/fleet/${fleetId}/analytics/costs`, {
@@ -179,7 +197,7 @@ export default function FleetAnalytics() {
   });
 
   // Fetch alerts (existing endpoint)
-  const { data: alertsData, isLoading: isAlertsLoading } = useQuery({
+  const { data: alertsData, isLoading: isFleetAlertsLoading } = useQuery({
     queryKey: [`/api/fleet/${fleetId}/alerts`, { active: true }],
     queryFn: async () => {
       const response = await fetch(`/api/fleet/${fleetId}/alerts?active=true`, {
@@ -886,7 +904,9 @@ export default function FleetAnalytics() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-red-600">2</div>
+                  <div className="text-3xl font-bold text-red-600">
+                    {highRiskVehicles?.vehicles?.length || 0}
+                  </div>
                   <p className="text-sm text-muted-foreground mt-1">
                     Need immediate attention
                   </p>
@@ -898,21 +918,25 @@ export default function FleetAnalytics() {
                   <CardTitle className="text-sm">Predicted Cost (30 days)</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">$12,000</div>
+                  <div className="text-3xl font-bold">
+                    ${(maintenancePredictions?.summary?.totalEstimatedCost || 0).toLocaleString()}
+                  </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Based on ML predictions
+                    Based on AI predictions
                   </p>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Preventable Breakdowns</CardTitle>
+                  <CardTitle className="text-sm">Active Alerts</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-green-600">85%</div>
+                  <div className="text-3xl font-bold text-orange-600">
+                    {maintenanceAlerts?.alerts?.filter((a: any) => !a.acknowledgedAt).length || 0}
+                  </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    With timely maintenance
+                    Require acknowledgment
                   </p>
                 </CardContent>
               </Card>
@@ -920,55 +944,70 @@ export default function FleetAnalytics() {
 
             {/* Predictive Maintenance Table */}
             <Card>
-              <CardHeader>
-                <CardTitle>Predictive Maintenance Recommendations</CardTitle>
-                <CardDescription>AI-powered maintenance predictions for your fleet</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Predictive Maintenance Recommendations</CardTitle>
+                  <CardDescription>AI-powered maintenance predictions for your fleet</CardDescription>
+                </div>
+                <Button 
+                  onClick={() => setLocation("/fleet/maintenance-predictor")}
+                  variant="outline"
+                  data-testid="button-open-predictor"
+                >
+                  <Activity className="h-4 w-4 mr-2" />
+                  Open Full Dashboard
+                </Button>
               </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Vehicle</TableHead>
-                      <TableHead>Risk Score</TableHead>
+                      <TableHead>Risk Level</TableHead>
                       <TableHead>Next Maintenance</TableHead>
-                      <TableHead>Predicted Services</TableHead>
+                      <TableHead>Service Type</TableHead>
                       <TableHead>Est. Cost</TableHead>
                       <TableHead>Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {vehicleHealthData.map((vehicle, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="font-medium">{vehicle.unitNumber}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Progress value={100 - vehicle.riskScore} className="w-16" />
-                            <span className="text-sm">{vehicle.riskScore}%</span>
-                          </div>
+                    {maintenancePredictions?.predictions?.slice(0, 5).map((prediction: any, index: number) => (
+                      <TableRow key={prediction.id}>
+                        <TableCell className="font-medium">
+                          {vehiclesData?.vehicles?.find((v: any) => v.id === prediction.vehicleId)?.unitNumber || `Vehicle ${index + 1}`}
                         </TableCell>
                         <TableCell>
-                          {format(new Date(Date.now() + (index + 1) * 5 * 24 * 60 * 60 * 1000), 'MMM dd')}
+                          <Badge variant={
+                            prediction.riskLevel === 'critical' ? 'destructive' :
+                            prediction.riskLevel === 'high' ? 'secondary' :
+                            prediction.riskLevel === 'medium' ? 'outline' :
+                            'secondary'
+                          }>
+                            {prediction.riskLevel}
+                          </Badge>
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1">
-                            <Badge variant="outline" className="text-xs">
-                              Brake Service (75%)
-                            </Badge>
-                            {index % 2 === 0 && (
-                              <Badge variant="outline" className="text-xs">
-                                Oil Change (90%)
-                              </Badge>
-                            )}
-                          </div>
+                          {format(new Date(prediction.predictedDate), 'MMM dd')}
                         </TableCell>
-                        <TableCell>$1,850</TableCell>
+                        <TableCell>{prediction.serviceType}</TableCell>
+                        <TableCell>${prediction.estimatedCost.toFixed(0)}</TableCell>
                         <TableCell>
-                          <Button size="sm" data-testid={`button-schedule-pm-${index}`}>
+                          <Button 
+                            size="sm" 
+                            onClick={() => setLocation("/fleet/schedule-pm")}
+                            data-testid={`button-schedule-pm-${index}`}
+                          >
                             Schedule PM
                           </Button>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )) || (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground">
+                          No maintenance predictions available
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>

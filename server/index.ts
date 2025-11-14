@@ -254,6 +254,11 @@ app.use((req, res, next) => {
   jobMonitor.start();
   log(`Job monitor started - checking for unassigned jobs`);
 
+  // Start the maintenance alert scheduler
+  const { maintenanceAlertScheduler } = await import('./services/maintenance-alert-scheduler');
+  maintenanceAlertScheduler.start();
+  log(`Maintenance alert scheduler started - monitoring fleet maintenance predictions`);
+
   // Initialize Queue Processing Service
   const queueService = new QueueProcessingService(storage);
   queueService.initialize();

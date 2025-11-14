@@ -25,7 +25,8 @@ import {
   Clock,
   Wrench,
   TrendingUp,
-  AlertTriangle
+  AlertTriangle,
+  Activity
 } from "lucide-react";
 
 export default function FleetDashboard() {
@@ -323,7 +324,7 @@ export default function FleetDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
           <Button 
             className="h-auto py-4 flex flex-col items-center gap-2"
             onClick={() => setLocation("/fleet/schedule-pm")}
@@ -360,6 +361,16 @@ export default function FleetDashboard() {
           >
             <TrendingUp className="h-5 w-5" />
             <span>Analytics</span>
+          </Button>
+
+          <Button 
+            className="h-auto py-4 flex flex-col items-center gap-2"
+            onClick={() => setLocation("/fleet/maintenance-predictor")}
+            variant="outline"
+            data-testid="button-maintenance-predictor"
+          >
+            <Activity className="h-5 w-5" />
+            <span>AI Predictions</span>
           </Button>
         </div>
 

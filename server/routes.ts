@@ -109,7 +109,13 @@ import {
   billingCycleEnum,
   subscriptionStatusEnum,
   billingHistoryStatusEnum,
-  planTypeEnum
+  planTypeEnum,
+  insertMaintenancePredictionSchema,
+  insertVehicleTelemetrySchema,
+  insertMaintenanceAlertSchema,
+  maintenanceRiskLevelEnum,
+  maintenanceAlertTypeEnum,
+  maintenanceSeverityEnum
 } from "@shared/schema";
 
 // Extend Express Request to include user
@@ -158,6 +164,25 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!user || !user.isActive) {
     req.session.destroy(() => {});
     return res.status(401).json({ message: 'Invalid session' });
+  }
+
+  next();
+}
+
+// Admin middleware
+async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+
+  const user = await storage.getUser(req.session.userId);
+  if (!user || !user.isActive) {
+    req.session.destroy(() => {});
+    return res.status(401).json({ message: 'Invalid session' });
+  }
+
+  if (user.role !== 'admin' && user.role !== 'fleet_admin' && user.role !== 'system_admin') {
+    return res.status(403).json({ message: 'Admin privileges required' });
   }
 
   next();
@@ -7230,6 +7255,163 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(500).json({ 
           message: error.message || 'Failed to create batch jobs' 
         });
+      }
+    }
+  );
+
+  // ==================== MAINTENANCE PREDICTION ROUTES ====================
+  
+  // Get all maintenance predictions for a fleet
+  app.get('/api/fleet/:fleetId/maintenance-predictions',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const { start, end } = req.query;
+        const dateRange = (start && end) ? {
+          start: new Date(start as string),
+          end: new Date(end as string)
+        } : undefined;
+        
+        const result = await storage.getMaintenancePredictions(req.params.fleetId, dateRange);
+        res.json(result);
+      } catch (error) {
+        console.error('Get maintenance predictions error:', error);
+        res.status(500).json({ message: 'Failed to get maintenance predictions' });
+      }
+    }
+  );
+
+  // Get maintenance schedule for a specific vehicle
+  app.get('/api/vehicles/:vehicleId/maintenance-schedule',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const schedule = await storage.getVehicleMaintenanceSchedule(req.params.vehicleId);
+        res.json(schedule);
+      } catch (error) {
+        console.error('Get vehicle maintenance schedule error:', error);
+        res.status(500).json({ message: 'Failed to get maintenance schedule' });
+      }
+    }
+  );
+
+  // Submit vehicle telemetry data
+  app.post('/api/vehicles/:vehicleId/telemetry',
+    requireAuth,
+    validateRequest(insertVehicleTelemetrySchema.omit({ vehicleId: true, createdAt: true })),
+    async (req: Request, res: Response) => {
+      try {
+        const telemetry = await storage.recordVehicleTelemetry(
+          req.params.vehicleId,
+          req.body
+        );
+        res.status(201).json({ 
+          message: 'Telemetry recorded successfully',
+          telemetry 
+        });
+      } catch (error) {
+        console.error('Record telemetry error:', error);
+        res.status(500).json({ message: 'Failed to record telemetry' });
+      }
+    }
+  );
+
+  // Get active maintenance alerts for a fleet
+  app.get('/api/fleet/:fleetId/maintenance-alerts',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const { active, severity, limit } = req.query;
+        const options = {
+          active: active === 'true',
+          severity: severity as string,
+          limit: limit ? parseInt(limit as string) : undefined
+        };
+        
+        const alerts = await storage.getFleetMaintenanceAlerts(req.params.fleetId, options);
+        res.json({ alerts });
+      } catch (error) {
+        console.error('Get maintenance alerts error:', error);
+        res.status(500).json({ message: 'Failed to get maintenance alerts' });
+      }
+    }
+  );
+
+  // Acknowledge a maintenance alert
+  app.post('/api/predictions/:alertId/acknowledge',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { notes } = req.body;
+        const alert = await storage.acknowledgeMaintenanceAlert(
+          req.params.alertId,
+          req.session.userId!,
+          notes
+        );
+        
+        if (!alert) {
+          return res.status(404).json({ message: 'Alert not found' });
+        }
+        
+        res.json({ 
+          message: 'Alert acknowledged successfully',
+          alert 
+        });
+      } catch (error) {
+        console.error('Acknowledge alert error:', error);
+        res.status(500).json({ message: 'Failed to acknowledge alert' });
+      }
+    }
+  );
+
+  // Get maintenance ROI analysis
+  app.get('/api/analytics/maintenance-roi',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { vehicleId } = req.query;
+        if (!vehicleId) {
+          return res.status(400).json({ message: 'Vehicle ID is required' });
+        }
+        
+        const roi = await storage.calculateMaintenanceROI(vehicleId as string);
+        res.json(roi);
+      } catch (error) {
+        console.error('Calculate maintenance ROI error:', error);
+        res.status(500).json({ message: 'Failed to calculate ROI' });
+      }
+    }
+  );
+
+  // Get prediction model accuracy metrics
+  app.get('/api/predictions/accuracy',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { modelId } = req.query;
+        const accuracy = await storage.getPredictionAccuracy(modelId as string);
+        res.json(accuracy);
+      } catch (error) {
+        console.error('Get prediction accuracy error:', error);
+        res.status(500).json({ message: 'Failed to get prediction accuracy' });
+      }
+    }
+  );
+
+  // Get high-risk vehicles for a fleet
+  app.get('/api/fleet/:fleetId/high-risk-vehicles',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicles = await storage.getHighRiskVehicles(req.params.fleetId);
+        res.json({ vehicles });
+      } catch (error) {
+        console.error('Get high-risk vehicles error:', error);
+        res.status(500).json({ message: 'Failed to get high-risk vehicles' });
       }
     }
   );

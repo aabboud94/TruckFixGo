@@ -79,6 +79,11 @@ export const partsTransactionTypeEnum = pgEnum('parts_transaction_type', ['used'
 export const partsOrderStatusEnum = pgEnum('parts_order_status', ['pending', 'ordered', 'shipped', 'delivered', 'cancelled', 'returned']);
 export const partsCategoryEnum = pgEnum('parts_category', ['engine', 'transmission', 'brakes', 'electrical', 'suspension', 'body', 'hvac', 'tires', 'fluids', 'filters', 'belts_hoses', 'lighting', 'exhaust', 'accessories', 'tools', 'safety', 'other']);
 
+// Maintenance prediction related enums
+export const maintenanceRiskLevelEnum = pgEnum('maintenance_risk_level', ['low', 'medium', 'high', 'critical']);
+export const maintenanceAlertTypeEnum = pgEnum('maintenance_alert_type', ['predictive', 'scheduled', 'critical', 'overdue', 'safety', 'warranty']);
+export const maintenanceSeverityEnum = pgEnum('maintenance_severity', ['info', 'warning', 'urgent', 'critical']);
+
 // ====================
 // USERS & AUTH
 // ====================
@@ -3682,6 +3687,108 @@ export const jobParts = pgTable("job_parts", {
 }));
 
 // ====================
+// MAINTENANCE PREDICTIONS
+// ====================
+
+export const maintenancePredictions = pgTable("maintenance_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vehicleId: varchar("vehicle_id").notNull().references(() => fleetVehicles.id),
+  predictedDate: timestamp("predicted_date").notNull(),
+  serviceType: varchar("service_type", { length: 100 }).notNull(),
+  confidence: decimal("confidence", { precision: 5, scale: 2 }).notNull(), // 0-100%
+  riskLevel: maintenanceRiskLevelEnum("risk_level").notNull(),
+  estimatedCost: decimal("estimated_cost", { precision: 10, scale: 2 }).notNull(),
+  reasoning: text("reasoning").notNull(),
+  modelVersion: varchar("model_version", { length: 50 }).notNull(),
+  recommendations: jsonb("recommendations"), // Detailed recommendations array
+  historicalAccuracy: decimal("historical_accuracy", { precision: 5, scale: 2 }), // Model's past accuracy for this type
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  vehicleIdx: index("idx_maintenance_predictions_vehicle").on(table.vehicleId),
+  predictedDateIdx: index("idx_maintenance_predictions_date").on(table.predictedDate),
+  riskLevelIdx: index("idx_maintenance_predictions_risk").on(table.riskLevel),
+  serviceTypeIdx: index("idx_maintenance_predictions_service").on(table.serviceType),
+  createdIdx: index("idx_maintenance_predictions_created").on(table.createdAt)
+}));
+
+export const vehicleTelemetry = pgTable("vehicle_telemetry", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vehicleId: varchar("vehicle_id").notNull().references(() => fleetVehicles.id),
+  timestamp: timestamp("timestamp").notNull(),
+  mileage: integer("mileage").notNull(),
+  engineHours: decimal("engine_hours", { precision: 10, scale: 2 }),
+  faultCodes: jsonb("fault_codes"), // Array of diagnostic trouble codes
+  sensorReadings: jsonb("sensor_readings"), // {
+    // oilPressure: 45,
+    // coolantTemp: 195,
+    // brakeWear: 65,
+    // tirePressure: { FL: 100, FR: 100, RL: 100, RR: 100 },
+    // batteryVoltage: 13.8,
+    // engineRpm: 1500,
+    // fuelLevel: 75,
+    // defLevel: 50
+  // }
+  location: jsonb("location"), // { lat, lng, speed, heading }
+  driverBehavior: jsonb("driver_behavior"), // { hardBrakes, hardAccel, idleTime, speeding }
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  vehicleIdx: index("idx_vehicle_telemetry_vehicle").on(table.vehicleId),
+  timestampIdx: index("idx_vehicle_telemetry_timestamp").on(table.timestamp),
+  createdIdx: index("idx_vehicle_telemetry_created").on(table.createdAt)
+}));
+
+export const maintenanceModels = pgTable("maintenance_models", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  modelName: varchar("model_name", { length: 100 }).notNull(),
+  version: varchar("version", { length: 20 }).notNull(),
+  accuracy: decimal("accuracy", { precision: 5, scale: 2 }).notNull(), // Overall model accuracy percentage
+  trainedAt: timestamp("trained_at").notNull(),
+  parameters: jsonb("parameters"), // Model configuration and hyperparameters
+  performanceMetrics: jsonb("performance_metrics"), // {
+    // precision: 0.85,
+    // recall: 0.82,
+    // f1Score: 0.835,
+    // confusionMatrix: {...},
+    // featureImportance: {...}
+  // }
+  trainingData: jsonb("training_data"), // Summary of training dataset
+  isActive: boolean("is_active").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  modelNameIdx: index("idx_maintenance_models_name").on(table.modelName),
+  versionIdx: index("idx_maintenance_models_version").on(table.version),
+  activeIdx: index("idx_maintenance_models_active").on(table.isActive),
+  trainedIdx: index("idx_maintenance_models_trained").on(table.trainedAt)
+}));
+
+export const maintenanceAlerts = pgTable("maintenance_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vehicleId: varchar("vehicle_id").notNull().references(() => fleetVehicles.id),
+  predictionId: varchar("prediction_id").references(() => maintenancePredictions.id),
+  alertType: maintenanceAlertTypeEnum("alert_type").notNull(),
+  severity: maintenanceSeverityEnum("severity").notNull(),
+  message: text("message").notNull(),
+  triggerValue: decimal("trigger_value", { precision: 10, scale: 2 }), // The value that triggered the alert
+  threshold: decimal("threshold", { precision: 10, scale: 2 }), // The threshold that was exceeded
+  actionRequired: text("action_required"), // Recommended action
+  acknowledgedBy: varchar("acknowledged_by").references(() => users.id),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  resolvedAt: timestamp("resolved_at"),
+  notes: text("notes"),
+  notificationSent: boolean("notification_sent").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  vehicleIdx: index("idx_maintenance_alerts_vehicle").on(table.vehicleId),
+  predictionIdx: index("idx_maintenance_alerts_prediction").on(table.predictionId),
+  alertTypeIdx: index("idx_maintenance_alerts_type").on(table.alertType),
+  severityIdx: index("idx_maintenance_alerts_severity").on(table.severity),
+  acknowledgedIdx: index("idx_maintenance_alerts_acknowledged").on(table.acknowledgedBy),
+  createdIdx: index("idx_maintenance_alerts_created").on(table.createdAt)
+}));
+
+// ====================
 // NOTIFICATIONS
 // ====================
 
@@ -3842,4 +3949,35 @@ export const insertJobPartSchema = createInsertSchema(jobParts).omit({
 });
 export type InsertJobPart = z.infer<typeof insertJobPartSchema>;
 export type JobPart = typeof jobParts.$inferSelect;
+
+// Maintenance Prediction schemas and types
+export const insertMaintenancePredictionSchema = createInsertSchema(maintenancePredictions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertMaintenancePrediction = z.infer<typeof insertMaintenancePredictionSchema>;
+export type MaintenancePrediction = typeof maintenancePredictions.$inferSelect;
+
+export const insertVehicleTelemetrySchema = createInsertSchema(vehicleTelemetry).omit({
+  id: true,
+  createdAt: true
+});
+export type InsertVehicleTelemetry = z.infer<typeof insertVehicleTelemetrySchema>;
+export type VehicleTelemetry = typeof vehicleTelemetry.$inferSelect;
+
+export const insertMaintenanceModelSchema = createInsertSchema(maintenanceModels).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertMaintenanceModel = z.infer<typeof insertMaintenanceModelSchema>;
+export type MaintenanceModel = typeof maintenanceModels.$inferSelect;
+
+export const insertMaintenanceAlertSchema = createInsertSchema(maintenanceAlerts).omit({
+  id: true,
+  createdAt: true
+});
+export type InsertMaintenanceAlert = z.infer<typeof insertMaintenanceAlertSchema>;
+export type MaintenanceAlert = typeof maintenanceAlerts.$inferSelect;
 
