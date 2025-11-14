@@ -122,7 +122,9 @@ import {
   insertCommissionRuleSchema,
   insertCommissionTransactionSchema,
   insertPaymentReconciliationSchema,
-  insertPayoutBatchSchema
+  insertPayoutBatchSchema,
+  insertServiceHistorySchema,
+  insertVehicleMaintenanceLogSchema
 } from "@shared/schema";
 
 // Extend Express Request to include user
@@ -19901,6 +19903,381 @@ The TruckFixGo Team
         res.status(500).json({ 
           message: 'Failed to reject fleet application' 
         });
+      }
+    }
+  );
+
+  // ==================== SERVICE HISTORY API ENDPOINTS ====================
+
+  // Get vehicle service history
+  app.get('/api/service-history/vehicle/:vehicleId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        const { startDate, endDate, serviceType, hasWarranty, limit, offset } = req.query;
+        
+        // Check permissions
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        // Check if user has access to this vehicle
+        if (req.session.role === 'fleet_manager') {
+          const fleet = await storage.getFleetAccount(vehicle.fleetAccountId);
+          if (!fleet || fleet.primaryContactId !== req.session.userId) {
+            return res.status(403).json({ message: 'Access denied' });
+          }
+        }
+        
+        const history = await storage.getVehicleServiceHistory(vehicleId, {
+          startDate: startDate ? new Date(startDate as string) : undefined,
+          endDate: endDate ? new Date(endDate as string) : undefined,
+          serviceType: serviceType as string,
+          hasWarranty: hasWarranty === 'true',
+          limit: limit ? parseInt(limit as string) : 100,
+          offset: offset ? parseInt(offset as string) : 0,
+          orderBy: 'serviceDate',
+          orderDir: 'desc'
+        });
+        
+        res.json(history);
+      } catch (error) {
+        console.error('Get service history error:', error);
+        res.status(500).json({ message: 'Failed to get service history' });
+      }
+    }
+  );
+
+  // Record new service history
+  app.post('/api/service-history',
+    requireAuth,
+    requireRole('admin', 'contractor', 'fleet_manager'),
+    validateRequest(insertServiceHistorySchema.omit({ id: true, createdAt: true, updatedAt: true })),
+    async (req: Request, res: Response) => {
+      try {
+        const { serviceHistoryService } = await import('./services/service-history-service');
+        
+        // Check if recording from job completion
+        if (req.body.jobId) {
+          const job = await storage.getJob(req.body.jobId);
+          if (!job) {
+            return res.status(404).json({ message: 'Job not found' });
+          }
+          
+          // Check if service history already exists for this job
+          const exists = await storage.serviceHistoryExistsForJob(req.body.jobId);
+          if (exists) {
+            return res.status(400).json({ message: 'Service history already recorded for this job' });
+          }
+          
+          // Record service from job
+          const history = await serviceHistoryService.recordServiceFromJob(job);
+          if (!history) {
+            return res.status(400).json({ message: 'Could not record service history from job' });
+          }
+          
+          res.json(history);
+        } else {
+          // Manual service history entry
+          const history = await storage.recordServiceHistory(req.body);
+          
+          // Update service schedule
+          if (history.vehicleId && history.serviceType) {
+            await storage.updateServiceSchedule(history.vehicleId, history.serviceType, {
+              vehicleId: history.vehicleId,
+              serviceType: history.serviceType as any,
+              lastServiceDate: history.serviceDate,
+              lastServiceMileage: history.mileage
+            });
+          }
+          
+          res.json(history);
+        }
+      } catch (error) {
+        console.error('Record service history error:', error);
+        res.status(500).json({ message: 'Failed to record service history' });
+      }
+    }
+  );
+
+  // Get upcoming services for vehicle
+  app.get('/api/service-history/upcoming/:vehicleId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        
+        // Check permissions
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        const upcomingServices = await storage.getUpcomingServices(vehicleId);
+        
+        res.json(upcomingServices);
+      } catch (error) {
+        console.error('Get upcoming services error:', error);
+        res.status(500).json({ message: 'Failed to get upcoming services' });
+      }
+    }
+  );
+
+  // Get service recommendations for vehicle
+  app.get('/api/service-history/recommendations/:vehicleId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        const { priority, isCompleted, isDismissed } = req.query;
+        
+        // Check permissions
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        const recommendations = await storage.getServiceRecommendations(vehicleId, {
+          priority: priority as string,
+          isCompleted: isCompleted === 'true',
+          isDismissed: isDismissed === 'true'
+        });
+        
+        res.json(recommendations);
+      } catch (error) {
+        console.error('Get service recommendations error:', error);
+        res.status(500).json({ message: 'Failed to get service recommendations' });
+      }
+    }
+  );
+
+  // Generate maintenance report for vehicle
+  app.get('/api/service-history/report/:vehicleId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        const { startDate, endDate, format } = req.query;
+        
+        // Check permissions
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        const { serviceHistoryService } = await import('./services/service-history-service');
+        
+        const report = await serviceHistoryService.generateMaintenanceReport(vehicleId, {
+          startDate: startDate ? new Date(startDate as string) : undefined,
+          endDate: endDate ? new Date(endDate as string) : undefined
+        });
+        
+        if (format === 'pdf') {
+          // Generate PDF report
+          const pdfBuffer = await pdfService.generateMaintenanceReport(report);
+          
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', 
+            `attachment; filename="maintenance-report-${vehicleId}-${new Date().toISOString().split('T')[0]}.pdf"`);
+          res.send(pdfBuffer);
+        } else {
+          res.json(report);
+        }
+      } catch (error) {
+        console.error('Generate maintenance report error:', error);
+        res.status(500).json({ message: 'Failed to generate maintenance report' });
+      }
+    }
+  );
+
+  // Update service schedule for vehicle
+  app.put('/api/service-history/schedule/:vehicleId',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        const { serviceType } = req.body;
+        
+        if (!serviceType) {
+          return res.status(400).json({ message: 'Service type is required' });
+        }
+        
+        // Check permissions
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        const schedule = await storage.updateServiceSchedule(vehicleId, serviceType, req.body);
+        
+        res.json(schedule);
+      } catch (error) {
+        console.error('Update service schedule error:', error);
+        res.status(500).json({ message: 'Failed to update service schedule' });
+      }
+    }
+  );
+
+  // Generate service recommendations
+  app.post('/api/service-history/recommendations/generate/:vehicleId',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        
+        // Check permissions
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        const { serviceHistoryService } = await import('./services/service-history-service');
+        
+        const recommendations = await serviceHistoryService.generateServiceRecommendations(vehicleId);
+        
+        res.json({
+          message: `Generated ${recommendations.length} service recommendations`,
+          recommendations
+        });
+      } catch (error) {
+        console.error('Generate service recommendations error:', error);
+        res.status(500).json({ message: 'Failed to generate service recommendations' });
+      }
+    }
+  );
+
+  // Mark recommendation as completed
+  app.put('/api/service-history/recommendations/:recommendationId/complete',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const { recommendationId } = req.params;
+        const { jobId } = req.body;
+        
+        if (!jobId) {
+          return res.status(400).json({ message: 'Job ID is required' });
+        }
+        
+        const recommendation = await storage.markRecommendationCompleted(recommendationId, jobId);
+        
+        if (!recommendation) {
+          return res.status(404).json({ message: 'Recommendation not found' });
+        }
+        
+        res.json(recommendation);
+      } catch (error) {
+        console.error('Mark recommendation completed error:', error);
+        res.status(500).json({ message: 'Failed to mark recommendation as completed' });
+      }
+    }
+  );
+
+  // Dismiss recommendation
+  app.put('/api/service-history/recommendations/:recommendationId/dismiss',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const { recommendationId } = req.params;
+        const { reason } = req.body;
+        
+        const recommendation = await storage.dismissRecommendation(
+          recommendationId, 
+          req.session.userId!,
+          reason
+        );
+        
+        if (!recommendation) {
+          return res.status(404).json({ message: 'Recommendation not found' });
+        }
+        
+        res.json(recommendation);
+      } catch (error) {
+        console.error('Dismiss recommendation error:', error);
+        res.status(500).json({ message: 'Failed to dismiss recommendation' });
+      }
+    }
+  );
+
+  // Send service reminders
+  app.post('/api/service-history/reminders/send/:vehicleId',
+    requireAuth,
+    requireRole('admin', 'fleet_manager'),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        
+        // Check permissions
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        const { serviceHistoryService } = await import('./services/service-history-service');
+        
+        await serviceHistoryService.sendServiceReminders(vehicleId);
+        
+        res.json({ message: 'Service reminders sent successfully' });
+      } catch (error) {
+        console.error('Send service reminders error:', error);
+        res.status(500).json({ message: 'Failed to send service reminders' });
+      }
+    }
+  );
+
+  // Create maintenance log entry
+  app.post('/api/service-history/maintenance-log',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'contractor'),
+    validateRequest(insertVehicleMaintenanceLogSchema.omit({ id: true, createdAt: true, updatedAt: true })),
+    async (req: Request, res: Response) => {
+      try {
+        const logData = {
+          ...req.body,
+          createdBy: req.session.userId
+        };
+        
+        const log = await storage.createMaintenanceLog(logData);
+        
+        res.json(log);
+      } catch (error) {
+        console.error('Create maintenance log error:', error);
+        res.status(500).json({ message: 'Failed to create maintenance log' });
+      }
+    }
+  );
+
+  // Get maintenance logs for vehicle
+  app.get('/api/service-history/maintenance-logs/:vehicleId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        const { startDate, endDate, logType, limit, offset } = req.query;
+        
+        // Check permissions
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        const logs = await storage.getVehicleMaintenanceLogs(vehicleId, {
+          startDate: startDate ? new Date(startDate as string) : undefined,
+          endDate: endDate ? new Date(endDate as string) : undefined,
+          logType: logType as string,
+          limit: limit ? parseInt(limit as string) : 100,
+          offset: offset ? parseInt(offset as string) : 0
+        });
+        
+        res.json(logs);
+      } catch (error) {
+        console.error('Get maintenance logs error:', error);
+        res.status(500).json({ message: 'Failed to get maintenance logs' });
       }
     }
   );

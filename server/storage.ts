@@ -75,6 +75,18 @@ import {
   commissionTransactions,
   paymentReconciliation,
   payoutBatches,
+  serviceHistory,
+  serviceSchedules,
+  serviceRecommendations,
+  vehicleMaintenanceLogs,
+  type ServiceHistory,
+  type InsertServiceHistory,
+  type ServiceSchedule,
+  type InsertServiceSchedule,
+  type ServiceRecommendation,
+  type InsertServiceRecommendation,
+  type VehicleMaintenanceLog,
+  type InsertVehicleMaintenanceLog,
   type CommissionRule,
   type InsertCommissionRule,
   type CommissionTransaction,
@@ -979,6 +991,86 @@ export interface IStorage {
     successRate: number;
     averageScore: number;
   }>;
+
+  // ==================== SERVICE HISTORY ====================
+
+  // Record service history from job completion
+  recordServiceHistory(data: InsertServiceHistory): Promise<ServiceHistory>;
+
+  // Get vehicle service history
+  getVehicleServiceHistory(vehicleId: string, options?: {
+    limit?: number;
+    offset?: number;
+    orderBy?: string;
+    orderDir?: 'asc' | 'desc';
+    startDate?: Date;
+    endDate?: Date;
+    serviceType?: string;
+    hasWarranty?: boolean;
+  }): Promise<ServiceHistory[]>;
+
+  // Update or create service schedule
+  updateServiceSchedule(vehicleId: string, serviceType: string, data: InsertServiceSchedule): Promise<ServiceSchedule | null>;
+
+  // Get upcoming services for a vehicle
+  getUpcomingServices(vehicleId: string): Promise<ServiceSchedule[]>;
+
+  // Create service recommendation
+  createServiceRecommendation(data: InsertServiceRecommendation): Promise<ServiceRecommendation>;
+
+  // Get service recommendations for a vehicle
+  getServiceRecommendations(vehicleId: string, filters?: {
+    priority?: string;
+    isCompleted?: boolean;
+    isDismissed?: boolean;
+  }): Promise<ServiceRecommendation[]>;
+
+  // Mark service recommendation as completed
+  markRecommendationCompleted(recommendationId: string, jobId: string): Promise<ServiceRecommendation | null>;
+
+  // Dismiss service recommendation
+  dismissRecommendation(recommendationId: string, userId: string, reason?: string): Promise<ServiceRecommendation | null>;
+
+  // Get maintenance report for a vehicle
+  getMaintenanceReport(vehicleId: string, dateRange?: { startDate: Date; endDate: Date }): Promise<{
+    vehicle: FleetVehicle;
+    serviceHistory: ServiceHistory[];
+    upcomingServices: ServiceSchedule[];
+    recommendations: ServiceRecommendation[];
+    statistics: {
+      totalServices: number;
+      totalCost: string;
+      avgCostPerService: string;
+      mostFrequentService: string;
+    };
+  }>;
+
+  // Get service schedule for a vehicle
+  getServiceSchedule(vehicleId: string, serviceType: string): Promise<ServiceSchedule | null>;
+
+  // Update service schedules alert time
+  updateServiceSchedulesAlertTime(vehicleId: string): Promise<void>;
+
+  // Create vehicle maintenance log
+  createMaintenanceLog(data: InsertVehicleMaintenanceLog): Promise<VehicleMaintenanceLog>;
+
+  // Get vehicle maintenance logs
+  getVehicleMaintenanceLogs(vehicleId: string, options?: {
+    limit?: number;
+    offset?: number;
+    startDate?: Date;
+    endDate?: Date;
+    logType?: string;
+  }): Promise<VehicleMaintenanceLog[]>;
+
+  // Get fleet vehicle by ID
+  getFleetVehicle(vehicleId: string): Promise<FleetVehicle | null>;
+
+  // Get fleet contacts for notifications
+  getFleetContacts(fleetAccountId: string): Promise<FleetContact[]>;
+
+  // Check if service history exists for job
+  serviceHistoryExistsForJob(jobId: string): Promise<boolean>;
 }
 
 import { db } from "./db";
@@ -14274,6 +14366,330 @@ export class PostgreSQLStorage implements IStorage {
       .where(eq(commissionTransactions.id, transactionId))
       .returning();
     return result[0];
+  }
+
+  // ==================== SERVICE HISTORY IMPLEMENTATION ====================
+
+  async recordServiceHistory(data: InsertServiceHistory): Promise<ServiceHistory> {
+    const [result] = await db.insert(serviceHistory).values(data).returning();
+    return result;
+  }
+
+  async getVehicleServiceHistory(vehicleId: string, options?: {
+    limit?: number;
+    offset?: number;
+    orderBy?: string;
+    orderDir?: 'asc' | 'desc';
+    startDate?: Date;
+    endDate?: Date;
+    serviceType?: string;
+    hasWarranty?: boolean;
+  }): Promise<ServiceHistory[]> {
+    const conditions = [eq(serviceHistory.vehicleId, vehicleId)];
+    
+    if (options?.startDate) {
+      conditions.push(gte(serviceHistory.serviceDate, options.startDate));
+    }
+    
+    if (options?.endDate) {
+      conditions.push(lte(serviceHistory.serviceDate, options.endDate));
+    }
+    
+    if (options?.serviceType) {
+      conditions.push(eq(serviceHistory.serviceType, options.serviceType as any));
+    }
+    
+    if (options?.hasWarranty) {
+      conditions.push(isNotNull(serviceHistory.warrantyExpiresAt));
+      conditions.push(gte(serviceHistory.warrantyExpiresAt, new Date()));
+    }
+    
+    let query = db.select().from(serviceHistory).where(and(...conditions));
+    
+    // Apply ordering
+    const orderDir = options?.orderDir === 'asc' ? asc : desc;
+    if (options?.orderBy === 'serviceDate') {
+      query = query.orderBy(orderDir(serviceHistory.serviceDate));
+    } else if (options?.orderBy === 'totalCost') {
+      query = query.orderBy(orderDir(serviceHistory.totalCost));
+    } else {
+      query = query.orderBy(desc(serviceHistory.serviceDate));
+    }
+    
+    // Apply pagination
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+    if (options?.offset) {
+      query = query.offset(options.offset);
+    }
+    
+    return await query;
+  }
+
+  async updateServiceSchedule(vehicleId: string, serviceType: string, data: InsertServiceSchedule): Promise<ServiceSchedule | null> {
+    // Check if schedule exists
+    const existing = await db
+      .select()
+      .from(serviceSchedules)
+      .where(
+        and(
+          eq(serviceSchedules.vehicleId, vehicleId),
+          eq(serviceSchedules.serviceType, serviceType as any)
+        )
+      )
+      .limit(1);
+    
+    if (existing[0]) {
+      // Update existing schedule
+      const [updated] = await db
+        .update(serviceSchedules)
+        .set({ ...data, updatedAt: new Date() })
+        .where(
+          and(
+            eq(serviceSchedules.vehicleId, vehicleId),
+            eq(serviceSchedules.serviceType, serviceType as any)
+          )
+        )
+        .returning();
+      return updated;
+    } else {
+      // Create new schedule
+      const [created] = await db.insert(serviceSchedules).values(data).returning();
+      return created;
+    }
+  }
+
+  async getUpcomingServices(vehicleId: string): Promise<ServiceSchedule[]> {
+    const result = await db
+      .select()
+      .from(serviceSchedules)
+      .where(
+        and(
+          eq(serviceSchedules.vehicleId, vehicleId),
+          eq(serviceSchedules.isActive, true)
+        )
+      )
+      .orderBy(asc(serviceSchedules.nextDueDate));
+    
+    return result;
+  }
+
+  async createServiceRecommendation(data: InsertServiceRecommendation): Promise<ServiceRecommendation> {
+    const [result] = await db.insert(serviceRecommendations).values(data).returning();
+    return result;
+  }
+
+  async getServiceRecommendations(vehicleId: string, filters?: {
+    priority?: string;
+    isCompleted?: boolean;
+    isDismissed?: boolean;
+  }): Promise<ServiceRecommendation[]> {
+    const conditions = [eq(serviceRecommendations.vehicleId, vehicleId)];
+    
+    if (filters?.priority) {
+      conditions.push(eq(serviceRecommendations.priority, filters.priority as any));
+    }
+    
+    if (filters?.isCompleted !== undefined) {
+      conditions.push(eq(serviceRecommendations.isCompleted, filters.isCompleted));
+    }
+    
+    if (filters?.isDismissed !== undefined) {
+      conditions.push(eq(serviceRecommendations.isDismissed, filters.isDismissed));
+    }
+    
+    return await db
+      .select()
+      .from(serviceRecommendations)
+      .where(and(...conditions))
+      .orderBy(desc(serviceRecommendations.priority), asc(serviceRecommendations.recommendedDate));
+  }
+
+  async markRecommendationCompleted(recommendationId: string, jobId: string): Promise<ServiceRecommendation | null> {
+    const [result] = await db
+      .update(serviceRecommendations)
+      .set({
+        isCompleted: true,
+        completedAt: new Date(),
+        completedJobId: jobId,
+        updatedAt: new Date()
+      })
+      .where(eq(serviceRecommendations.id, recommendationId))
+      .returning();
+    
+    return result || null;
+  }
+
+  async dismissRecommendation(recommendationId: string, userId: string, reason?: string): Promise<ServiceRecommendation | null> {
+    const [result] = await db
+      .update(serviceRecommendations)
+      .set({
+        isDismissed: true,
+        dismissedAt: new Date(),
+        dismissedBy: userId,
+        dismissalReason: reason || null,
+        updatedAt: new Date()
+      })
+      .where(eq(serviceRecommendations.id, recommendationId))
+      .returning();
+    
+    return result || null;
+  }
+
+  async getMaintenanceReport(vehicleId: string, dateRange?: { startDate: Date; endDate: Date }): Promise<{
+    vehicle: FleetVehicle;
+    serviceHistory: ServiceHistory[];
+    upcomingServices: ServiceSchedule[];
+    recommendations: ServiceRecommendation[];
+    statistics: {
+      totalServices: number;
+      totalCost: string;
+      avgCostPerService: string;
+      mostFrequentService: string;
+    };
+  }> {
+    // Get vehicle
+    const vehicle = await this.getFleetVehicle(vehicleId);
+    if (!vehicle) {
+      throw new Error('Vehicle not found');
+    }
+    
+    // Get service history
+    const history = await this.getVehicleServiceHistory(vehicleId, {
+      startDate: dateRange?.startDate,
+      endDate: dateRange?.endDate,
+      limit: 1000
+    });
+    
+    // Get upcoming services
+    const upcoming = await this.getUpcomingServices(vehicleId);
+    
+    // Get recommendations
+    const recs = await this.getServiceRecommendations(vehicleId, {
+      isCompleted: false,
+      isDismissed: false
+    });
+    
+    // Calculate statistics
+    const totalCost = history.reduce((sum, s) => sum + parseFloat(s.totalCost || '0'), 0);
+    const totalServices = history.length;
+    const avgCostPerService = totalServices > 0 ? totalCost / totalServices : 0;
+    
+    // Find most frequent service
+    const serviceTypeCounts: Record<string, number> = {};
+    history.forEach(s => {
+      serviceTypeCounts[s.serviceType] = (serviceTypeCounts[s.serviceType] || 0) + 1;
+    });
+    const mostFrequentService = Object.entries(serviceTypeCounts)
+      .sort(([,a], [,b]) => b - a)[0]?.[0] || 'none';
+    
+    return {
+      vehicle,
+      serviceHistory: history,
+      upcomingServices: upcoming,
+      recommendations: recs,
+      statistics: {
+        totalServices,
+        totalCost: totalCost.toFixed(2),
+        avgCostPerService: avgCostPerService.toFixed(2),
+        mostFrequentService
+      }
+    };
+  }
+
+  async getServiceSchedule(vehicleId: string, serviceType: string): Promise<ServiceSchedule | null> {
+    const result = await db
+      .select()
+      .from(serviceSchedules)
+      .where(
+        and(
+          eq(serviceSchedules.vehicleId, vehicleId),
+          eq(serviceSchedules.serviceType, serviceType as any)
+        )
+      )
+      .limit(1);
+    
+    return result[0] || null;
+  }
+
+  async updateServiceSchedulesAlertTime(vehicleId: string): Promise<void> {
+    await db
+      .update(serviceSchedules)
+      .set({
+        alertSentAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(serviceSchedules.vehicleId, vehicleId));
+  }
+
+  async createMaintenanceLog(data: InsertVehicleMaintenanceLog): Promise<VehicleMaintenanceLog> {
+    const [result] = await db.insert(vehicleMaintenanceLogs).values(data).returning();
+    return result;
+  }
+
+  async getVehicleMaintenanceLogs(vehicleId: string, options?: {
+    limit?: number;
+    offset?: number;
+    startDate?: Date;
+    endDate?: Date;
+    logType?: string;
+  }): Promise<VehicleMaintenanceLog[]> {
+    const conditions = [eq(vehicleMaintenanceLogs.vehicleId, vehicleId)];
+    
+    if (options?.startDate) {
+      conditions.push(gte(vehicleMaintenanceLogs.entryDate, options.startDate));
+    }
+    
+    if (options?.endDate) {
+      conditions.push(lte(vehicleMaintenanceLogs.entryDate, options.endDate));
+    }
+    
+    if (options?.logType) {
+      conditions.push(eq(vehicleMaintenanceLogs.logType, options.logType as any));
+    }
+    
+    let query = db
+      .select()
+      .from(vehicleMaintenanceLogs)
+      .where(and(...conditions))
+      .orderBy(desc(vehicleMaintenanceLogs.entryDate));
+    
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+    if (options?.offset) {
+      query = query.offset(options.offset);
+    }
+    
+    return await query;
+  }
+
+  async getFleetVehicle(vehicleId: string): Promise<FleetVehicle | null> {
+    const result = await db
+      .select()
+      .from(fleetVehicles)
+      .where(eq(fleetVehicles.id, vehicleId))
+      .limit(1);
+    
+    return result[0] || null;
+  }
+
+  async getFleetContacts(fleetAccountId: string): Promise<FleetContact[]> {
+    return await db
+      .select()
+      .from(fleetContacts)
+      .where(eq(fleetContacts.fleetAccountId, fleetAccountId));
+  }
+
+  async serviceHistoryExistsForJob(jobId: string): Promise<boolean> {
+    const result = await db
+      .select({ id: serviceHistory.id })
+      .from(serviceHistory)
+      .where(eq(serviceHistory.jobId, jobId))
+      .limit(1);
+    
+    return result.length > 0;
   }
 }
 

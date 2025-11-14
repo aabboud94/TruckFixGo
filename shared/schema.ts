@@ -4997,6 +4997,228 @@ export const payoutBatches = pgTable("payout_batches", {
   createdIdx: index("idx_payout_batches_created").on(table.createdAt)
 }));
 
+// ====================
+// SERVICE HISTORY TABLES
+// ====================
+
+// Service history related enums
+export const serviceHistoryTypeEnum = pgEnum('service_history_type', [
+  'oil_change',
+  'tire_rotation',
+  'brake_service', 
+  'transmission_service',
+  'coolant_flush',
+  'air_filter',
+  'fuel_filter',
+  'inspection',
+  'major_repair',
+  'battery_replacement',
+  'alignment',
+  'differential_service',
+  'power_steering_flush',
+  'spark_plug_replacement',
+  'belt_replacement',
+  'wiper_replacement',
+  'other'
+]);
+
+export const servicePriorityEnum = pgEnum('service_priority', ['low', 'medium', 'high', 'critical']);
+export const maintenanceLogTypeEnum = pgEnum('maintenance_log_type', ['service', 'inspection', 'repair', 'note', 'warranty']);
+
+// Service History table - tracks all completed maintenance and repairs
+export const serviceHistory = pgTable("service_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // References
+  jobId: varchar("job_id").references(() => jobs.id),
+  vehicleId: varchar("vehicle_id").notNull().references(() => fleetVehicles.id),
+  contractorId: varchar("contractor_id").references(() => users.id),
+  fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id),
+  
+  // Service details
+  serviceType: serviceHistoryTypeEnum("service_type").notNull(),
+  serviceDate: timestamp("service_date").notNull(),
+  description: text("description"),
+  mileage: integer("mileage"),
+  
+  // Parts and labor
+  partsUsed: jsonb("parts_used"), // Array of {partName, partNumber, quantity, unitCost}
+  laborHours: decimal("labor_hours", { precision: 5, scale: 2 }),
+  
+  // Costs
+  partsCost: decimal("parts_cost", { precision: 10, scale: 2 }),
+  laborCost: decimal("labor_cost", { precision: 10, scale: 2 }),
+  totalCost: decimal("total_cost", { precision: 10, scale: 2 }),
+  
+  // Warranty
+  warrantyInfo: jsonb("warranty_info"), // {provider, duration, expirationDate, terms}
+  warrantyExpiresAt: timestamp("warranty_expires_at"),
+  
+  // Additional info
+  invoiceId: varchar("invoice_id").references(() => invoices.id),
+  notes: text("notes"),
+  attachments: jsonb("attachments"), // Array of file URLs
+  metadata: jsonb("metadata"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  performedBy: varchar("performed_by", { length: 255 })
+}, (table) => ({
+  vehicleIdx: index("idx_service_history_vehicle").on(table.vehicleId),
+  jobIdx: index("idx_service_history_job").on(table.jobId),
+  contractorIdx: index("idx_service_history_contractor").on(table.contractorId),
+  serviceDateIdx: index("idx_service_history_date").on(table.serviceDate),
+  serviceTypeIdx: index("idx_service_history_type").on(table.serviceType)
+}));
+
+// Service Schedules table - tracks maintenance intervals
+export const serviceSchedules = pgTable("service_schedules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // References
+  vehicleId: varchar("vehicle_id").notNull().references(() => fleetVehicles.id),
+  fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id),
+  
+  // Service type and intervals
+  serviceType: serviceHistoryTypeEnum("service_type").notNull(),
+  intervalMiles: integer("interval_miles"),
+  intervalMonths: integer("interval_months"),
+  
+  // Tracking
+  lastServiceDate: timestamp("last_service_date"),
+  lastServiceMileage: integer("last_service_mileage"),
+  nextDueDate: timestamp("next_due_date"),
+  nextDueMileage: integer("next_due_mileage"),
+  
+  // Status and alerts
+  isOverdue: boolean("is_overdue").notNull().default(false),
+  overdueBy: integer("overdue_by"), // Days or miles overdue
+  alertSentAt: timestamp("alert_sent_at"),
+  
+  // Configuration
+  isActive: boolean("is_active").notNull().default(true),
+  customNotes: text("custom_notes"),
+  metadata: jsonb("metadata"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  vehicleServiceIdx: uniqueIndex("idx_service_schedules_vehicle_service").on(table.vehicleId, table.serviceType),
+  vehicleIdx: index("idx_service_schedules_vehicle").on(table.vehicleId),
+  nextDueDateIdx: index("idx_service_schedules_next_due_date").on(table.nextDueDate),
+  overdueIdx: index("idx_service_schedules_overdue").on(table.isOverdue)
+}));
+
+// Service Recommendations table - AI-generated or manual recommendations
+export const serviceRecommendations = pgTable("service_recommendations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // References
+  vehicleId: varchar("vehicle_id").notNull().references(() => fleetVehicles.id),
+  fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id),
+  
+  // Recommendation details
+  serviceType: serviceHistoryTypeEnum("service_type").notNull(),
+  priority: servicePriorityEnum("priority").notNull().default('medium'),
+  recommendedDate: timestamp("recommended_date"),
+  reason: text("reason").notNull(),
+  estimatedCost: decimal("estimated_cost", { precision: 10, scale: 2 }),
+  
+  // Source and status
+  generatedBy: varchar("generated_by", { length: 50 }), // 'system', 'ai', 'manual'
+  isCompleted: boolean("is_completed").notNull().default(false),
+  completedAt: timestamp("completed_at"),
+  completedJobId: varchar("completed_job_id").references(() => jobs.id),
+  
+  // Dismissal
+  isDismissed: boolean("is_dismissed").notNull().default(false),
+  dismissedAt: timestamp("dismissed_at"),
+  dismissedBy: varchar("dismissed_by").references(() => users.id),
+  dismissalReason: text("dismissal_reason"),
+  
+  // Additional data
+  confidence: decimal("confidence", { precision: 3, scale: 2 }), // AI confidence 0-1
+  supportingData: jsonb("supporting_data"), // Telemetry, patterns, etc.
+  metadata: jsonb("metadata"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  vehicleIdx: index("idx_service_recommendations_vehicle").on(table.vehicleId),
+  priorityIdx: index("idx_service_recommendations_priority").on(table.priority),
+  completedIdx: index("idx_service_recommendations_completed").on(table.isCompleted),
+  recommendedDateIdx: index("idx_service_recommendations_date").on(table.recommendedDate)
+}));
+
+// Vehicle Maintenance Log table - general maintenance notes and records
+export const vehicleMaintenanceLogs = pgTable("vehicle_maintenance_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // References
+  vehicleId: varchar("vehicle_id").notNull().references(() => fleetVehicles.id),
+  fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  
+  // Log details
+  logType: maintenanceLogTypeEnum("log_type").notNull(),
+  entryDate: timestamp("entry_date").notNull(),
+  notes: text("notes").notNull(),
+  attachments: jsonb("attachments"), // Array of file URLs
+  
+  // Additional references
+  relatedJobId: varchar("related_job_id").references(() => jobs.id),
+  relatedServiceId: varchar("related_service_id").references(() => serviceHistory.id),
+  
+  // Metadata
+  mileageAtEntry: integer("mileage_at_entry"),
+  metadata: jsonb("metadata"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  vehicleIdx: index("idx_vehicle_maintenance_logs_vehicle").on(table.vehicleId),
+  entryDateIdx: index("idx_vehicle_maintenance_logs_date").on(table.entryDate),
+  logTypeIdx: index("idx_vehicle_maintenance_logs_type").on(table.logType),
+  createdByIdx: index("idx_vehicle_maintenance_logs_created_by").on(table.createdBy)
+}));
+
+// Service History schemas and types
+export const insertServiceHistorySchema = createInsertSchema(serviceHistory).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertServiceHistory = z.infer<typeof insertServiceHistorySchema>;
+export type ServiceHistory = typeof serviceHistory.$inferSelect;
+
+export const insertServiceScheduleSchema = createInsertSchema(serviceSchedules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertServiceSchedule = z.infer<typeof insertServiceScheduleSchema>;
+export type ServiceSchedule = typeof serviceSchedules.$inferSelect;
+
+export const insertServiceRecommendationSchema = createInsertSchema(serviceRecommendations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertServiceRecommendation = z.infer<typeof insertServiceRecommendationSchema>;
+export type ServiceRecommendation = typeof serviceRecommendations.$inferSelect;
+
+export const insertVehicleMaintenanceLogSchema = createInsertSchema(vehicleMaintenanceLogs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertVehicleMaintenanceLog = z.infer<typeof insertVehicleMaintenanceLogSchema>;
+export type VehicleMaintenanceLog = typeof vehicleMaintenanceLogs.$inferSelect;
+
 // Commission and reconciliation schemas and types
 export const insertCommissionRuleSchema = createInsertSchema(commissionRules).omit({
   id: true,
