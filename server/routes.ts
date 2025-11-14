@@ -9913,6 +9913,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== CONTRACTOR BULK OPERATIONS ====================
+  
+  // Bulk approve contractors
+  app.post('/api/admin/contractors/bulk-approve',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      contractorIds: z.array(z.string()).min(1, 'At least one contractor ID is required')
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { contractorIds } = req.body;
+        const performedBy = req.session.userId || 'admin';
+        
+        console.log(`[Bulk Operation] Approving ${contractorIds.length} contractors`);
+        const result = await storage.bulkApproveContractors(contractorIds, performedBy);
+        
+        res.json({
+          success: true,
+          message: `Successfully approved ${result.succeeded.length} contractors`,
+          result
+        });
+      } catch (error) {
+        console.error('Bulk approve contractors error:', error);
+        res.status(500).json({ message: 'Failed to approve contractors' });
+      }
+    }
+  );
+  
+  // Bulk reject contractors
+  app.post('/api/admin/contractors/bulk-reject',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      contractorIds: z.array(z.string()).min(1, 'At least one contractor ID is required'),
+      reason: z.string().min(1, 'Rejection reason is required')
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { contractorIds, reason } = req.body;
+        const performedBy = req.session.userId || 'admin';
+        
+        console.log(`[Bulk Operation] Rejecting ${contractorIds.length} contractors`);
+        const result = await storage.bulkRejectContractors(contractorIds, reason, performedBy);
+        
+        res.json({
+          success: true,
+          message: `Successfully rejected ${result.succeeded.length} contractors`,
+          result
+        });
+      } catch (error) {
+        console.error('Bulk reject contractors error:', error);
+        res.status(500).json({ message: 'Failed to reject contractors' });
+      }
+    }
+  );
+  
+  // Bulk suspend contractors
+  app.post('/api/admin/contractors/bulk-suspend',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      contractorIds: z.array(z.string()).min(1, 'At least one contractor ID is required')
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { contractorIds } = req.body;
+        const performedBy = req.session.userId || 'admin';
+        
+        console.log(`[Bulk Operation] Suspending ${contractorIds.length} contractors`);
+        const result = await storage.bulkSuspendContractors(contractorIds, performedBy);
+        
+        res.json({
+          success: true,
+          message: `Successfully suspended ${result.succeeded.length} contractors`,
+          result
+        });
+      } catch (error) {
+        console.error('Bulk suspend contractors error:', error);
+        res.status(500).json({ message: 'Failed to suspend contractors' });
+      }
+    }
+  );
+  
+  // Bulk activate contractors
+  app.post('/api/admin/contractors/bulk-activate',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      contractorIds: z.array(z.string()).min(1, 'At least one contractor ID is required')
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { contractorIds } = req.body;
+        const performedBy = req.session.userId || 'admin';
+        
+        console.log(`[Bulk Operation] Activating ${contractorIds.length} contractors`);
+        const result = await storage.bulkActivateContractors(contractorIds, performedBy);
+        
+        res.json({
+          success: true,
+          message: `Successfully activated ${result.succeeded.length} contractors`,
+          result
+        });
+      } catch (error) {
+        console.error('Bulk activate contractors error:', error);
+        res.status(500).json({ message: 'Failed to activate contractors' });
+      }
+    }
+  );
+  
+  // Bulk email contractors
+  app.post('/api/admin/contractors/bulk-email',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      contractorIds: z.array(z.string()).min(1, 'At least one contractor ID is required'),
+      subject: z.string().min(1, 'Subject is required'),
+      message: z.string().min(1, 'Message is required')
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { contractorIds, subject, message } = req.body;
+        const performedBy = req.session.userId || 'admin';
+        
+        console.log(`[Bulk Operation] Emailing ${contractorIds.length} contractors`);
+        const result = await storage.bulkEmailContractors(contractorIds, subject, message, performedBy);
+        
+        res.json({
+          success: true,
+          message: `Successfully emailed ${result.succeeded.length} contractors`,
+          result
+        });
+      } catch (error) {
+        console.error('Bulk email contractors error:', error);
+        res.status(500).json({ message: 'Failed to email contractors' });
+      }
+    }
+  );
+
   // ==================== EMAIL TEST ENDPOINT ====================
   
   // Test email sending functionality
@@ -10367,46 +10507,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  // Bulk operations (e.g., suspend multiple users)
-  app.post('/api/admin/users/bulk',
+  // ==================== USER BULK OPERATIONS ====================
+  
+  // Bulk suspend users
+  app.post('/api/admin/users/bulk-suspend',
     requireAuth,
     requireRole('admin'),
     validateRequest(z.object({
-      userIds: z.array(z.string()),
-      operation: z.enum(['suspend', 'activate', 'delete'])
+      userIds: z.array(z.string()).min(1, 'At least one user ID is required')
     })),
     async (req: Request, res: Response) => {
       try {
-        const { userIds, operation } = req.body;
-        const results = [];
+        const { userIds } = req.body;
+        const performedBy = req.session.userId || 'admin';
         
-        for (const userId of userIds) {
-          try {
-            if (operation === 'suspend') {
-              await storage.updateUserStatus(userId, false);
-              results.push({ userId, success: true });
-            } else if (operation === 'activate') {
-              await storage.updateUserStatus(userId, true);
-              results.push({ userId, success: true });
-            } else if (operation === 'delete') {
-              await storage.updateUserStatus(userId, false); // Soft delete
-              results.push({ userId, success: true });
-            }
-          } catch (error) {
-            results.push({ userId, success: false, error: error instanceof Error ? error.message : 'Unknown error' });
-          }
-        }
+        console.log(`[Bulk Operation] Suspending ${userIds.length} users`);
+        const result = await storage.bulkSuspendUsers(userIds, performedBy);
         
-        const successCount = results.filter(r => r.success).length;
-        const failureCount = results.filter(r => !r.success).length;
-        
-        res.json({ 
-          message: `Bulk operation completed: ${successCount} succeeded, ${failureCount} failed`,
-          results 
+        res.json({
+          success: true,
+          message: `Successfully suspended ${result.succeeded.length} users`,
+          result
         });
       } catch (error) {
-        console.error('Bulk user operation error:', error);
-        res.status(500).json({ message: 'Failed to perform bulk operation' });
+        console.error('Bulk suspend users error:', error);
+        res.status(500).json({ message: 'Failed to suspend users' });
+      }
+    }
+  );
+  
+  // Bulk activate users
+  app.post('/api/admin/users/bulk-activate',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      userIds: z.array(z.string()).min(1, 'At least one user ID is required')
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { userIds } = req.body;
+        const performedBy = req.session.userId || 'admin';
+        
+        console.log(`[Bulk Operation] Activating ${userIds.length} users`);
+        const result = await storage.bulkActivateUsers(userIds, performedBy);
+        
+        res.json({
+          success: true,
+          message: `Successfully activated ${result.succeeded.length} users`,
+          result
+        });
+      } catch (error) {
+        console.error('Bulk activate users error:', error);
+        res.status(500).json({ message: 'Failed to activate users' });
+      }
+    }
+  );
+  
+  // Bulk delete users (soft delete)
+  app.post('/api/admin/users/bulk-delete',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      userIds: z.array(z.string()).min(1, 'At least one user ID is required')
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { userIds } = req.body;
+        const performedBy = req.session.userId || 'admin';
+        
+        console.log(`[Bulk Operation] Deleting ${userIds.length} users`);
+        const result = await storage.bulkDeleteUsers(userIds, performedBy);
+        
+        res.json({
+          success: true,
+          message: `Successfully deleted ${result.succeeded.length} users`,
+          result
+        });
+      } catch (error) {
+        console.error('Bulk delete users error:', error);
+        res.status(500).json({ message: 'Failed to delete users' });
+      }
+    }
+  );
+  
+  // Bulk email users
+  app.post('/api/admin/users/bulk-email',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(z.object({
+      userIds: z.array(z.string()).min(1, 'At least one user ID is required'),
+      subject: z.string().min(1, 'Subject is required'),
+      message: z.string().min(1, 'Message is required')
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const { userIds, subject, message } = req.body;
+        const performedBy = req.session.userId || 'admin';
+        
+        console.log(`[Bulk Operation] Emailing ${userIds.length} users`);
+        const result = await storage.bulkEmailUsers(userIds, subject, message, performedBy);
+        
+        res.json({
+          success: true,
+          message: `Successfully emailed ${result.succeeded.length} users`,
+          result
+        });
+      } catch (error) {
+        console.error('Bulk email users error:', error);
+        res.status(500).json({ message: 'Failed to email users' });
       }
     }
   );

@@ -324,6 +324,27 @@ export interface IStorage {
     polyline: string;
     points: Array<{ lat: number; lng: number; timestamp: Date }>;
   }>;
+  
+  // ==================== BULK OPERATIONS ====================
+  
+  // User Bulk Operations
+  bulkSuspendUsers(userIds: string[], performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }>;
+  bulkActivateUsers(userIds: string[], performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }>;
+  bulkDeleteUsers(userIds: string[], performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }>;
+  bulkEmailUsers(userIds: string[], subject: string, message: string, performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }>;
+  
+  // Contractor Bulk Operations
+  bulkApproveContractors(contractorIds: string[], performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }>;
+  bulkRejectContractors(contractorIds: string[], reason: string, performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }>;
+  bulkSuspendContractors(contractorIds: string[], performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }>;
+  bulkActivateContractors(contractorIds: string[], performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }>;
+  bulkEmailContractors(contractorIds: string[], subject: string, message: string, performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }>;
+  
+  // Helper method to get user emails
+  getUserEmails(userIds: string[]): Promise<{ userId: string; email: string; name: string }[]>;
+  
+  // Helper method to get contractor emails
+  getContractorEmails(contractorIds: string[]): Promise<{ contractorId: string; email: string; name: string }[]>;
 }
 
 import { db } from "./db";
@@ -8891,6 +8912,447 @@ export class PostgreSQLStorage implements IStorage {
     // This would use AI/ML or business logic to generate maintenance schedules
     // For now, return empty array as a placeholder
     return [];
+  }
+  
+  // ==================== BULK OPERATIONS ====================
+  
+  // User Bulk Operations
+  async bulkSuspendUsers(userIds: string[], performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }> {
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    const errorMessages: { [key: string]: string } = {};
+    
+    for (const userId of userIds) {
+      try {
+        // Don't allow suspension of admin users unless there are other admins
+        const user = await this.getUser(userId);
+        if (!user) {
+          failed.push(userId);
+          errorMessages[userId] = 'User not found';
+          continue;
+        }
+        
+        if (user.role === 'admin') {
+          const adminCount = await db.select({ count: sql`count(*)::int` })
+            .from(users)
+            .where(and(eq(users.role, 'admin'), eq(users.isActive, true)));
+          
+          if (adminCount[0].count <= 1) {
+            failed.push(userId);
+            errorMessages[userId] = 'Cannot suspend the last active admin';
+            continue;
+          }
+        }
+        
+        await db.update(users)
+          .set({ isActive: false, updatedAt: new Date() })
+          .where(eq(users.id, userId));
+        
+        succeeded.push(userId);
+        
+        // Log the action
+        console.log(`[Bulk Action] User ${userId} suspended by ${performedBy}`);
+      } catch (error) {
+        failed.push(userId);
+        errorMessages[userId] = error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+    
+    return { succeeded, failed, errorMessages };
+  }
+  
+  async bulkActivateUsers(userIds: string[], performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }> {
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    const errorMessages: { [key: string]: string } = {};
+    
+    for (const userId of userIds) {
+      try {
+        const user = await this.getUser(userId);
+        if (!user) {
+          failed.push(userId);
+          errorMessages[userId] = 'User not found';
+          continue;
+        }
+        
+        await db.update(users)
+          .set({ isActive: true, updatedAt: new Date() })
+          .where(eq(users.id, userId));
+        
+        succeeded.push(userId);
+        
+        // Log the action
+        console.log(`[Bulk Action] User ${userId} activated by ${performedBy}`);
+      } catch (error) {
+        failed.push(userId);
+        errorMessages[userId] = error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+    
+    return { succeeded, failed, errorMessages };
+  }
+  
+  async bulkDeleteUsers(userIds: string[], performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }> {
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    const errorMessages: { [key: string]: string } = {};
+    
+    for (const userId of userIds) {
+      try {
+        const user = await this.getUser(userId);
+        if (!user) {
+          failed.push(userId);
+          errorMessages[userId] = 'User not found';
+          continue;
+        }
+        
+        // Prevent deletion of admin users
+        if (user.role === 'admin') {
+          failed.push(userId);
+          errorMessages[userId] = 'Cannot delete admin users';
+          continue;
+        }
+        
+        // Soft delete by marking as inactive and adding deleted timestamp
+        await db.update(users)
+          .set({ 
+            isActive: false, 
+            updatedAt: new Date(),
+            email: `deleted_${Date.now()}_${user.email}` // Prefix email to allow re-registration
+          })
+          .where(eq(users.id, userId));
+        
+        succeeded.push(userId);
+        
+        // Log the action
+        console.log(`[Bulk Action] User ${userId} soft-deleted by ${performedBy}`);
+      } catch (error) {
+        failed.push(userId);
+        errorMessages[userId] = error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+    
+    return { succeeded, failed, errorMessages };
+  }
+  
+  async bulkEmailUsers(userIds: string[], subject: string, message: string, performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }> {
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    const errorMessages: { [key: string]: string } = {};
+    
+    // Get email service
+    const { emailService } = await import('./services/email-service');
+    
+    for (const userId of userIds) {
+      try {
+        const user = await this.getUser(userId);
+        if (!user) {
+          failed.push(userId);
+          errorMessages[userId] = 'User not found';
+          continue;
+        }
+        
+        if (!user.email) {
+          failed.push(userId);
+          errorMessages[userId] = 'User has no email address';
+          continue;
+        }
+        
+        // Send custom email
+        const emailSent = await emailService.sendCustomEmail(
+          user.email,
+          subject,
+          message,
+          {
+            userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User',
+            performedBy
+          }
+        );
+        
+        if (emailSent) {
+          succeeded.push(userId);
+        } else {
+          failed.push(userId);
+          errorMessages[userId] = 'Failed to send email';
+        }
+        
+        // Log the action
+        console.log(`[Bulk Action] Email sent to user ${userId} by ${performedBy}`);
+      } catch (error) {
+        failed.push(userId);
+        errorMessages[userId] = error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+    
+    return { succeeded, failed, errorMessages };
+  }
+  
+  // Contractor Bulk Operations
+  async bulkApproveContractors(contractorIds: string[], performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }> {
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    const errorMessages: { [key: string]: string } = {};
+    
+    for (const contractorId of contractorIds) {
+      try {
+        const contractor = await this.getContractorProfile(contractorId);
+        if (!contractor) {
+          failed.push(contractorId);
+          errorMessages[contractorId] = 'Contractor not found';
+          continue;
+        }
+        
+        if (contractor.status === 'active') {
+          failed.push(contractorId);
+          errorMessages[contractorId] = 'Contractor is already active';
+          continue;
+        }
+        
+        await db.update(contractorProfiles)
+          .set({ 
+            status: 'active',
+            isActive: true,
+            approvedAt: new Date(),
+            approvedBy: performedBy,
+            updatedAt: new Date()
+          })
+          .where(eq(contractorProfiles.userId, contractorId));
+        
+        succeeded.push(contractorId);
+        
+        // Log the action
+        console.log(`[Bulk Action] Contractor ${contractorId} approved by ${performedBy}`);
+      } catch (error) {
+        failed.push(contractorId);
+        errorMessages[contractorId] = error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+    
+    return { succeeded, failed, errorMessages };
+  }
+  
+  async bulkRejectContractors(contractorIds: string[], reason: string, performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }> {
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    const errorMessages: { [key: string]: string } = {};
+    
+    for (const contractorId of contractorIds) {
+      try {
+        const contractor = await this.getContractorProfile(contractorId);
+        if (!contractor) {
+          failed.push(contractorId);
+          errorMessages[contractorId] = 'Contractor not found';
+          continue;
+        }
+        
+        if (contractor.status === 'rejected') {
+          failed.push(contractorId);
+          errorMessages[contractorId] = 'Contractor is already rejected';
+          continue;
+        }
+        
+        await db.update(contractorProfiles)
+          .set({ 
+            status: 'rejected',
+            isActive: false,
+            rejectionReason: reason,
+            updatedAt: new Date()
+          })
+          .where(eq(contractorProfiles.userId, contractorId));
+        
+        succeeded.push(contractorId);
+        
+        // Log the action
+        console.log(`[Bulk Action] Contractor ${contractorId} rejected by ${performedBy}: ${reason}`);
+      } catch (error) {
+        failed.push(contractorId);
+        errorMessages[contractorId] = error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+    
+    return { succeeded, failed, errorMessages };
+  }
+  
+  async bulkSuspendContractors(contractorIds: string[], performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }> {
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    const errorMessages: { [key: string]: string } = {};
+    
+    for (const contractorId of contractorIds) {
+      try {
+        const contractor = await this.getContractorProfile(contractorId);
+        if (!contractor) {
+          failed.push(contractorId);
+          errorMessages[contractorId] = 'Contractor not found';
+          continue;
+        }
+        
+        if (contractor.status === 'suspended') {
+          failed.push(contractorId);
+          errorMessages[contractorId] = 'Contractor is already suspended';
+          continue;
+        }
+        
+        await db.update(contractorProfiles)
+          .set({ 
+            status: 'suspended',
+            isActive: false,
+            isAvailable: false,
+            suspendedAt: new Date(),
+            suspendedBy: performedBy,
+            updatedAt: new Date()
+          })
+          .where(eq(contractorProfiles.userId, contractorId));
+        
+        succeeded.push(contractorId);
+        
+        // Log the action
+        console.log(`[Bulk Action] Contractor ${contractorId} suspended by ${performedBy}`);
+      } catch (error) {
+        failed.push(contractorId);
+        errorMessages[contractorId] = error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+    
+    return { succeeded, failed, errorMessages };
+  }
+  
+  async bulkActivateContractors(contractorIds: string[], performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }> {
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    const errorMessages: { [key: string]: string } = {};
+    
+    for (const contractorId of contractorIds) {
+      try {
+        const contractor = await this.getContractorProfile(contractorId);
+        if (!contractor) {
+          failed.push(contractorId);
+          errorMessages[contractorId] = 'Contractor not found';
+          continue;
+        }
+        
+        if (contractor.status === 'active') {
+          failed.push(contractorId);
+          errorMessages[contractorId] = 'Contractor is already active';
+          continue;
+        }
+        
+        await db.update(contractorProfiles)
+          .set({ 
+            status: 'active',
+            isActive: true,
+            suspendedAt: null,
+            suspendedBy: null,
+            updatedAt: new Date()
+          })
+          .where(eq(contractorProfiles.userId, contractorId));
+        
+        succeeded.push(contractorId);
+        
+        // Log the action
+        console.log(`[Bulk Action] Contractor ${contractorId} activated by ${performedBy}`);
+      } catch (error) {
+        failed.push(contractorId);
+        errorMessages[contractorId] = error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+    
+    return { succeeded, failed, errorMessages };
+  }
+  
+  async bulkEmailContractors(contractorIds: string[], subject: string, message: string, performedBy: string): Promise<{ succeeded: string[]; failed: string[]; errorMessages: { [key: string]: string } }> {
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+    const errorMessages: { [key: string]: string } = {};
+    
+    // Get email service
+    const { emailService } = await import('./services/email-service');
+    
+    for (const contractorId of contractorIds) {
+      try {
+        const contractor = await this.getContractorProfile(contractorId);
+        if (!contractor) {
+          failed.push(contractorId);
+          errorMessages[contractorId] = 'Contractor not found';
+          continue;
+        }
+        
+        const user = await this.getUser(contractorId);
+        if (!user || !user.email) {
+          failed.push(contractorId);
+          errorMessages[contractorId] = 'Contractor has no email address';
+          continue;
+        }
+        
+        // Send custom email
+        const emailSent = await emailService.sendCustomEmail(
+          user.email,
+          subject,
+          message,
+          {
+            contractorName: `${contractor.firstName || ''} ${contractor.lastName || ''}`.trim() || 'Contractor',
+            companyName: contractor.company || '',
+            performedBy
+          }
+        );
+        
+        if (emailSent) {
+          succeeded.push(contractorId);
+        } else {
+          failed.push(contractorId);
+          errorMessages[contractorId] = 'Failed to send email';
+        }
+        
+        // Log the action
+        console.log(`[Bulk Action] Email sent to contractor ${contractorId} by ${performedBy}`);
+      } catch (error) {
+        failed.push(contractorId);
+        errorMessages[contractorId] = error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+    
+    return { succeeded, failed, errorMessages };
+  }
+  
+  // Helper methods
+  async getUserEmails(userIds: string[]): Promise<{ userId: string; email: string; name: string }[]> {
+    if (userIds.length === 0) return [];
+    
+    const result = await db.select({
+      userId: users.id,
+      email: users.email,
+      firstName: users.firstName,
+      lastName: users.lastName
+    })
+    .from(users)
+    .where(inArray(users.id, userIds));
+    
+    return result.map(r => ({
+      userId: r.userId,
+      email: r.email,
+      name: `${r.firstName || ''} ${r.lastName || ''}`.trim() || 'User'
+    }));
+  }
+  
+  async getContractorEmails(contractorIds: string[]): Promise<{ contractorId: string; email: string; name: string }[]> {
+    if (contractorIds.length === 0) return [];
+    
+    const result = await db.select({
+      contractorId: contractorProfiles.userId,
+      email: users.email,
+      firstName: contractorProfiles.firstName,
+      lastName: contractorProfiles.lastName,
+      company: contractorProfiles.company
+    })
+    .from(contractorProfiles)
+    .innerJoin(users, eq(contractorProfiles.userId, users.id))
+    .where(inArray(contractorProfiles.userId, contractorIds));
+    
+    return result.map(r => ({
+      contractorId: r.contractorId,
+      email: r.email,
+      name: `${r.firstName || ''} ${r.lastName || ''}`.trim() || r.company || 'Contractor'
+    }));
   }
 }
 

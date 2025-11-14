@@ -15,11 +15,30 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Search, Filter, UserPlus, Ban, CheckCircle, XCircle, Key,
   Shield, Clock, Activity, AlertCircle, RefreshCw, Download,
   Loader2, Edit, Eye, UserX, UserCheck, History, LogIn,
-  Settings, Mail
+  Settings, Mail, ChevronDown, Trash2
 } from "lucide-react";
 
 export default function AdminUsers() {
@@ -39,6 +58,15 @@ export default function AdminUsers() {
     name: '',
     role: 'driver',
     password: '',
+  });
+
+  // Bulk action states
+  const [bulkAction, setBulkAction] = useState<string | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [emailData, setEmailData] = useState({
+    subject: '',
+    message: '',
   });
 
   // Query for users
@@ -137,6 +165,92 @@ export default function AdminUsers() {
     },
   });
 
+  // Bulk operations mutations
+  const bulkSuspendMutation = useMutation({
+    mutationFn: async (userIds: string[]) => {
+      return apiRequest('POST', '/api/admin/users/bulk-suspend', { userIds });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      setSelectedUsers([]);
+      toast({
+        title: "Users suspended",
+        description: data.message || `Successfully suspended ${data.result?.succeeded?.length || 0} users`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error suspending users",
+        description: error.message || "Failed to suspend selected users",
+      });
+    },
+  });
+
+  const bulkActivateMutation = useMutation({
+    mutationFn: async (userIds: string[]) => {
+      return apiRequest('POST', '/api/admin/users/bulk-activate', { userIds });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      setSelectedUsers([]);
+      toast({
+        title: "Users activated",
+        description: data.message || `Successfully activated ${data.result?.succeeded?.length || 0} users`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error activating users",
+        description: error.message || "Failed to activate selected users",
+      });
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (userIds: string[]) => {
+      return apiRequest('POST', '/api/admin/users/bulk-delete', { userIds });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      setSelectedUsers([]);
+      toast({
+        title: "Users deleted",
+        description: data.message || `Successfully deleted ${data.result?.succeeded?.length || 0} users`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error deleting users",
+        description: error.message || "Failed to delete selected users",
+      });
+    },
+  });
+
+  const bulkEmailMutation = useMutation({
+    mutationFn: async ({ userIds, subject, message }: { userIds: string[], subject: string, message: string }) => {
+      return apiRequest('POST', '/api/admin/users/bulk-email', { userIds, subject, message });
+    },
+    onSuccess: (data) => {
+      setEmailData({ subject: '', message: '' });
+      setShowEmailDialog(false);
+      setSelectedUsers([]);
+      toast({
+        title: "Emails sent",
+        description: data.message || `Successfully emailed ${data.result?.succeeded?.length || 0} users`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error sending emails",
+        description: error.message || "Failed to send emails to selected users",
+      });
+    },
+  });
+
   const usersData = users || [];
 
   const activityData = activityLogs?.data || [];
@@ -167,6 +281,67 @@ export default function AdminUsers() {
       case 'job_create': return Activity;
       case 'profile_update': return Settings;
       default: return Activity;
+    }
+  };
+
+  // Helper functions for bulk actions
+  const handleBulkAction = (action: string) => {
+    setBulkAction(action);
+    if (action === 'email') {
+      setShowEmailDialog(true);
+    } else {
+      setShowConfirmDialog(true);
+    }
+  };
+
+  const confirmBulkAction = () => {
+    if (!bulkAction || selectedUsers.length === 0) return;
+
+    switch (bulkAction) {
+      case 'suspend':
+        bulkSuspendMutation.mutate(selectedUsers);
+        break;
+      case 'activate':
+        bulkActivateMutation.mutate(selectedUsers);
+        break;
+      case 'delete':
+        bulkDeleteMutation.mutate(selectedUsers);
+        break;
+    }
+
+    setShowConfirmDialog(false);
+    setBulkAction(null);
+  };
+
+  const sendBulkEmail = () => {
+    if (!emailData.subject || !emailData.message || selectedUsers.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Validation error",
+        description: "Please provide both subject and message for the email",
+      });
+      return;
+    }
+
+    bulkEmailMutation.mutate({
+      userIds: selectedUsers,
+      subject: emailData.subject,
+      message: emailData.message,
+    });
+  };
+
+  const getBulkActionDescription = () => {
+    if (!bulkAction) return '';
+    const count = selectedUsers.length;
+    switch (bulkAction) {
+      case 'suspend':
+        return `You are about to suspend ${count} user${count > 1 ? 's' : ''}. They will not be able to access the system until reactivated.`;
+      case 'activate':
+        return `You are about to activate ${count} user${count > 1 ? 's' : ''}. They will be able to access the system again.`;
+      case 'delete':
+        return `You are about to delete ${count} user${count > 1 ? 's' : ''}. This action cannot be undone.`;
+      default:
+        return '';
     }
   };
 
@@ -277,37 +452,61 @@ export default function AdminUsers() {
 
           {/* Bulk Actions */}
           {selectedUsers.length > 0 && (
-            <div className="flex items-center gap-4 mb-4 p-3 bg-muted rounded-lg">
-              <span className="text-sm">
-                {selectedUsers.length} user(s) selected
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    // Suspend selected users
-                  }}
-                >
-                  Suspend
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    // Send email to selected users
-                  }}
-                >
-                  Send Email
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSelectedUsers([])}
-                >
-                  Clear Selection
-                </Button>
+            <div className="flex items-center justify-between mb-4 p-3 bg-muted rounded-lg">
+              <div className="flex items-center gap-4">
+                <span className="font-medium">
+                  {selectedUsers.length} user{selectedUsers.length > 1 ? 's' : ''} selected
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" data-testid="dropdown-bulk-actions">
+                      Bulk Actions <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuLabel>Choose an action</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={() => handleBulkAction('suspend')}
+                      data-testid="action-bulk-suspend"
+                    >
+                      <Ban className="mr-2 h-4 w-4" />
+                      Suspend Users
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => handleBulkAction('activate')}
+                      data-testid="action-bulk-activate"
+                    >
+                      <UserCheck className="mr-2 h-4 w-4" />
+                      Activate Users
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => handleBulkAction('email')}
+                      data-testid="action-bulk-email"
+                    >
+                      <Mail className="mr-2 h-4 w-4" />
+                      Send Email
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={() => handleBulkAction('delete')}
+                      className="text-destructive hover:text-destructive"
+                      data-testid="action-bulk-delete"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete Users
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelectedUsers([])}
+                data-testid="button-clear-selection"
+              >
+                Clear Selection
+              </Button>
             </div>
           )}
 
@@ -859,6 +1058,108 @@ export default function AdminUsers() {
                 <>
                   <UserPlus className="mr-2 h-4 w-4" />
                   Create User
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Action Confirmation Dialog */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Confirm Bulk {bulkAction === 'suspend' ? 'Suspension' : bulkAction === 'activate' ? 'Activation' : 'Deletion'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {getBulkActionDescription()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setBulkAction(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkAction}
+              className={bulkAction === 'delete' ? 'bg-destructive hover:bg-destructive/90' : ''}
+              data-testid="button-confirm-bulk-action"
+            >
+              {bulkSuspendMutation.isPending || bulkActivateMutation.isPending || bulkDeleteMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                `Confirm ${bulkAction === 'suspend' ? 'Suspension' : bulkAction === 'activate' ? 'Activation' : 'Deletion'}`
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Email Dialog */}
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Send Email to Selected Users</DialogTitle>
+            <DialogDescription>
+              Compose an email to send to {selectedUsers.length} selected user{selectedUsers.length > 1 ? 's' : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="email-subject">Subject</Label>
+              <Input
+                id="email-subject"
+                value={emailData.subject}
+                onChange={(e) => setEmailData({ ...emailData, subject: e.target.value })}
+                placeholder="Enter email subject..."
+                data-testid="input-email-subject"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email-message">Message</Label>
+              <Textarea
+                id="email-message"
+                value={emailData.message}
+                onChange={(e) => setEmailData({ ...emailData, message: e.target.value })}
+                placeholder="Enter your message..."
+                rows={10}
+                className="resize-none"
+                data-testid="input-email-message"
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <p>This email will be sent to:</p>
+              <ul className="mt-1 ml-4 list-disc">
+                <li>{selectedUsers.length} selected user{selectedUsers.length > 1 ? 's' : ''}</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowEmailDialog(false);
+                setBulkAction(null);
+                setEmailData({ subject: '', message: '' });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={sendBulkEmail}
+              disabled={bulkEmailMutation.isPending || !emailData.subject || !emailData.message}
+              data-testid="button-send-bulk-email"
+            >
+              {bulkEmailMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Mail className="mr-2 h-4 w-4" />
+                  Send Email
                 </>
               )}
             </Button>

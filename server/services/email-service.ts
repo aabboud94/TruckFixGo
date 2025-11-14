@@ -515,6 +515,62 @@ class EmailService {
       jobNumber: job.jobNumber
     });
   }
+  
+  // Send custom email for bulk operations
+  async sendCustomEmail(to: string, subject: string, message: string, data?: any): Promise<boolean> {
+    if (!this.transporter) {
+      console.error('[Email Service] Transporter not initialized, cannot send email');
+      return false;
+    }
+    
+    // Build HTML template
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #1e3a5f; color: white; padding: 20px; border-radius: 5px 5px 0 0; }
+          .content { padding: 20px; background: #f9f9f9; border: 1px solid #ddd; border-top: none; }
+          .footer { padding: 10px; background: #333; color: white; text-align: center; font-size: 12px; border-radius: 0 0 5px 5px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>TruckFixGo - Admin Notification</h2>
+          </div>
+          <div class="content">
+            <p>Hello ${data?.userName || data?.contractorName || 'there'},</p>
+            ${message.split('\n').map(line => `<p>${line}</p>`).join('')}
+            ${data?.companyName ? `<p><strong>Company:</strong> ${data.companyName}</p>` : ''}
+            <p style="margin-top: 20px;">Best regards,<br>TruckFixGo Team</p>
+          </div>
+          <div class="footer">
+            This email was sent by ${data?.performedBy || 'TruckFixGo Admin'} on ${new Date().toLocaleDateString()}
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    try {
+      await this.transporter.sendMail({
+        from: process.env.OFFICE365_EMAIL,
+        to,
+        subject: `[TruckFixGo] ${subject}`,
+        html,
+        text: message
+      });
+      
+      console.log(`[Email Service] Custom email sent successfully to ${to}`);
+      return true;
+    } catch (error) {
+      console.error('[Email Service] Failed to send custom email:', error);
+      return false;
+    }
+  }
 
   // Send new fleet application notification to all admins
   async sendNewFleetApplicationNotification(application: any): Promise<void> {

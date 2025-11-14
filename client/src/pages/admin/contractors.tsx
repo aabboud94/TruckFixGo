@@ -17,11 +17,30 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Search, Filter, UserPlus, Ban, CheckCircle, XCircle, Star,
   DollarSign, Briefcase, Clock, Award, FileCheck, AlertCircle,
   RefreshCw, Download, TrendingUp, TrendingDown, Loader2, 
-  Edit, Eye, UserCheck, UserX
+  Edit, Eye, UserCheck, UserX, Mail, ChevronDown
 } from "lucide-react";
 
 export default function AdminContractors() {
@@ -34,6 +53,17 @@ export default function AdminContractors() {
   const [editedContractor, setEditedContractor] = useState<any>(null);
   const [showContractorDetails, setShowContractorDetails] = useState(false);
   const [selectedContractors, setSelectedContractors] = useState<string[]>([]);
+
+  // Bulk action states
+  const [bulkAction, setBulkAction] = useState<string | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [emailData, setEmailData] = useState({
+    subject: '',
+    message: '',
+  });
+  const [rejectReason, setRejectReason] = useState('');
 
   // Build query parameters for contractors
   const buildQueryParams = () => {
@@ -89,13 +119,12 @@ export default function AdminContractors() {
     },
   });
 
-  // Mutation for bulk actions
-  const bulkActionMutation = useMutation({
-    mutationFn: async ({ action, contractorIds }: { action: string; contractorIds: string[] }) => {
-      return apiRequest('POST', '/api/admin/contractors/bulk', { action, contractorIds });
+  // Bulk operations mutations
+  const bulkApproveMutation = useMutation({
+    mutationFn: async (contractorIds: string[]) => {
+      return apiRequest('POST', '/api/admin/contractors/bulk-approve', { contractorIds });
     },
-    onSuccess: () => {
-      // Invalidate all contractor queries including filtered ones
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ 
         predicate: (query) => {
           const key = query.queryKey[0] as string;
@@ -104,8 +133,116 @@ export default function AdminContractors() {
       });
       setSelectedContractors([]);
       toast({
-        title: "Bulk action completed",
-        description: "Selected contractors have been updated",
+        title: "Contractors approved",
+        description: data.message || `Successfully approved ${data.result?.succeeded?.length || 0} contractors`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error approving contractors",
+        description: error.message || "Failed to approve selected contractors",
+      });
+    },
+  });
+
+  const bulkRejectMutation = useMutation({
+    mutationFn: async ({ contractorIds, reason }: { contractorIds: string[], reason: string }) => {
+      return apiRequest('POST', '/api/admin/contractors/bulk-reject', { contractorIds, reason });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0] as string;
+          return key && key.startsWith('/api/admin/contractors');
+        }
+      });
+      setSelectedContractors([]);
+      setRejectReason('');
+      toast({
+        title: "Contractors rejected",
+        description: data.message || `Successfully rejected ${data.result?.succeeded?.length || 0} contractors`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error rejecting contractors",
+        description: error.message || "Failed to reject selected contractors",
+      });
+    },
+  });
+
+  const bulkSuspendMutation = useMutation({
+    mutationFn: async (contractorIds: string[]) => {
+      return apiRequest('POST', '/api/admin/contractors/bulk-suspend', { contractorIds });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0] as string;
+          return key && key.startsWith('/api/admin/contractors');
+        }
+      });
+      setSelectedContractors([]);
+      toast({
+        title: "Contractors suspended",
+        description: data.message || `Successfully suspended ${data.result?.succeeded?.length || 0} contractors`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error suspending contractors",
+        description: error.message || "Failed to suspend selected contractors",
+      });
+    },
+  });
+
+  const bulkActivateMutation = useMutation({
+    mutationFn: async (contractorIds: string[]) => {
+      return apiRequest('POST', '/api/admin/contractors/bulk-activate', { contractorIds });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0] as string;
+          return key && key.startsWith('/api/admin/contractors');
+        }
+      });
+      setSelectedContractors([]);
+      toast({
+        title: "Contractors activated",
+        description: data.message || `Successfully activated ${data.result?.succeeded?.length || 0} contractors`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error activating contractors",
+        description: error.message || "Failed to activate selected contractors",
+      });
+    },
+  });
+
+  const bulkEmailMutation = useMutation({
+    mutationFn: async ({ contractorIds, subject, message }: { contractorIds: string[], subject: string, message: string }) => {
+      return apiRequest('POST', '/api/admin/contractors/bulk-email', { contractorIds, subject, message });
+    },
+    onSuccess: (data) => {
+      setEmailData({ subject: '', message: '' });
+      setShowEmailDialog(false);
+      setSelectedContractors([]);
+      toast({
+        title: "Emails sent",
+        description: data.message || `Successfully emailed ${data.result?.succeeded?.length || 0} contractors`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Error sending emails",
+        description: error.message || "Failed to send emails to selected contractors",
       });
     },
   });
@@ -181,6 +318,88 @@ export default function AdminContractors() {
       case 'pending': return 'warning';
       case 'suspended': return 'destructive';
       default: return 'secondary';
+    }
+  };
+
+  // Helper functions for bulk actions
+  const handleBulkAction = (action: string) => {
+    setBulkAction(action);
+    if (action === 'email') {
+      setShowEmailDialog(true);
+    } else if (action === 'reject') {
+      setShowRejectDialog(true);
+    } else {
+      setShowConfirmDialog(true);
+    }
+  };
+
+  const confirmBulkAction = () => {
+    if (!bulkAction || selectedContractors.length === 0) return;
+
+    switch (bulkAction) {
+      case 'approve':
+        bulkApproveMutation.mutate(selectedContractors);
+        break;
+      case 'suspend':
+        bulkSuspendMutation.mutate(selectedContractors);
+        break;
+      case 'activate':
+        bulkActivateMutation.mutate(selectedContractors);
+        break;
+    }
+
+    setShowConfirmDialog(false);
+    setBulkAction(null);
+  };
+
+  const confirmBulkReject = () => {
+    if (!rejectReason || selectedContractors.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Validation error",
+        description: "Please provide a reason for rejection",
+      });
+      return;
+    }
+
+    bulkRejectMutation.mutate({
+      contractorIds: selectedContractors,
+      reason: rejectReason,
+    });
+
+    setShowRejectDialog(false);
+    setBulkAction(null);
+  };
+
+  const sendBulkEmail = () => {
+    if (!emailData.subject || !emailData.message || selectedContractors.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Validation error",
+        description: "Please provide both subject and message for the email",
+      });
+      return;
+    }
+
+    bulkEmailMutation.mutate({
+      contractorIds: selectedContractors,
+      subject: emailData.subject,
+      message: emailData.message,
+    });
+  };
+
+  const getBulkActionDescription = () => {
+    if (!bulkAction) return '';
+    const count = selectedContractors.length;
+    switch (bulkAction) {
+      case 'approve':
+        return `You are about to approve ${count} contractor${count > 1 ? 's' : ''}. They will be able to accept jobs and access the contractor dashboard.`;
+      case 'suspend':
+        return `You are about to suspend ${count} contractor${count > 1 ? 's' : ''}. They will not be able to accept new jobs until reactivated.`;
+      case 'activate':
+        return `You are about to activate ${count} contractor${count > 1 ? 's' : ''}. They will be able to accept jobs again.`;
+      default:
+        return '';
     }
   };
 
@@ -288,39 +507,67 @@ export default function AdminContractors() {
 
           {/* Bulk Actions */}
           {selectedContractors.length > 0 && (
-            <div className="flex items-center gap-4 mb-4 p-3 bg-muted rounded-lg">
-              <span className="text-sm">
-                {selectedContractors.length} contractor(s) selected
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => bulkActionMutation.mutate({
-                    action: 'approve',
-                    contractorIds: selectedContractors,
-                  })}
-                >
-                  Approve
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => bulkActionMutation.mutate({
-                    action: 'suspend',
-                    contractorIds: selectedContractors,
-                  })}
-                >
-                  Suspend
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSelectedContractors([])}
-                >
-                  Clear Selection
-                </Button>
+            <div className="flex items-center justify-between mb-4 p-3 bg-muted rounded-lg">
+              <div className="flex items-center gap-4">
+                <span className="font-medium">
+                  {selectedContractors.length} contractor{selectedContractors.length > 1 ? 's' : ''} selected
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" data-testid="dropdown-bulk-actions">
+                      Bulk Actions <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuLabel>Choose an action</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={() => handleBulkAction('approve')}
+                      data-testid="action-bulk-approve"
+                    >
+                      <UserCheck className="mr-2 h-4 w-4" />
+                      Approve Contractors
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => handleBulkAction('reject')}
+                      data-testid="action-bulk-reject"
+                    >
+                      <UserX className="mr-2 h-4 w-4" />
+                      Reject Contractors
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => handleBulkAction('suspend')}
+                      data-testid="action-bulk-suspend"
+                    >
+                      <Ban className="mr-2 h-4 w-4" />
+                      Suspend Contractors
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => handleBulkAction('activate')}
+                      data-testid="action-bulk-activate"
+                    >
+                      <UserCheck className="mr-2 h-4 w-4" />
+                      Activate Contractors
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={() => handleBulkAction('email')}
+                      data-testid="action-bulk-email"
+                    >
+                      <Mail className="mr-2 h-4 w-4" />
+                      Send Email
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelectedContractors([])}
+                data-testid="button-clear-selection"
+              >
+                Clear Selection
+              </Button>
             </div>
           )}
 
@@ -699,6 +946,170 @@ export default function AdminContractors() {
               </TabsContent>
             </Tabs>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Action Confirmation Dialog */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Confirm Bulk {bulkAction === 'approve' ? 'Approval' : bulkAction === 'suspend' ? 'Suspension' : 'Activation'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {getBulkActionDescription()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setBulkAction(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkAction}
+              data-testid="button-confirm-bulk-action"
+            >
+              {bulkApproveMutation.isPending || bulkSuspendMutation.isPending || bulkActivateMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                `Confirm ${bulkAction === 'approve' ? 'Approval' : bulkAction === 'suspend' ? 'Suspension' : 'Activation'}`
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Rejection Dialog */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Reject Selected Contractors</DialogTitle>
+            <DialogDescription>
+              Provide a reason for rejecting {selectedContractors.length} contractor{selectedContractors.length > 1 ? 's' : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="reject-reason">Rejection Reason</Label>
+              <Textarea
+                id="reject-reason"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Enter the reason for rejection..."
+                rows={5}
+                className="resize-none"
+                data-testid="input-reject-reason"
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <p>This reason will be:</p>
+              <ul className="mt-1 ml-4 list-disc">
+                <li>Sent to all {selectedContractors.length} selected contractor{selectedContractors.length > 1 ? 's' : ''}</li>
+                <li>Logged for audit purposes</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowRejectDialog(false);
+                setBulkAction(null);
+                setRejectReason('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmBulkReject}
+              disabled={bulkRejectMutation.isPending || !rejectReason}
+              className="bg-destructive hover:bg-destructive/90"
+              data-testid="button-confirm-bulk-reject"
+            >
+              {bulkRejectMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Rejecting...
+                </>
+              ) : (
+                <>
+                  <UserX className="mr-2 h-4 w-4" />
+                  Reject Contractors
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Email Dialog */}
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Send Email to Selected Contractors</DialogTitle>
+            <DialogDescription>
+              Compose an email to send to {selectedContractors.length} selected contractor{selectedContractors.length > 1 ? 's' : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="email-subject">Subject</Label>
+              <Input
+                id="email-subject"
+                value={emailData.subject}
+                onChange={(e) => setEmailData({ ...emailData, subject: e.target.value })}
+                placeholder="Enter email subject..."
+                data-testid="input-email-subject"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email-message">Message</Label>
+              <Textarea
+                id="email-message"
+                value={emailData.message}
+                onChange={(e) => setEmailData({ ...emailData, message: e.target.value })}
+                placeholder="Enter your message..."
+                rows={10}
+                className="resize-none"
+                data-testid="input-email-message"
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <p>This email will be sent to:</p>
+              <ul className="mt-1 ml-4 list-disc">
+                <li>{selectedContractors.length} selected contractor{selectedContractors.length > 1 ? 's' : ''}</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowEmailDialog(false);
+                setBulkAction(null);
+                setEmailData({ subject: '', message: '' });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={sendBulkEmail}
+              disabled={bulkEmailMutation.isPending || !emailData.subject || !emailData.message}
+              data-testid="button-send-bulk-email"
+            >
+              {bulkEmailMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Mail className="mr-2 h-4 w-4" />
+                  Send Email
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
