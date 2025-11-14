@@ -17838,6 +17838,361 @@ The TruckFixGo Team
     }
   );
 
+  // ==================== ROUTE MANAGEMENT ENDPOINTS ====================
+
+  // Create a new multi-stop route for contractor
+  app.post(
+    '/api/contractor/routes',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId;
+        if (!contractorId) {
+          return res.status(401).json({ message: 'Not authenticated' });
+        }
+
+        const { name, jobIds, optimizationStrategy = 'shortest' } = req.body;
+
+        // Validate jobIds
+        if (!Array.isArray(jobIds) || jobIds.length === 0) {
+          return res.status(400).json({ message: 'Job IDs array is required' });
+        }
+
+        // Create the route
+        const route = await storage.createRoute({
+          contractorId,
+          name: name || `Route ${new Date().toLocaleDateString()}`,
+          startTime: new Date(),
+          optimizationStrategy: optimizationStrategy as 'shortest' | 'fastest' | 'most_profitable',
+          status: 'planned'
+        });
+
+        // Add stops for each job
+        for (let i = 0; i < jobIds.length; i++) {
+          const job = await storage.getJob(jobIds[i]);
+          if (job) {
+            await storage.addRouteStop(route.id, {
+              routeId: route.id,
+              jobId: job.id,
+              stopOrder: i + 1,
+              stopType: 'service',
+              status: 'pending',
+              location: {
+                lat: job.lat,
+                lng: job.lng,
+                address: job.address
+              }
+            });
+          }
+        }
+
+        // Optimize the route
+        const { RouteOptimizer } = await import('./services/route-optimizer');
+        const optimizer = new RouteOptimizer(storage);
+        const optimizedRoute = await optimizer.optimizeRoute(route.id);
+
+        res.json({ 
+          success: true, 
+          route: optimizedRoute,
+          message: 'Route created and optimized successfully' 
+        });
+      } catch (error) {
+        console.error('Route creation error:', error);
+        res.status(500).json({ message: 'Failed to create route' });
+      }
+    }
+  );
+
+  // Get route details with stops
+  app.get(
+    '/api/contractor/routes/:id',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const routeId = req.params.id;
+        const route = await storage.getRoute(routeId);
+        
+        if (!route) {
+          return res.status(404).json({ message: 'Route not found' });
+        }
+
+        // Verify access
+        if (route.contractorId !== req.session.userId && req.session.role !== 'admin') {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+
+        // Get route stops
+        const stops = await storage.getRouteStops(routeId);
+        
+        // Get jobs for each stop
+        const stopsWithJobs = await Promise.all(
+          stops.map(async (stop) => {
+            if (stop.jobId) {
+              const job = await storage.getJob(stop.jobId);
+              return { ...stop, job };
+            }
+            return stop;
+          })
+        );
+
+        res.json({
+          route,
+          stops: stopsWithJobs,
+          currentStop: stops.find(s => s.status === 'in_progress'),
+          completedStops: stops.filter(s => s.status === 'completed').length,
+          totalStops: stops.length
+        });
+      } catch (error) {
+        console.error('Get route error:', error);
+        res.status(500).json({ message: 'Failed to get route details' });
+      }
+    }
+  );
+
+  // Reoptimize route
+  app.put(
+    '/api/contractor/routes/:id/optimize',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const routeId = req.params.id;
+        const route = await storage.getRoute(routeId);
+        
+        if (!route) {
+          return res.status(404).json({ message: 'Route not found' });
+        }
+
+        // Verify ownership
+        if (route.contractorId !== req.session.userId) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+
+        // Optimize the route
+        const { RouteOptimizer } = await import('./services/route-optimizer');
+        const optimizer = new RouteOptimizer(storage);
+        const optimizedRoute = await optimizer.optimizeRoute(routeId);
+
+        // Notify clients via WebSocket
+        await trackingWSServer.notifyRouteOptimized(routeId, await storage.getRouteStops(routeId));
+
+        res.json({ 
+          success: true, 
+          route: optimizedRoute,
+          message: 'Route optimized successfully' 
+        });
+      } catch (error) {
+        console.error('Route optimization error:', error);
+        res.status(500).json({ message: 'Failed to optimize route' });
+      }
+    }
+  );
+
+  // Record GPS waypoint
+  app.post(
+    '/api/contractor/routes/:id/waypoint',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const routeId = req.params.id;
+        const route = await storage.getRoute(routeId);
+        
+        if (!route) {
+          return res.status(404).json({ message: 'Route not found' });
+        }
+
+        // Verify ownership
+        if (route.contractorId !== req.session.userId) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+
+        const { lat, lng, heading, speed, altitude } = req.body;
+
+        // Validate waypoint data
+        if (typeof lat !== 'number' || typeof lng !== 'number') {
+          return res.status(400).json({ message: 'Invalid waypoint data' });
+        }
+
+        // Record waypoint
+        const waypoint = await storage.recordWaypoint(routeId, {
+          routeId,
+          lat,
+          lng,
+          timestamp: new Date(),
+          heading: heading || null,
+          speed: speed || null,
+          altitude: altitude || null
+        });
+
+        // Check for route deviation
+        await trackingWSServer.checkRouteDeviation(routeId, { lat, lng });
+
+        res.json({ 
+          success: true, 
+          waypoint,
+          message: 'Waypoint recorded' 
+        });
+      } catch (error) {
+        console.error('Waypoint recording error:', error);
+        res.status(500).json({ message: 'Failed to record waypoint' });
+      }
+    }
+  );
+
+  // Customer view of their job within a route
+  app.get(
+    '/api/customer/route-tracking/:jobId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.jobId;
+        const job = await storage.getJob(jobId);
+        
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        // Verify access (customer should be job owner or admin)
+        if (job.customerId !== req.session.userId && req.session.role !== 'admin') {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+
+        // Find the route containing this job
+        const routeStop = await storage.getRouteStopByJobId(jobId);
+        
+        if (!routeStop) {
+          return res.status(404).json({ message: 'Job is not part of any active route' });
+        }
+
+        const route = await storage.getRoute(routeStop.routeId);
+        const allStops = await storage.getRouteStops(routeStop.routeId);
+        
+        // Find customer's position in the route
+        const customerStopIndex = allStops.findIndex(s => s.jobId === jobId);
+        const currentStop = allStops.find(s => s.status === 'in_progress');
+        const completedStops = allStops.filter(s => s.status === 'completed');
+        
+        // Calculate estimated arrival based on current progress
+        let estimatedArrival = routeStop.plannedArrivalTime;
+        if (currentStop && routeStop.status === 'pending') {
+          // Calculate based on average time per stop
+          const avgTimePerStop = route?.estimatedDuration 
+            ? (route.estimatedDuration / allStops.length) * 60000 // Convert to ms
+            : 30 * 60000; // Default 30 minutes per stop
+          
+          const stopsUntilCustomer = customerStopIndex - allStops.findIndex(s => s.id === currentStop.id);
+          estimatedArrival = new Date(Date.now() + (stopsUntilCustomer * avgTimePerStop));
+        }
+
+        res.json({
+          jobId,
+          routeId: route?.id,
+          routeName: route?.name,
+          stopOrder: customerStopIndex + 1,
+          totalStops: allStops.length,
+          stopStatus: routeStop.status,
+          estimatedArrival,
+          actualArrival: routeStop.actualArrival,
+          currentStop: currentStop ? {
+            order: allStops.findIndex(s => s.id === currentStop.id) + 1,
+            status: currentStop.status
+          } : null,
+          completedStops: completedStops.length,
+          contractor: {
+            id: route?.contractorId,
+            online: !!route && route.status === 'active'
+          }
+        });
+      } catch (error) {
+        console.error('Route tracking error:', error);
+        res.status(500).json({ message: 'Failed to get route tracking information' });
+      }
+    }
+  );
+
+  // Get active route for contractor
+  app.get(
+    '/api/contractor/routes/active',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId;
+        if (!contractorId) {
+          return res.status(401).json({ message: 'Not authenticated' });
+        }
+
+        const activeRoute = await storage.getActiveRoute(contractorId);
+        
+        if (!activeRoute) {
+          return res.json({ 
+            hasActiveRoute: false,
+            message: 'No active route found' 
+          });
+        }
+
+        const stops = await storage.getRouteStops(activeRoute.id);
+        const stopsWithJobs = await Promise.all(
+          stops.map(async (stop) => {
+            if (stop.jobId) {
+              const job = await storage.getJob(stop.jobId);
+              return { ...stop, job };
+            }
+            return stop;
+          })
+        );
+
+        res.json({
+          hasActiveRoute: true,
+          route: activeRoute,
+          stops: stopsWithJobs,
+          currentStop: stops.find(s => s.status === 'in_progress'),
+          nextStop: stops.find(s => s.status === 'pending'),
+          completedStops: stops.filter(s => s.status === 'completed').length,
+          totalStops: stops.length
+        });
+      } catch (error) {
+        console.error('Get active route error:', error);
+        res.status(500).json({ message: 'Failed to get active route' });
+      }
+    }
+  );
+
+  // Update route stop status
+  app.patch(
+    '/api/contractor/routes/:routeId/stops/:stopId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { routeId, stopId } = req.params;
+        const { status } = req.body;
+
+        const route = await storage.getRoute(routeId);
+        if (!route) {
+          return res.status(404).json({ message: 'Route not found' });
+        }
+
+        // Verify ownership
+        if (route.contractorId !== req.session.userId) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+
+        // Update stop status
+        if (status === 'in_progress') {
+          await storage.markStopArrived(stopId, new Date());
+        } else if (status === 'completed') {
+          await storage.markStopCompleted(stopId, new Date());
+        }
+
+        res.json({ 
+          success: true, 
+          message: `Stop ${status === 'completed' ? 'completed' : 'updated'} successfully` 
+        });
+      } catch (error) {
+        console.error('Update stop error:', error);
+        res.status(500).json({ message: 'Failed to update stop' });
+      }
+    }
+  );
+
   // Create and return the HTTP server
   const server = createServer(app);
   return server;

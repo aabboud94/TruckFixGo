@@ -26,7 +26,18 @@ const MessageTypeEnum = z.enum([
   'BID_COUNTERED',
   'BID_WITHDRAWN',
   'BIDDING_CLOSED',
-  'BIDDING_UPDATE'
+  'BIDDING_UPDATE',
+  // Route tracking message types
+  'JOIN_ROUTE_TRACKING',
+  'LEAVE_ROUTE_TRACKING',
+  'ROUTE_UPDATE',
+  'ROUTE_STOP_ARRIVED',
+  'ROUTE_STOP_COMPLETED',
+  'ROUTE_STOP_SKIPPED',
+  'ROUTE_ETA_UPDATE',
+  'ROUTE_DEVIATION',
+  'ROUTE_OPTIMIZED',
+  'ROUTE_COMPLETED'
 ]);
 
 const LocationSchema = z.object({
@@ -47,6 +58,7 @@ interface ExtendedWebSocket extends WebSocket {
   role?: 'customer' | 'contractor' | 'guest' | 'admin';
   jobId?: string;
   biddingJobId?: string;
+  routeId?: string;
 }
 
 interface TrackingRoom {
@@ -76,10 +88,31 @@ interface BiddingRoom {
   status: 'active' | 'closed' | 'cancelled';
 }
 
+interface RouteRoom {
+  routeId: string;
+  contractor?: ExtendedWebSocket;
+  customers: Map<string, Set<ExtendedWebSocket>>; // Map of jobId to customers
+  currentStop?: {
+    stopId: string;
+    jobId: string;
+    location: { lat: number; lng: number };
+    arrivalTime?: string;
+  };
+  nextStops: Array<{
+    stopId: string;
+    jobId: string;
+    estimatedArrival: string;
+    location: { lat: number; lng: number };
+  }>;
+  routeStatus: 'planned' | 'active' | 'completed';
+  lastUpdate?: string;
+}
+
 class TrackingWebSocketServer {
   private wss: WebSocketServer | null = null;
   private rooms: Map<string, TrackingRoom> = new Map();
   private biddingRooms: Map<string, BiddingRoom> = new Map();
+  private routeRooms: Map<string, RouteRoom> = new Map();
   private clients: Map<string, ExtendedWebSocket> = new Map();
   private pingInterval: NodeJS.Timeout | null = null;
 
@@ -161,6 +194,16 @@ class TrackingWebSocketServer {
         break;
       case 'LEAVE_BIDDING':
         this.handleLeaveBidding(ws);
+        break;
+      // Route tracking handlers
+      case 'JOIN_ROUTE_TRACKING':
+        await this.handleJoinRouteTracking(ws, message.payload);
+        break;
+      case 'LEAVE_ROUTE_TRACKING':
+        this.handleLeaveRouteTracking(ws);
+        break;
+      case 'ROUTE_UPDATE':
+        await this.handleRouteUpdate(ws, message.payload);
         break;
       default:
         this.sendError(ws, `Unknown message type: ${message.type}`);
@@ -783,6 +826,297 @@ class TrackingWebSocketServer {
     console.log(`[WebSocket] Notified ${count} online contractors about new job`);
   }
 
+  // ==================== ROUTE TRACKING HANDLERS ====================
+  
+  private async handleJoinRouteTracking(ws: ExtendedWebSocket, payload: any) {
+    const { routeId, jobId, userId, role } = payload;
+
+    if (!routeId) {
+      this.sendError(ws, 'Route ID is required');
+      return;
+    }
+
+    // Verify route exists
+    const route = await storage.getRoute(routeId);
+    if (!route) {
+      this.sendError(ws, 'Route not found');
+      return;
+    }
+
+    // Set client properties
+    ws.routeId = routeId;
+    ws.jobId = jobId;
+    ws.userId = userId;
+    ws.role = role || 'guest';
+
+    // Get or create route room
+    let room = this.routeRooms.get(routeId);
+    if (!room) {
+      const stops = await storage.getRouteStops(routeId);
+      const currentStop = stops.find(s => s.status === 'in_progress');
+      const nextStops = stops
+        .filter(s => s.status === 'pending')
+        .slice(0, 3)
+        .map(s => ({
+          stopId: s.id,
+          jobId: s.jobId || '',
+          estimatedArrival: s.plannedArrivalTime?.toISOString() || '',
+          location: s.location as { lat: number; lng: number }
+        }));
+
+      room = {
+        routeId,
+        customers: new Map(),
+        routeStatus: route.status as 'planned' | 'active' | 'completed',
+        currentStop: currentStop ? {
+          stopId: currentStop.id,
+          jobId: currentStop.jobId || '',
+          location: currentStop.location as { lat: number; lng: number },
+          arrivalTime: currentStop.actualArrival?.toISOString()
+        } : undefined,
+        nextStops
+      };
+      this.routeRooms.set(routeId, room);
+    }
+
+    // Add client to room
+    if (ws.role === 'contractor') {
+      room.contractor = ws;
+    } else if (ws.role === 'customer' && jobId) {
+      if (!room.customers.has(jobId)) {
+        room.customers.set(jobId, new Set());
+      }
+      room.customers.get(jobId)!.add(ws);
+    }
+
+    // Send initial state
+    this.sendMessage(ws, {
+      type: 'JOIN_ROUTE_TRACKING',
+      payload: {
+        success: true,
+        routeId,
+        routeStatus: room.routeStatus,
+        currentStop: room.currentStop,
+        nextStops: room.nextStops,
+        contractorOnline: !!room.contractor
+      }
+    });
+
+    console.log(`Client joined route tracking for route ${routeId}, role: ${ws.role}`);
+  }
+
+  private handleLeaveRouteTracking(ws: ExtendedWebSocket) {
+    if (!ws.routeId) return;
+
+    const room = this.routeRooms.get(ws.routeId);
+    if (room) {
+      if (ws.role === 'contractor') {
+        room.contractor = undefined;
+      } else if (ws.role === 'customer' && ws.jobId) {
+        const customers = room.customers.get(ws.jobId);
+        if (customers) {
+          customers.delete(ws);
+          if (customers.size === 0) {
+            room.customers.delete(ws.jobId);
+          }
+        }
+      }
+
+      // Clean up empty rooms
+      if (!room.contractor && room.customers.size === 0) {
+        this.routeRooms.delete(ws.routeId);
+      }
+    }
+
+    console.log(`Client left route tracking for route ${ws.routeId}`);
+  }
+
+  private async handleRouteUpdate(ws: ExtendedWebSocket, payload: any) {
+    if (!ws.routeId || ws.role !== 'contractor') {
+      this.sendError(ws, 'Unauthorized to send route updates');
+      return;
+    }
+
+    const room = this.routeRooms.get(ws.routeId);
+    if (!room) {
+      this.sendError(ws, 'Route room not found');
+      return;
+    }
+
+    const { type, data } = payload;
+
+    switch (type) {
+      case 'location':
+        // Update route progress with current location
+        const { location, currentStopId } = data;
+        await storage.updateRouteProgress(ws.routeId, currentStopId, location);
+        
+        // Broadcast to all customers on the route
+        this.broadcastToRouteCustomers(ws.routeId, {
+          type: 'ROUTE_UPDATE',
+          payload: {
+            location,
+            currentStopId,
+            timestamp: new Date().toISOString()
+          }
+        });
+        break;
+
+      case 'stop_arrived':
+        const { stopId } = data;
+        await storage.markStopArrived(stopId, new Date());
+        
+        // Notify customer for this specific job
+        const stop = await storage.getRouteStops(ws.routeId)
+          .then(stops => stops.find(s => s.id === stopId));
+        
+        if (stop && stop.jobId) {
+          this.notifyJobCustomers(stop.jobId, {
+            type: 'ROUTE_STOP_ARRIVED',
+            payload: {
+              stopId,
+              jobId: stop.jobId,
+              arrivalTime: new Date().toISOString()
+            }
+          });
+        }
+        break;
+
+      case 'stop_completed':
+        const { stopId: completedStopId } = data;
+        await storage.markStopCompleted(completedStopId, new Date());
+        
+        // Update room's current and next stops
+        const stops = await storage.getRouteStops(ws.routeId);
+        const nextStop = stops.find(s => s.status === 'pending');
+        
+        if (nextStop) {
+          room.currentStop = {
+            stopId: nextStop.id,
+            jobId: nextStop.jobId || '',
+            location: nextStop.location as { lat: number; lng: number }
+          };
+          
+          // Update next stops list
+          room.nextStops = stops
+            .filter(s => s.status === 'pending' && s.id !== nextStop.id)
+            .slice(0, 3)
+            .map(s => ({
+              stopId: s.id,
+              jobId: s.jobId || '',
+              estimatedArrival: s.plannedArrivalTime?.toISOString() || '',
+              location: s.location as { lat: number; lng: number }
+            }));
+        }
+
+        // Broadcast completion
+        this.broadcastToRouteCustomers(ws.routeId, {
+          type: 'ROUTE_STOP_COMPLETED',
+          payload: {
+            completedStopId,
+            nextStop: room.currentStop,
+            nextStops: room.nextStops
+          }
+        });
+        break;
+
+      case 'eta_update':
+        const { stopId: etaStopId, estimatedArrival } = data;
+        
+        // Update ETA for specific stop
+        const etaStop = room.nextStops.find(s => s.stopId === etaStopId);
+        if (etaStop) {
+          etaStop.estimatedArrival = estimatedArrival;
+        }
+
+        // Notify affected customers
+        const affectedStop = await storage.getRouteStops(ws.routeId)
+          .then(stops => stops.find(s => s.id === etaStopId));
+        
+        if (affectedStop && affectedStop.jobId) {
+          this.notifyJobCustomers(affectedStop.jobId, {
+            type: 'ROUTE_ETA_UPDATE',
+            payload: {
+              stopId: etaStopId,
+              jobId: affectedStop.jobId,
+              estimatedArrival
+            }
+          });
+        }
+        break;
+    }
+
+    room.lastUpdate = new Date().toISOString();
+  }
+
+  // Broadcast to all customers on a route
+  private broadcastToRouteCustomers(routeId: string, message: any) {
+    const room = this.routeRooms.get(routeId);
+    if (!room) return;
+
+    room.customers.forEach((customerSet) => {
+      customerSet.forEach(ws => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(message));
+        }
+      });
+    });
+  }
+
+  // Notify customers for a specific job
+  private notifyJobCustomers(jobId: string, message: any) {
+    // Check route rooms
+    this.routeRooms.forEach(room => {
+      const customers = room.customers.get(jobId);
+      if (customers) {
+        customers.forEach(ws => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(message));
+          }
+        });
+      }
+    });
+
+    // Also check regular tracking rooms for backward compatibility
+    const trackingRoom = this.rooms.get(jobId);
+    if (trackingRoom) {
+      trackingRoom.customers.forEach(ws => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(message));
+        }
+      });
+    }
+  }
+
+  // Handle route deviation detection
+  public async checkRouteDeviation(routeId: string, currentLocation: { lat: number; lng: number }) {
+    const deviation = await storage.handleRouteDeviation(routeId, currentLocation);
+    
+    if (deviation.isDeviated) {
+      this.broadcastToRouteCustomers(routeId, {
+        type: 'ROUTE_DEVIATION',
+        payload: {
+          isDeviated: true,
+          deviationDistance: deviation.deviationDistance,
+          recommendedAction: deviation.recommendedAction,
+          currentLocation
+        }
+      });
+    }
+  }
+
+  // Notify route optimization
+  public async notifyRouteOptimized(routeId: string, newStops: any[]) {
+    this.broadcastToRouteCustomers(routeId, {
+      type: 'ROUTE_OPTIMIZED',
+      payload: {
+        routeId,
+        newStops,
+        timestamp: new Date().toISOString()
+      }
+    });
+  }
+
   public shutdown() {
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
@@ -795,6 +1129,7 @@ class TrackingWebSocketServer {
     }
 
     this.rooms.clear();
+    this.routeRooms.clear();
     this.clients.clear();
   }
 
