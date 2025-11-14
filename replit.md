@@ -34,7 +34,9 @@ The backend is developed with Node.js and Express.js, using TypeScript. Drizzle 
 
 ### Database Schema
 
-The database schema includes core entities for Users & Authentication (e.g., `users`, `driver_profiles`, `contractor_profiles`), Fleet Management (`fleet_accounts`, `fleet_vehicles`), Service Catalog (`service_types`, `service_pricing`), Jobs & Bidding (`jobs`, `job_bids`), Payments & Billing (`payment_methods`, `transactions`, `invoices`, `split_payments`, `billing_subscriptions`), Reviews & Ratings (`reviews`), and Admin & Configuration (`admin_settings`, `email_templates`, `pricing_rules`). Enums and status workflows define the lifecycle for jobs, payments, bids, checks, and subscriptions.
+The database schema includes core entities for Users & Authentication (e.g., `users`, `driver_profiles`, `contractor_profiles`), Fleet Management (`fleet_accounts`, `fleet_vehicles`, `fleet_contracts` with 43 columns including SLA and contract terms), Service Catalog (`service_types`, `service_pricing`), Jobs & Bidding (`jobs`, `job_bids`, `bid_templates`, `bidding_config`), Payments & Billing (`payment_methods`, `transactions`, `invoices`, `split_payments`, `billing_subscriptions`, `billing_history` with comprehensive tracking columns), Reviews & Ratings (`reviews`), Location Tracking (`location_tracking`, `tracking_sessions`, `geofence_events`), Analytics (`vehicle_analytics`, `breakdown_patterns`, `fleet_analytics_alerts`), and Admin & Configuration (`admin_settings`, `email_templates`, `pricing_rules`, `booking_settings`). 
+
+**Database Synchronization (November 2025)**: Performed comprehensive schema synchronization adding 24 missing tables and fixing column mismatches in critical tables (fleet_contracts, billing_subscriptions, billing_history). Database now has 78 tables total, fully synchronized with Drizzle ORM schema definitions. All billing statistics and fleet management APIs now function correctly without database errors.
 
 ## External Dependencies
 
