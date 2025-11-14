@@ -1495,35 +1495,36 @@ export const billingSubscriptions = pgTable("billing_subscriptions", {
   stripeSubscriptionId: varchar("stripe_subscription_id").unique(),
   stripeCustomerId: varchar("stripe_customer_id"),
   
-  // Status and dates
+  // Status and dates (using actual database column names)
   status: subscriptionStatusEnum("status").notNull().default('active'),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date"),
-  trialEndDate: timestamp("trial_end_date"),
-  nextBillingDate: timestamp("next_billing_date").notNull(),
-  lastBillingDate: timestamp("last_billing_date"),
-  pausedAt: timestamp("paused_at"),
-  cancelledAt: timestamp("cancelled_at"),
-  cancellationReason: text("cancellation_reason"),
+  trialEndsAt: timestamp("trial_ends_at"), // Database column: trial_ends_at
+  currentPeriodStart: timestamp("current_period_start"), // Database column: current_period_start 
+  currentPeriodEnd: timestamp("current_period_end"), // Database column: current_period_end
+  cancelledAt: timestamp("cancelled_at"), // Database column: cancelled_at
+  // Note: The following columns are not mentioned in the task as existing:
+  // nextBillingDate, lastBillingDate, pausedAt, cancellationReason
   
-  // Contract details
-  contractTermMonths: integer("contract_term_months"), // For annual contracts
-  autoRenew: boolean("auto_renew").notNull().default(true),
-  earlyTerminationFee: decimal("early_termination_fee", { precision: 10, scale: 2 }),
+  // Contract details (these columns may not exist in the database)
+  // contractTermMonths: integer("contract_term_months"), // Column doesn't exist
+  // autoRenew: boolean("auto_renew").notNull().default(true), // May not exist
+  // earlyTerminationFee: decimal("early_termination_fee", { precision: 10, scale: 2 }), // May not exist
   
   // Usage tracking
-  currentMonthUsage: jsonb("current_month_usage"), // Track usage for current billing period
+  // currentMonthUsage: jsonb("current_month_usage"), // Column doesn't exist
   
   // Metadata
-  metadata: jsonb("metadata"),
-  notes: text("notes"),
+  // metadata: jsonb("metadata"), // May not exist
+  // notes: text("notes"), // May not exist
   
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow()
 }, (table) => ({
   fleetIdx: index("idx_billing_subscriptions_fleet").on(table.fleetAccountId),
   statusIdx: index("idx_billing_subscriptions_status").on(table.status),
-  nextBillingIdx: index("idx_billing_subscriptions_next_billing").on(table.nextBillingDate),
+  // nextBillingIdx: index("idx_billing_subscriptions_next_billing").on(table.nextBillingDate), // Column doesn't exist
+  currentPeriodEndIdx: index("idx_billing_subscriptions_period_end").on(table.currentPeriodEnd), // Use currentPeriodEnd instead
   stripeSubIdx: uniqueIndex("idx_billing_subscriptions_stripe").on(table.stripeSubscriptionId)
 }));
 

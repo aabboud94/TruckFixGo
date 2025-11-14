@@ -1768,7 +1768,7 @@ Job Details:
 - Service: {{service_type}}
 - Date: {{job_date}}
 - Technician: {{contractor_name}}
-- Total Cost: ${{total_amount}}
+- Total Cost: ${'{{total_amount}}'}
 
 View your invoice: {{invoice_link}}
 

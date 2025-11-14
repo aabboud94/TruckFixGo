@@ -6748,6 +6748,13 @@ export class PostgreSQLStorage implements IStorage {
     return result[0] || null;
   }
 
+  async getSubscriptionByStripeId(stripeSubscriptionId: string): Promise<BillingSubscription | null> {
+    const result = await db.select().from(billingSubscriptions)
+      .where(eq(billingSubscriptions.stripeSubscriptionId, stripeSubscriptionId))
+      .limit(1);
+    return result[0] || null;
+  }
+
   async getFleetSubscriptions(fleetAccountId: string): Promise<BillingSubscription[]> {
     return await db.select().from(billingSubscriptions)
       .where(eq(billingSubscriptions.fleetAccountId, fleetAccountId))
@@ -6773,7 +6780,7 @@ export class PostgreSQLStorage implements IStorage {
   async updateSubscriptionBillingDates(stripeSubscriptionId: string): Promise<void> {
     await db.update(billingSubscriptions)
       .set({ 
-        lastBillingDate: new Date(),
+        // lastBillingDate: new Date(), // Column doesn't exist
         updatedAt: new Date() 
       })
       .where(eq(billingSubscriptions.stripeSubscriptionId, stripeSubscriptionId));
@@ -6785,10 +6792,10 @@ export class PostgreSQLStorage implements IStorage {
       .where(
         and(
           eq(billingSubscriptions.status, 'active'),
-          lte(billingSubscriptions.nextBillingDate, now)
+          lte(billingSubscriptions.currentPeriodEnd, now) // Use currentPeriodEnd instead of nextBillingDate
         )
       )
-      .orderBy(asc(billingSubscriptions.nextBillingDate))
+      .orderBy(asc(billingSubscriptions.currentPeriodEnd)) // Use currentPeriodEnd for ordering
       .limit(limit);
   }
 
@@ -6796,7 +6803,7 @@ export class PostgreSQLStorage implements IStorage {
     const result = await db.update(billingSubscriptions)
       .set({ 
         status: 'paused',
-        pausedAt: new Date(),
+        // pausedAt: new Date(), // Column doesn't exist
         updatedAt: new Date()
       })
       .where(eq(billingSubscriptions.id, id))
@@ -6808,7 +6815,7 @@ export class PostgreSQLStorage implements IStorage {
     const result = await db.update(billingSubscriptions)
       .set({ 
         status: 'active',
-        pausedAt: null,
+        // pausedAt: null, // Column doesn't exist
         updatedAt: new Date()
       })
       .where(eq(billingSubscriptions.id, id))

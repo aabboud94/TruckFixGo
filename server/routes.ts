@@ -13939,8 +13939,9 @@ The TruckFixGo Team
           stripeCustomerId: stripeSubscription.customer as string,
           status: 'active',
           startDate: new Date(stripeSubscription.current_period_start * 1000),
-          nextBillingDate: new Date(stripeSubscription.current_period_end * 1000),
-          trialEndDate: stripeSubscription.trial_end ? new Date(stripeSubscription.trial_end * 1000) : undefined,
+          currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
+          currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+          trialEndsAt: stripeSubscription.trial_end ? new Date(stripeSubscription.trial_end * 1000) : undefined,
           autoRenew: true,
           maxVehicles: planType === 'custom' ? 999999 : planDetails.features.maxVehicles,
           includedEmergencyRepairs: planType === 'custom' ? 999999 : planDetails.features.includedEmergencyRepairs,
@@ -13955,7 +13956,7 @@ The TruckFixGo Team
           subscriptionId: subscription.id,
           fleetAccountId,
           periodStart: subscription.startDate,
-          periodEnd: subscription.nextBillingDate,
+          periodEnd: subscription.currentPeriodEnd || subscription.endDate || subscription.startDate,
         });
 
         res.status(201).json({
@@ -14402,6 +14403,32 @@ The TruckFixGo Team
       } catch (error) {
         console.error('Get billing statistics error:', error);
         res.status(500).json({ message: 'Failed to get statistics' });
+      }
+    }
+  );
+
+  // TEST ENDPOINT - Test billing columns without auth
+  app.get('/api/test/billing-columns',
+    async (req: Request, res: Response) => {
+      try {
+        console.log('Testing billing columns...');
+        const statistics = await storage.getBillingStatistics();
+        const subscriptions = await storage.getAllActiveSubscriptions();
+        
+        res.json({
+          success: true,
+          message: 'Billing columns are working correctly!',
+          statistics,
+          subscriptionsCount: subscriptions.length,
+          subscriptions: subscriptions.slice(0, 5) // First 5 subscriptions if any
+        });
+      } catch (error) {
+        console.error('Test billing columns error:', error);
+        res.status(500).json({ 
+          success: false,
+          message: 'Column mismatch error',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
     }
   );
