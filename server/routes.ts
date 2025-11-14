@@ -2960,6 +2960,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
           changedBy: req.session.userId
         });
 
+        // Create notification for job status change
+        let notificationTitle = '';
+        let notificationMessage = '';
+        let notificationType: any = 'job_update';
+        let priority: any = 'medium';
+
+        switch (status) {
+          case 'assigned':
+            notificationTitle = 'Job Assigned';
+            notificationMessage = `Job #${job.jobNumber} has been assigned to a contractor`;
+            priority = 'high';
+            break;
+          case 'en_route':
+            notificationTitle = 'Contractor En Route';
+            notificationMessage = `Contractor is on the way for job #${job.jobNumber}`;
+            priority = 'high';
+            break;
+          case 'on_site':
+            notificationTitle = 'Contractor On Site';
+            notificationMessage = `Contractor has arrived at the location for job #${job.jobNumber}`;
+            break;
+          case 'completed':
+            notificationTitle = 'Job Completed';
+            notificationMessage = `Job #${job.jobNumber} has been completed successfully`;
+            notificationType = 'job_update';
+            priority = 'high';
+            break;
+          case 'cancelled':
+            notificationTitle = 'Job Cancelled';
+            notificationMessage = `Job #${job.jobNumber} has been cancelled`;
+            notificationType = 'alert';
+            priority = 'high';
+            break;
+        }
+
+        if (notificationTitle) {
+          // Notify customer if job has a customer
+          if (job.customerId) {
+            await storage.createNotification({
+              userId: job.customerId,
+              type: notificationType,
+              title: notificationTitle,
+              message: notificationMessage,
+              relatedEntityType: 'job',
+              relatedEntityId: job.id,
+              priority,
+              actionUrl: `/jobs/${job.id}`
+            });
+          }
+
+          // Notify contractor if status is relevant
+          if (job.contractorId && ['cancelled', 'completed'].includes(status)) {
+            await storage.createNotification({
+              userId: job.contractorId,
+              type: notificationType,
+              title: notificationTitle,
+              message: notificationMessage,
+              relatedEntityType: 'job',
+              relatedEntityId: job.id,
+              priority,
+              actionUrl: `/contractor/jobs/${job.id}`
+            });
+          }
+        }
+
         // Handle reminder updates based on status
         if (status === 'cancelled') {
           // Cancel all pending reminders for this job
@@ -3011,6 +3076,130 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Send message error:', error);
         res.status(500).json({ message: 'Failed to send message' });
+      }
+    }
+  );
+
+  // ==================== NOTIFICATION ROUTES ====================
+  
+  // Get user's notifications with pagination and filtering
+  app.get('/api/notifications',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { type, isRead, priority, limit, offset, fromDate, toDate } = req.query;
+        
+        const options: any = {};
+        if (type) options.type = type as string;
+        if (isRead !== undefined) options.isRead = isRead === 'true';
+        if (priority) options.priority = priority as string;
+        if (limit) options.limit = parseInt(limit as string);
+        if (offset) options.offset = parseInt(offset as string);
+        if (fromDate) options.fromDate = new Date(fromDate as string);
+        if (toDate) options.toDate = new Date(toDate as string);
+        
+        const result = await storage.getUserNotifications(req.session.userId!, options);
+        res.json(result);
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+        res.status(500).json({ message: 'Failed to fetch notifications' });
+      }
+    }
+  );
+  
+  // Get unread notification count
+  app.get('/api/notifications/count',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const count = await storage.getUnreadNotificationCount(req.session.userId!);
+        res.json({ count });
+      } catch (error) {
+        console.error('Error fetching notification count:', error);
+        res.status(500).json({ message: 'Failed to fetch notification count' });
+      }
+    }
+  );
+  
+  // Mark single notification as read
+  app.put('/api/notifications/:notificationId/read',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { notificationId } = req.params;
+        const success = await storage.markNotificationAsRead(notificationId, req.session.userId!);
+        
+        if (success) {
+          res.json({ message: 'Notification marked as read' });
+        } else {
+          res.status(404).json({ message: 'Notification not found' });
+        }
+      } catch (error) {
+        console.error('Error marking notification as read:', error);
+        res.status(500).json({ message: 'Failed to mark notification as read' });
+      }
+    }
+  );
+  
+  // Mark all notifications as read
+  app.put('/api/notifications/mark-all-read',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const count = await storage.markAllNotificationsAsRead(req.session.userId!);
+        res.json({ message: `${count} notifications marked as read`, count });
+      } catch (error) {
+        console.error('Error marking all notifications as read:', error);
+        res.status(500).json({ message: 'Failed to mark all notifications as read' });
+      }
+    }
+  );
+  
+  // Delete single notification
+  app.delete('/api/notifications/:notificationId',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { notificationId } = req.params;
+        const success = await storage.deleteNotification(notificationId, req.session.userId!);
+        
+        if (success) {
+          res.json({ message: 'Notification deleted' });
+        } else {
+          res.status(404).json({ message: 'Notification not found' });
+        }
+      } catch (error) {
+        console.error('Error deleting notification:', error);
+        res.status(500).json({ message: 'Failed to delete notification' });
+      }
+    }
+  );
+  
+  // Clear all notifications
+  app.delete('/api/notifications/clear-all',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const count = await storage.clearAllNotifications(req.session.userId!);
+        res.json({ message: `${count} notifications cleared`, count });
+      } catch (error) {
+        console.error('Error clearing notifications:', error);
+        res.status(500).json({ message: 'Failed to clear notifications' });
+      }
+    }
+  );
+  
+  // Admin endpoint to get all notifications (admin only)
+  app.get('/api/admin/notifications',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const count = await storage.getUnreadNotificationCount(req.session.userId!);
+        res.json({ unreadCount: count });
+      } catch (error) {
+        console.error('Error fetching admin notifications:', error);
+        res.status(500).json({ message: 'Failed to fetch notifications' });
       }
     }
   );
@@ -4100,6 +4289,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const bid = await storage.createJobBid(bidData);
 
+        // Create notification for the job owner/customer
+        if (job.customerId) {
+          // Get contractor info
+          const contractor = await storage.getContractorProfile(req.session.userId!);
+          const contractorName = contractor?.companyName || 'A contractor';
+          
+          await storage.createNotification({
+            userId: job.customerId,
+            type: 'bid_received',
+            title: 'New Bid Received',
+            message: `${contractorName} has submitted a bid of $${bid.bidAmount} for job #${job.jobNumber}`,
+            relatedEntityType: 'bid',
+            relatedEntityId: bid.id,
+            priority: 'high',
+            actionUrl: `/jobs/${job.id}/bids`
+          });
+        }
+
+        // Create notification for fleet manager if it's a fleet job
+        if (job.fleetAccountId) {
+          const fleetAccount = await storage.getFleetAccount(job.fleetAccountId);
+          if (fleetAccount?.primaryContactId) {
+            const contractor = await storage.getContractorProfile(req.session.userId!);
+            const contractorName = contractor?.companyName || 'A contractor';
+            
+            await storage.createNotification({
+              userId: fleetAccount.primaryContactId,
+              type: 'bid_received',
+              title: 'New Bid for Fleet Job',
+              message: `${contractorName} has submitted a bid of $${bid.bidAmount} for fleet job #${job.jobNumber}`,
+              relatedEntityType: 'bid',
+              relatedEntityId: bid.id,
+              priority: 'medium',
+              actionUrl: `/fleet/jobs/${job.id}/bids`
+            });
+          }
+        }
+
         res.status(201).json({
           message: 'Bid submitted successfully',
           bid
@@ -4594,6 +4821,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
               paymentStatus: totalPaid >= parseFloat(job.totalCost) ? 'completed' : 'partial',
               paidAmount: totalPaid.toString()
             });
+
+            // Create notification for payment
+            if (job.customerId) {
+              await storage.createNotification({
+                userId: job.customerId,
+                type: 'payment',
+                title: 'Payment Processed',
+                message: `Payment of $${amount.toFixed(2)} has been processed for job #${job.jobNumber}`,
+                relatedEntityType: 'transaction',
+                relatedEntityId: transaction.id,
+                priority: 'high',
+                actionUrl: `/jobs/${job.id}`
+              });
+            }
+
+            // Notify contractor of payment if job is completed
+            if (job.contractorId && totalPaid >= parseFloat(job.totalCost)) {
+              await storage.createNotification({
+                userId: job.contractorId,
+                type: 'payment',
+                title: 'Payment Complete',
+                message: `Full payment received for job #${job.jobNumber}`,
+                relatedEntityType: 'transaction',
+                relatedEntityId: transaction.id,
+                priority: 'high',
+                actionUrl: `/contractor/jobs/${job.id}`
+              });
+            }
           }
         }
         
@@ -4687,6 +4942,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
               paymentStatus: totalPaid >= parseFloat(job.totalCost) ? 'completed' : 'partial',
               paidAmount: totalPaid.toString()
             });
+
+            // Create notification for payment
+            if (job.customerId) {
+              await storage.createNotification({
+                userId: job.customerId,
+                type: 'payment',
+                title: 'Payment Processed',
+                message: `Payment of $${amount.toFixed(2)} has been processed for job #${job.jobNumber}`,
+                relatedEntityType: 'transaction',
+                relatedEntityId: transaction.id,
+                priority: 'high',
+                actionUrl: `/jobs/${job.id}`
+              });
+            }
+
+            // Notify contractor of payment if job is completed
+            if (job.contractorId && totalPaid >= parseFloat(job.totalCost)) {
+              await storage.createNotification({
+                userId: job.contractorId,
+                type: 'payment',
+                title: 'Payment Complete',
+                message: `Full payment received for job #${job.jobNumber}`,
+                relatedEntityType: 'transaction',
+                relatedEntityId: transaction.id,
+                priority: 'high',
+                actionUrl: `/contractor/jobs/${job.id}`
+              });
+            }
           }
         }
         

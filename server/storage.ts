@@ -204,6 +204,11 @@ import {
   type InsertBookingSettings,
   type BookingBlacklist,
   type InsertBookingBlacklist,
+  notifications,
+  type Notification,
+  type InsertNotification,
+  notificationTypeEnum,
+  notificationPriorityEnum,
   contractStatusEnum,
   slaMetricTypeEnum,
   penaltyStatusEnum,
@@ -1220,6 +1225,46 @@ export interface IStorage {
     createdJobs: Job[];
   }>;
 
+  // ==================== NOTIFICATIONS ====================
+  
+  // Create a new notification
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  
+  // Get user's notifications with filters
+  getUserNotifications(userId: string, options?: {
+    type?: string;
+    isRead?: boolean;
+    priority?: string;
+    limit?: number;
+    offset?: number;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<{ notifications: Notification[]; total: number }>;
+  
+  // Get notification by ID
+  getNotification(notificationId: string, userId: string): Promise<Notification | null>;
+  
+  // Mark notification as read
+  markNotificationAsRead(notificationId: string, userId: string): Promise<boolean>;
+  
+  // Mark all user notifications as read
+  markAllNotificationsAsRead(userId: string): Promise<number>;
+  
+  // Delete a notification
+  deleteNotification(notificationId: string, userId: string): Promise<boolean>;
+  
+  // Clear all notifications for user
+  clearAllNotifications(userId: string): Promise<number>;
+  
+  // Get unread notification count
+  getUnreadNotificationCount(userId: string): Promise<number>;
+  
+  // Batch create notifications for multiple users
+  createBatchNotifications(notifications: InsertNotification[]): Promise<Notification[]>;
+  
+  // Get notifications by related entity
+  getNotificationsByEntity(entityType: string, entityId: string): Promise<Notification[]>;
+  
   // ==================== FLEET ANALYTICS API ====================
   
   // Get fleet overview statistics
@@ -10572,6 +10617,199 @@ export class PostgreSQLStorage implements IStorage {
       },
       details
     };
+  }
+
+  // ==================== NOTIFICATION OPERATIONS ====================
+  
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const result = await db.insert(notifications).values(notification).returning();
+    return result[0];
+  }
+  
+  async getUserNotifications(userId: string, options?: {
+    type?: string;
+    isRead?: boolean;
+    priority?: string;
+    limit?: number;
+    offset?: number;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<{ notifications: Notification[]; total: number }> {
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    
+    // Build conditions
+    const conditions = [
+      eq(notifications.userId, userId),
+      isNull(notifications.deletedAt)
+    ];
+    
+    if (options?.type) {
+      conditions.push(eq(notifications.type, options.type as any));
+    }
+    
+    if (options?.isRead !== undefined) {
+      conditions.push(eq(notifications.isRead, options.isRead));
+    }
+    
+    if (options?.priority) {
+      conditions.push(eq(notifications.priority, options.priority as any));
+    }
+    
+    if (options?.fromDate) {
+      conditions.push(gte(notifications.createdAt, options.fromDate));
+    }
+    
+    if (options?.toDate) {
+      conditions.push(lte(notifications.createdAt, options.toDate));
+    }
+    
+    // Get notifications
+    const result = await db
+      .select()
+      .from(notifications)
+      .where(and(...conditions))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    // Get total count
+    const countResult = await db
+      .select({ count: sql<number>`COUNT(*)::integer` })
+      .from(notifications)
+      .where(and(...conditions));
+    
+    return {
+      notifications: result,
+      total: countResult[0]?.count || 0
+    };
+  }
+  
+  async getNotification(notificationId: string, userId: string): Promise<Notification | null> {
+    const result = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.id, notificationId),
+          eq(notifications.userId, userId),
+          isNull(notifications.deletedAt)
+        )
+      )
+      .limit(1);
+    
+    return result[0] || null;
+  }
+  
+  async markNotificationAsRead(notificationId: string, userId: string): Promise<boolean> {
+    const result = await db
+      .update(notifications)
+      .set({
+        isRead: true,
+        readAt: new Date()
+      })
+      .where(
+        and(
+          eq(notifications.id, notificationId),
+          eq(notifications.userId, userId),
+          eq(notifications.isRead, false)
+        )
+      )
+      .returning();
+    
+    return result.length > 0;
+  }
+  
+  async markAllNotificationsAsRead(userId: string): Promise<number> {
+    const result = await db
+      .update(notifications)
+      .set({
+        isRead: true,
+        readAt: new Date()
+      })
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.isRead, false),
+          isNull(notifications.deletedAt)
+        )
+      )
+      .returning();
+    
+    return result.length;
+  }
+  
+  async deleteNotification(notificationId: string, userId: string): Promise<boolean> {
+    const result = await db
+      .update(notifications)
+      .set({
+        deletedAt: new Date()
+      })
+      .where(
+        and(
+          eq(notifications.id, notificationId),
+          eq(notifications.userId, userId),
+          isNull(notifications.deletedAt)
+        )
+      )
+      .returning();
+    
+    return result.length > 0;
+  }
+  
+  async clearAllNotifications(userId: string): Promise<number> {
+    const result = await db
+      .update(notifications)
+      .set({
+        deletedAt: new Date()
+      })
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          isNull(notifications.deletedAt)
+        )
+      )
+      .returning();
+    
+    return result.length;
+  }
+  
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`COUNT(*)::integer` })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.isRead, false),
+          isNull(notifications.deletedAt)
+        )
+      );
+    
+    return result[0]?.count || 0;
+  }
+  
+  async createBatchNotifications(notificationList: InsertNotification[]): Promise<Notification[]> {
+    if (notificationList.length === 0) return [];
+    
+    const result = await db.insert(notifications).values(notificationList).returning();
+    return result;
+  }
+  
+  async getNotificationsByEntity(entityType: string, entityId: string): Promise<Notification[]> {
+    const result = await db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.relatedEntityType, entityType),
+          eq(notifications.relatedEntityId, entityId),
+          isNull(notifications.deletedAt)
+        )
+      )
+      .orderBy(desc(notifications.createdAt));
+    
+    return result;
   }
 
   async getAdminRevenueReport(dateFrom: Date, dateTo: Date): Promise<{

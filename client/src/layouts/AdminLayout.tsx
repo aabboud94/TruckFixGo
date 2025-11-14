@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Toaster } from "@/components/ui/toaster";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { apiRequest } from "@/lib/queryClient";
+import { NotificationsPanel } from "@/components/notifications-panel";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -66,14 +67,7 @@ export default function AdminLayout({ children, title, breadcrumbs = [] }: Admin
     }
   }, [adminSession, isLoading, location, setLocation, redirectAttempts, error]);
 
-  // Check for notifications
-  const { data: notifications } = useQuery<{ unread: number }>({
-    queryKey: ['/api/admin/notifications'],
-    refetchInterval: 30000, // Refresh every 30 seconds
-    enabled: !!adminSession
-  });
-
-  const unreadCount = notifications?.unread || 0;
+  // Notification count is now handled by the NotificationsPanel component
 
   if (isLoading) {
     return (
@@ -199,22 +193,7 @@ export default function AdminLayout({ children, title, breadcrumbs = [] }: Admin
                 </Button>
 
                 {/* Notifications */}
-                <Button 
-                  size="icon" 
-                  variant="ghost"
-                  className="relative"
-                  data-testid="button-notifications"
-                >
-                  <Bell className="h-4 w-4" />
-                  {unreadCount > 0 && (
-                    <Badge 
-                      className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 flex items-center justify-center"
-                      variant="destructive"
-                    >
-                      {unreadCount}
-                    </Badge>
-                  )}
-                </Button>
+                <NotificationsPanel />
 
                 {/* Settings */}
                 <Button 
