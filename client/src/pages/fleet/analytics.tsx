@@ -69,6 +69,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import PerformanceWidget from "@/components/performance-widget";
 
 const COLORS = {
   primary: "#1E3A8A",
@@ -557,6 +558,68 @@ export default function FleetAnalytics() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+        )}
+
+        {/* Fleet Performance KPIs */}
+        {!isLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <PerformanceWidget
+              title="Fleet Utilization"
+              value={metrics?.utilizationRate || 0}
+              unit="percentage"
+              trend={metrics?.utilizationTrend}
+              status={
+                (metrics?.utilizationRate || 0) >= 80 ? 'green' :
+                (metrics?.utilizationRate || 0) >= 60 ? 'yellow' :
+                'red'
+              }
+              target={85}
+              icon={Truck}
+              variant="default"
+            />
+            <PerformanceWidget
+              title="On-Time Delivery"
+              value={metrics?.onTimeDeliveryRate || 0}
+              unit="percentage"
+              trend={metrics?.onTimeTrend}
+              status={
+                (metrics?.onTimeDeliveryRate || 0) >= 95 ? 'green' :
+                (metrics?.onTimeDeliveryRate || 0) >= 85 ? 'yellow' :
+                'red'
+              }
+              target={95}
+              icon={Clock}
+              variant="default"
+            />
+            <PerformanceWidget
+              title="Cost per Mile"
+              value={metrics?.costPerMile || 0}
+              unit="dollars"
+              trend={metrics?.costPerMileTrend}
+              status={
+                (metrics?.costPerMile || 0) <= 1.5 ? 'green' :
+                (metrics?.costPerMile || 0) <= 2.5 ? 'yellow' :
+                'red'
+              }
+              target={1.5}
+              icon={DollarSign}
+              variant="default"
+            />
+            <PerformanceWidget
+              title="Vehicle Health"
+              value={metrics?.avgVehicleHealth || 0}
+              unit="percentage"
+              trend={metrics?.healthTrend}
+              status={
+                (metrics?.avgVehicleHealth || 0) >= 80 ? 'green' :
+                (metrics?.avgVehicleHealth || 0) >= 60 ? 'yellow' :
+                'red'
+              }
+              target={85}
+              icon={Shield}
+              variant="default"
+            />
           </div>
         )}
 

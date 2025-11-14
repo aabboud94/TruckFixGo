@@ -59,6 +59,7 @@ import {
   FastForward
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
+import PerformanceWidget from "@/components/performance-widget";
 
 interface QueuedJob {
   id: string;
@@ -1145,6 +1146,61 @@ export default function ContractorDashboard() {
           </TabsContent>
           
           <TabsContent value="performance" className="space-y-4">
+            {/* Performance KPI Widgets */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <PerformanceWidget
+                title="Completion Rate"
+                value={contractor?.completionRate || 0}
+                unit="percentage"
+                trend={metrics?.completionRateTrend}
+                status={
+                  (contractor?.completionRate || 0) >= 95 ? 'green' :
+                  (contractor?.completionRate || 0) >= 85 ? 'yellow' :
+                  'red'
+                }
+                target={95}
+                icon={CheckCircle}
+                variant="default"
+              />
+              <PerformanceWidget
+                title="Response Time"
+                value={contractor?.responseTime || 0}
+                unit="minutes"
+                trend={metrics?.responseTimeTrend}
+                status={
+                  (contractor?.responseTime || 0) <= 30 ? 'green' :
+                  (contractor?.responseTime || 0) <= 60 ? 'yellow' :
+                  'red'
+                }
+                target={30}
+                icon={Clock}
+                variant="default"
+              />
+              <PerformanceWidget
+                title="Weekly Revenue"
+                value={metrics?.weekEarnings || 0}
+                unit="dollars"
+                trend={metrics?.revenueTrend}
+                status="neutral"
+                icon={DollarSign}
+                variant="default"
+              />
+              <PerformanceWidget
+                title="Customer Satisfaction"
+                value={contractor?.satisfactionScore || contractor?.averageRating || 0}
+                unit="rating"
+                trend={metrics?.satisfactionTrend}
+                status={
+                  (contractor?.averageRating || 0) >= 4.5 ? 'green' :
+                  (contractor?.averageRating || 0) >= 4.0 ? 'yellow' :
+                  'red'
+                }
+                target={4.5}
+                icon={Star}
+                variant="default"
+              />
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card>
                 <CardHeader>

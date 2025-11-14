@@ -301,7 +301,19 @@ import {
   type InsertMaintenanceAlert,
   maintenanceRiskLevelEnum,
   maintenanceAlertTypeEnum,
-  maintenanceSeverityEnum
+  maintenanceSeverityEnum,
+  performanceMetrics,
+  kpiDefinitions,
+  metricSnapshots,
+  performanceGoals,
+  type PerformanceMetric,
+  type InsertPerformanceMetric,
+  type KpiDefinition,
+  type InsertKpiDefinition,
+  type MetricSnapshot,
+  type InsertMetricSnapshot,
+  type PerformanceGoal,
+  type InsertPerformanceGoal
 } from "@shared/schema";
 import { partsInventoryService } from "./services/parts-inventory-service";
 
@@ -13007,6 +13019,147 @@ export class PostgreSQLStorage implements IStorage {
 
     const results = await query;
     return results.map(r => r.maintenance_alerts);
+  }
+
+  // =============================================
+  // PERFORMANCE METRICS METHODS
+  // =============================================
+
+  async recordPerformanceMetric(metric: InsertPerformanceMetric): Promise<PerformanceMetric> {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.recordMetric(metric);
+  }
+
+  async getPerformanceMetrics(
+    entityType: string, 
+    entityId: string, 
+    dateRange?: { startDate: Date; endDate: Date }
+  ): Promise<PerformanceMetric[]> {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.getPerformanceMetrics(entityType, entityId, dateRange);
+  }
+
+  async calculateKPI(
+    kpiId: string, 
+    entityId: string, 
+    period: { startDate: Date; endDate: Date }
+  ) {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.calculateKPI(kpiId, entityId, period);
+  }
+
+  async createPerformanceSnapshot() {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.createPerformanceSnapshot();
+  }
+
+  async setPerformanceGoal(
+    entityType: string, 
+    entityId: string, 
+    kpiId: string, 
+    target: {
+      targetValue: number;
+      deadline: Date;
+      notes?: string;
+    }
+  ): Promise<PerformanceGoal> {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.setPerformanceGoal({
+      entityType: entityType as any,
+      entityId,
+      kpiId,
+      targetValue: String(target.targetValue),
+      deadline: target.deadline,
+      notes: target.notes
+    });
+  }
+
+  async getPerformanceComparison(
+    entityId: string, 
+    periods: Array<{ startDate: Date; endDate: Date }>
+  ) {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.getPerformanceComparison(entityId, periods);
+  }
+
+  async getTopPerformers(metricType: string, limit?: number) {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.getTopPerformers(metricType, limit);
+  }
+
+  async getPerformanceTrends(
+    metricType: string, 
+    dateRange: { startDate: Date; endDate: Date }
+  ) {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.getPerformanceTrends(metricType, dateRange);
+  }
+
+  async generatePerformanceScorecard(
+    entityType: string, 
+    entityId: string, 
+    period?: { startDate: Date; endDate: Date }
+  ) {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.generateScorecard(entityType, entityId, period);
+  }
+
+  async initializePerformanceKPIs() {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.initializeKPIs();
+  }
+
+  async calculateResponseTimeMetrics(
+    entityType: string, 
+    entityId: string, 
+    dateRange: { startDate: Date; endDate: Date }
+  ) {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.calculateResponseTimeMetrics(entityType, entityId, dateRange);
+  }
+
+  async calculateCompletionRates(
+    entityType: string, 
+    entityId: string, 
+    dateRange: { startDate: Date; endDate: Date }
+  ) {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.calculateCompletionRates(entityType, entityId, dateRange);
+  }
+
+  async calculateRevenue(
+    entityType: string, 
+    entityId: string, 
+    dateRange: { startDate: Date; endDate: Date }
+  ) {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.calculateRevenue(entityType, entityId, dateRange);
+  }
+
+  async calculateSatisfactionScore(
+    entityType: string, 
+    entityId: string, 
+    dateRange: { startDate: Date; endDate: Date }
+  ) {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.calculateSatisfactionScore(entityType, entityId, dateRange);
+  }
+
+  async calculateFleetUtilization(
+    fleetId: string, 
+    dateRange: { startDate: Date; endDate: Date }
+  ) {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.calculateFleetUtilization(fleetId, dateRange);
+  }
+
+  async calculateOnTimeDelivery(
+    entityType: string, 
+    entityId: string, 
+    dateRange: { startDate: Date; endDate: Date }
+  ) {
+    const { performanceMetricsService } = await import('./services/performance-metrics-service');
+    return performanceMetricsService.calculateOnTimeDelivery(entityType, entityId, dateRange);
   }
 }
 

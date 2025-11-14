@@ -3981,3 +3981,128 @@ export const insertMaintenanceAlertSchema = createInsertSchema(maintenanceAlerts
 export type InsertMaintenanceAlert = z.infer<typeof insertMaintenanceAlertSchema>;
 export type MaintenanceAlert = typeof maintenanceAlerts.$inferSelect;
 
+// ====================
+// PERFORMANCE METRICS
+// ====================
+
+// Performance metrics enums
+export const entityTypeEnum = pgEnum('entity_type', ['contractor', 'fleet', 'vehicle', 'job']);
+export const metricTypeEnum = pgEnum('metric_type', ['response_time', 'completion_rate', 'revenue', 'satisfaction', 'utilization', 'cost', 'on_time', 'quality', 'efficiency']);
+export const performanceStatusEnum = pgEnum('performance_status', ['pending', 'in_progress', 'achieved', 'failed', 'expired']);
+export const kpiCategoryEnum = pgEnum('kpi_category', ['operational', 'financial', 'quality', 'customer', 'compliance']);
+
+// Performance metrics table
+export const performanceMetrics = pgTable("performance_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entityType: entityTypeEnum("entity_type").notNull(),
+  entityId: varchar("entity_id").notNull(),
+  metricType: metricTypeEnum("metric_type").notNull(),
+  metricName: varchar("metric_name", { length: 100 }).notNull(),
+  value: decimal("value", { precision: 15, scale: 4 }).notNull(),
+  unit: varchar("unit", { length: 50 }), // e.g., "percentage", "dollars", "minutes", "count"
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  periodStart: timestamp("period_start"),
+  periodEnd: timestamp("period_end"),
+  metadata: jsonb("metadata").default('{}'), // Additional context (e.g., { sample_size: 100, confidence: 0.95 })
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  entityIdx: index("idx_performance_metrics_entity").on(table.entityType, table.entityId),
+  metricTypeIdx: index("idx_performance_metrics_type").on(table.metricType),
+  timestampIdx: index("idx_performance_metrics_timestamp").on(table.timestamp),
+  periodIdx: index("idx_performance_metrics_period").on(table.periodStart, table.periodEnd)
+}));
+
+// KPI definitions table
+export const kpiDefinitions = pgTable("kpi_definitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull().unique(),
+  description: text("description"),
+  formula: text("formula"), // SQL or calculation formula
+  unit: varchar("unit", { length: 50 }).notNull(), // e.g., "percentage", "dollars", "minutes"
+  category: kpiCategoryEnum("category").notNull(),
+  targetValue: decimal("target_value", { precision: 15, scale: 4 }),
+  thresholdGreen: decimal("threshold_green", { precision: 15, scale: 4 }),
+  thresholdYellow: decimal("threshold_yellow", { precision: 15, scale: 4 }),
+  thresholdRed: decimal("threshold_red", { precision: 15, scale: 4 }),
+  isActive: boolean("is_active").notNull().default(true),
+  refreshInterval: integer("refresh_interval").default(3600), // seconds
+  aggregationType: varchar("aggregation_type", { length: 20 }).default('average'), // average, sum, count, max, min
+  metadata: jsonb("metadata").default('{}'), // Additional configuration
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  categoryIdx: index("idx_kpi_definitions_category").on(table.category),
+  activeIdx: index("idx_kpi_definitions_active").on(table.isActive),
+  nameIdx: uniqueIndex("idx_kpi_definitions_name").on(table.name)
+}));
+
+// Metric snapshots table
+export const metricSnapshots = pgTable("metric_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  snapshotDate: timestamp("snapshot_date").notNull(),
+  entityType: entityTypeEnum("entity_type"),
+  entityId: varchar("entity_id"),
+  metrics: jsonb("metrics").notNull().default('{}'), // { kpi_name: value, ... }
+  summary: jsonb("summary").default('{}'), // Aggregated summary stats
+  createdAt: timestamp("created_at").notNull().defaultNow()
+}, (table) => ({
+  dateIdx: index("idx_metric_snapshots_date").on(table.snapshotDate),
+  entityIdx: index("idx_metric_snapshots_entity").on(table.entityType, table.entityId),
+  dateEntityIdx: index("idx_metric_snapshots_date_entity").on(table.snapshotDate, table.entityType, table.entityId)
+}));
+
+// Performance goals table
+export const performanceGoals = pgTable("performance_goals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entityType: entityTypeEnum("entity_type").notNull(),
+  entityId: varchar("entity_id").notNull(),
+  kpiId: varchar("kpi_id").notNull().references(() => kpiDefinitions.id),
+  targetValue: decimal("target_value", { precision: 15, scale: 4 }).notNull(),
+  currentValue: decimal("current_value", { precision: 15, scale: 4 }),
+  startDate: timestamp("start_date").notNull().defaultNow(),
+  deadline: timestamp("deadline").notNull(),
+  status: performanceStatusEnum("status").notNull().default('pending'),
+  achievedAt: timestamp("achieved_at"),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  entityIdx: index("idx_performance_goals_entity").on(table.entityType, table.entityId),
+  kpiIdx: index("idx_performance_goals_kpi").on(table.kpiId),
+  statusIdx: index("idx_performance_goals_status").on(table.status),
+  deadlineIdx: index("idx_performance_goals_deadline").on(table.deadline)
+}));
+
+// Performance metric schemas and types
+export const insertPerformanceMetricSchema = createInsertSchema(performanceMetrics).omit({
+  id: true,
+  timestamp: true,
+  createdAt: true
+});
+export type InsertPerformanceMetric = z.infer<typeof insertPerformanceMetricSchema>;
+export type PerformanceMetric = typeof performanceMetrics.$inferSelect;
+
+export const insertKpiDefinitionSchema = createInsertSchema(kpiDefinitions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertKpiDefinition = z.infer<typeof insertKpiDefinitionSchema>;
+export type KpiDefinition = typeof kpiDefinitions.$inferSelect;
+
+export const insertMetricSnapshotSchema = createInsertSchema(metricSnapshots).omit({
+  id: true,
+  createdAt: true
+});
+export type InsertMetricSnapshot = z.infer<typeof insertMetricSnapshotSchema>;
+export type MetricSnapshot = typeof metricSnapshots.$inferSelect;
+
+export const insertPerformanceGoalSchema = createInsertSchema(performanceGoals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertPerformanceGoal = z.infer<typeof insertPerformanceGoalSchema>;
+export type PerformanceGoal = typeof performanceGoals.$inferSelect;
+
