@@ -64,6 +64,10 @@ export const trackingUpdateFrequencyEnum = pgEnum('tracking_update_frequency', [
 export const pmScheduleFrequencyEnum = pgEnum('pm_schedule_frequency', ['weekly', 'monthly', 'quarterly', 'annually']);
 export const pmScheduleStatusEnum = pgEnum('pm_schedule_status', ['active', 'paused', 'cancelled']);
 
+// Notification related enums
+export const notificationTypeEnum = pgEnum('notification_type', ['job_update', 'payment', 'system', 'bid_received', 'fleet_update', 'maintenance', 'alert']);
+export const notificationPriorityEnum = pgEnum('notification_priority', ['low', 'medium', 'high', 'urgent']);
+
 // ====================
 // USERS & AUTH
 // ====================
@@ -3090,6 +3094,51 @@ export type InsertBookingBlacklist = z.infer<typeof insertBookingBlacklistSchema
 export type BookingBlacklist = typeof bookingBlacklist.$inferSelect;
 
 
+// ====================
+// NOTIFICATIONS
+// ====================
+
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // User reference
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  
+  // Notification content
+  type: notificationTypeEnum("type").notNull().default('system'),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  
+  // Related entity references (polymorphic)
+  relatedEntityType: varchar("related_entity_type", { length: 50 }), // 'job', 'invoice', 'payment', 'bid', etc.
+  relatedEntityId: varchar("related_entity_id"),
+  
+  // Priority and status
+  priority: notificationPriorityEnum("priority").notNull().default('medium'),
+  isRead: boolean("is_read").notNull().default(false),
+  readAt: timestamp("read_at"),
+  
+  // Action URL (optional)
+  actionUrl: text("action_url"), // URL to navigate when notification is clicked
+  
+  // Additional data
+  metadata: jsonb("metadata"), // Additional context-specific data
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at"), // Optional expiration for time-sensitive notifications
+  
+  // Soft delete
+  deletedAt: timestamp("deleted_at")
+}, (table) => ({
+  userIdx: index("idx_notifications_user").on(table.userId),
+  typeIdx: index("idx_notifications_type").on(table.type),
+  readIdx: index("idx_notifications_read").on(table.isRead),
+  priorityIdx: index("idx_notifications_priority").on(table.priority),
+  createdIdx: index("idx_notifications_created").on(table.createdAt),
+  entityIdx: index("idx_notifications_entity").on(table.relatedEntityType, table.relatedEntityId)
+}));
+
 // Location tracking types
 export type LocationTracking = typeof locationTracking.$inferSelect;
 export type InsertLocationTracking = typeof locationTracking.$inferInsert;
@@ -3108,4 +3157,15 @@ export const insertLocationTrackingSchema = createInsertSchema(locationTracking)
 export const insertLocationHistorySchema = createInsertSchema(locationHistory);
 export const insertTrackingSessionSchema = createInsertSchema(trackingSessions);
 export const insertGeofenceEventSchema = createInsertSchema(geofenceEvents);
+
+// Notification schemas and types
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  isRead: true,
+  readAt: true,
+  createdAt: true,
+  deletedAt: true
+});
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
 
