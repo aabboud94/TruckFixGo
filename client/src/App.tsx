@@ -163,6 +163,7 @@ function Router() {
       <Route path="/fleet/jobs/:id" component={FleetJobDetails} />
       <Route path="/fleet/job-history" component={FleetJobHistory} />
       <Route path="/fleet/maintenance-predictor" component={FleetMaintenancePredictor} />
+      <Route path="/fleet/maintenance" component={FleetMaintenancePredictor} />
       
       {/* Admin Pages - Protected Routes */}
       <Route path="/admin/login" component={AdminLogin} />
@@ -179,6 +180,7 @@ function Router() {
       <Route path="/admin/bidding-config" component={AdminBiddingConfig} />
       <Route path="/admin/job-monitor" component={AdminJobMonitor} />
       <Route path="/admin/ai-dispatch" component={AIDispatchDashboard} />
+      <Route path="/admin/dispatch" component={AIDispatchDashboard} />
       <Route path="/admin/fleet-checks" component={AdminFleetChecks} />
       <Route path="/admin/billing" component={AdminBilling} />
       <Route path="/admin/contracts" component={AdminContracts} />
@@ -197,6 +199,7 @@ function Router() {
       <Route path="/admin/live-map" component={AdminLiveMap} />
       <Route path="/admin/status" component={AdminStatus} />
       <Route path="/admin/payment-reconciliation" component={PaymentReconciliation} />
+      <Route path="/admin/emergency-response" component={EmergencyResponsePage} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />
