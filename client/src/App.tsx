@@ -87,6 +87,7 @@ import AdminStatus from "@/pages/admin/status";
 import AIDispatchDashboard from "@/pages/admin/ai-dispatch-dashboard";
 import EmergencyResponsePage from "@/pages/emergency-response";
 import PaymentReconciliation from "@/pages/payment-reconciliation";
+import PartsInventory from "@/pages/admin/parts-inventory";
 
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
@@ -200,6 +201,7 @@ function Router() {
       <Route path="/admin/status" component={AdminStatus} />
       <Route path="/admin/payment-reconciliation" component={PaymentReconciliation} />
       <Route path="/admin/emergency-response" component={EmergencyResponsePage} />
+      <Route path="/admin/parts" component={PartsInventory} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />

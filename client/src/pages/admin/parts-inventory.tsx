@@ -227,10 +227,7 @@ export default function PartsInventory() {
       const url = data.id ? `/api/parts/${data.id}` : '/api/parts';
       const method = data.id ? 'PUT' : 'POST';
       
-      return apiRequest(url, {
-        method,
-        body: JSON.stringify(data)
-      });
+      return apiRequest(method, url, data);
     },
     onSuccess: () => {
       toast({
@@ -254,10 +251,7 @@ export default function PartsInventory() {
   // Inventory adjustment mutation
   const adjustmentMutation = useMutation({
     mutationFn: async (data: InventoryAdjustmentData & { partId: string }) => {
-      return apiRequest(`/api/parts/${data.partId}/stock`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-      });
+      return apiRequest('PUT', `/api/parts/${data.partId}/stock`, data);
     },
     onSuccess: () => {
       toast({
@@ -281,10 +275,7 @@ export default function PartsInventory() {
   // Create purchase order mutation
   const createOrderMutation = useMutation({
     mutationFn: async (data: PurchaseOrderData & { items: any[] }) => {
-      return apiRequest('/api/parts/orders', {
-        method: 'POST',
-        body: JSON.stringify(data)
-      });
+      return apiRequest('POST', '/api/parts/orders', data);
     },
     onSuccess: () => {
       toast({
@@ -308,10 +299,7 @@ export default function PartsInventory() {
   // Receive order mutation
   const receiveOrderMutation = useMutation({
     mutationFn: async ({ orderId, receivedItems, trackingNumber }: any) => {
-      return apiRequest(`/api/parts/orders/${orderId}/receive`, {
-        method: 'PUT',
-        body: JSON.stringify({ receivedItems, trackingNumber })
-      });
+      return apiRequest('PUT', `/api/parts/orders/${orderId}/receive`, { receivedItems, trackingNumber });
     },
     onSuccess: () => {
       toast({
