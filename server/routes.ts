@@ -3992,6 +3992,273 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== NOTIFICATION/REMINDER API ENDPOINTS ====================
+  
+  // Get all active reminders for the current user with pagination
+  app.get('/api/notifications/reminders',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const status = req.query.status as string;
+        const reminderType = req.query.reminderType as string;
+        
+        const result = await storage.getUserReminders(req.session.userId!, {
+          status,
+          reminderType,
+          limit,
+          offset,
+          orderBy: 'scheduledSendTime',
+          orderDir: 'desc'
+        });
+        
+        res.json({
+          reminders: result.reminders,
+          total: result.total,
+          limit,
+          offset
+        });
+      } catch (error) {
+        console.error('Error fetching user reminders:', error);
+        res.status(500).json({ message: 'Failed to fetch reminders' });
+      }
+    }
+  );
+  
+  // Get reminder delivery logs with status and metrics
+  app.get('/api/notifications/logs',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const status = req.query.status as string;
+        const channel = req.query.channel as string;
+        
+        // Parse date parameters
+        const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+        const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+        
+        const result = await storage.getUserReminderLogs(req.session.userId!, {
+          status,
+          channel,
+          startDate,
+          endDate,
+          limit,
+          offset
+        });
+        
+        res.json({
+          logs: result.logs,
+          total: result.total,
+          limit,
+          offset
+        });
+      } catch (error) {
+        console.error('Error fetching reminder logs:', error);
+        res.status(500).json({ message: 'Failed to fetch reminder logs' });
+      }
+    }
+  );
+  
+  // Get user's blacklisted contacts
+  app.get('/api/notifications/blacklist',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const type = req.query.type as 'email' | 'phone';
+        const isActive = req.query.isActive === undefined ? true : req.query.isActive === 'true';
+        
+        const result = await storage.getUserReminderBlacklist(req.session.userId!, {
+          type,
+          isActive,
+          limit,
+          offset
+        });
+        
+        res.json({
+          blacklist: result.entries,
+          total: result.total,
+          limit,
+          offset
+        });
+      } catch (error) {
+        console.error('Error fetching blacklist:', error);
+        res.status(500).json({ message: 'Failed to fetch blacklist' });
+      }
+    }
+  );
+  
+  // Add contact to blacklist
+  app.post('/api/notifications/blacklist',
+    requireAuth,
+    validateRequest(insertReminderBlacklistSchema),
+    async (req: Request, res: Response) => {
+      try {
+        const { value, type, reason } = req.body;
+        
+        // Check if already blacklisted
+        const existing = await storage.getUserReminderBlacklist(req.session.userId!, {
+          type,
+          isActive: true
+        });
+        
+        const alreadyBlacklisted = existing.entries.some(entry => entry.value === value);
+        
+        if (alreadyBlacklisted) {
+          return res.status(400).json({ message: 'Contact already blacklisted' });
+        }
+        
+        const entry = await storage.addToReminderBlacklist({
+          value,
+          type,
+          reason,
+          addedBy: req.session.userId!,
+          isActive: true
+        });
+        
+        res.status(201).json({
+          message: 'Contact added to blacklist',
+          entry
+        });
+      } catch (error) {
+        console.error('Error adding to blacklist:', error);
+        res.status(500).json({ message: 'Failed to add to blacklist' });
+      }
+    }
+  );
+  
+  // Remove contact from blacklist
+  app.delete('/api/notifications/blacklist/:id',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { id } = req.params;
+        
+        const success = await storage.removeFromReminderBlacklist(id, req.session.userId!);
+        
+        if (success) {
+          res.json({ message: 'Contact removed from blacklist' });
+        } else {
+          res.status(404).json({ message: 'Blacklist entry not found or unauthorized' });
+        }
+      } catch (error) {
+        console.error('Error removing from blacklist:', error);
+        res.status(500).json({ message: 'Failed to remove from blacklist' });
+      }
+    }
+  );
+  
+  // Get push notification history
+  app.get('/api/notifications/push-history',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+        const offset = parseInt(req.query.offset as string) || 0;
+        const days = parseInt(req.query.days as string) || 30;
+        
+        const result = await storage.getPushNotificationHistoryPaginated(req.session.userId!, {
+          days,
+          limit,
+          offset
+        });
+        
+        res.json({
+          notifications: result.notifications,
+          total: result.total,
+          limit,
+          offset,
+          days
+        });
+      } catch (error) {
+        console.error('Error fetching push notification history:', error);
+        res.status(500).json({ message: 'Failed to fetch push notification history' });
+      }
+    }
+  );
+  
+  // Get notification performance metrics
+  app.get('/api/notifications/metrics',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        // Parse date parameters
+        const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+        const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+        const channel = req.query.channel as string;
+        const messageType = req.query.messageType as string;
+        
+        // Validate dates
+        if (startDate && endDate && startDate > endDate) {
+          return res.status(400).json({ message: 'Start date must be before end date' });
+        }
+        
+        const metrics = await storage.getNotificationMetrics({
+          startDate,
+          endDate,
+          channel,
+          messageType
+        });
+        
+        // Calculate aggregate metrics
+        const aggregates = metrics.reduce((acc, metric) => {
+          acc.totalSent += metric.totalSent || 0;
+          acc.totalDelivered += metric.totalDelivered || 0;
+          acc.totalFailed += metric.totalFailed || 0;
+          acc.totalOpened += metric.totalOpened || 0;
+          acc.totalClicked += metric.totalClicked || 0;
+          acc.totalUnsubscribed += metric.totalUnsubscribed || 0;
+          acc.totalBounced += metric.totalBounced || 0;
+          acc.totalCost = (parseFloat(acc.totalCost) + parseFloat(metric.totalCost || '0')).toFixed(2);
+          return acc;
+        }, {
+          totalSent: 0,
+          totalDelivered: 0,
+          totalFailed: 0,
+          totalOpened: 0,
+          totalClicked: 0,
+          totalUnsubscribed: 0,
+          totalBounced: 0,
+          totalCost: '0.00'
+        });
+        
+        // Calculate rates
+        const deliveryRate = aggregates.totalSent > 0 ? 
+          (aggregates.totalDelivered / aggregates.totalSent * 100).toFixed(2) : '0.00';
+        const openRate = aggregates.totalDelivered > 0 ? 
+          (aggregates.totalOpened / aggregates.totalDelivered * 100).toFixed(2) : '0.00';
+        const clickRate = aggregates.totalOpened > 0 ? 
+          (aggregates.totalClicked / aggregates.totalOpened * 100).toFixed(2) : '0.00';
+        const bounceRate = aggregates.totalSent > 0 ? 
+          (aggregates.totalBounced / aggregates.totalSent * 100).toFixed(2) : '0.00';
+        
+        res.json({
+          metrics,
+          aggregates,
+          rates: {
+            deliveryRate: parseFloat(deliveryRate),
+            openRate: parseFloat(openRate),
+            clickRate: parseFloat(clickRate),
+            bounceRate: parseFloat(bounceRate)
+          },
+          filters: {
+            startDate,
+            endDate,
+            channel,
+            messageType
+          }
+        });
+      } catch (error) {
+        console.error('Error fetching notification metrics:', error);
+        res.status(500).json({ message: 'Failed to fetch notification metrics' });
+      }
+    }
+  );
+
   // Complete job
   app.post('/api/jobs/:id/complete',
     requireAuth,

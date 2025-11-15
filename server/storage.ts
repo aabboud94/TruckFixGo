@@ -1084,6 +1084,57 @@ export interface IStorage {
   // Check if service history exists for job
   serviceHistoryExistsForJob(jobId: string): Promise<boolean>;
   
+  // ==================== NOTIFICATION/REMINDER MANAGEMENT ====================
+  
+  // Get reminders for a user with pagination
+  getUserReminders(userId: string, options?: {
+    status?: string;
+    reminderType?: string;
+    limit?: number;
+    offset?: number;
+    orderBy?: string;
+    orderDir?: 'asc' | 'desc';
+  }): Promise<{ reminders: Reminder[]; total: number }>;
+  
+  // Get reminder logs for a user
+  getUserReminderLogs(userId: string, options?: {
+    status?: string;
+    channel?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ logs: ReminderLog[]; total: number }>;
+  
+  // Get blacklist entries for a user
+  getUserReminderBlacklist(userId?: string, options?: {
+    type?: 'email' | 'phone';
+    isActive?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ entries: ReminderBlacklist[]; total: number }>;
+  
+  // Add entry to reminder blacklist
+  addToReminderBlacklist(data: InsertReminderBlacklist): Promise<ReminderBlacklist>;
+  
+  // Remove from reminder blacklist by ID
+  removeFromReminderBlacklist(id: string, userId?: string): Promise<boolean>;
+  
+  // Get push notification history with pagination
+  getPushNotificationHistoryPaginated(userId: string, options?: {
+    days?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ notifications: PushNotification[]; total: number }>;
+  
+  // Get notification performance metrics
+  getNotificationMetrics(options?: {
+    startDate?: Date;
+    endDate?: Date;
+    channel?: string;
+    messageType?: string;
+  }): Promise<ReminderMetrics[]>;
+  
   // ==================== BOOKING PREFERENCES ====================
   
   // Save or update booking preferences
@@ -8172,6 +8223,237 @@ export class PostgreSQLStorage implements IStorage {
         )
       )
       .orderBy(asc(reminderLog.createdAt));
+  }
+
+  async getUserReminders(userId: string, options?: {
+    status?: string;
+    reminderType?: string;
+    limit?: number;
+    offset?: number;
+    orderBy?: string;
+    orderDir?: 'asc' | 'desc';
+  }): Promise<{ reminders: Reminder[]; total: number }> {
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    
+    const conditions = [eq(reminders.recipientId, userId)];
+    
+    if (options?.status) {
+      conditions.push(eq(reminders.status, options.status as any));
+    }
+    
+    if (options?.reminderType) {
+      conditions.push(eq(reminders.reminderType, options.reminderType as any));
+    }
+    
+    // Get total count
+    const totalResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(reminders)
+      .where(and(...conditions));
+    const total = Number(totalResult[0]?.count || 0);
+    
+    // Get paginated results
+    const query = db
+      .select()
+      .from(reminders)
+      .where(and(...conditions))
+      .limit(limit)
+      .offset(offset);
+    
+    // Apply ordering
+    if (options?.orderDir === 'asc') {
+      query.orderBy(asc(reminders.scheduledSendTime));
+    } else {
+      query.orderBy(desc(reminders.scheduledSendTime));
+    }
+    
+    const result = await query;
+    
+    return { reminders: result, total };
+  }
+
+  async getUserReminderLogs(userId: string, options?: {
+    status?: string;
+    channel?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ logs: ReminderLog[]; total: number }> {
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    
+    const conditions = [eq(reminderLog.recipientId, userId)];
+    
+    if (options?.status) {
+      conditions.push(eq(reminderLog.status, options.status));
+    }
+    
+    if (options?.channel) {
+      conditions.push(eq(reminderLog.channel, options.channel as any));
+    }
+    
+    if (options?.startDate) {
+      conditions.push(gte(reminderLog.createdAt, options.startDate));
+    }
+    
+    if (options?.endDate) {
+      conditions.push(lte(reminderLog.createdAt, options.endDate));
+    }
+    
+    // Get total count
+    const totalResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(reminderLog)
+      .where(and(...conditions));
+    const total = Number(totalResult[0]?.count || 0);
+    
+    // Get paginated results
+    const logs = await db
+      .select()
+      .from(reminderLog)
+      .where(and(...conditions))
+      .orderBy(desc(reminderLog.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    return { logs, total };
+  }
+
+  async getUserReminderBlacklist(userId?: string, options?: {
+    type?: 'email' | 'phone';
+    isActive?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ entries: ReminderBlacklist[]; total: number }> {
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    
+    const conditions = [];
+    
+    // If userId provided, filter by user who added the entry
+    if (userId) {
+      conditions.push(eq(reminderBlacklist.addedBy, userId));
+    }
+    
+    if (options?.type) {
+      conditions.push(eq(reminderBlacklist.type, options.type));
+    }
+    
+    if (options?.isActive !== undefined) {
+      conditions.push(eq(reminderBlacklist.isActive, options.isActive));
+    }
+    
+    // Get total count
+    const totalResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(reminderBlacklist)
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
+    const total = Number(totalResult[0]?.count || 0);
+    
+    // Get paginated results
+    const entries = await db
+      .select()
+      .from(reminderBlacklist)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(reminderBlacklist.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    return { entries, total };
+  }
+
+  async addToReminderBlacklist(data: InsertReminderBlacklist): Promise<ReminderBlacklist> {
+    const result = await db.insert(reminderBlacklist).values(data).returning();
+    return result[0];
+  }
+
+  async removeFromReminderBlacklist(id: string, userId?: string): Promise<boolean> {
+    const conditions = [eq(reminderBlacklist.id, id)];
+    
+    // If userId provided, ensure only the user who added can remove
+    if (userId) {
+      conditions.push(eq(reminderBlacklist.addedBy, userId));
+    }
+    
+    const result = await db
+      .update(reminderBlacklist)
+      .set({ 
+        isActive: false,
+        updatedAt: new Date()
+      })
+      .where(and(...conditions))
+      .returning();
+    
+    return result.length > 0;
+  }
+
+  async getPushNotificationHistoryPaginated(userId: string, options?: {
+    days?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ notifications: PushNotification[]; total: number }> {
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    const days = options?.days || 30;
+    
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    
+    const conditions = [
+      eq(pushNotifications.userId, userId),
+      gte(pushNotifications.createdAt, cutoffDate)
+    ];
+    
+    // Get total count
+    const totalResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(pushNotifications)
+      .where(and(...conditions));
+    const total = Number(totalResult[0]?.count || 0);
+    
+    // Get paginated results
+    const notifications = await db
+      .select()
+      .from(pushNotifications)
+      .where(and(...conditions))
+      .orderBy(desc(pushNotifications.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    return { notifications, total };
+  }
+
+  async getNotificationMetrics(options?: {
+    startDate?: Date;
+    endDate?: Date;
+    channel?: string;
+    messageType?: string;
+  }): Promise<ReminderMetrics[]> {
+    const conditions = [];
+    
+    if (options?.startDate) {
+      conditions.push(gte(reminderMetrics.date, options.startDate));
+    }
+    
+    if (options?.endDate) {
+      conditions.push(lte(reminderMetrics.date, options.endDate));
+    }
+    
+    if (options?.channel) {
+      conditions.push(eq(reminderMetrics.channel, options.channel as any));
+    }
+    
+    if (options?.messageType) {
+      conditions.push(eq(reminderMetrics.messageType, options.messageType));
+    }
+    
+    return await db
+      .select()
+      .from(reminderMetrics)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(reminderMetrics.date));
   }
   
   // ==================== CONTRACTOR APPLICATION OPERATIONS ====================
