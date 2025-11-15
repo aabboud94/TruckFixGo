@@ -22851,6 +22851,353 @@ The TruckFixGo Team
     }
   });
 
+  // ==================== CONTRACTOR EARNINGS API ====================
+  
+  // Get commission breakdown for a contractor
+  app.get('/api/contractors/:contractorId/commissions', async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const { contractorId } = req.params;
+      const { startDate, endDate, status, limit = '100', offset = '0' } = req.query;
+      
+      // Verify contractor can only see their own data
+      const user = await storage.getUser(userId);
+      if (!user || (user.role === 'contractor' && userId !== contractorId)) {
+        return res.status(403).json({ message: 'Forbidden: Cannot access another contractor\'s data' });
+      }
+      
+      // Get commission transactions
+      const transactions = await storage.getCommissionTransactions(
+        contractorId,
+        status as string | undefined,
+        parseInt(limit as string)
+      );
+      
+      // Filter by date range if provided
+      let filteredTransactions = transactions;
+      if (startDate || endDate) {
+        filteredTransactions = transactions.filter(t => {
+          const transDate = new Date(t.createdAt);
+          if (startDate && transDate < new Date(startDate as string)) return false;
+          if (endDate && transDate > new Date(endDate as string)) return false;
+          return true;
+        });
+      }
+      
+      // Apply pagination
+      const paginatedTransactions = filteredTransactions.slice(
+        parseInt(offset as string),
+        parseInt(offset as string) + parseInt(limit as string)
+      );
+      
+      // Calculate summary statistics
+      const summary = {
+        totalEarned: filteredTransactions
+          .filter(t => t.status === 'completed')
+          .reduce((sum, t) => sum + Number(t.commissionAmount), 0),
+        pendingAmount: filteredTransactions
+          .filter(t => t.status === 'pending')
+          .reduce((sum, t) => sum + Number(t.commissionAmount), 0),
+        disputedAmount: filteredTransactions
+          .filter(t => t.isDisputed)
+          .reduce((sum, t) => sum + Number(t.commissionAmount), 0),
+        totalTransactions: filteredTransactions.length
+      };
+      
+      res.json({
+        summary,
+        transactions: paginatedTransactions,
+        pagination: {
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string),
+          total: filteredTransactions.length
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching contractor commissions:', error);
+      res.status(500).json({ message: 'Failed to fetch commission data' });
+    }
+  });
+  
+  // Get commission rules applicable to contractor
+  app.get('/api/contractors/:contractorId/commission-rules', async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const { contractorId } = req.params;
+      
+      // Verify contractor can only see their own data
+      const user = await storage.getUser(userId);
+      if (!user || (user.role === 'contractor' && userId !== contractorId)) {
+        return res.status(403).json({ message: 'Forbidden: Cannot access another contractor\'s data' });
+      }
+      
+      // Get applicable commission rules
+      const rules = await storage.getContractorCommissionRules(contractorId);
+      
+      // Get contractor's monthly volume for context
+      const monthlyVolume = await storage.getContractorMonthlyVolume(contractorId);
+      
+      res.json({
+        rules,
+        currentMonthlyVolume: monthlyVolume,
+        applicableRulesCount: rules.length
+      });
+    } catch (error) {
+      console.error('Error fetching contractor commission rules:', error);
+      res.status(500).json({ message: 'Failed to fetch commission rules' });
+    }
+  });
+  
+  // Get payout history for contractor
+  app.get('/api/contractors/:contractorId/payouts', async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const { contractorId } = req.params;
+      const { startDate, endDate, status, limit = '50', offset = '0' } = req.query;
+      
+      // Verify contractor can only see their own data
+      const user = await storage.getUser(userId);
+      if (!user || (user.role === 'contractor' && userId !== contractorId)) {
+        return res.status(403).json({ message: 'Forbidden: Cannot access another contractor\'s data' });
+      }
+      
+      // Get payout batches
+      const payouts = await storage.getContractorPayoutBatches(contractorId, {
+        status: status as string | undefined,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string)
+      });
+      
+      // Calculate summary statistics
+      const summary = {
+        totalPaid: payouts
+          .filter(p => p.status === 'paid')
+          .reduce((sum, p) => sum + Number(p.netAmount), 0),
+        pendingPayouts: payouts
+          .filter(p => p.status === 'pending')
+          .reduce((sum, p) => sum + Number(p.netAmount), 0),
+        processingPayouts: payouts
+          .filter(p => p.status === 'processing')
+          .reduce((sum, p) => sum + Number(p.netAmount), 0),
+        totalPayouts: payouts.length
+      };
+      
+      res.json({
+        summary,
+        payouts,
+        pagination: {
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string)
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching contractor payouts:', error);
+      res.status(500).json({ message: 'Failed to fetch payout data' });
+    }
+  });
+  
+  // Get payment reconciliation data for contractor
+  app.get('/api/contractors/:contractorId/payment-reconciliation', async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const { contractorId } = req.params;
+      const { periodType, startDate, endDate, limit = '50', offset = '0' } = req.query;
+      
+      // Verify contractor can only see their own data
+      const user = await storage.getUser(userId);
+      if (!user || (user.role === 'contractor' && userId !== contractorId)) {
+        return res.status(403).json({ message: 'Forbidden: Cannot access another contractor\'s data' });
+      }
+      
+      // Get payment reconciliation records
+      const reconciliations = await storage.getContractorPaymentReconciliation(contractorId, {
+        periodType: periodType as string | undefined,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string)
+      });
+      
+      res.json({
+        reconciliations,
+        pagination: {
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string)
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching payment reconciliation:', error);
+      res.status(500).json({ message: 'Failed to fetch payment reconciliation data' });
+    }
+  });
+  
+  // Get performance metrics for contractor
+  app.get('/api/contractors/:contractorId/performance-metrics', async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const { contractorId } = req.params;
+      const { metricType, startDate, endDate, limit = '100', offset = '0' } = req.query;
+      
+      // Verify contractor can only see their own data
+      const user = await storage.getUser(userId);
+      if (!user || (user.role === 'contractor' && userId !== contractorId)) {
+        return res.status(403).json({ message: 'Forbidden: Cannot access another contractor\'s data' });
+      }
+      
+      // Get performance metrics
+      const metrics = await storage.getContractorPerformanceMetrics(contractorId, {
+        metricType: metricType as string | undefined,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string)
+      });
+      
+      // Calculate summary statistics by metric type
+      const metricsSummary: Record<string, any> = {};
+      metrics.forEach(metric => {
+        if (!metricsSummary[metric.metricType]) {
+          metricsSummary[metric.metricType] = {
+            count: 0,
+            totalValue: 0,
+            avgValue: 0,
+            lastValue: metric.metricValue,
+            lastUpdated: metric.createdAt
+          };
+        }
+        metricsSummary[metric.metricType].count++;
+        metricsSummary[metric.metricType].totalValue += metric.metricValue;
+        metricsSummary[metric.metricType].avgValue = 
+          metricsSummary[metric.metricType].totalValue / metricsSummary[metric.metricType].count;
+      });
+      
+      res.json({
+        metrics,
+        summary: metricsSummary,
+        pagination: {
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string)
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching performance metrics:', error);
+      res.status(500).json({ message: 'Failed to fetch performance metrics' });
+    }
+  });
+  
+  // Get performance goals for contractor
+  app.get('/api/contractors/:contractorId/performance-goals', async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const { contractorId } = req.params;
+      const { status, includeKpiDetails = 'true', limit = '50', offset = '0' } = req.query;
+      
+      // Verify contractor can only see their own data
+      const user = await storage.getUser(userId);
+      if (!user || (user.role === 'contractor' && userId !== contractorId)) {
+        return res.status(403).json({ message: 'Forbidden: Cannot access another contractor\'s data' });
+      }
+      
+      // Get performance goals with optional KPI details
+      const goals = await storage.getContractorPerformanceGoals(contractorId, {
+        status: status as string | undefined,
+        includeKpiDetails: includeKpiDetails === 'true',
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string)
+      });
+      
+      // Calculate overall progress
+      const summary = {
+        totalGoals: goals.length,
+        activeGoals: goals.filter(g => g.goal.status === 'active').length,
+        completedGoals: goals.filter(g => g.goal.status === 'completed').length,
+        averageProgress: goals.length > 0 
+          ? goals.reduce((sum, g) => sum + (g.progress || 0), 0) / goals.length 
+          : 0
+      };
+      
+      res.json({
+        goals,
+        summary,
+        pagination: {
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string)
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching performance goals:', error);
+      res.status(500).json({ message: 'Failed to fetch performance goals' });
+    }
+  });
+  
+  // Get contractor's truck parts inventory
+  app.get('/api/contractors/:contractorId/parts-stock', async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+      
+      const { contractorId } = req.params;
+      const { category, lowStockOnly = 'false', limit = '100', offset = '0' } = req.query;
+      
+      // Verify contractor can only see their own data
+      const user = await storage.getUser(userId);
+      if (!user || (user.role === 'contractor' && userId !== contractorId)) {
+        return res.status(403).json({ message: 'Forbidden: Cannot access another contractor\'s data' });
+      }
+      
+      // Get contractor's parts stock
+      const partsStock = await storage.getContractorPartsStock(contractorId, {
+        category: category as string | undefined,
+        lowStockOnly: lowStockOnly === 'true',
+        includePartDetails: true,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string)
+      });
+      
+      // Calculate inventory summary
+      const summary = {
+        totalItems: partsStock.length,
+        totalValue: partsStock.reduce((sum, item) => 
+          sum + (item.inventory.quantityOnHand * Number(item.part.unitCost)), 0),
+        lowStockItems: partsStock.filter(item => item.reorderNeeded).length,
+        outOfStockItems: partsStock.filter(item => item.inventory.quantityOnHand === 0).length,
+        categories: [...new Set(partsStock.map(item => item.part.category))]
+      };
+      
+      // Get recent transactions for context
+      const recentTransactions = await storage.getContractorPartsTransactions(contractorId, {
+        limit: 10
+      });
+      
+      res.json({
+        inventory: partsStock,
+        summary,
+        recentTransactions,
+        pagination: {
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string)
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching contractor parts stock:', error);
+      res.status(500).json({ message: 'Failed to fetch parts inventory' });
+    }
+  });
+
   // Create and return the HTTP server
   const server = createServer(app);
   return server;
