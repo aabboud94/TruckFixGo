@@ -5180,6 +5180,95 @@ export const vehicleMaintenanceLogs = pgTable("vehicle_maintenance_logs", {
 }));
 
 // ====================
+// SERVICE AREAS AND COMMISSION
+// ====================
+
+// Commission type enum
+export const commissionTypeEnum = pgEnum('commission_type', ['percentage', 'flat']);
+
+// Service Areas table - manages cities/regions where services are offered
+export const serviceAreas = pgTable("service_areas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Location details
+  name: text("name").notNull(),
+  state: varchar("state", { length: 2 }).notNull(),
+  country: varchar("country", { length: 3 }).notNull().default('USA'),
+  
+  // Coverage settings
+  coverageRadiusMiles: decimal("coverage_radius_miles", { precision: 6, scale: 2 }).notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  
+  // Pricing adjustments
+  baseRateMultiplier: decimal("base_rate_multiplier", { precision: 4, scale: 2 }), // Optional multiplier for area-specific pricing
+  
+  // Time zone
+  timezone: varchar("timezone", { length: 50 }).notNull(),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  nameStateIdx: uniqueIndex("idx_service_areas_name_state").on(table.name, table.state),
+  activeIdx: index("idx_service_areas_active").on(table.isActive),
+  stateIdx: index("idx_service_areas_state").on(table.state)
+}));
+
+// Commission Settings table - global commission configuration
+export const commissionSettings = pgTable("commission_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Commission configuration
+  commissionType: commissionTypeEnum("commission_type").notNull(),
+  commissionValue: decimal("commission_value", { precision: 10, scale: 2 }).notNull(), // Percentage (0-100) or flat amount
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+});
+
+// Contractor Pricing table - individual contractor pricing settings
+export const contractorPricing = pgTable("contractor_pricing", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // References
+  contractorId: varchar("contractor_id").notNull().references(() => users.id).unique(),
+  
+  // Pricing settings
+  baseHourlyRate: decimal("base_hourly_rate", { precision: 10, scale: 2 }).notNull(),
+  partsMarkupPercent: decimal("parts_markup_percent", { precision: 5, scale: 2 }).notNull().default('0'),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  contractorIdx: uniqueIndex("idx_contractor_pricing_contractor").on(table.contractorId)
+}));
+
+// Contractor Service Areas junction table - links contractors to service areas
+export const contractorServiceAreas = pgTable("contractor_service_areas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // References
+  contractorId: varchar("contractor_id").notNull().references(() => users.id),
+  serviceAreaId: varchar("service_area_id").notNull().references(() => serviceAreas.id),
+  
+  // Settings
+  isActive: boolean("is_active").notNull().default(true),
+  maxDistanceMiles: decimal("max_distance_miles", { precision: 6, scale: 2 }), // Optional override for contractor's max distance in this area
+  customRateMultiplier: decimal("custom_rate_multiplier", { precision: 4, scale: 2 }), // Optional area-specific rate adjustment for this contractor
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  contractorAreaIdx: uniqueIndex("idx_contractor_service_areas_unique").on(table.contractorId, table.serviceAreaId),
+  contractorIdx: index("idx_contractor_service_areas_contractor").on(table.contractorId),
+  areaIdx: index("idx_contractor_service_areas_area").on(table.serviceAreaId),
+  activeIdx: index("idx_contractor_service_areas_active").on(table.isActive)
+}));
+
+// ====================
 // BOOKING PREFERENCES
 // ====================
 
@@ -5371,4 +5460,37 @@ export const insertBookingTemplateSchema = createInsertSchema(bookingTemplates).
 });
 export type InsertBookingTemplate = z.infer<typeof insertBookingTemplateSchema>;
 export type BookingTemplate = typeof bookingTemplates.$inferSelect;
+
+// Service Areas and Commission schemas and types
+export const insertServiceAreaSchema = createInsertSchema(serviceAreas).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertServiceArea = z.infer<typeof insertServiceAreaSchema>;
+export type ServiceArea = typeof serviceAreas.$inferSelect;
+
+export const insertCommissionSettingsSchema = createInsertSchema(commissionSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertCommissionSettings = z.infer<typeof insertCommissionSettingsSchema>;
+export type CommissionSettings = typeof commissionSettings.$inferSelect;
+
+export const insertContractorPricingSchema = createInsertSchema(contractorPricing).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertContractorPricing = z.infer<typeof insertContractorPricingSchema>;
+export type ContractorPricing = typeof contractorPricing.$inferSelect;
+
+export const insertContractorServiceAreasSchema = createInsertSchema(contractorServiceAreas).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertContractorServiceAreas = z.infer<typeof insertContractorServiceAreasSchema>;
+export type ContractorServiceAreas = typeof contractorServiceAreas.$inferSelect;
 
