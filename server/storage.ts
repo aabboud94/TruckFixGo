@@ -2113,6 +2113,54 @@ export interface IStorage {
     limit?: number;
   }): Promise<MaintenanceAlert[]>;
   
+  // Get maintenance predictions for a specific vehicle
+  getVehicleMaintenancePredictions(vehicleId: string, options?: {
+    riskLevel?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MaintenancePrediction[]>;
+  
+  // Get maintenance alerts for a specific vehicle
+  getVehicleMaintenanceAlerts(vehicleId: string, options?: {
+    active?: boolean;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MaintenanceAlert[]>;
+  
+  // Get all service schedules for a vehicle
+  getVehicleServiceSchedules(vehicleId: string, options?: {
+    activeOnly?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<ServiceSchedule[]>;
+  
+  // Get parts inventory for a vehicle (using vehicleId as warehouseId)
+  getVehiclePartsInventory(vehicleId: string, options?: {
+    lowStockOnly?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<Array<{
+    inventory: PartsInventory;
+    part: PartsCatalog;
+  }>>;
+  
+  // Add parts to vehicle inventory
+  addVehiclePartInventory(
+    vehicleId: string,
+    partId: string,
+    quantity: number,
+    notes?: string
+  ): Promise<PartsInventory>;
+  
+  // Remove parts from vehicle inventory
+  removeVehiclePartInventory(
+    vehicleId: string,
+    partId: string,
+    quantity: number,
+    notes?: string
+  ): Promise<PartsInventory | null>;
+  
   // Get unread notification count
   getUnreadNotificationCount(userId: string): Promise<number>;
   
@@ -13731,6 +13779,246 @@ export class PostgreSQLStorage implements IStorage {
 
     const results = await query;
     return results.map(r => r.maintenance_alerts);
+  }
+
+  async getVehicleMaintenancePredictions(vehicleId: string, options?: {
+    riskLevel?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MaintenancePrediction[]> {
+    let query = db
+      .select()
+      .from(maintenancePredictions)
+      .where(eq(maintenancePredictions.vehicleId, vehicleId));
+
+    if (options?.riskLevel) {
+      query = query.where(eq(maintenancePredictions.riskLevel, options.riskLevel as any));
+    }
+
+    query = query.orderBy(
+      asc(maintenancePredictions.predictedDate),
+      desc(maintenancePredictions.confidence)
+    );
+
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+
+    if (options?.offset) {
+      query = query.offset(options.offset);
+    }
+
+    return await query;
+  }
+
+  async getVehicleMaintenanceAlerts(vehicleId: string, options?: {
+    active?: boolean;
+    severity?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<MaintenanceAlert[]> {
+    let query = db
+      .select()
+      .from(maintenanceAlerts)
+      .where(eq(maintenanceAlerts.vehicleId, vehicleId));
+
+    if (options?.active) {
+      query = query.where(isNull(maintenanceAlerts.acknowledgedAt));
+    }
+
+    if (options?.severity) {
+      query = query.where(eq(maintenanceAlerts.severity, options.severity as any));
+    }
+
+    query = query.orderBy(
+      desc(maintenanceAlerts.severity),
+      desc(maintenanceAlerts.createdAt)
+    );
+
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+
+    if (options?.offset) {
+      query = query.offset(options.offset);
+    }
+
+    return await query;
+  }
+
+  async getVehicleServiceSchedules(vehicleId: string, options?: {
+    activeOnly?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<ServiceSchedule[]> {
+    let query = db
+      .select()
+      .from(serviceSchedules)
+      .where(eq(serviceSchedules.vehicleId, vehicleId));
+
+    if (options?.activeOnly) {
+      query = query.where(eq(serviceSchedules.isActive, true));
+    }
+
+    query = query.orderBy(asc(serviceSchedules.nextDueDate));
+
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+
+    if (options?.offset) {
+      query = query.offset(options.offset);
+    }
+
+    return await query;
+  }
+
+  async getVehiclePartsInventory(vehicleId: string, options?: {
+    lowStockOnly?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<Array<{
+    inventory: PartsInventory;
+    part: PartsCatalog;
+  }>> {
+    let query = db
+      .select({
+        inventory: partsInventory,
+        part: partsCatalog
+      })
+      .from(partsInventory)
+      .innerJoin(partsCatalog, eq(partsInventory.partId, partsCatalog.id))
+      .where(eq(partsInventory.warehouseId, vehicleId));  // Using vehicleId as warehouseId
+
+    if (options?.lowStockOnly) {
+      query = query.where(sql`${partsInventory.quantity} <= ${partsInventory.reorderLevel}`);
+    }
+
+    query = query.orderBy(asc(partsCatalog.name));
+
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+
+    if (options?.offset) {
+      query = query.offset(options.offset);
+    }
+
+    return await query;
+  }
+
+  async addVehiclePartInventory(
+    vehicleId: string,
+    partId: string,
+    quantity: number,
+    notes?: string
+  ): Promise<PartsInventory> {
+    // Check if inventory exists for this vehicle-part combination
+    const existing = await db
+      .select()
+      .from(partsInventory)
+      .where(
+        and(
+          eq(partsInventory.warehouseId, vehicleId),  // Using vehicleId as warehouseId
+          eq(partsInventory.partId, partId)
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      // Update existing inventory
+      const [updated] = await db
+        .update(partsInventory)
+        .set({
+          quantity: sql`${partsInventory.quantity} + ${quantity}`,
+          updatedAt: new Date()
+        })
+        .where(eq(partsInventory.id, existing[0].id))
+        .returning();
+
+      // Record the transaction
+      await db.insert(partsTransactions).values({
+        partId,
+        warehouseId: vehicleId,
+        transactionType: 'restocked',
+        quantity,
+        notes,
+        createdAt: new Date()
+      });
+
+      return updated;
+    } else {
+      // Create new inventory record
+      const [created] = await db
+        .insert(partsInventory)
+        .values({
+          partId,
+          warehouseId: vehicleId,  // Using vehicleId as warehouseId
+          quantity,
+          reorderLevel: 5,  // Default reorder level
+          reorderQuantity: 10,  // Default reorder quantity
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })
+        .returning();
+
+      // Record the transaction
+      await db.insert(partsTransactions).values({
+        partId,
+        warehouseId: vehicleId,
+        transactionType: 'initial_stock',
+        quantity,
+        notes,
+        createdAt: new Date()
+      });
+
+      return created;
+    }
+  }
+
+  async removeVehiclePartInventory(
+    vehicleId: string,
+    partId: string,
+    quantity: number,
+    notes?: string
+  ): Promise<PartsInventory | null> {
+    // Check if inventory exists for this vehicle-part combination
+    const existing = await db
+      .select()
+      .from(partsInventory)
+      .where(
+        and(
+          eq(partsInventory.warehouseId, vehicleId),  // Using vehicleId as warehouseId
+          eq(partsInventory.partId, partId)
+        )
+      )
+      .limit(1);
+
+    if (existing.length === 0 || existing[0].quantity < quantity) {
+      return null;  // Not enough inventory or doesn't exist
+    }
+
+    // Update inventory
+    const [updated] = await db
+      .update(partsInventory)
+      .set({
+        quantity: sql`${partsInventory.quantity} - ${quantity}`,
+        updatedAt: new Date()
+      })
+      .where(eq(partsInventory.id, existing[0].id))
+      .returning();
+
+    // Record the transaction
+    await db.insert(partsTransactions).values({
+      partId,
+      warehouseId: vehicleId,
+      transactionType: 'used',
+      quantity: -quantity,  // Negative quantity for removal
+      notes,
+      createdAt: new Date()
+    });
+
+    return updated;
   }
 
   // =============================================
