@@ -1202,7 +1202,7 @@ export interface IStorage {
   updateServiceArea(areaId: string, updates: Partial<InsertServiceArea>): Promise<ServiceArea | null>;
   deleteServiceArea(areaId: string): Promise<boolean>;
   getServiceArea(areaId: string): Promise<ServiceArea | null>;
-  getAllServiceAreas(filters?: { isActive?: boolean; state?: string }): Promise<ServiceArea[]>;
+  getAllServiceAreas(filters?: { isActive?: boolean }): Promise<ServiceArea[]>;
   searchServiceAreasByLocation(lat: number, lng: number, radiusMiles: number): Promise<ServiceArea[]>;
   
   // Contractor Service Areas
@@ -15814,22 +15814,18 @@ export class PostgreSQLStorage implements IStorage {
     return area || null;
   }
   
-  async getAllServiceAreas(filters?: { isActive?: boolean; state?: string }): Promise<ServiceArea[]> {
+  async getAllServiceAreas(filters?: { isActive?: boolean }): Promise<ServiceArea[]> {
     const conditions = [];
     
     if (filters?.isActive !== undefined) {
       conditions.push(eq(serviceAreas.isActive, filters.isActive));
     }
     
-    if (filters?.state) {
-      conditions.push(eq(serviceAreas.state, filters.state));
-    }
-    
     const query = conditions.length > 0 
       ? db.select().from(serviceAreas).where(and(...conditions))
       : db.select().from(serviceAreas);
     
-    return await query.orderBy(asc(serviceAreas.state), asc(serviceAreas.name));
+    return await query.orderBy(asc(serviceAreas.name));
   }
   
   async searchServiceAreasByLocation(lat: number, lng: number, radiusMiles: number): Promise<ServiceArea[]> {

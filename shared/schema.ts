@@ -5170,28 +5170,26 @@ export const commissionTypeEnum = pgEnum('commission_type', ['percentage', 'flat
 export const serviceAreas = pgTable("service_areas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   
-  // Location details
+  // Area details
   name: text("name").notNull(),
-  state: varchar("state", { length: 2 }).notNull(),
-  country: varchar("country", { length: 3 }).notNull().default('USA'),
+  type: varchar("type", { length: 20 }).notNull(),
+  coordinates: jsonb("coordinates").notNull(),
   
-  // Coverage settings
-  coverageRadiusMiles: decimal("coverage_radius_miles", { precision: 6, scale: 2 }).notNull(),
+  // Surcharge settings
+  surchargeType: serviceAreaSurchargeTypeEnum("surcharge_type"),
+  surchargeAmount: decimal("surcharge_amount", { precision: 8, scale: 2 }),
+  surchargePercentage: decimal("surcharge_percentage", { precision: 5, scale: 2 }),
+  
+  // Status
   isActive: boolean("is_active").notNull().default(true),
-  
-  // Pricing adjustments
-  baseRateMultiplier: decimal("base_rate_multiplier", { precision: 4, scale: 2 }), // Optional multiplier for area-specific pricing
-  
-  // Time zone
-  timezone: varchar("timezone", { length: 50 }).notNull(),
   
   // Timestamps
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow()
 }, (table) => ({
-  nameStateIdx: uniqueIndex("idx_service_areas_name_state").on(table.name, table.state),
+  nameIdx: index("idx_service_areas_name").on(table.name),
   activeIdx: index("idx_service_areas_active").on(table.isActive),
-  stateIdx: index("idx_service_areas_state").on(table.state)
+  typeIdx: index("idx_service_areas_type").on(table.type)
 }));
 
 // Commission Settings table - global commission configuration
@@ -5444,8 +5442,9 @@ export type BookingTemplate = typeof bookingTemplates.$inferSelect;
 // Service Areas and Commission schemas and types
 export const insertServiceAreaSchema = createInsertSchema(serviceAreas, {
   // Override decimal fields to accept numbers instead of strings
-  coverageRadiusMiles: z.number().min(0).max(9999.99),
-  baseRateMultiplier: z.number().min(0).max(99.99).optional()
+  surchargeAmount: z.number().min(0).max(999999.99).optional(),
+  surchargePercentage: z.number().min(0).max(999.99).optional(),
+  coordinates: z.any() // jsonb field
 }).omit({
   id: true,
   createdAt: true,

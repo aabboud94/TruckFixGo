@@ -13423,8 +13423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const filters = {
           isActive: req.query.isActive === 'true' ? true : 
-                   req.query.isActive === 'false' ? false : undefined,
-          state: req.query.state as string
+                   req.query.isActive === 'false' ? false : undefined
         };
         
         const areas = await storage.getAllServiceAreas(filters);
