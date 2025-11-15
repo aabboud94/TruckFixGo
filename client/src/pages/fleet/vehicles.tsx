@@ -1008,7 +1008,23 @@ export default function VehicleManagement() {
     { id: "d4", name: "Alice Williams" }
   ];
 
-  const form = useForm<VehicleForm>({
+  // Separate forms for Add and Edit to prevent conflicts
+  const addForm = useForm<VehicleForm>({
+    resolver: zodResolver(vehicleSchema),
+    defaultValues: {
+      vin: "",
+      unitNumber: "",
+      year: "",
+      make: "",
+      model: "",
+      vehicleType: "",
+      licensePlate: "",
+      currentOdometer: "",
+      assignedDriver: ""
+    }
+  });
+
+  const editForm = useForm<VehicleForm>({
     resolver: zodResolver(vehicleSchema),
     defaultValues: {
       vin: "",
@@ -1066,7 +1082,7 @@ export default function VehicleManagement() {
       });
       refetchVehicles();
       setIsAddDialogOpen(false);
-      form.reset();
+      addForm.reset();
     },
     onError: (error: any) => {
       toast({
@@ -1096,7 +1112,7 @@ export default function VehicleManagement() {
       });
       refetchVehicles();
       setIsEditDialogOpen(false);
-      form.reset();
+      editForm.reset();
     },
     onError: (error: any) => {
       toast({
@@ -1222,17 +1238,19 @@ export default function VehicleManagement() {
     }
   });
 
-  const onSubmit = async (data: VehicleForm) => {
-    if (isEditDialogOpen && selectedVehicle) {
+  const onAddSubmit = async (data: VehicleForm) => {
+    addVehicleMutation.mutate(data);
+  };
+
+  const onEditSubmit = async (data: VehicleForm) => {
+    if (selectedVehicle) {
       updateVehicleMutation.mutate({ vehicleId: selectedVehicle.id, data });
-    } else {
-      addVehicleMutation.mutate(data);
     }
   };
 
   const handleEdit = (vehicle: Vehicle) => {
     setSelectedVehicle(vehicle);
-    form.reset({
+    editForm.reset({
       vin: vehicle.vin || "",
       unitNumber: vehicle.unitNumber || "",
       year: vehicle.year?.toString() || "",
@@ -1430,7 +1448,16 @@ export default function VehicleManagement() {
                 <Download className="h-4 w-4 mr-2" />
                 Export CSV
               </Button>
-              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <Dialog 
+                open={isAddDialogOpen} 
+                onOpenChange={(open) => {
+                  if (open) {
+                    // Reset the add form when opening the dialog
+                    addForm.reset();
+                  }
+                  setIsAddDialogOpen(open);
+                }}
+              >
                 <DialogTrigger asChild>
                   <Button data-testid="button-add-vehicle" disabled={!fleetId}>
                     <Plus className="h-4 w-4 mr-2" />
@@ -1444,11 +1471,11 @@ export default function VehicleManagement() {
                       Enter the details of the vehicle to add to your fleet
                     </DialogDescription>
                   </DialogHeader>
-                  <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <Form {...addForm}>
+                    <form onSubmit={addForm.handleSubmit(onAddSubmit)} className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <FormField
-                          control={form.control}
+                          control={addForm.control}
                           name="unitNumber"
                           render={({ field }) => (
                             <FormItem>
@@ -1462,7 +1489,7 @@ export default function VehicleManagement() {
                         />
 
                         <FormField
-                          control={form.control}
+                          control={addForm.control}
                           name="vin"
                           render={({ field }) => (
                             <FormItem>
@@ -1476,7 +1503,7 @@ export default function VehicleManagement() {
                         />
 
                         <FormField
-                          control={form.control}
+                          control={addForm.control}
                           name="year"
                           render={({ field }) => (
                             <FormItem>
@@ -1490,7 +1517,7 @@ export default function VehicleManagement() {
                         />
 
                         <FormField
-                          control={form.control}
+                          control={addForm.control}
                           name="make"
                           render={({ field }) => (
                             <FormItem>
@@ -1504,7 +1531,7 @@ export default function VehicleManagement() {
                         />
 
                         <FormField
-                          control={form.control}
+                          control={addForm.control}
                           name="model"
                           render={({ field }) => (
                             <FormItem>
@@ -1518,7 +1545,7 @@ export default function VehicleManagement() {
                         />
 
                         <FormField
-                          control={form.control}
+                          control={addForm.control}
                           name="vehicleType"
                           render={({ field }) => (
                             <FormItem>
@@ -1545,7 +1572,7 @@ export default function VehicleManagement() {
                         />
 
                         <FormField
-                          control={form.control}
+                          control={addForm.control}
                           name="licensePlate"
                           render={({ field }) => (
                             <FormItem>
@@ -1559,7 +1586,7 @@ export default function VehicleManagement() {
                         />
 
                         <FormField
-                          control={form.control}
+                          control={addForm.control}
                           name="currentOdometer"
                           render={({ field }) => (
                             <FormItem>
@@ -1573,7 +1600,7 @@ export default function VehicleManagement() {
                         />
 
                         <FormField
-                          control={form.control}
+                          control={addForm.control}
                           name="assignedDriver"
                           render={({ field }) => (
                             <FormItem>
@@ -1743,7 +1770,7 @@ export default function VehicleManagement() {
                               {vehicle.maintenanceStatus === 'critical' ? 'Critical' :
                                vehicle.maintenanceStatus === 'attention' ? 'Attention' : 'Good'}
                             </span>
-                            {vehicle.activeAlertCount > 0 && (
+                            {vehicle.activeAlertCount && vehicle.activeAlertCount > 0 && (
                               <Badge variant="outline" data-testid={`badge-alerts-${vehicle.id}`}>
                                 {vehicle.activeAlertCount} alert{vehicle.activeAlertCount > 1 ? 's' : ''}
                               </Badge>
@@ -1831,11 +1858,11 @@ export default function VehicleManagement() {
               Update the details of the vehicle
             </DialogDescription>
           </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <FormField
-                  control={form.control}
+                  control={editForm.control}
                   name="unitNumber"
                   render={({ field }) => (
                     <FormItem>
@@ -1849,7 +1876,7 @@ export default function VehicleManagement() {
                 />
 
                 <FormField
-                  control={form.control}
+                  control={editForm.control}
                   name="vin"
                   render={({ field }) => (
                     <FormItem>
@@ -1863,7 +1890,7 @@ export default function VehicleManagement() {
                 />
 
                 <FormField
-                  control={form.control}
+                  control={editForm.control}
                   name="year"
                   render={({ field }) => (
                     <FormItem>
@@ -1877,7 +1904,7 @@ export default function VehicleManagement() {
                 />
 
                 <FormField
-                  control={form.control}
+                  control={editForm.control}
                   name="make"
                   render={({ field }) => (
                     <FormItem>
@@ -1891,7 +1918,7 @@ export default function VehicleManagement() {
                 />
 
                 <FormField
-                  control={form.control}
+                  control={editForm.control}
                   name="model"
                   render={({ field }) => (
                     <FormItem>
@@ -1905,7 +1932,7 @@ export default function VehicleManagement() {
                 />
 
                 <FormField
-                  control={form.control}
+                  control={editForm.control}
                   name="vehicleType"
                   render={({ field }) => (
                     <FormItem>
@@ -1932,7 +1959,7 @@ export default function VehicleManagement() {
                 />
 
                 <FormField
-                  control={form.control}
+                  control={editForm.control}
                   name="licensePlate"
                   render={({ field }) => (
                     <FormItem>
@@ -1946,7 +1973,7 @@ export default function VehicleManagement() {
                 />
 
                 <FormField
-                  control={form.control}
+                  control={editForm.control}
                   name="currentOdometer"
                   render={({ field }) => (
                     <FormItem>

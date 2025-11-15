@@ -261,7 +261,10 @@ export default function NotificationsManagementPage() {
     mutationFn: (data: typeof blacklistForm) => 
       apiRequest('/api/notifications/blacklist', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          value: data.contact,  // Backend expects 'value' not 'contact'
+          type: data.type,
+        }),
       }),
     onSuccess: () => {
       toast({
