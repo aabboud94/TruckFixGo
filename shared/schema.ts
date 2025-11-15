@@ -221,14 +221,7 @@ export const contractorProfiles = pgTable("contractor_profiles", {
   baseLocationLon: decimal("base_location_lon", { precision: 11, scale: 8 }),
   
   // AI-enhanced fields for intelligent dispatch
-  specializations: jsonb("specializations"), // {
-    // engine_repair: { level: "expert", years: 10, certifications: ["ASE Engine"] },
-    // transmission: { level: "intermediate", years: 5, certifications: ["ASE Trans"] },
-    // electrical: { level: "advanced", years: 8, certifications: ["ASE Electrical"] },
-    // brakes: { level: "expert", years: 12, certifications: ["ASE Brakes"] },
-    // tires: { level: "expert", years: 15, certifications: [] },
-    // refrigeration: { level: "intermediate", years: 3, certifications: ["EPA 608"] }
-  // }
+  specializations: text("specializations").array().default(sql`ARRAY[]::text[]`), // Array of specializations like ['engine_repair', 'transmission', 'electrical', 'brakes', 'tires', 'refrigeration']
   
   certificationScores: jsonb("certification_scores"), // {
     // ase_master: { score: 95, expiry: "2025-12-31" },

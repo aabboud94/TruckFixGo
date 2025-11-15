@@ -307,10 +307,16 @@ export function WeatherWidget({
   showForecast = true,
   showImpactScore = false,
 }: WeatherWidgetProps) {
-  // Use appropriate hooks based on whether we have jobId or coordinates
-  const weatherQuery = jobId ? useJobWeather(jobId) : useWeather(lat, lng);
-  const forecastQuery = !jobId ? useWeatherForecast(lat, lng) : null;
-  const alertsQuery = showAlerts ? useWeatherAlerts(lat, lng) : null;
+  // Always call all hooks to maintain consistent order
+  const jobWeatherQuery = useJobWeather(jobId);
+  const coordWeatherQuery = useWeather(lat, lng);
+  const forecastQuery = useWeatherForecast(lat, lng);
+  const alertsQuery = useWeatherAlerts(lat, lng);
+  
+  // Use appropriate query based on whether we have jobId or coordinates
+  const weatherQuery = jobId ? jobWeatherQuery : coordWeatherQuery;
+  const shouldUseForecast = !jobId;
+  const shouldUseAlerts = showAlerts;
 
   // Handle loading states
   if (weatherQuery.isLoading) {
@@ -334,10 +340,10 @@ export function WeatherWidget({
     return null;
   }
 
-  const weather = jobId ? weatherQuery.data.current : weatherQuery.data;
-  const forecast = jobId ? weatherQuery.data.forecast : forecastQuery?.data;
-  const alerts = alertsQuery?.data || [];
-  const impactScore = jobId ? weatherQuery.data.impactScore : undefined;
+  const weather = jobId ? weatherQuery.data?.current : weatherQuery.data;
+  const forecast = jobId ? weatherQuery.data?.forecast : (shouldUseForecast ? forecastQuery?.data : null);
+  const alerts = shouldUseAlerts ? (alertsQuery?.data || []) : [];
+  const impactScore = jobId ? weatherQuery.data?.impactScore : undefined;
 
   return (
     <div className={cn('space-y-3', className)}>
@@ -372,7 +378,12 @@ export function WeatherBadge({ lat, lng, jobId }: {
   lng?: number;
   jobId?: string;
 }) {
-  const weatherQuery = jobId ? useJobWeather(jobId) : useWeather(lat, lng);
+  // Always call both hooks to maintain consistent order
+  const jobWeatherQuery = useJobWeather(jobId);
+  const coordWeatherQuery = useWeather(lat, lng);
+  
+  // Use appropriate query based on whether we have jobId or coordinates
+  const weatherQuery = jobId ? jobWeatherQuery : coordWeatherQuery;
 
   if (weatherQuery.isLoading) {
     return <Skeleton className="h-6 w-20" />;
