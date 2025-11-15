@@ -182,10 +182,12 @@ export default function NotificationsManagementPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/notifications/metrics'] });
       
       // Show toast notification
-      toast({
-        title: "Notification Sent",
-        description: `${payload.channel} notification sent to recipient`,
-      });
+      if (payload) {
+        toast({
+          title: "Notification Sent",
+          description: `${payload.channel || 'Notification'} sent to recipient`,
+        });
+      }
     },
     onNotificationDelivered: (payload) => {
       console.log('Notification delivered:', payload);
@@ -194,15 +196,15 @@ export default function NotificationsManagementPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/notifications/metrics'] });
       
       // Show toast based on delivery status
-      if (payload.status === 'delivered') {
+      if (payload?.status === 'delivered') {
         toast({
           title: "Notification Delivered",
           description: "Notification successfully delivered to recipient",
         });
-      } else if (payload.status === 'failed') {
+      } else if (payload?.status === 'failed') {
         toast({
           title: "Delivery Failed",
-          description: payload.error || "Failed to deliver notification",
+          description: payload?.error || "Failed to deliver notification",
           variant: "destructive",
         });
       }
@@ -213,12 +215,14 @@ export default function NotificationsManagementPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/notifications/blacklist'] });
       
       // Show toast notification
-      toast({
-        title: "Blacklist Updated",
-        description: payload.action === 'added' 
-          ? `${payload.contact} added to blacklist`
-          : `${payload.contact} removed from blacklist`,
-      });
+      if (payload) {
+        toast({
+          title: "Blacklist Updated",
+          description: payload.action === 'added' 
+            ? `${payload.contact || 'Contact'} added to blacklist`
+            : `${payload.contact || 'Contact'} removed from blacklist`,
+        });
+      }
     },
   });
 
@@ -241,13 +245,13 @@ export default function NotificationsManagementPage() {
   });
 
   // Fetch blacklist
-  const { data: blacklistData, isLoading: blacklistLoading, refetch: refetchBlacklist } = useQuery<{ entries: BlacklistEntry[], total: number }>({
+  const { data: blacklistData, isLoading: blacklistLoading, refetch: refetchBlacklist } = useQuery<{ blacklist?: BlacklistEntry[], entries?: BlacklistEntry[], total: number }>({
     queryKey: ['/api/notifications/blacklist', currentPage],
     enabled: activeTab === 'blacklist',
   });
 
   // Fetch push history
-  const { data: pushHistoryData, isLoading: pushHistoryLoading } = useQuery<{ history: PushHistory[], total: number }>({
+  const { data: pushHistoryData, isLoading: pushHistoryLoading } = useQuery<{ notifications?: PushHistory[], history?: PushHistory[], total: number }>({
     queryKey: ['/api/notifications/push-history', dateRange, currentPage],
     enabled: activeTab === 'push',
   });
@@ -351,8 +355,8 @@ export default function NotificationsManagementPage() {
                   <span className="text-sm font-medium text-muted-foreground">Total Sent</span>
                   <Send className="h-4 w-4 text-muted-foreground" />
                 </div>
-                <div className="text-2xl font-bold">{metrics.totalSent.toLocaleString()}</div>
-                {metrics.todayCount !== undefined && (
+                <div className="text-2xl font-bold">{(metrics?.totalSent ?? 0).toLocaleString()}</div>
+                {metrics?.todayCount !== undefined && (
                   <p className="text-xs text-muted-foreground">
                     {metrics.todayCount} today
                   </p>
@@ -365,8 +369,8 @@ export default function NotificationsManagementPage() {
                   <span className="text-sm font-medium text-muted-foreground">Delivery Rate</span>
                   <CheckCircle className="h-4 w-4 text-green-500" />
                 </div>
-                <div className="text-2xl font-bold">{metrics.deliveryRate.toFixed(1)}%</div>
-                <Progress value={metrics.deliveryRate} className="h-2" />
+                <div className="text-2xl font-bold">{(metrics?.deliveryRate ?? 0).toFixed(1)}%</div>
+                <Progress value={metrics?.deliveryRate ?? 0} className="h-2" />
               </div>
 
               {/* Open Rate */}
@@ -375,8 +379,8 @@ export default function NotificationsManagementPage() {
                   <span className="text-sm font-medium text-muted-foreground">Open Rate</span>
                   <Eye className="h-4 w-4 text-blue-500" />
                 </div>
-                <div className="text-2xl font-bold">{metrics.openRate.toFixed(1)}%</div>
-                <Progress value={metrics.openRate} className="h-2" />
+                <div className="text-2xl font-bold">{(metrics?.openRate ?? 0).toFixed(1)}%</div>
+                <Progress value={metrics?.openRate ?? 0} className="h-2" />
               </div>
 
               {/* Click Rate */}
@@ -385,8 +389,8 @@ export default function NotificationsManagementPage() {
                   <span className="text-sm font-medium text-muted-foreground">Click Rate</span>
                   <MousePointer className="h-4 w-4 text-purple-500" />
                 </div>
-                <div className="text-2xl font-bold">{metrics.clickRate.toFixed(1)}%</div>
-                <Progress value={metrics.clickRate} className="h-2" />
+                <div className="text-2xl font-bold">{(metrics?.clickRate ?? 0).toFixed(1)}%</div>
+                <Progress value={metrics?.clickRate ?? 0} className="h-2" />
               </div>
             </div>
           ) : (
@@ -758,7 +762,7 @@ export default function NotificationsManagementPage() {
                     <Skeleton key={i} className="h-12 w-full" />
                   ))}
                 </div>
-              ) : blacklistData?.entries && blacklistData.entries.length > 0 ? (
+              ) : (blacklistData?.blacklist || blacklistData?.entries) && (blacklistData?.blacklist || blacklistData?.entries)!.length > 0 ? (
                 <>
                   <Table>
                     <TableHeader>
@@ -770,7 +774,7 @@ export default function NotificationsManagementPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {blacklistData.entries.map((entry) => (
+                      {(blacklistData?.blacklist || blacklistData?.entries || []).map((entry) => (
                         <TableRow key={entry.id} data-testid={`blacklist-row-${entry.id}`}>
                           <TableCell className="font-medium">{entry.contact}</TableCell>
                           <TableCell>
@@ -876,7 +880,7 @@ export default function NotificationsManagementPage() {
                     <Skeleton key={i} className="h-12 w-full" />
                   ))}
                 </div>
-              ) : pushHistoryData?.history && pushHistoryData.history.length > 0 ? (
+              ) : (pushHistoryData?.notifications || pushHistoryData?.history) && (pushHistoryData?.notifications || pushHistoryData?.history)!.length > 0 ? (
                 <>
                   <Table>
                     <TableHeader>
@@ -889,7 +893,7 @@ export default function NotificationsManagementPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {pushHistoryData.history.map((push) => (
+                      {(pushHistoryData?.notifications || pushHistoryData?.history || []).map((push) => (
                         <TableRow key={push.id} data-testid={`push-row-${push.id}`}>
                           <TableCell className="font-medium">{push.title}</TableCell>
                           <TableCell className="max-w-md truncate">{push.body}</TableCell>
