@@ -2473,6 +2473,107 @@ export interface IStorage {
   ): Promise<CommissionTransaction>;
   getDisputedCommissions(contractorId?: string): Promise<CommissionTransaction[]>;
   resolveCommissionDispute(transactionId: string, resolution: string): Promise<CommissionTransaction>;
+
+  // ==================== PERFORMANCE METRICS & GOALS ====================
+  
+  // Get performance metrics for contractor
+  getContractorPerformanceMetrics(
+    contractorId: string,
+    options?: {
+      metricType?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<PerformanceMetric[]>;
+  
+  // Get performance goals for contractor
+  getContractorPerformanceGoals(
+    contractorId: string,
+    options?: {
+      status?: string;
+      includeKpiDetails?: boolean;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<Array<{
+    goal: PerformanceGoal;
+    kpi?: KpiDefinition;
+    progress?: number;
+  }>>;
+  
+  // Update performance goal progress
+  updatePerformanceGoalProgress(
+    goalId: string,
+    currentValue: number
+  ): Promise<PerformanceGoal | null>;
+  
+  // Get KPI definitions
+  getKpiDefinitions(category?: string): Promise<KpiDefinition[]>;
+  
+  // ==================== CONTRACTOR PARTS INVENTORY ====================
+  
+  // Get contractor's truck parts inventory (uses partsInventory with contractorId as warehouseId)
+  getContractorPartsStock(
+    contractorId: string,
+    options?: {
+      category?: string;
+      lowStockOnly?: boolean;
+      includePartDetails?: boolean;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<Array<{
+    inventory: PartsInventory;
+    part: PartsCatalog;
+    reorderNeeded: boolean;
+  }>>;
+  
+  // Get parts transaction history for contractor
+  getContractorPartsTransactions(
+    contractorId: string,
+    options?: {
+      transactionType?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<Array<{
+    transaction: PartsTransaction;
+    part: PartsCatalog;
+    job?: Job;
+  }>>;
+  
+  // Get commission rules applicable to contractor
+  getContractorCommissionRules(
+    contractorId: string
+  ): Promise<CommissionRule[]>;
+  
+  // Get contractor payout batches
+  getContractorPayoutBatches(
+    contractorId: string,
+    options?: {
+      status?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<PayoutBatch[]>;
+  
+  // Get payment reconciliation for contractor
+  getContractorPaymentReconciliation(
+    contractorId: string,
+    options?: {
+      periodType?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<PaymentReconciliation[]>;
 }
 
 // PostgreSQL implementation using Drizzle ORM
@@ -15610,6 +15711,378 @@ export class PostgreSQLStorage implements IStorage {
         lastUsedAt: new Date()
       })
       .where(eq(bookingTemplates.id, templateId));
+  }
+
+  // ==================== PERFORMANCE METRICS & GOALS IMPLEMENTATION ====================
+  
+  async getContractorPerformanceMetrics(
+    contractorId: string,
+    options?: {
+      metricType?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<PerformanceMetric[]> {
+    const conditions = [eq(performanceMetrics.contractorId, contractorId)];
+    
+    if (options?.metricType) {
+      conditions.push(eq(performanceMetrics.metricType, options.metricType));
+    }
+    
+    if (options?.startDate) {
+      conditions.push(gte(performanceMetrics.createdAt, options.startDate));
+    }
+    
+    if (options?.endDate) {
+      conditions.push(lte(performanceMetrics.createdAt, options.endDate));
+    }
+    
+    let query = db.select().from(performanceMetrics).where(and(...conditions));
+    query = query.orderBy(desc(performanceMetrics.createdAt));
+    
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+    if (options?.offset) {
+      query = query.offset(options.offset);
+    }
+    
+    return await query;
+  }
+  
+  async getContractorPerformanceGoals(
+    contractorId: string,
+    options?: {
+      status?: string;
+      includeKpiDetails?: boolean;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<Array<{
+    goal: PerformanceGoal;
+    kpi?: KpiDefinition;
+    progress?: number;
+  }>> {
+    const conditions = [
+      eq(performanceGoals.contractorId, contractorId)
+    ];
+    
+    if (options?.status) {
+      conditions.push(eq(performanceGoals.status, options.status as any));
+    }
+    
+    let query = db
+      .select()
+      .from(performanceGoals)
+      .where(and(...conditions))
+      .orderBy(asc(performanceGoals.targetDate));
+    
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+    if (options?.offset) {
+      query = query.offset(options.offset);
+    }
+    
+    const goals = await query;
+    
+    // Enhance with KPI details if requested
+    const result = [];
+    for (const goal of goals) {
+      const item: any = { goal };
+      
+      if (options?.includeKpiDetails && goal.kpiId) {
+        const kpiResult = await db
+          .select()
+          .from(kpiDefinitions)
+          .where(eq(kpiDefinitions.id, goal.kpiId))
+          .limit(1);
+        if (kpiResult[0]) {
+          item.kpi = kpiResult[0];
+        }
+      }
+      
+      // Calculate progress percentage
+      if (goal.targetValue > 0) {
+        item.progress = Math.round((goal.currentValue / goal.targetValue) * 100);
+      }
+      
+      result.push(item);
+    }
+    
+    return result;
+  }
+  
+  async updatePerformanceGoalProgress(
+    goalId: string,
+    currentValue: number
+  ): Promise<PerformanceGoal | null> {
+    const result = await db
+      .update(performanceGoals)
+      .set({ 
+        currentValue,
+        updatedAt: new Date()
+      })
+      .where(eq(performanceGoals.id, goalId))
+      .returning();
+    return result[0] || null;
+  }
+  
+  async getKpiDefinitions(category?: string): Promise<KpiDefinition[]> {
+    if (category) {
+      return await db
+        .select()
+        .from(kpiDefinitions)
+        .where(eq(kpiDefinitions.category, category))
+        .orderBy(asc(kpiDefinitions.name));
+    }
+    
+    return await db.select().from(kpiDefinitions).orderBy(asc(kpiDefinitions.name));
+  }
+  
+  // ==================== CONTRACTOR PARTS INVENTORY IMPLEMENTATION ====================
+  
+  async getContractorPartsStock(
+    contractorId: string,
+    options?: {
+      category?: string;
+      lowStockOnly?: boolean;
+      includePartDetails?: boolean;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<Array<{
+    inventory: PartsInventory;
+    part: PartsCatalog;
+    reorderNeeded: boolean;
+  }>> {
+    // Use contractorId as warehouseId for contractor truck inventory
+    const inventoryQuery = db
+      .select()
+      .from(partsInventory)
+      .innerJoin(partsCatalog, eq(partsInventory.partId, partsCatalog.id))
+      .where(eq(partsInventory.warehouseId, contractorId));
+    
+    const inventoryItems = await inventoryQuery;
+    
+    // Filter and process results
+    let results = inventoryItems.map(item => ({
+      inventory: item.parts_inventory,
+      part: item.parts_catalog,
+      reorderNeeded: item.parts_inventory.quantityOnHand <= item.parts_inventory.reorderPoint
+    }));
+    
+    // Apply filters
+    if (options?.category) {
+      results = results.filter(r => r.part.category === options.category);
+    }
+    
+    if (options?.lowStockOnly) {
+      results = results.filter(r => r.reorderNeeded);
+    }
+    
+    // Apply pagination
+    if (options?.offset) {
+      results = results.slice(options.offset);
+    }
+    if (options?.limit) {
+      results = results.slice(0, options.limit);
+    }
+    
+    return results;
+  }
+  
+  async getContractorPartsTransactions(
+    contractorId: string,
+    options?: {
+      transactionType?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<Array<{
+    transaction: PartsTransaction;
+    part: PartsCatalog;
+    job?: Job;
+  }>> {
+    const conditions = [
+      or(
+        eq(partsTransactions.fromWarehouseId, contractorId),
+        eq(partsTransactions.toWarehouseId, contractorId)
+      )
+    ];
+    
+    if (options?.transactionType) {
+      conditions.push(eq(partsTransactions.transactionType, options.transactionType as any));
+    }
+    
+    if (options?.startDate) {
+      conditions.push(gte(partsTransactions.createdAt, options.startDate));
+    }
+    
+    if (options?.endDate) {
+      conditions.push(lte(partsTransactions.createdAt, options.endDate));
+    }
+    
+    let query = db
+      .select()
+      .from(partsTransactions)
+      .innerJoin(partsCatalog, eq(partsTransactions.partId, partsCatalog.id))
+      .leftJoin(jobs, eq(partsTransactions.jobId, jobs.id))
+      .where(and(...conditions))
+      .orderBy(desc(partsTransactions.createdAt));
+    
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+    if (options?.offset) {
+      query = query.offset(options.offset);
+    }
+    
+    const results = await query;
+    
+    return results.map(r => ({
+      transaction: r.parts_transactions,
+      part: r.parts_catalog,
+      job: r.jobs || undefined
+    }));
+  }
+  
+  async getContractorCommissionRules(
+    contractorId: string
+  ): Promise<CommissionRule[]> {
+    // Get contractor details to determine applicable rules
+    const contractor = await this.getContractorProfile(contractorId);
+    if (!contractor) {
+      return [];
+    }
+    
+    // Get active commission rules that apply to contractors
+    const rules = await db
+      .select()
+      .from(commissionRules)
+      .where(
+        and(
+          eq(commissionRules.userType, 'contractor'),
+          eq(commissionRules.isActive, true)
+        )
+      )
+      .orderBy(desc(commissionRules.priority), asc(commissionRules.commissionPercentage));
+    
+    // Filter rules based on contractor's profile
+    return rules.filter(rule => {
+      // Check monthly volume threshold
+      if (rule.monthlyVolumeThreshold) {
+        // This would need actual volume calculation
+        // For now, return all rules
+      }
+      
+      // Check performance rating threshold  
+      if (rule.performanceRatingThreshold && contractor.rating) {
+        if (contractor.rating < rule.performanceRatingThreshold) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  }
+  
+  async getContractorPayoutBatches(
+    contractorId: string,
+    options?: {
+      status?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<PayoutBatch[]> {
+    const conditions = [eq(payoutBatches.contractorId, contractorId)];
+    
+    if (options?.status) {
+      conditions.push(eq(payoutBatches.status, options.status as any));
+    }
+    
+    if (options?.startDate) {
+      conditions.push(gte(payoutBatches.periodStart, options.startDate));
+    }
+    
+    if (options?.endDate) {
+      conditions.push(lte(payoutBatches.periodEnd, options.endDate));
+    }
+    
+    let query = db
+      .select()
+      .from(payoutBatches)
+      .where(and(...conditions))
+      .orderBy(desc(payoutBatches.createdAt));
+    
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+    if (options?.offset) {
+      query = query.offset(options.offset);
+    }
+    
+    return await query;
+  }
+  
+  async getContractorPaymentReconciliation(
+    contractorId: string,
+    options?: {
+      periodType?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<PaymentReconciliation[]> {
+    // First get all payout batches for contractor to find related reconciliation IDs
+    const payouts = await db
+      .select()
+      .from(payoutBatches)
+      .where(eq(payoutBatches.contractorId, contractorId));
+    
+    const reconciliationIds = payouts
+      .map(p => p.reconciliationId)
+      .filter(Boolean) as string[];
+    
+    if (reconciliationIds.length === 0) {
+      return [];
+    }
+    
+    const conditions = [inArray(paymentReconciliation.id, reconciliationIds)];
+    
+    if (options?.periodType) {
+      conditions.push(eq(paymentReconciliation.periodType, options.periodType as any));
+    }
+    
+    if (options?.startDate) {
+      conditions.push(gte(paymentReconciliation.periodStart, options.startDate));
+    }
+    
+    if (options?.endDate) {
+      conditions.push(lte(paymentReconciliation.periodEnd, options.endDate));
+    }
+    
+    let query = db
+      .select()
+      .from(paymentReconciliation)
+      .where(and(...conditions))
+      .orderBy(desc(paymentReconciliation.createdAt));
+    
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+    if (options?.offset) {
+      query = query.offset(options.offset);
+    }
+    
+    return await query;
   }
 }
 
