@@ -395,7 +395,17 @@ import {
   type FavoriteContractor,
   type InsertFavoriteContractor,
   type BookingTemplate,
-  type InsertBookingTemplate
+  type InsertBookingTemplate,
+  commissionSettings,
+  contractorPricing,
+  contractorServiceAreas,
+  type CommissionSettings,
+  type InsertCommissionSettings,
+  type ContractorPricing,
+  type InsertContractorPricing,
+  type ContractorServiceAreas,
+  type InsertContractorServiceAreas,
+  commissionTypeEnum
 } from "@shared/schema";
 import { partsInventoryService } from "./services/parts-inventory-service";
 
@@ -1184,6 +1194,59 @@ export interface IStorage {
   
   // Record template usage
   recordTemplateUsage(templateId: string): Promise<void>;
+
+  // ==================== SERVICE AREAS AND COMMISSION ====================
+  
+  // Service Areas Management
+  createServiceArea(area: InsertServiceArea): Promise<ServiceArea>;
+  updateServiceArea(areaId: string, updates: Partial<InsertServiceArea>): Promise<ServiceArea | null>;
+  deleteServiceArea(areaId: string): Promise<boolean>;
+  getServiceArea(areaId: string): Promise<ServiceArea | null>;
+  getAllServiceAreas(filters?: { isActive?: boolean; state?: string }): Promise<ServiceArea[]>;
+  searchServiceAreasByLocation(lat: number, lng: number, radiusMiles: number): Promise<ServiceArea[]>;
+  
+  // Contractor Service Areas
+  assignContractorToServiceArea(contractorId: string, serviceAreaId: string, settings?: {
+    maxDistanceMiles?: number;
+    customRateMultiplier?: number;
+  }): Promise<ContractorServiceAreas>;
+  removeContractorFromServiceArea(contractorId: string, serviceAreaId: string): Promise<boolean>;
+  getContractorServiceAreas(contractorId: string): Promise<Array<{
+    serviceArea: ServiceArea;
+    settings: ContractorServiceAreas;
+  }>>;
+  getServiceAreaContractors(serviceAreaId: string, filters?: {
+    isActive?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<Array<{
+    contractor: ContractorProfile;
+    settings: ContractorServiceAreas;
+  }>>;
+  updateContractorServiceAreaSettings(
+    contractorId: string,
+    serviceAreaId: string,
+    settings: Partial<InsertContractorServiceAreas>
+  ): Promise<ContractorServiceAreas | null>;
+  
+  // Commission Settings
+  getCommissionSettings(): Promise<CommissionSettings | null>;
+  updateCommissionSettings(settings: InsertCommissionSettings): Promise<CommissionSettings>;
+  calculateCommission(jobTotal: number): Promise<{
+    commissionType: string;
+    commissionValue: number;
+    commissionAmount: number;
+  }>;
+  
+  // Contractor Pricing
+  getContractorPricing(contractorId: string): Promise<ContractorPricing | null>;
+  setContractorPricing(contractorId: string, pricing: InsertContractorPricing): Promise<ContractorPricing>;
+  updateContractorPricing(contractorId: string, updates: Partial<InsertContractorPricing>): Promise<ContractorPricing | null>;
+  calculateContractorRate(contractorId: string, serviceAreaId?: string): Promise<{
+    baseRate: number;
+    areaMultiplier?: number;
+    effectiveRate: number;
+  }>;
 }
 
 import { db } from "./db";
@@ -15711,6 +15774,387 @@ export class PostgreSQLStorage implements IStorage {
         lastUsedAt: new Date()
       })
       .where(eq(bookingTemplates.id, templateId));
+  }
+
+  // ==================== SERVICE AREAS AND COMMISSION IMPLEMENTATION ====================
+  
+  async createServiceArea(area: InsertServiceArea): Promise<ServiceArea> {
+    const [created] = await db
+      .insert(serviceAreas)
+      .values(area)
+      .returning();
+    return created;
+  }
+  
+  async updateServiceArea(areaId: string, updates: Partial<InsertServiceArea>): Promise<ServiceArea | null> {
+    const [updated] = await db
+      .update(serviceAreas)
+      .set({
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(eq(serviceAreas.id, areaId))
+      .returning();
+    return updated || null;
+  }
+  
+  async deleteServiceArea(areaId: string): Promise<boolean> {
+    const result = await db
+      .delete(serviceAreas)
+      .where(eq(serviceAreas.id, areaId));
+    return !!result.rowCount;
+  }
+  
+  async getServiceArea(areaId: string): Promise<ServiceArea | null> {
+    const [area] = await db
+      .select()
+      .from(serviceAreas)
+      .where(eq(serviceAreas.id, areaId))
+      .limit(1);
+    return area || null;
+  }
+  
+  async getAllServiceAreas(filters?: { isActive?: boolean; state?: string }): Promise<ServiceArea[]> {
+    const conditions = [];
+    
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(serviceAreas.isActive, filters.isActive));
+    }
+    
+    if (filters?.state) {
+      conditions.push(eq(serviceAreas.state, filters.state));
+    }
+    
+    const query = conditions.length > 0 
+      ? db.select().from(serviceAreas).where(and(...conditions))
+      : db.select().from(serviceAreas);
+    
+    return await query.orderBy(asc(serviceAreas.state), asc(serviceAreas.name));
+  }
+  
+  async searchServiceAreasByLocation(lat: number, lng: number, radiusMiles: number): Promise<ServiceArea[]> {
+    // This would typically use PostGIS or similar spatial queries
+    // For now, return all active areas as a simple implementation
+    return await db
+      .select()
+      .from(serviceAreas)
+      .where(eq(serviceAreas.isActive, true));
+  }
+  
+  async assignContractorToServiceArea(
+    contractorId: string, 
+    serviceAreaId: string, 
+    settings?: {
+      maxDistanceMiles?: number;
+      customRateMultiplier?: number;
+    }
+  ): Promise<ContractorServiceAreas> {
+    // Check if assignment already exists
+    const [existing] = await db
+      .select()
+      .from(contractorServiceAreas)
+      .where(
+        and(
+          eq(contractorServiceAreas.contractorId, contractorId),
+          eq(contractorServiceAreas.serviceAreaId, serviceAreaId)
+        )
+      )
+      .limit(1);
+    
+    if (existing) {
+      // Update existing assignment
+      const [updated] = await db
+        .update(contractorServiceAreas)
+        .set({
+          isActive: true,
+          maxDistanceMiles: settings?.maxDistanceMiles?.toString(),
+          customRateMultiplier: settings?.customRateMultiplier?.toString(),
+          updatedAt: new Date()
+        })
+        .where(eq(contractorServiceAreas.id, existing.id))
+        .returning();
+      return updated;
+    }
+    
+    // Create new assignment
+    const [created] = await db
+      .insert(contractorServiceAreas)
+      .values({
+        contractorId,
+        serviceAreaId,
+        maxDistanceMiles: settings?.maxDistanceMiles?.toString(),
+        customRateMultiplier: settings?.customRateMultiplier?.toString()
+      })
+      .returning();
+    return created;
+  }
+  
+  async removeContractorFromServiceArea(contractorId: string, serviceAreaId: string): Promise<boolean> {
+    const result = await db
+      .update(contractorServiceAreas)
+      .set({ 
+        isActive: false,
+        updatedAt: new Date() 
+      })
+      .where(
+        and(
+          eq(contractorServiceAreas.contractorId, contractorId),
+          eq(contractorServiceAreas.serviceAreaId, serviceAreaId)
+        )
+      );
+    return !!result.rowCount;
+  }
+  
+  async getContractorServiceAreas(contractorId: string): Promise<Array<{
+    serviceArea: ServiceArea;
+    settings: ContractorServiceAreas;
+  }>> {
+    const results = await db
+      .select({
+        serviceArea: serviceAreas,
+        settings: contractorServiceAreas
+      })
+      .from(contractorServiceAreas)
+      .innerJoin(serviceAreas, eq(contractorServiceAreas.serviceAreaId, serviceAreas.id))
+      .where(
+        and(
+          eq(contractorServiceAreas.contractorId, contractorId),
+          eq(contractorServiceAreas.isActive, true)
+        )
+      );
+    
+    return results;
+  }
+  
+  async getServiceAreaContractors(
+    serviceAreaId: string, 
+    filters?: {
+      isActive?: boolean;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<Array<{
+    contractor: ContractorProfile;
+    settings: ContractorServiceAreas;
+  }>> {
+    const conditions = [
+      eq(contractorServiceAreas.serviceAreaId, serviceAreaId)
+    ];
+    
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(contractorServiceAreas.isActive, filters.isActive));
+    }
+    
+    let query = db
+      .select({
+        contractor: contractorProfiles,
+        settings: contractorServiceAreas
+      })
+      .from(contractorServiceAreas)
+      .innerJoin(contractorProfiles, eq(contractorServiceAreas.contractorId, contractorProfiles.userId))
+      .where(and(...conditions));
+    
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
+    }
+    if (filters?.offset) {
+      query = query.offset(filters.offset);
+    }
+    
+    return await query;
+  }
+  
+  async updateContractorServiceAreaSettings(
+    contractorId: string,
+    serviceAreaId: string,
+    settings: Partial<InsertContractorServiceAreas>
+  ): Promise<ContractorServiceAreas | null> {
+    const [updated] = await db
+      .update(contractorServiceAreas)
+      .set({
+        ...settings,
+        updatedAt: new Date()
+      })
+      .where(
+        and(
+          eq(contractorServiceAreas.contractorId, contractorId),
+          eq(contractorServiceAreas.serviceAreaId, serviceAreaId)
+        )
+      )
+      .returning();
+    return updated || null;
+  }
+  
+  async getCommissionSettings(): Promise<CommissionSettings | null> {
+    const [settings] = await db
+      .select()
+      .from(commissionSettings)
+      .orderBy(desc(commissionSettings.createdAt))
+      .limit(1);
+    return settings || null;
+  }
+  
+  async updateCommissionSettings(settings: InsertCommissionSettings): Promise<CommissionSettings> {
+    // Get current settings
+    const current = await this.getCommissionSettings();
+    
+    if (current) {
+      // Update existing settings
+      const [updated] = await db
+        .update(commissionSettings)
+        .set({
+          ...settings,
+          updatedAt: new Date()
+        })
+        .where(eq(commissionSettings.id, current.id))
+        .returning();
+      return updated;
+    }
+    
+    // Create new settings
+    const [created] = await db
+      .insert(commissionSettings)
+      .values(settings)
+      .returning();
+    return created;
+  }
+  
+  async calculateCommission(jobTotal: number): Promise<{
+    commissionType: string;
+    commissionValue: number;
+    commissionAmount: number;
+  }> {
+    const settings = await this.getCommissionSettings();
+    
+    if (!settings) {
+      // Default commission if not configured
+      return {
+        commissionType: 'percentage',
+        commissionValue: 15,
+        commissionAmount: jobTotal * 0.15
+      };
+    }
+    
+    const commissionValue = parseFloat(settings.commissionValue);
+    let commissionAmount: number;
+    
+    if (settings.commissionType === 'percentage') {
+      commissionAmount = jobTotal * (commissionValue / 100);
+    } else {
+      // Flat commission
+      commissionAmount = commissionValue;
+    }
+    
+    return {
+      commissionType: settings.commissionType,
+      commissionValue,
+      commissionAmount
+    };
+  }
+  
+  async getContractorPricing(contractorId: string): Promise<ContractorPricing | null> {
+    const [pricing] = await db
+      .select()
+      .from(contractorPricing)
+      .where(eq(contractorPricing.contractorId, contractorId))
+      .limit(1);
+    return pricing || null;
+  }
+  
+  async setContractorPricing(contractorId: string, pricing: InsertContractorPricing): Promise<ContractorPricing> {
+    // Check if pricing already exists
+    const existing = await this.getContractorPricing(contractorId);
+    
+    if (existing) {
+      // Update existing pricing
+      const [updated] = await db
+        .update(contractorPricing)
+        .set({
+          ...pricing,
+          updatedAt: new Date()
+        })
+        .where(eq(contractorPricing.contractorId, contractorId))
+        .returning();
+      return updated;
+    }
+    
+    // Create new pricing
+    const [created] = await db
+      .insert(contractorPricing)
+      .values({
+        ...pricing,
+        contractorId
+      })
+      .returning();
+    return created;
+  }
+  
+  async updateContractorPricing(contractorId: string, updates: Partial<InsertContractorPricing>): Promise<ContractorPricing | null> {
+    const [updated] = await db
+      .update(contractorPricing)
+      .set({
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(eq(contractorPricing.contractorId, contractorId))
+      .returning();
+    return updated || null;
+  }
+  
+  async calculateContractorRate(contractorId: string, serviceAreaId?: string): Promise<{
+    baseRate: number;
+    areaMultiplier?: number;
+    effectiveRate: number;
+  }> {
+    // Get contractor pricing
+    const pricing = await this.getContractorPricing(contractorId);
+    
+    if (!pricing) {
+      // Default rate if not configured
+      return {
+        baseRate: 75,
+        effectiveRate: 75
+      };
+    }
+    
+    const baseRate = parseFloat(pricing.baseHourlyRate);
+    let effectiveRate = baseRate;
+    let areaMultiplier: number | undefined;
+    
+    // Apply service area multiplier if provided
+    if (serviceAreaId) {
+      // Get service area
+      const area = await this.getServiceArea(serviceAreaId);
+      if (area?.baseRateMultiplier) {
+        areaMultiplier = parseFloat(area.baseRateMultiplier);
+        effectiveRate *= areaMultiplier;
+      }
+      
+      // Check for contractor-specific area settings
+      const [contractorArea] = await db
+        .select()
+        .from(contractorServiceAreas)
+        .where(
+          and(
+            eq(contractorServiceAreas.contractorId, contractorId),
+            eq(contractorServiceAreas.serviceAreaId, serviceAreaId),
+            eq(contractorServiceAreas.isActive, true)
+          )
+        )
+        .limit(1);
+      
+      if (contractorArea?.customRateMultiplier) {
+        const customMultiplier = parseFloat(contractorArea.customRateMultiplier);
+        effectiveRate = baseRate * customMultiplier;
+        areaMultiplier = customMultiplier;
+      }
+    }
+    
+    return {
+      baseRate,
+      areaMultiplier,
+      effectiveRate
+    };
   }
 
   // ==================== PERFORMANCE METRICS & GOALS IMPLEMENTATION ====================

@@ -132,7 +132,16 @@ import {
   insertBookingPreferencesSchema,
   insertContractorBlacklistSchema,
   insertFavoriteContractorsSchema,
-  insertBookingTemplateSchema
+  insertBookingTemplateSchema,
+  insertServiceAreaSchema,
+  insertCommissionSettingsSchema,
+  insertContractorPricingSchema,
+  insertContractorServiceAreasSchema,
+  type ServiceArea,
+  type CommissionSettings,
+  type ContractorPricing,
+  type ContractorServiceAreas,
+  commissionTypeEnum
 } from "@shared/schema";
 
 // Extend Express Request to include user
@@ -7339,6 +7348,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== CONTRACTOR ROUTES ====================
 
+  // ==================== CONTRACTOR PRICING ====================
+  
+  // Get contractor pricing
+  app.get('/api/contractor/pricing',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const pricing = await storage.getContractorPricing(req.session.userId!);
+        
+        if (!pricing) {
+          // Return defaults if no pricing configured
+          return res.json({
+            baseHourlyRate: '75',
+            partsMarkupPercent: '0'
+          });
+        }
+        
+        res.json(pricing);
+      } catch (error) {
+        console.error('Get contractor pricing error:', error);
+        res.status(500).json({ message: 'Failed to get pricing' });
+      }
+    }
+  );
+  
+  // Update contractor pricing
+  app.put('/api/contractor/pricing',
+    requireAuth,
+    requireRole('contractor'),
+    validateRequest(insertContractorPricingSchema.omit({ contractorId: true })),
+    async (req: Request, res: Response) => {
+      try {
+        const pricing = await storage.setContractorPricing(
+          req.session.userId!,
+          req.body
+        );
+        
+        res.json(pricing);
+      } catch (error) {
+        console.error('Update contractor pricing error:', error);
+        res.status(500).json({ message: 'Failed to update pricing' });
+      }
+    }
+  );
+
   // Get contractor earnings statement
   app.get('/api/contractor/earnings-statement', 
     requireAuth,
@@ -13360,47 +13415,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== SERVICE AREA MANAGEMENT ====================
   
-  // Get all service areas with contractor counts
+  // Get all service areas
   app.get('/api/admin/service-areas',
     requireAuth,
     requireRole('admin'),
     async (req: Request, res: Response) => {
       try {
-        // Get all service areas
-        const areas = await storage.getAllServiceAreas();
+        const filters = {
+          isActive: req.query.isActive === 'true' ? true : 
+                   req.query.isActive === 'false' ? false : undefined,
+          state: req.query.state as string
+        };
         
-        // Add contractor count for each area
-        const areasWithCounts = await Promise.all(areas.map(async (area) => {
-          // Count contractors in this service area
-          // For radius-based areas, we'd need PostGIS for accurate counts
-          // For now, we'll count all active contractors as a placeholder
-          const contractorCount = await db.select({
-            count: sql<number>`COUNT(*)`
-          })
-          .from(contractorProfiles)
-          .where(eq(contractorProfiles.isAvailable, true))
-          .then(result => result[0]?.count || 0);
-          
-          // Transform database schema to frontend expectations
-          const coordinates = area.coordinates as any || { center: { lat: 0, lng: 0 }, radius: 0 };
-          
-          return {
-            id: area.id,
-            name: area.name,
-            description: area.name, // Use name as description if not available
-            latitude: coordinates.center?.lat || 0,
-            longitude: coordinates.center?.lng || 0,
-            radiusMiles: coordinates.radius || 50,
-            baseSurcharge: Number(area.surchargeAmount || 0),
-            isActive: area.isActive,
-            contractorCount: Number(contractorCount)
-          };
-        }));
+        const areas = await storage.getAllServiceAreas(filters);
         
-        res.json(areasWithCounts);
+        res.json(areas);
       } catch (error) {
         console.error('Get service areas error:', error);
         res.status(500).json({ message: 'Failed to get service areas' });
+      }
+    }
+  );
+  
+  // Get single service area
+  app.get('/api/admin/service-areas/:id',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const area = await storage.getServiceArea(req.params.id);
+        
+        if (!area) {
+          return res.status(404).json({ message: 'Service area not found' });
+        }
+        
+        res.json(area);
+      } catch (error) {
+        console.error('Get service area error:', error);
+        res.status(500).json({ message: 'Failed to get service area' });
       }
     }
   );
@@ -13409,34 +13461,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/service-areas',
     requireAuth,
     requireRole('admin'),
-    validateRequest(z.object({
-      name: z.string().min(1),
-      description: z.string().optional(),
-      latitude: z.number().min(-90).max(90),
-      longitude: z.number().min(-180).max(180),
-      radiusMiles: z.number().min(1).max(500),
-      baseSurcharge: z.number().min(0),
-      isActive: z.boolean()
-    })),
+    validateRequest(insertServiceAreaSchema),
     async (req: Request, res: Response) => {
       try {
-        const { name, description, latitude, longitude, radiusMiles, baseSurcharge, isActive } = req.body;
+        const area = await storage.createServiceArea(req.body);
         
-        // Transform frontend data to database schema
-        const serviceAreaData = {
-          name,
-          type: 'radius' as const,
-          coordinates: {
-            center: { lat: latitude, lng: longitude },
-            radius: radiusMiles
-          },
-          surchargeType: 'distance' as const,
-          surchargeAmount: baseSurcharge.toString(),
-          surchargePercentage: '0',
-          isActive
-        };
-        
-        const area = await storage.createServiceArea(serviceAreaData);
+        res.status(201).json(area);
         
         // Transform back to frontend format
         const response = {
@@ -13463,59 +13493,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/admin/service-areas/:id',
     requireAuth,
     requireRole('admin'),
-    validateRequest(z.object({
-      name: z.string().min(1),
-      description: z.string().optional(),
-      latitude: z.number().min(-90).max(90),
-      longitude: z.number().min(-180).max(180),
-      radiusMiles: z.number().min(1).max(500),
-      baseSurcharge: z.number().min(0),
-      isActive: z.boolean()
-    })),
+    validateRequest(insertServiceAreaSchema.partial()),
     async (req: Request, res: Response) => {
       try {
-        const { id } = req.params;
-        const { name, description, latitude, longitude, radiusMiles, baseSurcharge, isActive } = req.body;
-        
-        // Check if area exists
-        const existingArea = await storage.getServiceArea(id);
-        if (!existingArea) {
-          return res.status(404).json({ message: 'Service area not found' });
-        }
-        
-        // Transform frontend data to database schema
-        const updateData = {
-          name,
-          type: 'radius' as const,
-          coordinates: {
-            center: { lat: latitude, lng: longitude },
-            radius: radiusMiles
-          },
-          surchargeType: 'distance' as const,
-          surchargeAmount: baseSurcharge.toString(),
-          isActive
-        };
-        
-        const updatedArea = await storage.updateServiceArea(id, updateData);
+        const updatedArea = await storage.updateServiceArea(req.params.id, req.body);
         
         if (!updatedArea) {
           return res.status(404).json({ message: 'Service area not found' });
         }
         
-        // Transform back to frontend format
-        const response = {
-          id: updatedArea.id,
-          name: updatedArea.name,
-          description: description || updatedArea.name,
-          latitude,
-          longitude,
-          radiusMiles,
-          baseSurcharge,
-          isActive: updatedArea.isActive,
-          contractorCount: 0
-        };
-        
-        res.json(response);
+        res.json(updatedArea);
       } catch (error) {
         console.error('Update service area error:', error);
         res.status(500).json({ message: 'Failed to update service area' });
@@ -13529,15 +13516,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole('admin'),
     async (req: Request, res: Response) => {
       try {
-        const { id } = req.params;
-        
-        // Check if area exists
-        const existingArea = await storage.getServiceArea(id);
-        if (!existingArea) {
-          return res.status(404).json({ message: 'Service area not found' });
-        }
-        
-        const deleted = await storage.deleteServiceArea(id);
+        const deleted = await storage.deleteServiceArea(req.params.id);
         
         if (!deleted) {
           return res.status(404).json({ message: 'Service area not found' });
@@ -13551,48 +13530,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
   
-  // Toggle service area active status
-  app.patch('/api/admin/service-areas/:id/status',
+  // ==================== COMMISSION SETTINGS ====================
+  
+  // Get commission settings
+  app.get('/api/admin/commission-settings',
     requireAuth,
     requireRole('admin'),
-    validateRequest(z.object({
-      isActive: z.boolean()
-    })),
     async (req: Request, res: Response) => {
       try {
-        const { id } = req.params;
-        const { isActive } = req.body;
+        const settings = await storage.getCommissionSettings();
         
-        // Check if area exists
-        const existingArea = await storage.getServiceArea(id);
-        if (!existingArea) {
-          return res.status(404).json({ message: 'Service area not found' });
+        if (!settings) {
+          // Return default if no settings exist
+          return res.json({
+            commissionType: 'percentage',
+            commissionValue: '15'
+          });
         }
         
-        const updatedArea = await storage.updateServiceArea(id, { isActive });
-        
-        if (!updatedArea) {
-          return res.status(404).json({ message: 'Service area not found' });
-        }
-        
-        // Transform back to frontend format
-        const coordinates = updatedArea.coordinates as any || { center: { lat: 0, lng: 0 }, radius: 0 };
-        const response = {
-          id: updatedArea.id,
-          name: updatedArea.name,
-          description: updatedArea.name,
-          latitude: coordinates.center?.lat || 0,
-          longitude: coordinates.center?.lng || 0,
-          radiusMiles: coordinates.radius || 50,
-          baseSurcharge: Number(updatedArea.surchargeAmount || 0),
-          isActive: updatedArea.isActive,
-          contractorCount: 0
-        };
-        
-        res.json(response);
+        res.json(settings);
       } catch (error) {
-        console.error('Toggle service area status error:', error);
-        res.status(500).json({ message: 'Failed to update service area status' });
+        console.error('Get commission settings error:', error);
+        res.status(500).json({ message: 'Failed to get commission settings' });
+      }
+    }
+  );
+  
+  // Update commission settings
+  app.put('/api/admin/commission-settings',
+    requireAuth,
+    requireRole('admin'),
+    validateRequest(insertCommissionSettingsSchema),
+    async (req: Request, res: Response) => {
+      try {
+        const settings = await storage.updateCommissionSettings(req.body);
+        
+        res.json(settings);
+      } catch (error) {
+        console.error('Update commission settings error:', error);
+        res.status(500).json({ message: 'Failed to update commission settings' });
       }
     }
   );
