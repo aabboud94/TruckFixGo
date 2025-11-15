@@ -88,6 +88,7 @@ import AIDispatchDashboard from "@/pages/admin/ai-dispatch-dashboard";
 import EmergencyResponsePage from "@/pages/emergency-response";
 import PaymentReconciliation from "@/pages/payment-reconciliation";
 import PartsInventory from "@/pages/admin/parts-inventory";
+import NotificationsPage from "@/pages/notifications";
 
 import NotFound from "@/pages/not-found";
 import AIChatbot from "@/components/ai-chatbot";
@@ -116,6 +117,7 @@ function Router() {
       <Route path="/about" component={About} />
       <Route path="/services" component={Services} />
       <Route path="/pricing" component={Pricing} />
+      <Route path="/notifications" component={NotificationsPage} />
       
       {/* Test Pages */}
       <Route path="/test-location" component={TestLocationInput} />
