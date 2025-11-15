@@ -152,6 +152,12 @@ const availabilitySchema = z.object({
   emergencyAvailable: z.boolean()
 });
 
+// Pricing schema
+const pricingSchema = z.object({
+  baseHourlyRate: z.number().min(0, "Hourly rate must be positive").max(1000, "Hourly rate seems too high"),
+  partsMarkupPercentage: z.number().min(0, "Markup must be positive").max(100, "Markup cannot exceed 100%")
+});
+
 const availableServices = [
   { id: "tire_repair", label: "Tire Repair", icon: Truck },
   { id: "mechanical", label: "Mechanical Repair", icon: Wrench },
@@ -271,6 +277,12 @@ interface PartsStockData {
   };
 }
 
+interface PricingData {
+  baseHourlyRate: number;
+  partsMarkupPercentage: number;
+  platformCommissionRate: number;
+}
+
 export default function ContractorProfile() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -377,6 +389,12 @@ export default function ContractorProfile() {
     enabled: !!contractorId && activeTab === "inventory"
   });
 
+  // Fetch pricing data
+  const { data: pricingData, isLoading: pricingLoading, refetch: refetchPricing } = useQuery<PricingData>({
+    queryKey: ["/api/contractor/pricing"],
+    enabled: activeTab === "pricing"
+  });
+
   // Profile form
   const profileForm = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
@@ -445,6 +463,15 @@ export default function ContractorProfile() {
       saturday: { enabled: false, start: "08:00", end: "18:00" },
       sunday: { enabled: false, start: "08:00", end: "18:00" },
       emergencyAvailable: true
+    }
+  });
+
+  // Pricing form
+  const pricingForm = useForm<z.infer<typeof pricingSchema>>({
+    resolver: zodResolver(pricingSchema),
+    defaultValues: {
+      baseHourlyRate: pricingData?.baseHourlyRate || 75,
+      partsMarkupPercentage: pricingData?.partsMarkupPercentage || 20
     }
   });
 
@@ -539,6 +566,30 @@ export default function ContractorProfile() {
         description: "Your availability schedule has been updated"
       });
       refetch();
+    }
+  });
+
+  // Update pricing mutation
+  const updatePricingMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof pricingSchema>) => {
+      return await apiRequest("/api/contractor/pricing", {
+        method: "PUT",
+        body: JSON.stringify(data)
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Pricing Updated",
+        description: "Your pricing has been updated successfully"
+      });
+      refetchPricing();
+    },
+    onError: () => {
+      toast({
+        title: "Update Failed",
+        description: "Failed to update pricing",
+        variant: "destructive"
+      });
     }
   });
 
@@ -653,6 +704,7 @@ export default function ContractorProfile() {
           <ScrollArea className="w-full">
             <TabsList className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full">
               <TabsTrigger value="personal" data-testid="tab-personal">Profile</TabsTrigger>
+              <TabsTrigger value="pricing" data-testid="tab-pricing">Pricing</TabsTrigger>
               <TabsTrigger value="earnings" data-testid="tab-earnings">Earnings</TabsTrigger>
               <TabsTrigger value="performance" data-testid="tab-performance">Performance</TabsTrigger>
               <TabsTrigger value="inventory" data-testid="tab-inventory">Parts Inventory</TabsTrigger>
@@ -722,6 +774,137 @@ export default function ContractorProfile() {
                     </div>
                   </form>
                 </Form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* PRICING TAB */}
+          <TabsContent value="pricing" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pricing Configuration</CardTitle>
+                <CardDescription>
+                  Set your base hourly rate and parts markup percentage. The platform will automatically calculate your earnings after commission.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {pricingLoading ? (
+                  <div className="space-y-4">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-20 w-full" />
+                  </div>
+                ) : (
+                  <Form {...pricingForm}>
+                    <form onSubmit={pricingForm.handleSubmit(data => updatePricingMutation.mutate(data))} className="space-y-6">
+                      {/* Base Hourly Rate */}
+                      <FormField
+                        control={pricingForm.control}
+                        name="baseHourlyRate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Base Hourly Rate</FormLabel>
+                            <FormDescription>
+                              Your standard hourly rate for labor before platform commission
+                            </FormDescription>
+                            <FormControl>
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                                  $
+                                </span>
+                                <Input
+                                  {...field}
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  max="1000"
+                                  className="pl-8"
+                                  data-testid="input-hourly-rate"
+                                  onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                                />
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {/* Parts Markup Percentage */}
+                      <FormField
+                        control={pricingForm.control}
+                        name="partsMarkupPercentage"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Parts Markup Percentage</FormLabel>
+                            <FormDescription>
+                              The percentage markup you add to parts costs
+                            </FormDescription>
+                            <FormControl>
+                              <div className="relative">
+                                <Input
+                                  {...field}
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  max="100"
+                                  className="pr-8"
+                                  data-testid="input-parts-markup"
+                                  onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                                  %
+                                </span>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {/* Earnings Estimation */}
+                      <div className="rounded-lg bg-muted p-4 space-y-3">
+                        <h4 className="font-medium flex items-center gap-2">
+                          <DollarSign className="h-4 w-4" />
+                          Estimated Earnings After Commission
+                        </h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Your hourly rate:</span>
+                            <span className="font-medium">${pricingForm.watch("baseHourlyRate")?.toFixed(2) || "0.00"}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Platform commission ({pricingData?.platformCommissionRate || 15}%):</span>
+                            <span className="text-red-600">
+                              -${((pricingForm.watch("baseHourlyRate") || 0) * ((pricingData?.platformCommissionRate || 15) / 100)).toFixed(2)}
+                            </span>
+                          </div>
+                          <Separator />
+                          <div className="flex justify-between font-medium">
+                            <span>You earn per hour:</span>
+                            <span className="text-green-600">
+                              ${((pricingForm.watch("baseHourlyRate") || 0) * (1 - ((pricingData?.platformCommissionRate || 15) / 100))).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Note: Parts markup is calculated separately and not subject to commission.
+                        </p>
+                      </div>
+
+                      {/* Save Button */}
+                      <div className="flex justify-end">
+                        <Button 
+                          type="submit" 
+                          disabled={updatePricingMutation.isPending}
+                          data-testid="button-save-pricing"
+                        >
+                          <Save className="w-4 h-4 mr-2" />
+                          {updatePricingMutation.isPending ? "Saving..." : "Save Pricing"}
+                        </Button>
+                      </div>
+                    </form>
+                  </Form>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
