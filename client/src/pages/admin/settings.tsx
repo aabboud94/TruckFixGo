@@ -39,10 +39,19 @@ export default function AdminSettings() {
     categories: [] as string[]
   });
   const [featureStates, setFeatureStates] = useState<Record<string, boolean>>({});
+  
+  // Commission Settings State
+  const [commissionType, setCommissionType] = useState<'percentage' | 'flat'>('percentage');
+  const [commissionValue, setCommissionValue] = useState<number>(15);
 
   // Query for current settings
   const { data: settings, isLoading } = useQuery({
     queryKey: ['/api/admin/settings'],
+  });
+
+  // Query for commission settings
+  const { data: commissionSettings } = useQuery({
+    queryKey: ['/api/admin/commission-settings'],
   });
 
   // Initialize feature states when settings are loaded
@@ -51,6 +60,14 @@ export default function AdminSettings() {
       setFeatureStates(settings.features);
     }
   }, [settings]);
+
+  // Initialize commission settings when loaded
+  useEffect(() => {
+    if (commissionSettings) {
+      setCommissionType(commissionSettings.type || 'percentage');
+      setCommissionValue(commissionSettings.value || 15);
+    }
+  }, [commissionSettings]);
 
   // Mutation for saving settings
   const saveMutation = useMutation({
@@ -68,6 +85,27 @@ export default function AdminSettings() {
       toast({
         variant: "destructive",
         title: "Failed to save settings",
+        description: error.message,
+      });
+    },
+  });
+
+  // Mutation for saving commission settings
+  const saveCommissionMutation = useMutation({
+    mutationFn: async (data: { type: 'percentage' | 'flat', value: number }) => {
+      return apiRequest('PUT', '/api/admin/commission-settings', data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/commission-settings'] });
+      toast({
+        title: "Commission settings saved",
+        description: "Commission settings have been updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to save commission settings",
         description: error.message,
       });
     },
@@ -738,6 +776,110 @@ export default function AdminSettings() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Commission Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Commission Settings</CardTitle>
+              <CardDescription>Configure how contractors are charged commission on completed jobs</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Display current commission settings */}
+              <div className="rounded-lg bg-muted p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Current Commission:</span>
+                  <span className="font-medium">
+                    {commissionType === 'percentage' 
+                      ? `${commissionValue}%` 
+                      : `$${commissionValue} flat fee`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Commission Type Selection */}
+              <div className="space-y-3">
+                <Label>Commission Type</Label>
+                <RadioGroup
+                  value={commissionType}
+                  onValueChange={(value) => setCommissionType(value as 'percentage' | 'flat')}
+                  className="space-y-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem 
+                      value="percentage" 
+                      id="percentage" 
+                      data-testid="radio-commission-percentage" 
+                    />
+                    <Label htmlFor="percentage" className="font-normal cursor-pointer">
+                      Percentage of job value
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem 
+                      value="flat" 
+                      id="flat" 
+                      data-testid="radio-commission-flat" 
+                    />
+                    <Label htmlFor="flat" className="font-normal cursor-pointer">
+                      Flat fee per job
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              {/* Commission Value Input */}
+              <div className="space-y-2">
+                <Label htmlFor="commission-value">
+                  Commission Value {commissionType === 'percentage' ? '(%)' : '($)'}
+                </Label>
+                <div className="flex items-center gap-2">
+                  {commissionType === 'flat' && (
+                    <span className="text-sm text-muted-foreground">$</span>
+                  )}
+                  <Input
+                    id="commission-value"
+                    type="number"
+                    min={0}
+                    step={commissionType === 'percentage' ? 0.1 : 1}
+                    value={commissionValue}
+                    onChange={(e) => setCommissionValue(parseFloat(e.target.value) || 0)}
+                    className="w-32"
+                    placeholder={commissionType === 'percentage' ? '15' : '25'}
+                    data-testid="input-commission-value"
+                  />
+                  {commissionType === 'percentage' && (
+                    <span className="text-sm text-muted-foreground">%</span>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {commissionType === 'percentage' 
+                    ? 'Percentage charged on each completed job'
+                    : 'Fixed amount charged for each completed job'}
+                </p>
+              </div>
+
+              {/* Save Button */}
+              <div className="flex justify-end pt-4">
+                <Button
+                  onClick={() => {
+                    saveCommissionMutation.mutate({
+                      type: commissionType,
+                      value: commissionValue
+                    });
+                  }}
+                  disabled={saveCommissionMutation.isPending}
+                  data-testid="button-save-commission"
+                >
+                  {saveCommissionMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Save Commission Settings
+                </Button>
               </div>
             </CardContent>
           </Card>
