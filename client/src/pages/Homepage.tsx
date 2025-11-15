@@ -50,8 +50,8 @@ export default function Homepage() {
   return (
     <div className="min-h-screen bg-background">
       <SEOHead 
-        title="24/7 Emergency Truck Repair - Get Help in 15 Minutes | TruckFixGo"
-        description="Stranded on the highway? Get immediate mobile truck repair service. 24/7 emergency assistance, certified mechanics, 15-minute response. Service First Policy - we fix now, paperwork later. Call 1-800-TRUCK-FIX!"
+        title="24/7 Emergency Truck Repair - Fast Response Time | TruckFixGo"
+        description="Stranded on the highway? Get immediate mobile truck repair service. 24/7 emergency assistance, certified mechanics, fast response. Service First Policy - we fix now, paperwork later. Call 1-800-TRUCK-FIX!"
         canonical="https://truckfixgo.com/"
       />
       
@@ -59,7 +59,7 @@ export default function Homepage() {
       <div className="bg-destructive text-destructive-foreground py-2 text-center animate-pulse">
         <div className="flex items-center justify-center gap-2">
           <AlertCircle className="w-4 h-4" />
-          <span className="font-semibold text-sm">EMERGENCY? Get help in 15 minutes or less</span>
+          <span className="font-semibold text-sm">EMERGENCY? Get help with fast response</span>
           <a href="tel:1-800-TRUCK-FIX" className="underline font-bold">Call Now</a>
         </div>
       </div>
@@ -163,7 +163,7 @@ export default function Homepage() {
           <div className="max-w-3xl">
             <Badge className="mb-4 bg-destructive text-destructive-foreground">
               <Timer className="w-3 h-3 mr-1" />
-              Average 15-minute response time
+              Fast response time
             </Badge>
             
             <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold text-white mb-6 leading-tight">
@@ -184,8 +184,7 @@ export default function Homepage() {
                 onClick={() => setLocation("/emergency")}
                 data-testid="button-hero-emergency"
               >
-                <Phone className="w-5 h-5 mr-2" />
-                Get Help Now - 15 Min Response
+                Get Help Now - Fast Response Time
               </Button>
               
               <Button 
@@ -211,7 +210,7 @@ export default function Homepage() {
                 <div className="text-xs text-gray-200">Trucks Rescued This Month</div>
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold text-white">15 min</div>
+                <div className="text-2xl font-bold text-white">Fast</div>
                 <div className="text-xs text-gray-200">Average Response Time</div>
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-center">
@@ -330,7 +329,7 @@ export default function Homepage() {
                 <ul className="space-y-2 mb-4">
                   <li className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-600" />
-                    <span className="text-sm">15-minute average response time</span>
+                    <span className="text-sm">Fast response time</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-600" />
@@ -574,7 +573,7 @@ export default function Homepage() {
           {/* Stats Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div className="text-center">
-              <div className="text-4xl md:text-5xl font-bold mb-2">15 min</div>
+              <div className="text-4xl md:text-5xl font-bold mb-2">Fast</div>
               <div className="text-sm opacity-90">Average Response Time</div>
             </div>
             <div className="text-center">

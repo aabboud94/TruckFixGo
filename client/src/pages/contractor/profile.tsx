@@ -155,7 +155,7 @@ const availabilitySchema = z.object({
 // Pricing schema
 const pricingSchema = z.object({
   baseHourlyRate: z.number().min(0, "Hourly rate must be positive").max(1000, "Hourly rate seems too high"),
-  partsMarkupPercentage: z.number().min(0, "Markup must be positive").max(100, "Markup cannot exceed 100%")
+  partsMarkupPercent: z.number().min(0, "Markup must be positive").max(100, "Markup cannot exceed 100%")
 });
 
 const availableServices = [
@@ -279,7 +279,7 @@ interface PartsStockData {
 
 interface PricingData {
   baseHourlyRate: number;
-  partsMarkupPercentage: number;
+  partsMarkupPercent: number;
   platformCommissionRate: number;
 }
 
@@ -471,7 +471,7 @@ export default function ContractorProfile() {
     resolver: zodResolver(pricingSchema),
     defaultValues: {
       baseHourlyRate: pricingData?.baseHourlyRate || 75,
-      partsMarkupPercentage: pricingData?.partsMarkupPercentage || 20
+      partsMarkupPercent: pricingData?.partsMarkupPercent || 20
     }
   });
 
@@ -704,10 +704,10 @@ export default function ContractorProfile() {
           <ScrollArea className="w-full">
             <TabsList className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full">
               <TabsTrigger value="personal" data-testid="tab-personal">Profile</TabsTrigger>
-              <TabsTrigger value="pricing" data-testid="tab-pricing">Pricing</TabsTrigger>
               <TabsTrigger value="earnings" data-testid="tab-earnings">Earnings</TabsTrigger>
               <TabsTrigger value="performance" data-testid="tab-performance">Performance</TabsTrigger>
               <TabsTrigger value="inventory" data-testid="tab-inventory">Parts Inventory</TabsTrigger>
+              <TabsTrigger value="pricing" data-testid="tab-pricing">Pricing</TabsTrigger>
               <TabsTrigger value="documents" data-testid="tab-documents">Documents</TabsTrigger>
               <TabsTrigger value="settings" data-testid="tab-settings">Settings</TabsTrigger>
             </TabsList>
@@ -832,10 +832,10 @@ export default function ContractorProfile() {
                       {/* Parts Markup Percentage */}
                       <FormField
                         control={pricingForm.control}
-                        name="partsMarkupPercentage"
+                        name="partsMarkupPercent"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Parts Markup Percentage</FormLabel>
+                            <FormLabel>Parts Markup</FormLabel>
                             <FormDescription>
                               The percentage markup you add to parts costs
                             </FormDescription>
