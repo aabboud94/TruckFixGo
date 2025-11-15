@@ -5442,7 +5442,11 @@ export type InsertBookingTemplate = z.infer<typeof insertBookingTemplateSchema>;
 export type BookingTemplate = typeof bookingTemplates.$inferSelect;
 
 // Service Areas and Commission schemas and types
-export const insertServiceAreaSchema = createInsertSchema(serviceAreas).omit({
+export const insertServiceAreaSchema = createInsertSchema(serviceAreas, {
+  // Override decimal fields to accept numbers instead of strings
+  coverageRadiusMiles: z.number().min(0).max(9999.99),
+  baseRateMultiplier: z.number().min(0).max(99.99).optional()
+}).omit({
   id: true,
   createdAt: true,
   updatedAt: true
