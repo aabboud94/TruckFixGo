@@ -3,6 +3,7 @@ import { reminderService } from './reminder-service';
 import { storage } from './storage';
 import { type Job } from '@shared/schema';
 import { executeWithRetry } from './db';
+import { trackingWSServer } from './websocket';
 
 class ReminderScheduler {
   private cronJobs: Map<string, cron.ScheduledTask> = new Map();
@@ -82,6 +83,26 @@ class ReminderScheduler {
           setImmediate(async () => {
             try {
               await reminderService.sendReminder(reminder);
+              
+              // Emit notification sent event via WebSocket
+              await trackingWSServer.broadcastNotificationSent({
+                id: reminder.id,
+                recipientId: reminder.recipientId,
+                type: reminder.reminderType,
+                channel: reminder.reminderType as 'sms' | 'email' | 'both',
+                message: reminder.messageContent || '',
+                timestamp: new Date().toISOString()
+              });
+              
+              // Emit delivery status update
+              await trackingWSServer.broadcastNotificationDelivered({
+                id: `${reminder.id}-delivery`,
+                notificationId: reminder.id,
+                recipientId: reminder.recipientId,
+                status: 'delivered',
+                channel: reminder.reminderType as 'sms' | 'email' | 'push',
+                timestamp: new Date().toISOString()
+              });
             } catch (error) {
               console.error(`Failed to send reminder ${reminder.id}:`, error);
               await executeWithRetry(
@@ -92,6 +113,17 @@ class ReminderScheduler {
                 ),
                 { retries: 2 }
               );
+              
+              // Emit delivery failure event via WebSocket
+              await trackingWSServer.broadcastNotificationDelivered({
+                id: `${reminder.id}-delivery`,
+                notificationId: reminder.id,
+                recipientId: reminder.recipientId,
+                status: 'failed',
+                channel: reminder.reminderType as 'sms' | 'email' | 'push',
+                error: (error as Error).message,
+                timestamp: new Date().toISOString()
+              });
             }
           });
         } catch (error) {
