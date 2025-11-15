@@ -43,7 +43,7 @@ import {
   ShieldAlert,
   DollarSign,
   CalendarClock,
-  Tool,
+  Wrench as Tool,
   X,
   Info
 } from "lucide-react";
