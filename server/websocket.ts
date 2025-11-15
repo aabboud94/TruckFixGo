@@ -397,6 +397,27 @@ class TrackingWebSocketServer {
       case 'REMOVE_REACTION':
         await this.handleRemoveReaction(ws, message.payload);
         break;
+      // Notification event handlers
+      case 'JOIN_NOTIFICATIONS':
+        await this.handleJoinNotifications(ws, message.payload);
+        break;
+      case 'LEAVE_NOTIFICATIONS':
+        this.handleLeaveNotifications(ws);
+        break;
+      // Fleet maintenance event handlers
+      case 'JOIN_FLEET_UPDATES':
+        await this.handleJoinFleetUpdates(ws, message.payload);
+        break;
+      case 'LEAVE_FLEET_UPDATES':
+        this.handleLeaveFleetUpdates(ws);
+        break;
+      // Contractor earnings event handlers
+      case 'JOIN_EARNINGS_UPDATES':
+        await this.handleJoinEarningsUpdates(ws, message.payload);
+        break;
+      case 'LEAVE_EARNINGS_UPDATES':
+        this.handleLeaveEarningsUpdates(ws);
+        break;
       default:
         this.sendError(ws, `Unknown message type: ${message.type}`);
     }
@@ -2198,6 +2219,50 @@ class TrackingWebSocketServer {
     if (contractorWs && contractorWs.readyState === WebSocket.OPEN) {
       this.sendMessage(contractorWs, message);
     }
+  }
+
+  // ==================== SUBSCRIPTION HANDLERS ====================
+  
+  // Handle joining notifications updates
+  private async handleJoinNotifications(ws: ExtendedWebSocket, payload: any) {
+    // Simply acknowledge the subscription
+    this.sendMessage(ws, {
+      type: 'JOIN_NOTIFICATIONS',
+      payload: { success: true }
+    });
+  }
+  
+  // Handle leaving notifications updates
+  private handleLeaveNotifications(ws: ExtendedWebSocket) {
+    // No special cleanup needed for now
+  }
+  
+  // Handle joining fleet updates
+  private async handleJoinFleetUpdates(ws: ExtendedWebSocket, payload: any) {
+    // Simply acknowledge the subscription
+    this.sendMessage(ws, {
+      type: 'JOIN_FLEET_UPDATES', 
+      payload: { success: true }
+    });
+  }
+  
+  // Handle leaving fleet updates
+  private handleLeaveFleetUpdates(ws: ExtendedWebSocket) {
+    // No special cleanup needed for now
+  }
+  
+  // Handle joining earnings updates
+  private async handleJoinEarningsUpdates(ws: ExtendedWebSocket, payload: any) {
+    // Simply acknowledge the subscription
+    this.sendMessage(ws, {
+      type: 'JOIN_EARNINGS_UPDATES',
+      payload: { success: true }
+    });
+  }
+  
+  // Handle leaving earnings updates
+  private handleLeaveEarningsUpdates(ws: ExtendedWebSocket) {
+    // No special cleanup needed for now
   }
 }
 
