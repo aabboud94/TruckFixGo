@@ -64,8 +64,8 @@ export default function AdminSettings() {
   // Initialize commission settings when loaded
   useEffect(() => {
     if (commissionSettings) {
-      setCommissionType(commissionSettings.type || 'percentage');
-      setCommissionValue(commissionSettings.value || 15);
+      setCommissionType(commissionSettings.commissionType || 'percentage');
+      setCommissionValue(parseFloat(commissionSettings.commissionValue) || 15);
     }
   }, [commissionSettings]);
 
@@ -92,8 +92,11 @@ export default function AdminSettings() {
 
   // Mutation for saving commission settings
   const saveCommissionMutation = useMutation({
-    mutationFn: async (data: { type: 'percentage' | 'flat', value: number }) => {
-      return apiRequest('PUT', '/api/admin/commission-settings', data);
+    mutationFn: async (data: { commissionType: 'percentage' | 'flat', commissionValue: number }) => {
+      return apiRequest('PUT', '/api/admin/commission-settings', {
+        commissionType: data.commissionType,
+        commissionValue: String(data.commissionValue)
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/commission-settings'] });
@@ -866,8 +869,8 @@ export default function AdminSettings() {
                 <Button
                   onClick={() => {
                     saveCommissionMutation.mutate({
-                      type: commissionType,
-                      value: commissionValue
+                      commissionType: commissionType,
+                      commissionValue: commissionValue
                     });
                   }}
                   disabled={saveCommissionMutation.isPending}

@@ -13538,14 +13538,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole('admin'),
     async (req: Request, res: Response) => {
       try {
+        // Now getCommissionSettings will always return settings (creates defaults if none exist)
         const settings = await storage.getCommissionSettings();
         
         if (!settings) {
-          // Return default if no settings exist
-          return res.json({
-            commissionType: 'percentage',
-            commissionValue: '15'
-          });
+          // This should never happen now, but keep as safety fallback
+          console.error('Failed to get or create commission settings');
+          return res.status(500).json({ message: 'Failed to get commission settings' });
         }
         
         res.json(settings);

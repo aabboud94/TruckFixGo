@@ -15991,15 +15991,35 @@ export class PostgreSQLStorage implements IStorage {
       .from(commissionSettings)
       .orderBy(desc(commissionSettings.createdAt))
       .limit(1);
-    return settings || null;
+    
+    // If no settings exist, create default settings
+    if (!settings) {
+      const defaultSettings: InsertCommissionSettings = {
+        commissionType: 'percentage',
+        commissionValue: '15'
+      };
+      
+      const [created] = await db
+        .insert(commissionSettings)
+        .values(defaultSettings)
+        .returning();
+      
+      return created;
+    }
+    
+    return settings;
   }
   
   async updateCommissionSettings(settings: InsertCommissionSettings): Promise<CommissionSettings> {
-    // Get current settings
-    const current = await this.getCommissionSettings();
+    // Get all existing settings
+    const allSettings = await db
+      .select()
+      .from(commissionSettings)
+      .orderBy(desc(commissionSettings.createdAt));
     
-    if (current) {
-      // Update existing settings
+    if (allSettings && allSettings.length > 0) {
+      // Update the most recent settings
+      const current = allSettings[0];
       const [updated] = await db
         .update(commissionSettings)
         .set({
@@ -16008,6 +16028,13 @@ export class PostgreSQLStorage implements IStorage {
         })
         .where(eq(commissionSettings.id, current.id))
         .returning();
+      
+      // Clean up old records (keep only the most recent)
+      if (allSettings.length > 1) {
+        const idsToDelete = allSettings.slice(1).map(s => s.id);
+        await db.delete(commissionSettings).where(inArray(commissionSettings.id, idsToDelete));
+      }
+      
       return updated;
     }
     
