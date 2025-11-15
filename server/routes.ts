@@ -9758,6 +9758,348 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== FLEET MAINTENANCE API ROUTES ====================
+  
+  // GET /api/fleet/vehicles/:vehicleId/maintenance/predictions - Get AI-powered maintenance predictions for a specific vehicle
+  app.get('/api/fleet/vehicles/:vehicleId/maintenance/predictions',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        const { riskLevel, limit, offset } = req.query;
+        
+        // Verify vehicle exists and user has access to its fleet
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        // Verify fleet access
+        if (req.session.role === 'fleet_manager') {
+          const user = await storage.getUser(req.session.userId!);
+          const fleetAccount = await storage.getFleetAccountByEmail(user?.email || '');
+          if (!fleetAccount || fleetAccount.id !== vehicle.fleetAccountId) {
+            return res.status(403).json({ 
+              message: 'Access denied to this vehicle' 
+            });
+          }
+        }
+        
+        const options = {
+          riskLevel: riskLevel as string | undefined,
+          limit: limit ? parseInt(limit as string) : 50,
+          offset: offset ? parseInt(offset as string) : 0
+        };
+        
+        const predictions = await storage.getVehicleMaintenancePredictions(vehicleId, options);
+        res.json({ predictions });
+      } catch (error) {
+        console.error('Failed to get maintenance predictions:', error);
+        res.status(500).json({ 
+          message: 'Failed to retrieve maintenance predictions',
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+  );
+  
+  // GET /api/fleet/vehicles/:vehicleId/maintenance/alerts - Get active maintenance alerts
+  app.get('/api/fleet/vehicles/:vehicleId/maintenance/alerts',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        const { active, severity, limit, offset } = req.query;
+        
+        // Verify vehicle exists and user has access to its fleet
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        // Verify fleet access
+        if (req.session.role === 'fleet_manager') {
+          const user = await storage.getUser(req.session.userId!);
+          const fleetAccount = await storage.getFleetAccountByEmail(user?.email || '');
+          if (!fleetAccount || fleetAccount.id !== vehicle.fleetAccountId) {
+            return res.status(403).json({ 
+              message: 'Access denied to this vehicle' 
+            });
+          }
+        }
+        
+        const options = {
+          active: active === 'true' || active === '1',
+          severity: severity as string | undefined,
+          limit: limit ? parseInt(limit as string) : 50,
+          offset: offset ? parseInt(offset as string) : 0
+        };
+        
+        const alerts = await storage.getVehicleMaintenanceAlerts(vehicleId, options);
+        res.json({ alerts });
+      } catch (error) {
+        console.error('Failed to get maintenance alerts:', error);
+        res.status(500).json({ 
+          message: 'Failed to retrieve maintenance alerts',
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+  );
+  
+  // GET /api/fleet/vehicles/:vehicleId/service-history - Get complete service history with timeline data
+  app.get('/api/fleet/vehicles/:vehicleId/service-history',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        const { startDate, endDate, serviceType, limit, offset } = req.query;
+        
+        // Verify vehicle exists and user has access to its fleet
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        // Verify fleet access
+        if (req.session.role === 'fleet_manager') {
+          const user = await storage.getUser(req.session.userId!);
+          const fleetAccount = await storage.getFleetAccountByEmail(user?.email || '');
+          if (!fleetAccount || fleetAccount.id !== vehicle.fleetAccountId) {
+            return res.status(403).json({ 
+              message: 'Access denied to this vehicle' 
+            });
+          }
+        }
+        
+        const options = {
+          startDate: startDate ? new Date(startDate as string) : undefined,
+          endDate: endDate ? new Date(endDate as string) : undefined,
+          serviceType: serviceType as string | undefined,
+          limit: limit ? parseInt(limit as string) : 100,
+          offset: offset ? parseInt(offset as string) : 0
+        };
+        
+        const history = await storage.getVehicleServiceHistory(vehicleId, options);
+        res.json({ serviceHistory: history });
+      } catch (error) {
+        console.error('Failed to get service history:', error);
+        res.status(500).json({ 
+          message: 'Failed to retrieve service history',
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+  );
+  
+  // GET /api/fleet/vehicles/:vehicleId/service-schedules - Get upcoming scheduled maintenance
+  app.get('/api/fleet/vehicles/:vehicleId/service-schedules',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        const { activeOnly, limit, offset } = req.query;
+        
+        // Verify vehicle exists and user has access to its fleet
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        // Verify fleet access
+        if (req.session.role === 'fleet_manager') {
+          const user = await storage.getUser(req.session.userId!);
+          const fleetAccount = await storage.getFleetAccountByEmail(user?.email || '');
+          if (!fleetAccount || fleetAccount.id !== vehicle.fleetAccountId) {
+            return res.status(403).json({ 
+              message: 'Access denied to this vehicle' 
+            });
+          }
+        }
+        
+        const options = {
+          activeOnly: activeOnly === 'true' || activeOnly === '1',
+          limit: limit ? parseInt(limit as string) : 50,
+          offset: offset ? parseInt(offset as string) : 0
+        };
+        
+        const schedules = await storage.getVehicleServiceSchedules(vehicleId, options);
+        res.json({ schedules });
+      } catch (error) {
+        console.error('Failed to get service schedules:', error);
+        res.status(500).json({ 
+          message: 'Failed to retrieve service schedules',
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+  );
+  
+  // GET /api/fleet/vehicles/:vehicleId/parts-inventory - Get parts inventory for the vehicle
+  app.get('/api/fleet/vehicles/:vehicleId/parts-inventory',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        const { lowStockOnly, limit, offset } = req.query;
+        
+        // Verify vehicle exists and user has access to its fleet
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        // Verify fleet access
+        if (req.session.role === 'fleet_manager') {
+          const user = await storage.getUser(req.session.userId!);
+          const fleetAccount = await storage.getFleetAccountByEmail(user?.email || '');
+          if (!fleetAccount || fleetAccount.id !== vehicle.fleetAccountId) {
+            return res.status(403).json({ 
+              message: 'Access denied to this vehicle' 
+            });
+          }
+        }
+        
+        const options = {
+          lowStockOnly: lowStockOnly === 'true' || lowStockOnly === '1',
+          limit: limit ? parseInt(limit as string) : 100,
+          offset: offset ? parseInt(offset as string) : 0
+        };
+        
+        const inventory = await storage.getVehiclePartsInventory(vehicleId, options);
+        res.json({ inventory });
+      } catch (error) {
+        console.error('Failed to get parts inventory:', error);
+        res.status(500).json({ 
+          message: 'Failed to retrieve parts inventory',
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+  );
+  
+  // POST /api/fleet/vehicles/:vehicleId/parts-inventory - Add parts to vehicle inventory
+  app.post('/api/fleet/vehicles/:vehicleId/parts-inventory',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    validateRequest(z.object({
+      partId: z.string(),
+      quantity: z.number().positive(),
+      notes: z.string().optional()
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        const { partId, quantity, notes } = req.body;
+        
+        // Verify vehicle exists and user has access to its fleet
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        // Verify fleet access
+        if (req.session.role === 'fleet_manager') {
+          const user = await storage.getUser(req.session.userId!);
+          const fleetAccount = await storage.getFleetAccountByEmail(user?.email || '');
+          if (!fleetAccount || fleetAccount.id !== vehicle.fleetAccountId) {
+            return res.status(403).json({ 
+              message: 'Access denied to this vehicle' 
+            });
+          }
+        }
+        
+        // Verify part exists
+        const part = await storage.getPartById(partId);
+        if (!part) {
+          return res.status(404).json({ message: 'Part not found' });
+        }
+        
+        const inventory = await storage.addVehiclePartInventory(vehicleId, partId, quantity, notes);
+        res.status(201).json({ 
+          message: 'Parts added to inventory successfully',
+          inventory 
+        });
+      } catch (error) {
+        console.error('Failed to add parts to inventory:', error);
+        res.status(500).json({ 
+          message: 'Failed to add parts to inventory',
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+  );
+  
+  // DELETE /api/fleet/vehicles/:vehicleId/parts-inventory/:partId - Remove parts from inventory
+  app.delete('/api/fleet/vehicles/:vehicleId/parts-inventory/:partId',
+    requireAuth,
+    requireRole('admin', 'fleet_manager', 'dispatcher'),
+    async (req: Request, res: Response) => {
+      try {
+        const vehicleId = req.params.vehicleId;
+        const partId = req.params.partId;
+        const { quantity, notes } = req.query;
+        
+        // Verify vehicle exists and user has access to its fleet
+        const vehicle = await storage.getFleetVehicle(vehicleId);
+        if (!vehicle) {
+          return res.status(404).json({ message: 'Vehicle not found' });
+        }
+        
+        // Verify fleet access
+        if (req.session.role === 'fleet_manager') {
+          const user = await storage.getUser(req.session.userId!);
+          const fleetAccount = await storage.getFleetAccountByEmail(user?.email || '');
+          if (!fleetAccount || fleetAccount.id !== vehicle.fleetAccountId) {
+            return res.status(403).json({ 
+              message: 'Access denied to this vehicle' 
+            });
+          }
+        }
+        
+        // Verify part exists
+        const part = await storage.getPartById(partId);
+        if (!part) {
+          return res.status(404).json({ message: 'Part not found' });
+        }
+        
+        const quantityToRemove = quantity ? parseInt(quantity as string) : 1;
+        if (isNaN(quantityToRemove) || quantityToRemove <= 0) {
+          return res.status(400).json({ message: 'Invalid quantity' });
+        }
+        
+        const inventory = await storage.removeVehiclePartInventory(
+          vehicleId, 
+          partId, 
+          quantityToRemove, 
+          notes as string | undefined
+        );
+        
+        if (!inventory) {
+          return res.status(400).json({ 
+            message: 'Insufficient inventory or part not found in vehicle inventory' 
+          });
+        }
+        
+        res.json({ 
+          message: 'Parts removed from inventory successfully',
+          inventory 
+        });
+      } catch (error) {
+        console.error('Failed to remove parts from inventory:', error);
+        res.status(500).json({ 
+          message: 'Failed to remove parts from inventory',
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+  );
+
   // ==================== SERVICE & PRICING ROUTES ====================
 
   // List all service types
