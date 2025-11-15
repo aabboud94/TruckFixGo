@@ -6,7 +6,7 @@ import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   ArrowLeft,
   Plus,
@@ -31,7 +32,19 @@ import {
   FileText,
   Users,
   Clock,
-  Wrench
+  Wrench,
+  Package,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  Eye,
+  History,
+  ShieldAlert,
+  DollarSign,
+  CalendarClock,
+  Tool,
+  X,
+  Info
 } from "lucide-react";
 
 const vehicleSchema = z.object({
@@ -72,6 +85,20 @@ const pmScheduleSchema = z.object({
 
 type PmScheduleForm = z.infer<typeof pmScheduleSchema>;
 
+// Parts inventory schema
+const partSchema = z.object({
+  partName: z.string().min(1, "Part name is required"),
+  partNumber: z.string().min(1, "Part number is required"),
+  quantity: z.string().min(1, "Quantity is required"),
+  unitCost: z.string().min(1, "Unit cost is required"),
+  category: z.string().min(1, "Category is required"),
+  minimumStock: z.string().optional(),
+  location: z.string().optional(),
+  notes: z.string().optional()
+});
+
+type PartForm = z.infer<typeof partSchema>;
+
 interface Vehicle {
   id: string;
   fleetAccountId: string;
@@ -89,6 +116,759 @@ interface Vehicle {
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  // Enhanced fields
+  maintenanceStatus?: 'good' | 'attention' | 'critical';
+  activeAlertCount?: number;
+}
+
+interface MaintenancePrediction {
+  id: string;
+  predictionType: string;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  recommendedAction: string;
+  predictedDate: string;
+  confidence: number;
+  estimatedCost?: number;
+}
+
+interface MaintenanceAlert {
+  id: string;
+  alertType: string;
+  severity: 'info' | 'warning' | 'critical';
+  message: string;
+  createdAt: string;
+  isActive: boolean;
+}
+
+interface ServiceHistoryItem {
+  id: string;
+  serviceDate: string;
+  serviceType: string;
+  cost: number;
+  notes?: string;
+  performedBy?: string;
+  odometer?: number;
+  isScheduled?: boolean;
+  isOverdue?: boolean;
+}
+
+interface PartsInventoryItem {
+  id: string;
+  partName: string;
+  partNumber: string;
+  quantity: number;
+  unitCost: number;
+  totalValue: number;
+  category: string;
+  minimumStock?: number;
+  location?: string;
+  notes?: string;
+  lastUpdated: string;
+}
+
+// Component for Vehicle Detail View
+function VehicleDetailView({ 
+  vehicle, 
+  onClose 
+}: { 
+  vehicle: Vehicle; 
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [isAddPartDialogOpen, setIsAddPartDialogOpen] = useState(false);
+  
+  const partForm = useForm<PartForm>({
+    resolver: zodResolver(partSchema),
+    defaultValues: {
+      partName: "",
+      partNumber: "",
+      quantity: "",
+      unitCost: "",
+      category: "",
+      minimumStock: "5",
+      location: "",
+      notes: ""
+    }
+  });
+
+  // Fetch maintenance predictions
+  const { data: predictionsData, isLoading: isLoadingPredictions } = useQuery({
+    queryKey: [`/api/fleet/vehicles/${vehicle.id}/maintenance/predictions`],
+    queryFn: async () => {
+      try {
+        return await apiRequest('GET', `/api/fleet/vehicles/${vehicle.id}/maintenance/predictions`);
+      } catch (error) {
+        console.error('Failed to fetch predictions:', error);
+        return { predictions: [] };
+      }
+    }
+  });
+
+  // Fetch maintenance alerts
+  const { data: alertsData, isLoading: isLoadingAlerts } = useQuery({
+    queryKey: [`/api/fleet/vehicles/${vehicle.id}/maintenance/alerts`],
+    queryFn: async () => {
+      try {
+        return await apiRequest('GET', `/api/fleet/vehicles/${vehicle.id}/maintenance/alerts`);
+      } catch (error) {
+        console.error('Failed to fetch alerts:', error);
+        return { alerts: [] };
+      }
+    }
+  });
+
+  // Fetch service history
+  const { data: serviceHistoryData, isLoading: isLoadingHistory } = useQuery({
+    queryKey: [`/api/fleet/vehicles/${vehicle.id}/service-history`],
+    queryFn: async () => {
+      try {
+        return await apiRequest('GET', `/api/fleet/vehicles/${vehicle.id}/service-history`);
+      } catch (error) {
+        console.error('Failed to fetch service history:', error);
+        return { history: [] };
+      }
+    }
+  });
+
+  // Fetch service schedules
+  const { data: schedulesData, isLoading: isLoadingSchedules } = useQuery({
+    queryKey: [`/api/fleet/vehicles/${vehicle.id}/service-schedules`],
+    queryFn: async () => {
+      try {
+        return await apiRequest('GET', `/api/fleet/vehicles/${vehicle.id}/service-schedules`);
+      } catch (error) {
+        console.error('Failed to fetch schedules:', error);
+        return { schedules: [] };
+      }
+    }
+  });
+
+  // Fetch parts inventory
+  const { data: partsData, isLoading: isLoadingParts, refetch: refetchParts } = useQuery({
+    queryKey: [`/api/fleet/vehicles/${vehicle.id}/parts-inventory`],
+    queryFn: async () => {
+      try {
+        return await apiRequest('GET', `/api/fleet/vehicles/${vehicle.id}/parts-inventory`);
+      } catch (error) {
+        console.error('Failed to fetch parts inventory:', error);
+        return { parts: [] };
+      }
+    }
+  });
+
+  // Add part mutation
+  const addPartMutation = useMutation({
+    mutationFn: async (data: PartForm) => {
+      const payload = {
+        ...data,
+        quantity: parseInt(data.quantity),
+        unitCost: parseFloat(data.unitCost),
+        minimumStock: data.minimumStock ? parseInt(data.minimumStock) : 5
+      };
+      return await apiRequest('POST', `/api/fleet/vehicles/${vehicle.id}/parts-inventory`, payload);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Part Added",
+        description: "Successfully added part to inventory"
+      });
+      refetchParts();
+      setIsAddPartDialogOpen(false);
+      partForm.reset();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Add Part",
+        description: error.message || "An error occurred",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Remove part mutation
+  const removePartMutation = useMutation({
+    mutationFn: async (partId: string) => {
+      return await apiRequest('DELETE', `/api/fleet/vehicles/${vehicle.id}/parts-inventory/${partId}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Part Removed",
+        description: "Successfully removed part from inventory"
+      });
+      refetchParts();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Remove Part",
+        description: error.message || "An error occurred",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const predictions = predictionsData?.predictions || [];
+  const alerts = alertsData?.alerts || [];
+  const history = serviceHistoryData?.history || [];
+  const schedules = schedulesData?.schedules || [];
+  const parts = partsData?.parts || [];
+
+  // Combine history and schedules for timeline
+  const timelineItems = [
+    ...history.map((item: any) => ({ ...item, isScheduled: false })),
+    ...schedules.map((item: any) => ({ 
+      ...item, 
+      isScheduled: true,
+      isOverdue: new Date(item.serviceDate) < new Date()
+    }))
+  ].sort((a, b) => new Date(b.serviceDate).getTime() - new Date(a.serviceDate).getTime());
+
+  const getRiskLevelColor = (level: string) => {
+    switch (level) {
+      case 'critical': return 'text-red-600 bg-red-50';
+      case 'high': return 'text-orange-600 bg-orange-50';
+      case 'medium': return 'text-yellow-600 bg-yellow-50';
+      case 'low': return 'text-green-600 bg-green-50';
+      default: return 'text-gray-600 bg-gray-50';
+    }
+  };
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'critical': return 'destructive';
+      case 'warning': return 'secondary';
+      case 'info': return 'default';
+      default: return 'outline';
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-hidden">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="absolute right-0 top-0 h-full w-full max-w-4xl bg-background shadow-xl overflow-y-auto">
+        <div className="sticky top-0 z-10 bg-background border-b p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-detail">
+                <X className="h-5 w-5" />
+              </Button>
+              <div>
+                <h2 className="text-2xl font-bold">{vehicle.make} {vehicle.model}</h2>
+                <p className="text-muted-foreground">Unit #{vehicle.unitNumber} • {vehicle.licensePlate}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6">
+          <Tabs defaultValue="overview" className="w-full">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
+              <TabsTrigger value="maintenance" data-testid="tab-maintenance">
+                Maintenance
+                {alerts.length > 0 && (
+                  <Badge variant="destructive" className="ml-2">
+                    {alerts.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="service" data-testid="tab-service">Service History</TabsTrigger>
+              <TabsTrigger value="parts" data-testid="tab-parts">
+                Parts
+                {parts.filter((p: PartsInventoryItem) => p.quantity < (p.minimumStock || 5)).length > 0 && (
+                  <Badge variant="secondary" className="ml-2">
+                    !
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Vehicle Information</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">VIN</p>
+                      <p className="font-medium">{vehicle.vin}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Year</p>
+                      <p className="font-medium">{vehicle.year}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Type</p>
+                      <p className="font-medium">{vehicle.vehicleType}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Current Odometer</p>
+                      <p className="font-medium">{vehicle.currentOdometer?.toLocaleString()} miles</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Last Service</p>
+                      <p className="font-medium">
+                        {vehicle.lastServiceDate 
+                          ? new Date(vehicle.lastServiceDate).toLocaleDateString()
+                          : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Next Service Due</p>
+                      <p className="font-medium">
+                        {vehicle.nextServiceDue 
+                          ? new Date(vehicle.nextServiceDue).toLocaleDateString()
+                          : 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="maintenance" className="space-y-4">
+              {/* Active Alerts */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Active Maintenance Alerts</CardTitle>
+                  <CardDescription>Current issues requiring attention</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoadingAlerts ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-20 w-full" />
+                      <Skeleton className="h-20 w-full" />
+                    </div>
+                  ) : alerts.length > 0 ? (
+                    <div className="space-y-3">
+                      {alerts.map((alert: MaintenanceAlert) => (
+                        <Alert key={alert.id} className={`border-l-4 ${
+                          alert.severity === 'critical' ? 'border-l-red-500' :
+                          alert.severity === 'warning' ? 'border-l-yellow-500' :
+                          'border-l-blue-500'
+                        }`}>
+                          <div className="flex items-start gap-3">
+                            {alert.severity === 'critical' ? (
+                              <ShieldAlert className="h-5 w-5 text-red-500 mt-0.5" />
+                            ) : alert.severity === 'warning' ? (
+                              <AlertTriangle className="h-5 w-5 text-yellow-500 mt-0.5" />
+                            ) : (
+                              <Info className="h-5 w-5 text-blue-500 mt-0.5" />
+                            )}
+                            <div className="flex-1">
+                              <AlertTitle className="mb-1">
+                                {alert.alertType}
+                                <Badge 
+                                  variant={getSeverityColor(alert.severity)} 
+                                  className="ml-2"
+                                  data-testid={`badge-severity-${alert.id}`}
+                                >
+                                  {alert.severity.toUpperCase()}
+                                </Badge>
+                              </AlertTitle>
+                              <AlertDescription>
+                                {alert.message}
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {new Date(alert.createdAt).toLocaleString()}
+                                </p>
+                              </AlertDescription>
+                            </div>
+                          </div>
+                        </Alert>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-500" />
+                      <p>No active alerts</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Predictive Maintenance */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Predictive Maintenance</CardTitle>
+                  <CardDescription>AI-powered maintenance predictions</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoadingPredictions ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-24 w-full" />
+                      <Skeleton className="h-24 w-full" />
+                    </div>
+                  ) : predictions.length > 0 ? (
+                    <div className="space-y-3">
+                      {predictions.map((prediction: MaintenancePrediction) => (
+                        <Card key={prediction.id} className={`p-4 ${getRiskLevelColor(prediction.riskLevel)}`}>
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Tool className="h-4 w-4" />
+                                <h4 className="font-semibold">{prediction.predictionType}</h4>
+                                <Badge 
+                                  variant="outline"
+                                  className={getRiskLevelColor(prediction.riskLevel)}
+                                  data-testid={`badge-risk-${prediction.id}`}
+                                >
+                                  {prediction.riskLevel.toUpperCase()} RISK
+                                </Badge>
+                              </div>
+                              <p className="text-sm mb-2">{prediction.recommendedAction}</p>
+                              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <CalendarClock className="h-3 w-3" />
+                                  {new Date(prediction.predictedDate).toLocaleDateString()}
+                                </span>
+                                {prediction.estimatedCost && (
+                                  <span className="flex items-center gap-1">
+                                    <DollarSign className="h-3 w-3" />
+                                    ${prediction.estimatedCost}
+                                  </span>
+                                )}
+                                <span>
+                                  Confidence: {(prediction.confidence * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Tool className="h-12 w-12 mx-auto mb-2" />
+                      <p>No predictions available</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="service" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Service Timeline</CardTitle>
+                  <CardDescription>Service history and upcoming schedules</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoadingHistory || isLoadingSchedules ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-20 w-full" />
+                      <Skeleton className="h-20 w-full" />
+                      <Skeleton className="h-20 w-full" />
+                    </div>
+                  ) : timelineItems.length > 0 ? (
+                    <div className="relative">
+                      <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+                      <div className="space-y-6">
+                        {timelineItems.map((item: ServiceHistoryItem, index: number) => (
+                          <div key={item.id} className="relative flex items-start gap-4">
+                            <div className={`absolute left-2 w-4 h-4 rounded-full border-2 ${
+                              item.isOverdue ? 'bg-red-500 border-red-500' :
+                              item.isScheduled ? 'bg-blue-500 border-blue-500' :
+                              'bg-green-500 border-green-500'
+                            }`}></div>
+                            <div className="ml-10 flex-1">
+                              <Card className={item.isOverdue ? 'border-red-200 bg-red-50' : ''}>
+                                <CardContent className="p-4">
+                                  <div className="flex items-start justify-between">
+                                    <div>
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <h4 className="font-semibold">{item.serviceType}</h4>
+                                        {item.isScheduled && (
+                                          <Badge 
+                                            variant={item.isOverdue ? "destructive" : "secondary"}
+                                            data-testid={`badge-schedule-${item.id}`}
+                                          >
+                                            {item.isOverdue ? 'OVERDUE' : 'SCHEDULED'}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <p className="text-sm text-muted-foreground">
+                                        {new Date(item.serviceDate).toLocaleDateString()}
+                                        {item.performedBy && ` • By ${item.performedBy}`}
+                                      </p>
+                                      {item.odometer && (
+                                        <p className="text-sm text-muted-foreground">
+                                          Odometer: {item.odometer.toLocaleString()} miles
+                                        </p>
+                                      )}
+                                      {item.notes && (
+                                        <p className="text-sm mt-2">{item.notes}</p>
+                                      )}
+                                    </div>
+                                    {item.cost !== undefined && (
+                                      <div className="text-right">
+                                        <p className="font-semibold">${item.cost}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <History className="h-12 w-12 mx-auto mb-2" />
+                      <p>No service history available</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="parts" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Parts Inventory</CardTitle>
+                      <CardDescription>Manage vehicle parts and supplies</CardDescription>
+                    </div>
+                    <Dialog open={isAddPartDialogOpen} onOpenChange={setIsAddPartDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button data-testid="button-add-part">
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Part
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Add New Part</DialogTitle>
+                          <DialogDescription>
+                            Add a new part to the vehicle inventory
+                          </DialogDescription>
+                        </DialogHeader>
+                        <Form {...partForm}>
+                          <form onSubmit={partForm.handleSubmit((data) => addPartMutation.mutate(data))} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <FormField
+                                control={partForm.control}
+                                name="partName"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Part Name</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} placeholder="Oil Filter" data-testid="input-part-name" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={partForm.control}
+                                name="partNumber"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Part Number</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} placeholder="OF-12345" data-testid="input-part-number" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={partForm.control}
+                                name="quantity"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Quantity</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} type="number" placeholder="10" data-testid="input-quantity" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={partForm.control}
+                                name="unitCost"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Unit Cost ($)</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} type="number" step="0.01" placeholder="25.99" data-testid="input-unit-cost" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={partForm.control}
+                                name="category"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Category</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                      <FormControl>
+                                        <SelectTrigger data-testid="select-category">
+                                          <SelectValue placeholder="Select category" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        <SelectItem value="engine">Engine</SelectItem>
+                                        <SelectItem value="transmission">Transmission</SelectItem>
+                                        <SelectItem value="brakes">Brakes</SelectItem>
+                                        <SelectItem value="electrical">Electrical</SelectItem>
+                                        <SelectItem value="suspension">Suspension</SelectItem>
+                                        <SelectItem value="tires">Tires</SelectItem>
+                                        <SelectItem value="fluids">Fluids</SelectItem>
+                                        <SelectItem value="filters">Filters</SelectItem>
+                                        <SelectItem value="other">Other</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={partForm.control}
+                                name="minimumStock"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Minimum Stock</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} type="number" placeholder="5" data-testid="input-minimum-stock" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                            <FormField
+                              control={partForm.control}
+                              name="location"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Storage Location</FormLabel>
+                                  <FormControl>
+                                    <Input {...field} placeholder="Shelf A-3" data-testid="input-location" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={partForm.control}
+                              name="notes"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Notes</FormLabel>
+                                  <FormControl>
+                                    <Textarea {...field} placeholder="Additional notes..." data-testid="input-notes" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <DialogFooter>
+                              <Button type="submit" disabled={addPartMutation.isPending} data-testid="button-submit-part">
+                                {addPartMutation.isPending ? 'Adding...' : 'Add Part'}
+                              </Button>
+                            </DialogFooter>
+                          </form>
+                        </Form>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {isLoadingParts ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-12 w-full" />
+                    </div>
+                  ) : parts.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Part Name</TableHead>
+                            <TableHead>Part #</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>Quantity</TableHead>
+                            <TableHead>Unit Cost</TableHead>
+                            <TableHead>Total Value</TableHead>
+                            <TableHead>Location</TableHead>
+                            <TableHead>Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {parts.map((part: PartsInventoryItem) => (
+                            <TableRow key={part.id}>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  {part.partName}
+                                  {part.quantity < (part.minimumStock || 5) && (
+                                    <Badge variant="secondary" data-testid={`badge-low-stock-${part.id}`}>
+                                      Low Stock
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>{part.partNumber}</TableCell>
+                              <TableCell>{part.category}</TableCell>
+                              <TableCell>{part.quantity}</TableCell>
+                              <TableCell>${part.unitCost.toFixed(2)}</TableCell>
+                              <TableCell className="font-semibold">
+                                ${part.totalValue.toFixed(2)}
+                              </TableCell>
+                              <TableCell>{part.location || '-'}</TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    if (confirm(`Remove ${part.partName} from inventory?`)) {
+                                      removePartMutation.mutate(part.id);
+                                    }
+                                  }}
+                                  data-testid={`button-remove-part-${part.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      <div className="mt-4 text-right">
+                        <p className="text-sm text-muted-foreground">
+                          Total Inventory Value: 
+                          <span className="font-semibold text-foreground ml-2">
+                            ${parts.reduce((sum: number, part: PartsInventoryItem) => sum + part.totalValue, 0).toFixed(2)}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Package className="h-12 w-12 mx-auto mb-2" />
+                      <p>No parts in inventory</p>
+                      <Button 
+                        variant="outline" 
+                        className="mt-4"
+                        onClick={() => setIsAddPartDialogOpen(true)}
+                      >
+                        Add First Part
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function VehicleManagement() {
@@ -97,6 +877,7 @@ export default function VehicleManagement() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [selectedVehicleForDetail, setSelectedVehicleForDetail] = useState<Vehicle | null>(null);
   const [isBatchScheduleDialogOpen, setIsBatchScheduleDialogOpen] = useState(false);
   const [isPmScheduleDialogOpen, setIsPmScheduleDialogOpen] = useState(false);
   const [selectedVehicleIds, setSelectedVehicleIds] = useState<string[]>([]);
@@ -114,14 +895,43 @@ export default function VehicleManagement() {
 
   const fleetId = fleetAccounts?.id;
 
-  // Fetch vehicles for the fleet
+  // Fetch vehicles for the fleet with enhanced data
   const { data: vehiclesData, isLoading: isLoadingVehicles, refetch: refetchVehicles } = useQuery({
     queryKey: [`/api/fleet/${fleetId}/vehicles`],
     enabled: !!fleetId,
     queryFn: async () => {
       if (!fleetId) return { vehicles: [] };
       try {
-        return await apiRequest('GET', `/api/fleet/${fleetId}/vehicles`);
+        const data = await apiRequest('GET', `/api/fleet/${fleetId}/vehicles`);
+        
+        // Enhance vehicles with maintenance status and alert count
+        const enhancedVehicles = await Promise.all(
+          data.vehicles.map(async (vehicle: Vehicle) => {
+            try {
+              // Fetch alerts for each vehicle
+              const alertsResponse = await apiRequest('GET', `/api/fleet/vehicles/${vehicle.id}/maintenance/alerts`);
+              const activeAlerts = alertsResponse.alerts || [];
+              const criticalAlerts = activeAlerts.filter((a: any) => a.severity === 'critical');
+              const warningAlerts = activeAlerts.filter((a: any) => a.severity === 'warning');
+              
+              return {
+                ...vehicle,
+                activeAlertCount: activeAlerts.length,
+                maintenanceStatus: criticalAlerts.length > 0 ? 'critical' : 
+                                 warningAlerts.length > 0 ? 'attention' : 'good'
+              };
+            } catch (error) {
+              // If fetching alerts fails, return vehicle with defaults
+              return {
+                ...vehicle,
+                activeAlertCount: 0,
+                maintenanceStatus: 'good'
+              };
+            }
+          })
+        );
+        
+        return { vehicles: enhancedVehicles };
       } catch (error) {
         console.error('Failed to fetch vehicles:', error);
         return { vehicles: [] };
@@ -478,7 +1288,20 @@ export default function VehicleManagement() {
       const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       return dueDate < weekFromNow;
     }).length,
-    unassignedVehicles: vehicles.length // In production, track assigned drivers
+    criticalMaintenanceCount: vehicles.filter((v: Vehicle) => v.maintenanceStatus === 'critical').length,
+    attentionNeededCount: vehicles.filter((v: Vehicle) => v.maintenanceStatus === 'attention').length
+  };
+
+  const getMaintenanceStatusIcon = (status: string | undefined) => {
+    switch (status) {
+      case 'critical':
+        return <AlertCircle className="h-4 w-4 text-red-500" />;
+      case 'attention':
+        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+      case 'good':
+      default:
+        return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+    }
   };
 
   if (!fleetId && !isLoadingFleet) {
@@ -648,11 +1471,13 @@ export default function VehicleManagement() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="Semi Truck">Semi Truck</SelectItem>
-                                  <SelectItem value="Box Truck">Box Truck</SelectItem>
-                                  <SelectItem value="Flatbed">Flatbed</SelectItem>
-                                  <SelectItem value="Refrigerated">Refrigerated</SelectItem>
-                                  <SelectItem value="Tanker">Tanker</SelectItem>
+                                  <SelectItem value="semi_truck">Semi Truck</SelectItem>
+                                  <SelectItem value="box_truck">Box Truck</SelectItem>
+                                  <SelectItem value="flatbed">Flatbed</SelectItem>
+                                  <SelectItem value="reefer">Reefer</SelectItem>
+                                  <SelectItem value="tanker">Tanker</SelectItem>
+                                  <SelectItem value="dump_truck">Dump Truck</SelectItem>
+                                  <SelectItem value="tow_truck">Tow Truck</SelectItem>
                                 </SelectContent>
                               </Select>
                               <FormMessage />
@@ -667,7 +1492,7 @@ export default function VehicleManagement() {
                             <FormItem>
                               <FormLabel>License Plate</FormLabel>
                               <FormControl>
-                                <Input {...field} placeholder="CA 12345" data-testid="input-license" />
+                                <Input {...field} placeholder="ABC-1234" data-testid="input-license-plate" />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -679,9 +1504,9 @@ export default function VehicleManagement() {
                           name="currentOdometer"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Current Odometer</FormLabel>
+                              <FormLabel>Current Odometer (miles)</FormLabel>
                               <FormControl>
-                                <Input {...field} placeholder="125000" data-testid="input-odometer" />
+                                <Input {...field} placeholder="150000" data-testid="input-odometer" />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -692,7 +1517,7 @@ export default function VehicleManagement() {
                           control={form.control}
                           name="assignedDriver"
                           render={({ field }) => (
-                            <FormItem className="col-span-2">
+                            <FormItem>
                               <FormLabel>Assigned Driver (Optional)</FormLabel>
                               <Select onValueChange={field.onChange} defaultValue={field.value}>
                                 <FormControl>
@@ -701,9 +1526,9 @@ export default function VehicleManagement() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                                  {drivers.map((driver) => (
-                                    <SelectItem key={driver.id} value={driver.name}>
+                                  <SelectItem value="">Unassigned</SelectItem>
+                                  {drivers.map(driver => (
+                                    <SelectItem key={driver.id} value={driver.id}>
                                       {driver.name}
                                     </SelectItem>
                                   ))}
@@ -714,17 +1539,9 @@ export default function VehicleManagement() {
                           )}
                         />
                       </div>
-
                       <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                          Cancel
-                        </Button>
-                        <Button 
-                          type="submit" 
-                          data-testid="button-save-vehicle"
-                          disabled={addVehicleMutation.isPending}
-                        >
-                          {addVehicleMutation.isPending ? "Saving..." : "Save Vehicle"}
+                        <Button type="submit" disabled={addVehicleMutation.isPending} data-testid="button-submit">
+                          {addVehicleMutation.isPending ? 'Adding...' : 'Add Vehicle'}
                         </Button>
                       </DialogFooter>
                     </form>
@@ -736,274 +1553,215 @@ export default function VehicleManagement() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card data-testid="stat-total-vehicles">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <Card>
+            <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Total Vehicles</CardTitle>
-              <Truck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.totalVehicles}</div>
-              <p className="text-xs text-muted-foreground">In your fleet</p>
+              <div className="flex items-center justify-between">
+                <p className="text-2xl font-bold">{stats.totalVehicles}</p>
+                <Truck className="h-5 w-5 text-muted-foreground" />
+              </div>
             </CardContent>
           </Card>
-
-          <Card data-testid="stat-active">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          
+          <Card>
+            <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Active</CardTitle>
-              <Truck className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.activeVehicles}</div>
-              <p className="text-xs text-muted-foreground">
-                {stats.totalVehicles > 0 
-                  ? `${Math.round((stats.activeVehicles / stats.totalVehicles) * 100)}% of fleet`
-                  : 'No vehicles'}
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-2xl font-bold">{stats.activeVehicles}</p>
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+              </div>
             </CardContent>
           </Card>
 
-          <Card data-testid="stat-pm-due">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <Card>
+            <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">PM Due Soon</CardTitle>
-              <Calendar className="h-4 w-4 text-yellow-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.pmDueSoon}</div>
-              <p className="text-xs text-muted-foreground">Within 7 days</p>
+              <div className="flex items-center justify-between">
+                <p className="text-2xl font-bold">{stats.pmDueSoon}</p>
+                <Clock className="h-5 w-5 text-yellow-500" />
+              </div>
             </CardContent>
           </Card>
 
-          <Card data-testid="stat-drivers">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Unassigned</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Critical Issues</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.unassignedVehicles}</div>
-              <p className="text-xs text-muted-foreground">Vehicles without drivers</p>
+              <div className="flex items-center justify-between">
+                <p className="text-2xl font-bold">{stats.criticalMaintenanceCount}</p>
+                <AlertCircle className="h-5 w-5 text-red-500" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Attention Needed</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <p className="text-2xl font-bold">{stats.attentionNeededCount}</p>
+                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Vehicle Table */}
+        {/* Vehicles Table */}
         <Card>
           <CardHeader>
             <CardTitle>Fleet Vehicles</CardTitle>
             <CardDescription>
-              Manage your fleet vehicles, assignments, and maintenance schedules
+              Manage your fleet vehicles and their maintenance schedules
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="all" className="w-full">
-              <TabsList>
-                <TabsTrigger value="all" data-testid="tab-all">All Vehicles</TabsTrigger>
-                <TabsTrigger value="active" data-testid="tab-active">Active</TabsTrigger>
-                <TabsTrigger value="inactive" data-testid="tab-inactive">Inactive</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="all" className="mt-4">
-                {isLoadingVehicles ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-16 w-full" />
-                    ))}
-                  </div>
-                ) : vehicles.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Truck className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No vehicles found</p>
-                    <p className="text-sm text-muted-foreground mt-2">Add your first vehicle to get started</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[50px]">
-                          <Checkbox 
-                            checked={selectedVehicleIds.length === vehicles.length && vehicles.length > 0}
-                            onCheckedChange={selectAllVehicles}
-                            data-testid="checkbox-select-all"
+            {isLoadingVehicles ? (
+              <div className="space-y-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : vehicles.length > 0 ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={selectedVehicleIds.length === vehicles.length}
+                          onCheckedChange={selectAllVehicles}
+                          data-testid="checkbox-select-all"
+                        />
+                      </TableHead>
+                      <TableHead>Unit #</TableHead>
+                      <TableHead>Vehicle</TableHead>
+                      <TableHead>License Plate</TableHead>
+                      <TableHead>Odometer</TableHead>
+                      <TableHead>Maintenance</TableHead>
+                      <TableHead>Next Service</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {vehicles.map((vehicle: Vehicle) => (
+                      <TableRow key={vehicle.id} className="cursor-pointer hover:bg-muted/50">
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedVehicleIds.includes(vehicle.id)}
+                            onCheckedChange={() => toggleVehicleSelection(vehicle.id)}
+                            data-testid={`checkbox-vehicle-${vehicle.id}`}
                           />
-                        </TableHead>
-                        <TableHead>Unit #</TableHead>
-                        <TableHead>VIN</TableHead>
-                        <TableHead>Make/Model</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>License Plate</TableHead>
-                        <TableHead>Odometer</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {vehicles.map((vehicle: Vehicle) => (
-                        <TableRow key={vehicle.id} data-testid={`vehicle-row-${vehicle.id}`}>
-                          <TableCell>
-                            <Checkbox 
-                              checked={selectedVehicleIds.includes(vehicle.id)}
-                              onCheckedChange={() => toggleVehicleSelection(vehicle.id)}
-                              data-testid={`checkbox-vehicle-${vehicle.id}`}
-                            />
-                          </TableCell>
-                          <TableCell className="font-medium">{vehicle.unitNumber}</TableCell>
-                          <TableCell className="font-mono text-xs">{vehicle.vin}</TableCell>
-                          <TableCell>{vehicle.make} {vehicle.model}</TableCell>
-                          <TableCell>{vehicle.vehicleType}</TableCell>
-                          <TableCell>{vehicle.licensePlate}</TableCell>
-                          <TableCell>{vehicle.currentOdometer?.toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Badge variant={vehicle.isActive ? "default" : "secondary"}>
-                              {vehicle.isActive ? "Active" : "Inactive"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                onClick={() => handleEdit(vehicle)}
-                                data-testid={`button-edit-${vehicle.id}`}
-                                disabled={updateVehicleMutation.isPending}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                onClick={() => setLocation(`/fleet/vehicles/${vehicle.id}`)}
-                                data-testid={`button-history-${vehicle.id}`}
-                              >
-                                <FileText className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                onClick={() => handleDelete(vehicle)}
-                                data-testid={`button-delete-${vehicle.id}`}
-                                disabled={deleteVehicleMutation.isPending}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
+                        </TableCell>
+                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                          <span className="font-medium">{vehicle.unitNumber}</span>
+                        </TableCell>
+                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                          {vehicle.year} {vehicle.make} {vehicle.model}
+                        </TableCell>
+                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                          {vehicle.licensePlate}
+                        </TableCell>
+                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                          {vehicle.currentOdometer?.toLocaleString()} mi
+                        </TableCell>
+                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                          <div className="flex items-center gap-2">
+                            {getMaintenanceStatusIcon(vehicle.maintenanceStatus)}
+                            <span className="text-sm">
+                              {vehicle.maintenanceStatus === 'critical' ? 'Critical' :
+                               vehicle.maintenanceStatus === 'attention' ? 'Attention' : 'Good'}
+                            </span>
+                            {vehicle.activeAlertCount > 0 && (
+                              <Badge variant="outline" data-testid={`badge-alerts-${vehicle.id}`}>
+                                {vehicle.activeAlertCount} alert{vehicle.activeAlertCount > 1 ? 's' : ''}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                          {vehicle.nextServiceDue ? (
+                            <div className="flex items-center gap-1">
+                              <CalendarClock className="h-4 w-4" />
+                              {new Date(vehicle.nextServiceDue).toLocaleDateString()}
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </TabsContent>
-
-              <TabsContent value="active" className="mt-4">
-                {isLoadingVehicles ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-16 w-full" />
-                    ))}
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Unit #</TableHead>
-                        <TableHead>VIN</TableHead>
-                        <TableHead>Make/Model</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Actions</TableHead>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                          {vehicle.isActive ? (
+                            <Badge variant="outline" className="text-green-600">Active</Badge>
+                          ) : (
+                            <Badge variant="secondary">Inactive</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setSelectedVehicleForDetail(vehicle)}
+                              data-testid={`button-view-${vehicle.id}`}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(vehicle)}
+                              data-testid={`button-edit-${vehicle.id}`}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(vehicle)}
+                              data-testid={`button-delete-${vehicle.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {vehicles
-                        .filter((v: Vehicle) => v.isActive)
-                        .map((vehicle: Vehicle) => (
-                          <TableRow key={vehicle.id}>
-                            <TableCell className="font-medium">{vehicle.unitNumber}</TableCell>
-                            <TableCell className="font-mono text-xs">{vehicle.vin}</TableCell>
-                            <TableCell>{vehicle.make} {vehicle.model}</TableCell>
-                            <TableCell>{vehicle.vehicleType}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => handleEdit(vehicle)}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => handleDelete(vehicle)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </TabsContent>
-
-              <TabsContent value="inactive" className="mt-4">
-                {isLoadingVehicles ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-16 w-full" />
                     ))}
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Unit #</TableHead>
-                        <TableHead>VIN</TableHead>
-                        <TableHead>Make/Model</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {vehicles
-                        .filter((v: Vehicle) => !v.isActive)
-                        .map((vehicle: Vehicle) => (
-                          <TableRow key={vehicle.id}>
-                            <TableCell className="font-medium">{vehicle.unitNumber}</TableCell>
-                            <TableCell className="font-mono text-xs">{vehicle.vin}</TableCell>
-                            <TableCell>{vehicle.make} {vehicle.model}</TableCell>
-                            <TableCell>{vehicle.vehicleType}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => handleEdit(vehicle)}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => handleDelete(vehicle)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </TabsContent>
-            </Tabs>
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Truck className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground mb-4">No vehicles in your fleet yet</p>
+                <Button onClick={() => setIsAddDialogOpen(true)} data-testid="button-add-first">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Your First Vehicle
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
-      </div>
+      </main>
+
+      {/* Vehicle Detail View */}
+      {selectedVehicleForDetail && (
+        <VehicleDetailView 
+          vehicle={selectedVehicleForDetail} 
+          onClose={() => setSelectedVehicleForDetail(null)}
+        />
+      )}
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -1100,11 +1858,13 @@ export default function VehicleManagement() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="Semi Truck">Semi Truck</SelectItem>
-                          <SelectItem value="Box Truck">Box Truck</SelectItem>
-                          <SelectItem value="Flatbed">Flatbed</SelectItem>
-                          <SelectItem value="Refrigerated">Refrigerated</SelectItem>
-                          <SelectItem value="Tanker">Tanker</SelectItem>
+                          <SelectItem value="semi_truck">Semi Truck</SelectItem>
+                          <SelectItem value="box_truck">Box Truck</SelectItem>
+                          <SelectItem value="flatbed">Flatbed</SelectItem>
+                          <SelectItem value="reefer">Reefer</SelectItem>
+                          <SelectItem value="tanker">Tanker</SelectItem>
+                          <SelectItem value="dump_truck">Dump Truck</SelectItem>
+                          <SelectItem value="tow_truck">Tow Truck</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -1119,7 +1879,7 @@ export default function VehicleManagement() {
                     <FormItem>
                       <FormLabel>License Plate</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="CA 12345" data-testid="input-edit-license" />
+                        <Input {...field} placeholder="ABC-1234" data-testid="input-edit-license-plate" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1131,52 +1891,18 @@ export default function VehicleManagement() {
                   name="currentOdometer"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Current Odometer</FormLabel>
+                      <FormLabel>Current Odometer (miles)</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="125000" data-testid="input-edit-odometer" />
+                        <Input {...field} placeholder="150000" data-testid="input-edit-odometer" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
-                <FormField
-                  control={form.control}
-                  name="assignedDriver"
-                  render={({ field }) => (
-                    <FormItem className="col-span-2">
-                      <FormLabel>Assigned Driver (Optional)</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-edit-driver">
-                            <SelectValue placeholder="Select driver" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="unassigned">Unassigned</SelectItem>
-                          {drivers.map((driver) => (
-                            <SelectItem key={driver.id} value={driver.name}>
-                              {driver.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
-
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button 
-                  type="submit" 
-                  data-testid="button-update-vehicle"
-                  disabled={updateVehicleMutation.isPending}
-                >
-                  {updateVehicleMutation.isPending ? "Updating..." : "Update Vehicle"}
+                <Button type="submit" disabled={updateVehicleMutation.isPending} data-testid="button-update">
+                  {updateVehicleMutation.isPending ? 'Updating...' : 'Update Vehicle'}
                 </Button>
               </DialogFooter>
             </form>
@@ -1184,7 +1910,7 @@ export default function VehicleManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Batch Scheduling Dialog */}
+      {/* Batch Schedule Dialog */}
       <Dialog open={isBatchScheduleDialogOpen} onOpenChange={setIsBatchScheduleDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -1201,20 +1927,20 @@ export default function VehicleManagement() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Service Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-batch-service-type">
                           <SelectValue placeholder="Select service type" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Oil Change">Oil Change</SelectItem>
-                        <SelectItem value="Tire Rotation">Tire Rotation</SelectItem>
-                        <SelectItem value="Brake Inspection">Brake Inspection</SelectItem>
-                        <SelectItem value="DOT Inspection">DOT Inspection</SelectItem>
-                        <SelectItem value="General Maintenance">General Maintenance</SelectItem>
-                        <SelectItem value="Engine Service">Engine Service</SelectItem>
-                        <SelectItem value="Transmission Service">Transmission Service</SelectItem>
+                        <SelectItem value="oil_change">Oil Change</SelectItem>
+                        <SelectItem value="tire_rotation">Tire Rotation</SelectItem>
+                        <SelectItem value="brake_inspection">Brake Inspection</SelectItem>
+                        <SelectItem value="full_service">Full Service</SelectItem>
+                        <SelectItem value="dot_inspection">DOT Inspection</SelectItem>
+                        <SelectItem value="transmission_service">Transmission Service</SelectItem>
+                        <SelectItem value="coolant_flush">Coolant Flush</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -1229,12 +1955,7 @@ export default function VehicleManagement() {
                   <FormItem>
                     <FormLabel>Scheduled Date</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="date" 
-                        {...field} 
-                        data-testid="input-batch-scheduled-date"
-                        min={new Date().toISOString().split('T')[0]}
-                      />
+                      <Input {...field} type="datetime-local" data-testid="input-batch-date" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1246,8 +1967,8 @@ export default function VehicleManagement() {
                 name="urgency"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Urgency Level</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <FormLabel>Urgency</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-batch-urgency">
                           <SelectValue placeholder="Select urgency" />
@@ -1271,12 +1992,7 @@ export default function VehicleManagement() {
                   <FormItem>
                     <FormLabel>Estimated Duration (minutes)</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="number" 
-                        {...field} 
-                        placeholder="120" 
-                        data-testid="input-batch-duration"
-                      />
+                      <Input {...field} type="number" placeholder="120" data-testid="input-batch-duration" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1290,11 +2006,7 @@ export default function VehicleManagement() {
                   <FormItem>
                     <FormLabel>Description (Optional)</FormLabel>
                     <FormControl>
-                      <Textarea 
-                        {...field} 
-                        placeholder="Additional notes or special instructions..." 
-                        data-testid="textarea-batch-description"
-                      />
+                      <Textarea {...field} placeholder="Additional notes..." data-testid="input-batch-description" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1302,15 +2014,8 @@ export default function VehicleManagement() {
               />
 
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsBatchScheduleDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button 
-                  type="submit" 
-                  data-testid="button-submit-batch-schedule"
-                  disabled={batchScheduleMutation.isPending}
-                >
-                  {batchScheduleMutation.isPending ? "Scheduling..." : "Schedule Maintenance"}
+                <Button type="submit" disabled={batchScheduleMutation.isPending} data-testid="button-batch-submit">
+                  {batchScheduleMutation.isPending ? 'Scheduling...' : 'Schedule Maintenance'}
                 </Button>
               </DialogFooter>
             </form>
@@ -1318,13 +2023,13 @@ export default function VehicleManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* PM Scheduling Dialog */}
+      {/* PM Schedule Dialog */}
       <Dialog open={isPmScheduleDialogOpen} onOpenChange={setIsPmScheduleDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Create PM Schedule</DialogTitle>
             <DialogDescription>
-              Set up a recurring preventive maintenance schedule for a vehicle
+              Set up a preventive maintenance schedule for a vehicle
             </DialogDescription>
           </DialogHeader>
           <Form {...pmScheduleForm}>
@@ -1335,7 +2040,7 @@ export default function VehicleManagement() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Vehicle</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-pm-vehicle">
                           <SelectValue placeholder="Select vehicle" />
@@ -1344,7 +2049,7 @@ export default function VehicleManagement() {
                       <SelectContent>
                         {vehicles.map((vehicle: Vehicle) => (
                           <SelectItem key={vehicle.id} value={vehicle.id}>
-                            {vehicle.unitNumber} - {vehicle.make} {vehicle.model}
+                            {vehicle.unitNumber} - {vehicle.year} {vehicle.make} {vehicle.model}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1360,22 +2065,9 @@ export default function VehicleManagement() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Service Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-pm-service-type">
-                          <SelectValue placeholder="Select service type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="Oil Change">Oil Change</SelectItem>
-                        <SelectItem value="Tire Rotation">Tire Rotation</SelectItem>
-                        <SelectItem value="Brake Inspection">Brake Inspection</SelectItem>
-                        <SelectItem value="DOT Inspection">DOT Inspection</SelectItem>
-                        <SelectItem value="General Maintenance">General Maintenance</SelectItem>
-                        <SelectItem value="Engine Service">Engine Service</SelectItem>
-                        <SelectItem value="Transmission Service">Transmission Service</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <Input {...field} placeholder="e.g., Oil Change, Tire Rotation" data-testid="input-pm-service" />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -1387,7 +2079,7 @@ export default function VehicleManagement() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Frequency</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-pm-frequency">
                           <SelectValue placeholder="Select frequency" />
@@ -1412,12 +2104,7 @@ export default function VehicleManagement() {
                   <FormItem>
                     <FormLabel>Next Service Date</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="date" 
-                        {...field} 
-                        data-testid="input-pm-next-date"
-                        min={new Date().toISOString().split('T')[0]}
-                      />
+                      <Input {...field} type="date" data-testid="input-pm-next-date" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1431,11 +2118,7 @@ export default function VehicleManagement() {
                   <FormItem>
                     <FormLabel>Last Service Date (Optional)</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="date" 
-                        {...field} 
-                        data-testid="input-pm-last-date"
-                      />
+                      <Input {...field} type="date" data-testid="input-pm-last-date" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1449,11 +2132,7 @@ export default function VehicleManagement() {
                   <FormItem>
                     <FormLabel>Notes (Optional)</FormLabel>
                     <FormControl>
-                      <Textarea 
-                        {...field} 
-                        placeholder="Additional notes about this PM schedule..." 
-                        data-testid="textarea-pm-notes"
-                      />
+                      <Textarea {...field} placeholder="Additional notes..." data-testid="input-pm-notes" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1461,15 +2140,8 @@ export default function VehicleManagement() {
               />
 
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsPmScheduleDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button 
-                  type="submit" 
-                  data-testid="button-submit-pm-schedule"
-                  disabled={createPmScheduleMutation.isPending}
-                >
-                  {createPmScheduleMutation.isPending ? "Creating..." : "Create PM Schedule"}
+                <Button type="submit" disabled={createPmScheduleMutation.isPending} data-testid="button-pm-submit">
+                  {createPmScheduleMutation.isPending ? 'Creating...' : 'Create Schedule'}
                 </Button>
               </DialogFooter>
             </form>
