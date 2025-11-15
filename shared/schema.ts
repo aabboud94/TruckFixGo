@@ -475,21 +475,7 @@ export const servicePricing = pgTable("service_pricing", {
   dateIdx: index("idx_service_pricing_dates").on(table.effectiveDate, table.expiryDate)
 }));
 
-export const serviceAreas = pgTable("service_areas", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  type: varchar("type", { length: 20 }).notNull(),
-  coordinates: jsonb("coordinates").notNull(),
-  surchargeType: serviceAreaSurchargeTypeEnum("surcharge_type"),
-  surchargeAmount: decimal("surcharge_amount", { precision: 8, scale: 2 }),
-  surchargePercentage: decimal("surcharge_percentage", { precision: 5, scale: 2 }),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow()
-}, (table) => ({
-  nameIdx: index("idx_service_areas_name").on(table.name),
-  typeIdx: index("idx_service_areas_type").on(table.type)
-}));
+// Note: serviceAreas table is defined later in this file with city-focused structure
 
 // ====================
 // JOB MANAGEMENT
@@ -2455,13 +2441,7 @@ export const insertServicePricingSchema = createInsertSchema(servicePricing).omi
 export type InsertServicePricing = z.infer<typeof insertServicePricingSchema>;
 export type ServicePricing = typeof servicePricing.$inferSelect;
 
-export const insertServiceAreaSchema = createInsertSchema(serviceAreas).omit({ 
-  id: true, 
-  createdAt: true, 
-  updatedAt: true 
-});
-export type InsertServiceArea = z.infer<typeof insertServiceAreaSchema>;
-export type ServiceArea = typeof serviceAreas.$inferSelect;
+// Note: insertServiceAreaSchema is defined later in this file with city-focused structure
 
 // Job Management
 export const insertJobSchema = createInsertSchema(jobs).omit({ 
