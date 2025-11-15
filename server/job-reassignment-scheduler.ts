@@ -2,6 +2,7 @@ import * as cron from 'node-cron';
 import { storage } from './storage';
 import { emailService } from './services/email-service';
 import { trackingWSServer } from './websocket';
+import { executeWithRetry } from './db';
 
 class JobReassignmentScheduler {
   private cronJob: cron.ScheduledTask | null = null;
@@ -59,8 +60,11 @@ class JobReassignmentScheduler {
     try {
       console.log('[JobReassignment] Checking for staled jobs...');
       
-      // Call the storage function to check and reassign staled jobs
-      const reassignments = await storage.checkAndReassignStaledJobs();
+      // Call the storage function to check and reassign staled jobs with retry logic
+      const reassignments = await executeWithRetry(
+        () => storage.checkAndReassignStaledJobs(),
+        { retries: 3 }
+      );
       
       if (reassignments.length === 0) {
         console.log('[JobReassignment] No staled jobs found');

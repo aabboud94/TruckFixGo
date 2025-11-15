@@ -2,6 +2,7 @@ import * as cron from 'node-cron';
 import { reminderService } from './reminder-service';
 import { storage } from './storage';
 import { type Job } from '@shared/schema';
+import { executeWithRetry } from './db';
 
 class ReminderScheduler {
   private cronJobs: Map<string, cron.ScheduledTask> = new Map();
@@ -63,12 +64,19 @@ class ReminderScheduler {
   // Process pending reminders
   private async processReminders() {
     try {
-      const pendingReminders = await storage.getPendingReminders(50);
+      // Wrap database operation with retry logic
+      const pendingReminders = await executeWithRetry(
+        () => storage.getPendingReminders(50),
+        { retries: 3 }
+      );
       
       for (const reminder of pendingReminders) {
         try {
           // Mark as queued to prevent duplicate processing
-          await storage.updateReminderStatus(reminder.id, 'queued');
+          await executeWithRetry(
+            () => storage.updateReminderStatus(reminder.id, 'queued'),
+            { retries: 2 }
+          );
           
           // Process the reminder asynchronously
           setImmediate(async () => {
@@ -76,10 +84,13 @@ class ReminderScheduler {
               await reminderService.sendReminder(reminder);
             } catch (error) {
               console.error(`Failed to send reminder ${reminder.id}:`, error);
-              await storage.updateReminderStatus(
-                reminder.id, 
-                'failed', 
-                (error as Error).message
+              await executeWithRetry(
+                () => storage.updateReminderStatus(
+                  reminder.id, 
+                  'failed', 
+                  (error as Error).message
+                ),
+                { retries: 2 }
               );
             }
           });
@@ -92,7 +103,7 @@ class ReminderScheduler {
         console.log(`Processed ${pendingReminders.length} pending reminders`);
       }
     } catch (error) {
-      console.error('Error processing reminders:', error);
+      console.error('Error processing reminders after retries:', error);
     }
   }
 
@@ -104,8 +115,11 @@ class ReminderScheduler {
       const twelveHoursLater = new Date(now.getTime() + 12 * 60 * 60 * 1000);
       const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
 
-      // Get scheduled jobs that need reminders
-      const upcomingJobs = await storage.getJobsScheduledBetween(now, twentyFourHoursLater);
+      // Get scheduled jobs that need reminders with retry logic
+      const upcomingJobs = await executeWithRetry(
+        () => storage.getJobsScheduledBetween(now, twentyFourHoursLater),
+        { retries: 3 }
+      );
 
       for (const job of upcomingJobs) {
         const scheduledTime = new Date(job.scheduledAt!);

@@ -1,5 +1,6 @@
 import { storage } from './storage';
 import { emailService } from './services/email-service';
+import { executeWithRetry } from './db';
 
 class JobMonitor {
   private monitoringInterval: NodeJS.Timeout | null = null;
@@ -37,12 +38,15 @@ class JobMonitor {
     console.log('[JobMonitor] Checking for unassigned jobs');
     
     try {
-      // Get all new (unassigned) jobs
-      const unassignedJobs = await storage.findJobs({
-        status: 'new',
-        orderBy: 'createdAt',
-        orderDir: 'asc'
-      });
+      // Get all new (unassigned) jobs with retry logic
+      const unassignedJobs = await executeWithRetry(
+        () => storage.findJobs({
+          status: 'new',
+          orderBy: 'createdAt',
+          orderDir: 'asc'
+        }),
+        { retries: 3 }
+      );
 
       console.log(`[JobMonitor] Found ${unassignedJobs.length} unassigned jobs`);
 

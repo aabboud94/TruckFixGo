@@ -2,7 +2,7 @@ import * as cron from 'node-cron';
 import { PostgreSQLStorage } from './storage';
 import { emailService } from './services/email-service';
 import { trackingWSServer } from './websocket';
-import { db } from './db';
+import { db, executeWithRetry } from './db';
 import { contractorJobQueue, jobs, contractorProfiles, users } from '@shared/schema';
 import { and, eq, gte, lte, inArray, sql } from 'drizzle-orm';
 
@@ -115,13 +115,16 @@ export class QueueProcessingService {
     try {
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
-      // Find queued entries older than 2 hours
-      const expiredEntries = await db.select()
-        .from(contractorJobQueue)
-        .where(and(
-          eq(contractorJobQueue.status, 'queued'),
-          lte(contractorJobQueue.queuedAt, twoHoursAgo)
-        ));
+      // Find queued entries older than 2 hours with retry logic
+      const expiredEntries = await executeWithRetry(
+        () => db.select()
+          .from(contractorJobQueue)
+          .where(and(
+            eq(contractorJobQueue.status, 'queued'),
+            lte(contractorJobQueue.queuedAt, twoHoursAgo)
+          )),
+        { retries: 3 }
+      );
 
       for (const entry of expiredEntries) {
         await this.handleQueueTimeout(entry.id);
