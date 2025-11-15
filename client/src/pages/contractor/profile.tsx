@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useWebSocket } from "@/hooks/use-websocket";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -282,6 +283,63 @@ export default function ContractorProfile() {
   });
 
   const contractorId = profileData?.contractor?.id;
+
+  // WebSocket setup for real-time contractor earnings updates
+  const { isConnected } = useWebSocket({
+    eventType: 'contractor_updates',
+    role: 'contractor',
+    onCommissionCalculated: (payload) => {
+      console.log('New commission calculated:', payload);
+      // Invalidate queries to refresh commission data
+      queryClient.invalidateQueries({ queryKey: [`/api/contractors/${contractorId}/commissions`] });
+      
+      // Show toast notification
+      toast({
+        title: "New Commission Earned!",
+        description: `You earned $${payload.amount} for ${payload.jobType}`,
+      });
+    },
+    onPayoutProcessed: (payload) => {
+      console.log('Payout processed:', payload);
+      // Invalidate queries to refresh payout data
+      queryClient.invalidateQueries({ queryKey: [`/api/contractors/${contractorId}/payouts`] });
+      
+      // Show toast notification
+      toast({
+        title: "Payout Processed",
+        description: `$${payload.amount} has been sent to your ${payload.method}`,
+      });
+    },
+    onPerformanceUpdated: (payload) => {
+      console.log('Performance metrics updated:', payload);
+      // Invalidate queries to refresh performance data
+      queryClient.invalidateQueries({ queryKey: [`/api/contractors/${contractorId}/performance-metrics`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/contractors/${contractorId}/performance-goals`] });
+      
+      // Show toast notification for significant changes
+      if (payload.metricType === 'rating' || payload.metricType === 'milestone') {
+        toast({
+          title: "Performance Update",
+          description: payload.message,
+          variant: payload.achievement ? 'default' : undefined,
+        });
+      }
+    },
+    onContractorPartsUpdate: (payload) => {
+      console.log('Contractor parts inventory updated:', payload);
+      // Invalidate parts inventory query
+      queryClient.invalidateQueries({ queryKey: [`/api/contractors/${contractorId}/parts-stock`] });
+      
+      // Show toast notification for low stock
+      if (payload.action === 'low_stock' || payload.action === 'out_of_stock') {
+        toast({
+          title: "Parts Inventory Alert",
+          description: `${payload.partName}: ${payload.message}`,
+          variant: 'destructive',
+        });
+      }
+    },
+  });
 
   // Fetch commission data
   const { data: commissionsData, isLoading: commissionsLoading } = useQuery<CommissionData>({

@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useWebSocket } from "@/hooks/use-websocket";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -881,6 +882,64 @@ export default function VehicleManagement() {
   const [isBatchScheduleDialogOpen, setIsBatchScheduleDialogOpen] = useState(false);
   const [isPmScheduleDialogOpen, setIsPmScheduleDialogOpen] = useState(false);
   const [selectedVehicleIds, setSelectedVehicleIds] = useState<string[]>([]);
+
+  // WebSocket setup for real-time fleet maintenance updates
+  const { isConnected } = useWebSocket({
+    eventType: 'fleet_updates',
+    role: 'fleet_manager',
+    onMaintenanceAlert: (payload) => {
+      console.log('New maintenance alert:', payload);
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: [`/api/fleet/${payload.fleetAccountId}/vehicles`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/fleet/vehicles/${payload.vehicleId}/maintenance/alerts`] });
+      
+      // Show toast notification
+      toast({
+        title: "New Maintenance Alert",
+        description: payload.message,
+        variant: payload.severity === 'critical' ? 'destructive' : 'default',
+      });
+    },
+    onMaintenancePredictionUpdate: (payload) => {
+      console.log('Maintenance prediction updated:', payload);
+      // Invalidate predictions query
+      queryClient.invalidateQueries({ queryKey: [`/api/fleet/vehicles/${payload.vehicleId}/maintenance/predictions`] });
+      
+      // Show toast for high risk predictions
+      if (payload.riskLevel === 'critical' || payload.riskLevel === 'high') {
+        toast({
+          title: "Maintenance Prediction Update",
+          description: `${payload.predictionType} - Risk Level: ${payload.riskLevel}`,
+          variant: payload.riskLevel === 'critical' ? 'destructive' : 'default',
+        });
+      }
+    },
+    onMaintenanceServiceCompleted: (payload) => {
+      console.log('Maintenance service completed:', payload);
+      // Invalidate queries to refresh vehicle and service history
+      queryClient.invalidateQueries({ queryKey: [`/api/fleet/${payload.fleetAccountId}/vehicles`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/fleet/vehicles/${payload.vehicleId}/service-history`] });
+      
+      // Show toast notification
+      toast({
+        title: "Service Completed",
+        description: `${payload.serviceType} completed for vehicle`,
+      });
+    },
+    onFleetPartsUpdate: (payload) => {
+      console.log('Fleet parts inventory updated:', payload);
+      // Invalidate parts inventory query
+      queryClient.invalidateQueries({ queryKey: [`/api/fleet/${payload.fleetAccountId}/parts-inventory`] });
+      
+      // Show toast notification for low stock
+      if (payload.action === 'removed' || payload.action === 'updated') {
+        toast({
+          title: "Parts Inventory Updated",
+          description: `${payload.partName} ${payload.action}`,
+        });
+      }
+    },
+  });
 
   // Get fleet account first
   const { data: fleetAccounts, isLoading: isLoadingFleet } = useQuery({

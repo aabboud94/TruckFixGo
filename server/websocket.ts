@@ -66,7 +66,27 @@ const MessageTypeEnum = z.enum([
   'FUEL_PRICE_UPDATE',
   'FUEL_ALERT',
   'JOIN_FUEL_TRACKING',
-  'LEAVE_FUEL_TRACKING'
+  'LEAVE_FUEL_TRACKING',
+  // Notification events
+  'NOTIFICATION_SENT',
+  'NOTIFICATION_DELIVERED',
+  'NOTIFICATION_BLACKLIST_UPDATED',
+  'JOIN_NOTIFICATIONS',
+  'LEAVE_NOTIFICATIONS',
+  // Fleet maintenance events
+  'MAINTENANCE_ALERT_NEW',
+  'MAINTENANCE_PREDICTION_UPDATED',
+  'MAINTENANCE_SERVICE_COMPLETED',
+  'FLEET_PARTS_UPDATED',
+  'JOIN_FLEET_UPDATES',
+  'LEAVE_FLEET_UPDATES',
+  // Contractor earnings events
+  'COMMISSION_CALCULATED',
+  'PAYOUT_PROCESSED',
+  'PERFORMANCE_UPDATED',
+  'CONTRACTOR_PARTS_UPDATED',
+  'JOIN_EARNINGS_UPDATES',
+  'LEAVE_EARNINGS_UPDATES'
 ]);
 
 const LocationSchema = z.object({
@@ -1912,6 +1932,272 @@ class TrackingWebSocketServer {
         client.send(JSON.stringify(message));
       }
     });
+  }
+
+  // ==================== NOTIFICATION METHODS ====================
+  
+  // Broadcast notification sent event
+  public async broadcastNotificationSent(notification: {
+    id: string;
+    recipientId: string;
+    type: string;
+    channel: 'sms' | 'email' | 'both';
+    message: string;
+    timestamp: string;
+  }) {
+    const message = {
+      type: 'NOTIFICATION_SENT',
+      payload: notification
+    };
+    
+    // Send to the recipient if connected
+    const recipientWs = this.clients.get(notification.recipientId);
+    if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
+      this.sendMessage(recipientWs, message);
+    }
+    
+    // Also broadcast to admins
+    this.clients.forEach((ws) => {
+      if (ws.role === 'admin' && ws.readyState === WebSocket.OPEN) {
+        this.sendMessage(ws, message);
+      }
+    });
+  }
+  
+  // Broadcast notification delivery status
+  public async broadcastNotificationDelivered(delivery: {
+    id: string;
+    notificationId: string;
+    recipientId: string;
+    status: 'delivered' | 'failed' | 'pending';
+    channel: 'sms' | 'email' | 'push';
+    error?: string;
+    timestamp: string;
+  }) {
+    const message = {
+      type: 'NOTIFICATION_DELIVERED',
+      payload: delivery
+    };
+    
+    // Send to the recipient if connected
+    const recipientWs = this.clients.get(delivery.recipientId);
+    if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
+      this.sendMessage(recipientWs, message);
+    }
+    
+    // Also broadcast to admins
+    this.clients.forEach((ws) => {
+      if (ws.role === 'admin' && ws.readyState === WebSocket.OPEN) {
+        this.sendMessage(ws, message);
+      }
+    });
+  }
+  
+  // Broadcast blacklist update
+  public async broadcastBlacklistUpdate(update: {
+    action: 'added' | 'removed';
+    contact: string;
+    type: 'sms' | 'email' | 'all';
+    timestamp: string;
+  }) {
+    const message = {
+      type: 'NOTIFICATION_BLACKLIST_UPDATED',
+      payload: update
+    };
+    
+    // Broadcast to all admins
+    this.clients.forEach((ws) => {
+      if (ws.role === 'admin' && ws.readyState === WebSocket.OPEN) {
+        this.sendMessage(ws, message);
+      }
+    });
+  }
+  
+  // ==================== FLEET MAINTENANCE METHODS ====================
+  
+  // Broadcast new maintenance alert
+  public async broadcastMaintenanceAlert(alert: {
+    id: string;
+    vehicleId: string;
+    fleetAccountId: string;
+    alertType: string;
+    severity: 'info' | 'warning' | 'critical';
+    message: string;
+    recommendedAction?: string;
+    timestamp: string;
+  }) {
+    const message = {
+      type: 'MAINTENANCE_ALERT_NEW',
+      payload: alert
+    };
+    
+    // Broadcast to fleet managers of this account
+    this.clients.forEach((ws) => {
+      if (ws.role === 'fleet_manager' && ws.readyState === WebSocket.OPEN) {
+        // TODO: Add fleet account check when implementing user sessions
+        this.sendMessage(ws, message);
+      }
+    });
+  }
+  
+  // Broadcast maintenance prediction update
+  public async broadcastMaintenancePredictionUpdate(prediction: {
+    vehicleId: string;
+    fleetAccountId: string;
+    predictionType: string;
+    riskLevel: 'low' | 'medium' | 'high' | 'critical';
+    predictedDate: string;
+    estimatedCost?: number;
+    confidence: number;
+    timestamp: string;
+  }) {
+    const message = {
+      type: 'MAINTENANCE_PREDICTION_UPDATED',
+      payload: prediction
+    };
+    
+    // Broadcast to fleet managers of this account
+    this.clients.forEach((ws) => {
+      if (ws.role === 'fleet_manager' && ws.readyState === WebSocket.OPEN) {
+        this.sendMessage(ws, message);
+      }
+    });
+  }
+  
+  // Broadcast service completion
+  public async broadcastMaintenanceServiceCompleted(service: {
+    id: string;
+    vehicleId: string;
+    fleetAccountId: string;
+    serviceType: string;
+    completedBy?: string;
+    cost?: number;
+    notes?: string;
+    timestamp: string;
+  }) {
+    const message = {
+      type: 'MAINTENANCE_SERVICE_COMPLETED',
+      payload: service
+    };
+    
+    // Broadcast to fleet managers of this account
+    this.clients.forEach((ws) => {
+      if (ws.role === 'fleet_manager' && ws.readyState === WebSocket.OPEN) {
+        this.sendMessage(ws, message);
+      }
+    });
+  }
+  
+  // Broadcast fleet parts inventory update
+  public async broadcastFleetPartsUpdate(update: {
+    fleetAccountId: string;
+    partId: string;
+    partName: string;
+    action: 'added' | 'removed' | 'updated';
+    quantity?: number;
+    unitCost?: number;
+    timestamp: string;
+  }) {
+    const message = {
+      type: 'FLEET_PARTS_UPDATED',
+      payload: update
+    };
+    
+    // Broadcast to fleet managers of this account
+    this.clients.forEach((ws) => {
+      if (ws.role === 'fleet_manager' && ws.readyState === WebSocket.OPEN) {
+        this.sendMessage(ws, message);
+      }
+    });
+  }
+  
+  // ==================== CONTRACTOR EARNINGS METHODS ====================
+  
+  // Broadcast commission calculation
+  public async broadcastCommissionCalculated(commission: {
+    contractorId: string;
+    jobId: string;
+    amount: number;
+    commissionRate: number;
+    earned: number;
+    serviceType: string;
+    timestamp: string;
+  }) {
+    const message = {
+      type: 'COMMISSION_CALCULATED',
+      payload: commission
+    };
+    
+    // Send to the specific contractor
+    const contractorWs = this.clients.get(commission.contractorId);
+    if (contractorWs && contractorWs.readyState === WebSocket.OPEN) {
+      this.sendMessage(contractorWs, message);
+    }
+  }
+  
+  // Broadcast payout processed
+  public async broadcastPayoutProcessed(payout: {
+    contractorId: string;
+    payoutId: string;
+    amount: number;
+    method: string;
+    status: 'completed' | 'processing' | 'failed';
+    referenceNumber?: string;
+    timestamp: string;
+  }) {
+    const message = {
+      type: 'PAYOUT_PROCESSED',
+      payload: payout
+    };
+    
+    // Send to the specific contractor
+    const contractorWs = this.clients.get(payout.contractorId);
+    if (contractorWs && contractorWs.readyState === WebSocket.OPEN) {
+      this.sendMessage(contractorWs, message);
+    }
+  }
+  
+  // Broadcast performance update
+  public async broadcastPerformanceUpdate(performance: {
+    contractorId: string;
+    metric: string;
+    oldValue: number;
+    newValue: number;
+    trend: 'up' | 'down' | 'stable';
+    timestamp: string;
+  }) {
+    const message = {
+      type: 'PERFORMANCE_UPDATED',
+      payload: performance
+    };
+    
+    // Send to the specific contractor
+    const contractorWs = this.clients.get(performance.contractorId);
+    if (contractorWs && contractorWs.readyState === WebSocket.OPEN) {
+      this.sendMessage(contractorWs, message);
+    }
+  }
+  
+  // Broadcast contractor parts update
+  public async broadcastContractorPartsUpdate(update: {
+    contractorId: string;
+    partId: string;
+    partName: string;
+    action: 'added' | 'used' | 'restocked';
+    quantity?: number;
+    remainingStock?: number;
+    timestamp: string;
+  }) {
+    const message = {
+      type: 'CONTRACTOR_PARTS_UPDATED',
+      payload: update
+    };
+    
+    // Send to the specific contractor
+    const contractorWs = this.clients.get(update.contractorId);
+    if (contractorWs && contractorWs.readyState === WebSocket.OPEN) {
+      this.sendMessage(contractorWs, message);
+    }
   }
 }
 

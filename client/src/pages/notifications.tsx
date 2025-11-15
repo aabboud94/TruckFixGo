@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
+import { useWebSocket } from "@/hooks/use-websocket";
 import { 
   Bell, 
   Mail, 
@@ -168,6 +169,57 @@ export default function NotificationsManagementPage() {
   const [blacklistForm, setBlacklistForm] = useState({
     contact: "",
     type: "all" as 'sms' | 'email' | 'all',
+  });
+
+  // WebSocket setup for real-time notification updates
+  const { isConnected } = useWebSocket({
+    eventType: 'notifications',
+    role: 'admin',
+    onNotificationSent: (payload) => {
+      console.log('Notification sent:', payload);
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications/reminders'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications/metrics'] });
+      
+      // Show toast notification
+      toast({
+        title: "Notification Sent",
+        description: `${payload.channel} notification sent to recipient`,
+      });
+    },
+    onNotificationDelivered: (payload) => {
+      console.log('Notification delivered:', payload);
+      // Invalidate logs query to show updated delivery status
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications/logs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications/metrics'] });
+      
+      // Show toast based on delivery status
+      if (payload.status === 'delivered') {
+        toast({
+          title: "Notification Delivered",
+          description: "Notification successfully delivered to recipient",
+        });
+      } else if (payload.status === 'failed') {
+        toast({
+          title: "Delivery Failed",
+          description: payload.error || "Failed to deliver notification",
+          variant: "destructive",
+        });
+      }
+    },
+    onBlacklistUpdated: (payload) => {
+      console.log('Blacklist updated:', payload);
+      // Invalidate blacklist query
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications/blacklist'] });
+      
+      // Show toast notification
+      toast({
+        title: "Blacklist Updated",
+        description: payload.action === 'added' 
+          ? `${payload.contact} added to blacklist`
+          : `${payload.contact} removed from blacklist`,
+      });
+    },
   });
 
   // Fetch metrics
