@@ -6,11 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { MapPin, Loader2, Navigation, Phone, Mail } from "lucide-react";
+import { MapPin, Loader2, Navigation, Phone, Mail, User } from "lucide-react";
 import { EmergencyBookingData } from "./index";
 import LocationInput, { LocationData } from "@/components/location-input";
 
 const formSchema = z.object({
+  name: z.string()
+    .min(2, "Name is required")
+    .max(100, "Name must be less than 100 characters"),
   phone: z.string()
     .min(10, "Phone number is required")
     .regex(/^[\d\s\-\+\(\)]+$/, "Invalid phone number format"),
@@ -37,6 +40,7 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      name: initialData.name || "",
       phone: initialData.phone || "",
       email: initialData.email || "",
     },
@@ -57,6 +61,7 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
     }
 
     onComplete({
+      name: values.name,
       phone: values.phone,
       email: values.email,
       location: {
@@ -98,6 +103,35 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
           {/* Contact Information Card */}
           <Card className="border-2">
             <CardContent className="p-6 space-y-4">
+              {/* Name Field */}
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base font-medium flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      Your Name (Required)
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        id="name-input"
+                        type="text"
+                        placeholder="John Smith"
+                        className="h-14 text-base"
+                        data-testid="input-name"
+                        autoComplete="name"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                    <p className="text-sm text-muted-foreground mt-2">
+                      We'll use this name for your service records
+                    </p>
+                  </FormItem>
+                )}
+              />
+
               {/* Phone Number Field */}
               <FormField
                 control={form.control}

@@ -9,6 +9,7 @@ import Confirmation from "./confirmation";
 
 export interface EmergencyBookingData {
   // Step 1
+  name?: string;
   location?: { lat: number; lng: number; address?: string };
   manualLocation?: string;
   phone: string;
