@@ -2703,7 +2703,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         // Get contractor metrics
-        const earnings = await storage.getContractorEarnings(contractorId);
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         const weekStart = new Date();
@@ -2711,15 +2710,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const monthStart = new Date();
         monthStart.setDate(1);
 
-        const todayEarnings = earnings
+        // Get earnings data - returns an object with totalEarnings and transactions
+        const earningsData = await storage.getContractorEarnings(contractorId);
+        const transactions = earningsData.transactions || [];
+
+        const todayEarnings = transactions
           .filter(e => new Date(e.createdAt) >= todayStart)
           .reduce((sum, e) => sum + Number(e.amount), 0);
 
-        const weekEarnings = earnings
+        const weekEarnings = transactions
           .filter(e => new Date(e.createdAt) >= weekStart)
           .reduce((sum, e) => sum + Number(e.amount), 0);
 
-        const monthEarnings = earnings
+        const monthEarnings = transactions
           .filter(e => new Date(e.createdAt) >= monthStart)
           .reduce((sum, e) => sum + Number(e.amount), 0);
 
