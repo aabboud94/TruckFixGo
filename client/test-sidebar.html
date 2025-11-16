@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sidebar Responsive Test</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+    }
+    .test-container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .pass {
+      background: #10b981;
+      color: white;
+    }
+    .fail {
+      background: #ef4444;
+      color: white;
+    }
+    .viewport-info {
+      background: #f3f4f6;
+      padding: 10px;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+    iframe {
+      width: 100%;
+      height: 600px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <h1>TruckFixGo Sidebar Responsive Test Suite</h1>
+    
+    <div class="test-section">
+      <h2>Current Viewport Information</h2>
+      <div class="viewport-info">
+        <p><strong>Width:</strong> <span id="viewport-width"></span>px</p>
+        <p><strong>Height:</strong> <span id="viewport-height"></span>px</p>
+        <p><strong>Device Type:</strong> <span id="device-type"></span></p>
+        <p><strong>Expected Behavior:</strong> <span id="expected-behavior"></span></p>
+      </div>
+    </div>
+
+    <div class="test-section">
+      <h2>Test Results</h2>
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: #f3f4f6;">
+            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Test Case</th>
+            <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Expected</th>
+            <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ddd;">Desktop View (≥768px)</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">Sidebar always visible, no hamburger menu</td>
+            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
+              <span class="status-badge" id="desktop-test">-</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ddd;">Mobile View (<768px)</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">Sidebar hidden by default, hamburger menu visible</td>
+            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
+              <span class="status-badge" id="mobile-test">-</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ddd;">Mobile Interaction</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">Hamburger toggles sidebar overlay with backdrop</td>
+            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
+              <span class="status-badge" id="interaction-test">-</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ddd;">Responsive Transition</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">Smooth transition when resizing window</td>
+            <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
+              <span class="status-badge" id="transition-test">-</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="test-section">
+      <h2>Live Application View</h2>
+      <p>Navigate to any page to test the sidebar behavior:</p>
+      <iframe src="http://localhost:5000" id="app-iframe"></iframe>
+    </div>
+
+    <div class="test-section">
+      <h2>Manual Test Instructions</h2>
+      <ol>
+        <li><strong>Desktop Test:</strong> If your screen is ≥768px wide, verify that:
+          <ul>
+            <li>Sidebar is visible on the left side</li>
+            <li>No hamburger menu button appears in the header</li>
+            <li>Content is pushed to the right by the sidebar</li>
+          </ul>
+        </li>
+        <li><strong>Mobile Test:</strong> Resize browser window to <768px wide, then verify:
+          <ul>
+            <li>Sidebar disappears automatically</li>
+            <li>Hamburger menu button appears in the header (top-left)</li>
+            <li>Content fills the full width</li>
+          </ul>
+        </li>
+        <li><strong>Mobile Interaction Test:</strong> On mobile view:
+          <ul>
+            <li>Click the hamburger menu button</li>
+            <li>Verify sidebar slides in from the left as an overlay</li>
+            <li>Verify a dark backdrop appears behind the sidebar</li>
+            <li>Click the backdrop to close the sidebar</li>
+          </ul>
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    function updateViewportInfo() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const isMobile = width < 768;
+      
+      document.getElementById('viewport-width').textContent = width;
+      document.getElementById('viewport-height').textContent = height;
+      document.getElementById('device-type').textContent = isMobile ? 'Mobile' : 'Desktop';
+      document.getElementById('expected-behavior').textContent = isMobile 
+        ? 'Sidebar hidden, hamburger menu visible' 
+        : 'Sidebar visible, no hamburger menu';
+      
+      // Update test statuses based on viewport
+      if (isMobile) {
+        document.getElementById('mobile-test').textContent = 'CURRENT';
+        document.getElementById('mobile-test').className = 'status-badge pass';
+        document.getElementById('desktop-test').textContent = 'N/A';
+        document.getElementById('desktop-test').className = 'status-badge';
+      } else {
+        document.getElementById('desktop-test').textContent = 'CURRENT';
+        document.getElementById('desktop-test').className = 'status-badge pass';
+        document.getElementById('mobile-test').textContent = 'N/A';
+        document.getElementById('mobile-test').className = 'status-badge';
+      }
+      
+      // Mark interaction and transition tests as manual
+      document.getElementById('interaction-test').textContent = 'MANUAL';
+      document.getElementById('transition-test').textContent = 'MANUAL';
+    }
+    
+    // Update on load and resize
+    updateViewportInfo();
+    window.addEventListener('resize', updateViewportInfo);
+  </script>
+</body>
+</html>
