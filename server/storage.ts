@@ -6049,6 +6049,43 @@ export class PostgreSQLStorage implements IStorage {
       .orderBy(desc(vacationRequests.createdAt));
   }
   
+  async createVacationRequest(data: {
+    contractorId: string;
+    startDate: string;
+    endDate: string;
+    reason?: string;
+    status: string;
+    requestedAt: string;
+  }): Promise<VacationRequest> {
+    const [vacation] = await db.insert(vacationRequests)
+      .values({
+        contractorId: data.contractorId,
+        startDate: new Date(data.startDate),
+        endDate: new Date(data.endDate),
+        reason: data.reason || '',
+        status: data.status as any,
+        requestedAt: new Date(data.requestedAt),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      })
+      .returning();
+    return vacation;
+  }
+
+  async getVacationRequest(id: string): Promise<VacationRequest | null> {
+    const results = await db.select().from(vacationRequests)
+      .where(eq(vacationRequests.id, id))
+      .limit(1);
+    return results[0] || null;
+  }
+
+  async deleteVacationRequest(id: string): Promise<boolean> {
+    const result = await db.delete(vacationRequests)
+      .where(eq(vacationRequests.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
   async findVacationRequests(filters: {
     contractorId?: string;
     status?: string[];
