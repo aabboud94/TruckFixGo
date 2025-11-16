@@ -60,7 +60,12 @@ export default function TestToolsPage() {
   const { data: testModeStatus } = useQuery({
     queryKey: ['/api/test-mode'],
     queryFn: async () => {
-      const response = await fetch('/api/test-mode');
+      const response = await fetch('/api/test-mode', {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to check test mode status: ${response.statusText}`);
+      }
       return response.json();
     }
   });

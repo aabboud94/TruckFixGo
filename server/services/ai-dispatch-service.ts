@@ -461,20 +461,8 @@ class AIDispatchService {
    * Calculate time of day performance
    */
   private calculateTimeOfDayPerformance(contractor: ContractorProfile, jobTime: Date): number {
-    if (!contractor.timeOfDayPerformance) {
-      return 75; // Default score
-    }
-
-    const performance = contractor.timeOfDayPerformance as any;
-    const hour = jobTime.getHours();
-
-    let timeOfDay: string;
-    if (hour >= 6 && hour < 12) timeOfDay = 'morning';
-    else if (hour >= 12 && hour < 17) timeOfDay = 'afternoon';
-    else if (hour >= 17 && hour < 22) timeOfDay = 'evening';
-    else timeOfDay = 'night';
-
-    return Math.round((performance[timeOfDay] || 0.75) * 100);
+    // Performance patterns removed from schema - using default score
+    return 75; // Default score
   }
 
   /**
@@ -490,14 +478,8 @@ class AIDispatchService {
    * Calculate complexity handling capability
    */
   private calculateComplexityHandling(contractor: ContractorProfile, jobComplexity: string): number {
-    if (!contractor.jobComplexityHandling) {
-      return 70; // Default score
-    }
-
-    const complexityPerformance = contractor.jobComplexityHandling as any;
-    const score = (complexityPerformance[jobComplexity] || 0.7) * 100;
-    
-    return Math.round(score);
+    // Performance patterns removed from schema - using default score
+    return 70; // Default score
   }
 
   /**
@@ -739,9 +721,7 @@ class AIDispatchService {
     return {
       metrics,
       patterns: {
-        timeOfDay: profile?.timeOfDayPerformance || {},
-        weather: profile?.weatherPerformance || {},
-        complexity: profile?.jobComplexityHandling || {}
+        // Performance patterns removed from schema
       },
       specializations: profile?.specializations || {},
       recommendations: await this.generatePerformanceRecommendations(contractorId, metrics)
@@ -841,35 +821,9 @@ class AIDispatchService {
     success: boolean,
     metrics: any
   ): Promise<void> {
-    const profile = await storage.getContractorProfile(contractorId);
-    if (!profile) return;
-
-    // Update time of day performance
-    const hour = new Date().getHours();
-    let timeOfDay: string;
-    if (hour >= 6 && hour < 12) timeOfDay = 'morning';
-    else if (hour >= 12 && hour < 17) timeOfDay = 'afternoon';
-    else if (hour >= 17 && hour < 22) timeOfDay = 'evening';
-    else timeOfDay = 'night';
-
-    const currentTimePerformance = (profile.timeOfDayPerformance as any) || {};
-    const currentScore = currentTimePerformance[timeOfDay] || 0.75;
-    
-    // Weighted average with new outcome (10% weight for new data)
-    const newScore = success ? 1 : 0;
-    currentTimePerformance[timeOfDay] = currentScore * 0.9 + newScore * 0.1;
-
-    // Update complexity handling
-    const complexity = await this.analyzeJobComplexity(job);
-    const currentComplexityHandling = (profile.jobComplexityHandling as any) || {};
-    const currentComplexityScore = currentComplexityHandling[complexity] || 0.75;
-    currentComplexityHandling[complexity] = currentComplexityScore * 0.9 + newScore * 0.1;
-
-    // Save updated patterns
-    await storage.updateContractorProfile(contractorId, {
-      timeOfDayPerformance: currentTimePerformance,
-      jobComplexityHandling: currentComplexityHandling
-    });
+    // Performance patterns removed from schema - no updates needed
+    // This method is kept for potential future enhancement
+    return;
   }
 
   /**

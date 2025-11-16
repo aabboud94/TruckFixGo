@@ -976,11 +976,7 @@ export interface IStorage {
   updateContractorSpecializations(contractorId: string, specializations: any): Promise<void>;
   
   // Get contractor performance pattern
-  getContractorPerformancePattern(contractorId: string): Promise<{
-    timeOfDayPerformance: any;
-    weatherPerformance: any;
-    jobComplexityHandling: any;
-  }>;
+  getContractorPerformancePattern(contractorId: string): Promise<{}>;
   
   // Record assignment outcome for learning
   recordAssignmentOutcome(jobId: string, success: boolean, metrics: {
@@ -13754,17 +13750,9 @@ export class PostgreSQLStorage implements IStorage {
       .where(eq(contractorProfiles.userId, contractorId));
   }
 
-  async getContractorPerformancePattern(contractorId: string): Promise<{
-    timeOfDayPerformance: any;
-    weatherPerformance: any;
-    jobComplexityHandling: any;
-  }> {
-    const profile = await this.getContractorProfile(contractorId);
-    return {
-      timeOfDayPerformance: profile?.timeOfDayPerformance || {},
-      weatherPerformance: profile?.weatherPerformance || {},
-      jobComplexityHandling: profile?.jobComplexityHandling || {}
-    };
+  async getContractorPerformancePattern(contractorId: string): Promise<{}> {
+    // Performance patterns removed from schema - returning empty object
+    return {};
   }
 
   async recordAssignmentOutcome(

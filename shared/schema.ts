@@ -231,20 +231,6 @@ export const contractorProfiles = pgTable("contractor_profiles", {
   // AI-enhanced fields for intelligent dispatch
   specializations: text("specializations").array().default(sql`ARRAY[]::text[]`), // Array of specializations like ['engine_repair', 'transmission', 'electrical', 'brakes', 'tires', 'refrigeration']
   
-  certificationScores: jsonb("certification_scores"), // {
-    // ase_master: { score: 95, expiry: "2025-12-31" },
-    // dot_inspector: { score: 88, expiry: "2024-06-30" },
-    // epa_608: { score: 92, expiry: "2026-03-15" },
-    // hazmat: { score: 85, expiry: "2024-11-30" }
-  // }
-  
-  languageSkills: text("language_skills").array().default(sql`ARRAY['English']::text[]`), // ['English', 'Spanish', 'French']
-  
-  // Performance patterns for AI analysis
-  timeOfDayPerformance: jsonb("time_of_day_performance"), // { morning: 0.95, afternoon: 0.88, evening: 0.92, night: 0.85 }
-  weatherPerformance: jsonb("weather_performance"), // { clear: 0.92, rain: 0.88, snow: 0.75, extreme_heat: 0.85 }
-  jobComplexityHandling: jsonb("job_complexity_handling"), // { simple: 0.98, moderate: 0.92, complex: 0.85, emergency: 0.90 }
-  
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow()
 }, (table) => ({
