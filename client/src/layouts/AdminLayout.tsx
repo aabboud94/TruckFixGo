@@ -185,11 +185,11 @@ export default function AdminLayout({ children, title, breadcrumbs = [] }: Admin
                 <Button 
                   size="icon" 
                   variant="ghost"
-                  className="md:hidden"
+                  className="h-11 w-11 md:h-9 md:w-9 md:hidden"
                   onClick={() => setShowMobileSearch(!showMobileSearch)}
                   data-testid="button-search-toggle"
                 >
-                  {showMobileSearch ? <X className="h-4 w-4" /> : <Search className="h-4 w-4" />}
+                  {showMobileSearch ? <X className="h-5 w-5 md:h-4 md:w-4" /> : <Search className="h-5 w-5 md:h-4 md:w-4" />}
                 </Button>
 
                 {/* Notifications */}
@@ -199,19 +199,21 @@ export default function AdminLayout({ children, title, breadcrumbs = [] }: Admin
                 <Button 
                   size="icon" 
                   variant="ghost"
+                  className="h-11 w-11 md:h-9 md:w-9"
                   onClick={() => setLocation('/admin/settings')}
                   data-testid="button-settings"
                 >
-                  <Settings className="h-4 w-4" />
+                  <Settings className="h-5 w-5 md:h-4 md:w-4" />
                 </Button>
 
                 {/* User Menu */}
                 <Button 
                   size="icon" 
                   variant="ghost"
+                  className="h-11 w-11 md:h-9 md:w-9"
                   data-testid="button-user-menu"
                 >
-                  <User className="h-4 w-4" />
+                  <User className="h-5 w-5 md:h-4 md:w-4" />
                 </Button>
               </div>
             </div>
