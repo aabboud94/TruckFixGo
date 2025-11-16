@@ -40,7 +40,7 @@ import {
   Search, Filter, UserPlus, Ban, CheckCircle, XCircle, Star,
   DollarSign, Briefcase, Clock, Award, FileCheck, AlertCircle,
   RefreshCw, Download, TrendingUp, TrendingDown, Loader2, 
-  Edit, Eye, UserCheck, UserX, Mail, ChevronDown
+  Edit, Eye, UserCheck, UserX, Mail, ChevronDown, Database
 } from "lucide-react";
 
 export default function AdminContractors() {
@@ -115,6 +115,32 @@ export default function AdminContractors() {
       toast({
         title: "Tier updated",
         description: "Contractor performance tier has been updated",
+      });
+    },
+  });
+
+  // Test data generator mutation
+  const generateTestContractorsMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', '/api/admin/contractors/generate-test-data', { count: 10 });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0] as string;
+          return key && key.startsWith('/api/admin/contractors');
+        }
+      });
+      toast({
+        title: "Test contractors generated",
+        description: `Generated ${data.contractors.length} test contractors successfully`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Generation failed",
+        description: error.message || "Failed to generate test contractors",
       });
     },
   });
@@ -487,6 +513,26 @@ export default function AdminContractors() {
                 <Download className="mr-2 h-4 w-4" />
                 Export
               </Button>
+              {process.env.NODE_ENV === 'development' && (
+                <Button
+                  variant="outline"
+                  onClick={() => generateTestContractorsMutation.mutate()}
+                  disabled={generateTestContractorsMutation.isPending}
+                  data-testid="button-generate-test-contractors"
+                >
+                  {generateTestContractorsMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Database className="mr-2 h-4 w-4" />
+                      Generate Test Contractors
+                    </>
+                  )}
+                </Button>
+              )}
               <Button
                 onClick={() => navigate('/admin/applications')}
                 data-testid="button-view-applications"

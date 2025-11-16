@@ -120,6 +120,28 @@ export default function AdminJobs() {
       });
     },
   });
+  
+  // Mutation for auto-assigning contractor
+  const autoAssignMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      return apiRequest('POST', `/api/admin/jobs/${jobId}/auto-assign`, {});
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/jobs'] });
+      setShowAssignDialog(false);
+      toast({
+        title: "Job auto-assigned successfully",
+        description: `Assigned to ${data.assignment.contractorName} (Score: ${data.assignment.score})`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Auto-assignment failed",
+        description: error.message || "Unable to find a suitable contractor",
+      });
+    },
+  });
 
   // Mutation for refunding
   const refundMutation = useMutation({
@@ -1235,14 +1257,37 @@ export default function AdminJobs() {
             )}
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setShowAssignDialog(false);
-              setSelectedContractorId('');
-              setSelectedAssigneeId('');
-              setAssigneeType('contractor');
-            }}>
-              Cancel
+          <DialogFooter className="flex justify-between">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                if (selectedJob) {
+                  autoAssignMutation.mutate(selectedJob.id);
+                }
+              }}
+              disabled={autoAssignMutation.isPending}
+              data-testid="button-auto-assign"
+            >
+              {autoAssignMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Auto-Assigning...
+                </>
+              ) : (
+                <>
+                  <Truck className="mr-2 h-4 w-4" />
+                  Auto-Assign Best Match
+                </>
+              )}
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => {
+                setShowAssignDialog(false);
+                setSelectedContractorId('');
+                setSelectedAssigneeId('');
+                setAssigneeType('contractor');
+              }}>
+                Cancel
             </Button>
             <Button 
               onClick={() => {
@@ -1350,6 +1395,7 @@ export default function AdminJobs() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
     </AdminLayout>
   );
 }

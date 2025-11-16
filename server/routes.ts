@@ -13647,6 +13647,368 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // ==================== ADMIN ROUTES ====================
+  
+  // Generate test contractors (Admin only)
+  app.post('/api/admin/contractors/generate-test-data', 
+    requireAdmin, 
+    async (req: Request, res: Response) => {
+      try {
+        const count = parseInt(req.body.count as string) || 10;
+        const generatedContractors = [];
+        
+        // Detroit metro cities for service areas
+        const detroitMetroCities = [
+          'Detroit', 'Warren', 'Sterling Heights', 'Ann Arbor', 'Livonia', 
+          'Dearborn', 'Troy', 'Westland', 'Farmington Hills', 'Rochester Hills',
+          'Southfield', 'Taylor', 'Pontiac', 'St. Clair Shores', 'Royal Oak'
+        ];
+        
+        // Test contractor data templates
+        const contractorTemplates = [
+          { firstName: 'Mike', lastName: 'Johnson', companyName: "Mike's Mobile Tire Repair", specialties: ['tires', 'brakes'] },
+          { firstName: 'Sarah', lastName: 'Williams', companyName: 'Detroit Diesel Docs', specialties: ['engine_repair', 'diesel'] },
+          { firstName: 'Robert', lastName: 'Brown', companyName: 'Quick Fix Fleet Services', specialties: ['transmission', 'electrical'] },
+          { firstName: 'John', lastName: 'Davis', companyName: '24/7 Road Rescue', specialties: ['emergency', 'roadside'] },
+          { firstName: 'Lisa', lastName: 'Martinez', companyName: 'Metro Truck Solutions', specialties: ['hvac', 'refrigeration'] },
+          { firstName: 'James', lastName: 'Wilson', companyName: 'Wilson Truck Repair', specialties: ['suspension', 'alignment'] },
+          { firstName: 'Maria', lastName: 'Garcia', companyName: 'Garcia Mobile Mechanics', specialties: ['hydraulics', 'welding'] },
+          { firstName: 'David', lastName: 'Anderson', companyName: 'Anderson Fleet Care', specialties: ['preventive_maintenance', 'oil_change'] },
+          { firstName: 'Jennifer', lastName: 'Taylor', companyName: 'Taylor Transport Services', specialties: ['dot_inspection', 'compliance'] },
+          { firstName: 'Michael', lastName: 'Thomas', companyName: 'Thomas Truck Tech', specialties: ['diagnostics', 'electronics'] }
+        ];
+        
+        const defaultPassword = await bcrypt.hash('Test123!', 10);
+        
+        for (let i = 0; i < Math.min(count, contractorTemplates.length); i++) {
+          const template = contractorTemplates[i];
+          const phoneNumber = `(313) 555-${String(i + 1).padStart(4, '0')}`;
+          const email = `${template.firstName.toLowerCase()}@${template.companyName.toLowerCase().replace(/[\s']/g, '')}.com`;
+          
+          // Random service cities (3-8 cities per contractor)
+          const numCities = Math.floor(Math.random() * 6) + 3;
+          const serviceCities = detroitMetroCities
+            .sort(() => Math.random() - 0.5)
+            .slice(0, numCities);
+          
+          // Random performance metrics
+          const performanceMetrics = {
+            averageRating: (Math.random() * 2 + 3).toFixed(2), // 3.0 to 5.0
+            totalJobsCompleted: Math.floor(Math.random() * 500) + 50,
+            averageResponseTime: Math.floor(Math.random() * 20) + 10, // 10-30 minutes
+            onTimeArrivalRate: (Math.random() * 20 + 80).toFixed(2), // 80-100%
+            jobCompletionRate: (Math.random() * 10 + 90).toFixed(2), // 90-100%
+            customerSatisfactionScore: (Math.random() * 20 + 80).toFixed(2) // 80-100%
+          };
+          
+          // Working hours with some variation
+          const workingHours = {
+            monday: { start: '07:00', end: '19:00' },
+            tuesday: { start: '07:00', end: '19:00' },
+            wednesday: { start: '07:00', end: '19:00' },
+            thursday: { start: '07:00', end: '19:00' },
+            friday: { start: '07:00', end: '19:00' },
+            saturday: { start: '08:00', end: '16:00' },
+            sunday: { start: '09:00', end: '14:00' }
+          };
+          
+          // Random base location in Detroit metro area
+          const baseLat = 42.3314 + (Math.random() - 0.5) * 0.2;
+          const baseLon = -83.0458 + (Math.random() - 0.5) * 0.3;
+          
+          try {
+            // Create user
+            const user = await storage.createUser({
+              email,
+              phone: phoneNumber,
+              role: 'contractor',
+              firstName: template.firstName,
+              lastName: template.lastName,
+              password: defaultPassword,
+              isActive: true
+            });
+            
+            // Create contractor profile with enhanced fields
+            const profile = await storage.createContractorProfile({
+              userId: user.id,
+              companyName: template.companyName,
+              performanceTier: i < 3 ? 'gold' : i < 6 ? 'silver' : 'bronze',
+              serviceRadius: Math.floor(Math.random() * 30) + 20, // 20-50 miles
+              isAvailable: true,
+              isOnline: true,
+              baseLocationLat: baseLat.toString(),
+              baseLocationLon: baseLon.toString(),
+              specializations: template.specialties,
+              workingHours,
+              currentJobCount: 0,
+              maxJobsPerDay: Math.floor(Math.random() * 3) + 5, // 5-7 jobs
+              serviceCities,
+              ...performanceMetrics,
+              totalReviews: Math.floor(performanceMetrics.totalJobsCompleted * 0.3),
+              isVerifiedContractor: i < 5, // First 5 are verified
+              isFeaturedContractor: i < 2, // First 2 are featured
+              profileCompleteness: 100
+            });
+            
+            // Add contractor services (link to service types)
+            const serviceTypes = await storage.getServiceTypes();
+            for (const specialty of template.specialties) {
+              const serviceType = serviceTypes.find(st => 
+                st.code.toLowerCase().includes(specialty.toLowerCase()) ||
+                st.name.toLowerCase().includes(specialty.toLowerCase())
+              );
+              
+              if (serviceType) {
+                await storage.createContractorService({
+                  contractorId: profile.id,
+                  serviceTypeId: serviceType.id,
+                  isActive: true
+                });
+              }
+            }
+            
+            generatedContractors.push({
+              id: profile.id,
+              name: `${template.firstName} ${template.lastName}`,
+              company: template.companyName,
+              email,
+              phone: phoneNumber,
+              serviceCities,
+              rating: performanceMetrics.averageRating,
+              specialties: template.specialties
+            });
+            
+          } catch (error) {
+            console.error(`[TestData] Error creating contractor ${template.firstName}:`, error);
+          }
+        }
+        
+        res.json({
+          success: true,
+          message: `Generated ${generatedContractors.length} test contractors`,
+          contractors: generatedContractors,
+          defaultPassword: 'Test123!'
+        });
+        
+      } catch (error) {
+        console.error('[TestData] Error generating test contractors:', error);
+        res.status(500).json({ 
+          success: false, 
+          message: 'Failed to generate test contractors',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+  );
+  
+  // Smart auto-assignment algorithm
+  app.post('/api/admin/jobs/:jobId/auto-assign',
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { jobId } = req.params;
+        
+        // Get job details
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        // Get job location (parse from job data)
+        const jobCity = job.city || 'Detroit'; // Default to Detroit if not specified
+        
+        // Find available contractors using smart algorithm
+        const contractors = await storage.findContractors({
+          isAvailable: true,
+          isOnline: true,
+          includeServices: true
+        });
+        
+        // Score each contractor based on multiple criteria
+        const scoredContractors = contractors.map(contractor => {
+          let score = 0;
+          const reasons = [];
+          
+          // 1. Check if online and available
+          if (!contractor.isOnline) {
+            return { contractor, score: -1, reasons: ['Offline'] };
+          }
+          if (!contractor.isAvailable) {
+            return { contractor, score: -1, reasons: ['Not available'] };
+          }
+          
+          // 2. Check working hours
+          const now = new Date();
+          const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()];
+          const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+          
+          if (contractor.workingHours) {
+            const todayHours = contractor.workingHours[dayOfWeek];
+            if (todayHours && todayHours.start && todayHours.end) {
+              if (currentTime >= todayHours.start && currentTime <= todayHours.end) {
+                score += 10;
+                reasons.push('Within working hours');
+              } else {
+                return { contractor, score: -1, reasons: ['Outside working hours'] };
+              }
+            }
+          }
+          
+          // 3. Check service area
+          if (contractor.serviceCities && Array.isArray(contractor.serviceCities)) {
+            if (contractor.serviceCities.includes(jobCity)) {
+              score += 20;
+              reasons.push(`Services ${jobCity}`);
+            } else {
+              // Check if within service radius (fallback)
+              if (job.location && contractor.baseLocationLat && contractor.baseLocationLon) {
+                const distance = calculateDistance(
+                  parseFloat(contractor.baseLocationLat),
+                  parseFloat(contractor.baseLocationLon),
+                  job.location.lat,
+                  job.location.lng
+                );
+                if (distance <= contractor.serviceRadius) {
+                  score += 10;
+                  reasons.push(`Within ${contractor.serviceRadius} mile radius`);
+                } else {
+                  return { contractor, score: -1, reasons: ['Outside service area'] };
+                }
+              }
+            }
+          }
+          
+          // 4. Check service type compatibility
+          if (contractor.contractorServices && job.serviceTypeId) {
+            const hasService = contractor.contractorServices.some(
+              cs => cs.serviceTypeId === job.serviceTypeId && cs.isActive
+            );
+            if (hasService) {
+              score += 15;
+              reasons.push('Has required service type');
+            }
+          }
+          
+          // 5. Load balancing - prefer contractors with fewer active jobs
+          const jobCount = contractor.currentJobCount || 0;
+          const maxJobs = contractor.maxJobsPerDay || 5;
+          
+          if (jobCount >= maxJobs) {
+            return { contractor, score: -1, reasons: ['At max job capacity'] };
+          }
+          
+          const loadScore = ((maxJobs - jobCount) / maxJobs) * 20;
+          score += loadScore;
+          reasons.push(`Load: ${jobCount}/${maxJobs} jobs`);
+          
+          // 6. Performance score
+          if (contractor.averageRating) {
+            const ratingScore = (parseFloat(contractor.averageRating) / 5) * 15;
+            score += ratingScore;
+            reasons.push(`Rating: ${contractor.averageRating}/5`);
+          }
+          
+          if (contractor.onTimeArrivalRate) {
+            const onTimeScore = (parseFloat(contractor.onTimeArrivalRate) / 100) * 10;
+            score += onTimeScore;
+            reasons.push(`On-time: ${contractor.onTimeArrivalRate}%`);
+          }
+          
+          // 7. Response time bonus
+          if (contractor.averageResponseTime && contractor.averageResponseTime < 20) {
+            score += 5;
+            reasons.push(`Fast response: ${contractor.averageResponseTime} min`);
+          }
+          
+          // 8. Tier bonus
+          if (contractor.performanceTier === 'gold') score += 10;
+          else if (contractor.performanceTier === 'silver') score += 5;
+          
+          // 9. Featured contractor bonus
+          if (contractor.isFeaturedContractor) {
+            score += 5;
+            reasons.push('Featured contractor');
+          }
+          
+          return { contractor, score, reasons };
+        })
+        .filter(sc => sc.score > 0)
+        .sort((a, b) => b.score - a.score);
+        
+        if (scoredContractors.length === 0) {
+          return res.status(404).json({ 
+            message: 'No available contractors found',
+            details: 'All contractors are either offline, outside working hours, or at capacity'
+          });
+        }
+        
+        // Select the best contractor
+        const bestMatch = scoredContractors[0];
+        
+        // Assign the job
+        await storage.updateJob(jobId, {
+          contractorId: bestMatch.contractor.userId,
+          status: 'assigned',
+          assignmentMethod: 'smart_auto_assign'
+        });
+        
+        // Update contractor job count
+        await storage.updateContractorProfile(bestMatch.contractor.id, {
+          currentJobCount: (bestMatch.contractor.currentJobCount || 0) + 1,
+          lastAssignedAt: new Date()
+        });
+        
+        // Send email notifications
+        if (emailService.isReady()) {
+          const user = await storage.getUser(bestMatch.contractor.userId);
+          const customer = job.customerId ? await storage.getUser(job.customerId) : null;
+          
+          if (user) {
+            await emailService.sendJobAssignmentNotifications(
+              { ...job, status: 'assigned' },
+              { ...bestMatch.contractor, ...user },
+              customer
+            );
+          }
+        }
+        
+        res.json({
+          success: true,
+          message: 'Job auto-assigned successfully',
+          assignment: {
+            contractorId: bestMatch.contractor.id,
+            contractorName: bestMatch.contractor.companyName,
+            score: bestMatch.score.toFixed(2),
+            reasons: bestMatch.reasons,
+            otherCandidates: scoredContractors.slice(1, 4).map(sc => ({
+              name: sc.contractor.companyName,
+              score: sc.score.toFixed(2),
+              reasons: sc.reasons
+            }))
+          }
+        });
+        
+      } catch (error) {
+        console.error('[AutoAssign] Error:', error);
+        res.status(500).json({ 
+          message: 'Failed to auto-assign job',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+  );
+  
+  // Helper function to calculate distance between two coordinates
+  function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 3959; // Earth's radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
 
   // Get all platform settings
   app.get('/api/admin/settings',
