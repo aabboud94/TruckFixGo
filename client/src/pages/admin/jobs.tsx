@@ -24,7 +24,7 @@ import {
   Search, Filter, Download, RefreshCw, MapPin, Clock, DollarSign,
   User, Truck, AlertCircle, CheckCircle, XCircle, Edit, Eye,
   MessageSquare, Camera, Ban, CreditCard, Loader2, Save, ChevronDown,
-  FileText, Receipt, ChevronUp, Package, Cloud
+  FileText, Receipt, ChevronUp, Package, Cloud, Wrench
 } from "lucide-react";
 
 export default function AdminJobs() {
@@ -1396,7 +1396,6 @@ export default function AdminJobs() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
     </AdminLayout>
   );
 }

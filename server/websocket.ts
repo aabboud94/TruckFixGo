@@ -2264,6 +2264,104 @@ class TrackingWebSocketServer {
   private handleLeaveEarningsUpdates(ws: ExtendedWebSocket) {
     // No special cleanup needed for now
   }
+
+  // ==================== CONTRACTOR STATUS BROADCASTING ====================
+  
+  // Broadcast contractor online/offline status change
+  public async broadcastContractorStatusChange(contractorId: string, status: {
+    isOnline: boolean;
+    nextOnlineAt?: Date;
+    message?: string;
+  }) {
+    const message = {
+      type: 'CONTRACTOR_STATUS_CHANGE',
+      payload: {
+        contractorId,
+        isOnline: status.isOnline,
+        nextOnlineAt: status.nextOnlineAt?.toISOString(),
+        message: status.message,
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    // Broadcast to all connected admin clients
+    this.wss?.clients.forEach((ws: ExtendedWebSocket) => {
+      if (ws.readyState === WebSocket.OPEN && ws.role === 'admin') {
+        ws.send(JSON.stringify(message));
+      }
+    });
+
+    // Also notify any customers tracking jobs assigned to this contractor
+    this.rooms.forEach((room) => {
+      if (room.contractor?.userId === contractorId) {
+        // Notify customers in this tracking room
+        room.customers.forEach((customerWs) => {
+          if (customerWs.readyState === WebSocket.OPEN) {
+            customerWs.send(JSON.stringify({
+              type: 'CONTRACTOR_STATUS_CHANGE',
+              payload: {
+                contractorId,
+                isOnline: status.isOnline,
+                timestamp: new Date().toISOString()
+              }
+            }));
+          }
+        });
+      }
+    });
+
+    console.log(`[WebSocket] Broadcast contractor status change: ${contractorId} is now ${status.isOnline ? 'online' : 'offline'}`);
+  }
+
+  // Broadcast contractor working hours update
+  public async broadcastContractorWorkingHoursUpdate(contractorId: string, workingHours: any) {
+    const message = {
+      type: 'CONTRACTOR_WORKING_HOURS_UPDATE',
+      payload: {
+        contractorId,
+        workingHours,
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    // Broadcast to all connected admin clients
+    this.wss?.clients.forEach((ws: ExtendedWebSocket) => {
+      if (ws.readyState === WebSocket.OPEN && ws.role === 'admin') {
+        ws.send(JSON.stringify(message));
+      }
+    });
+
+    console.log(`[WebSocket] Broadcast working hours update for contractor: ${contractorId}`);
+  }
+
+  // Broadcast contractor vacation update
+  public async broadcastContractorVacationUpdate(contractorId: string, vacation: {
+    action: 'added' | 'removed';
+    startDate: string;
+    endDate: string;
+    reason?: string;
+  }) {
+    const message = {
+      type: 'CONTRACTOR_VACATION_UPDATE',
+      payload: {
+        contractorId,
+        action: vacation.action,
+        startDate: vacation.startDate,
+        endDate: vacation.endDate,
+        reason: vacation.reason,
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    // Broadcast to all connected admin clients
+    this.wss?.clients.forEach((ws: ExtendedWebSocket) => {
+      if (ws.readyState === WebSocket.OPEN && ws.role === 'admin') {
+        ws.send(JSON.stringify(message));
+      }
+    });
+
+    console.log(`[WebSocket] Broadcast vacation ${vacation.action} for contractor: ${contractorId}`);
+  }
 }
 
 export const trackingWSServer = new TrackingWebSocketServer();

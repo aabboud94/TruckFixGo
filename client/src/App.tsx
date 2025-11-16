@@ -36,6 +36,7 @@ import ContractorJobAcceptance from "@/pages/contractor/job-acceptance";
 import ManageDrivers from "@/pages/contractor/manage-drivers";
 import ContractorJobCompletion from "@/pages/contractor/job-completion";
 import ContractorInvoicePreview from "@/pages/contractor/invoice-preview";
+import ContractorSettings from "@/pages/contractor/settings";
 
 // Fleet Pages
 import FleetLanding from "@/pages/fleet";
@@ -144,6 +145,7 @@ function Router() {
       <Route path="/contractor/apply" component={ContractorApply} />
       <Route path="/contractor-signup" component={ContractorSignup} />
       <Route path="/contractor/dashboard" component={ContractorDashboard} />
+      <Route path="/contractor/settings" component={ContractorSettings} />
       <Route path="/contractor/bidding" component={ContractorBidding} />
       <Route path="/contractor/jobs" component={ContractorJobs} />
       <Route path="/contractor/jobs/:jobId" component={ContractorJobs} />

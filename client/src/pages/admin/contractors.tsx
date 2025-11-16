@@ -40,7 +40,8 @@ import {
   Search, Filter, UserPlus, Ban, CheckCircle, XCircle, Star,
   DollarSign, Briefcase, Clock, Award, FileCheck, AlertCircle,
   RefreshCw, Download, TrendingUp, TrendingDown, Loader2, 
-  Edit, Eye, UserCheck, UserX, Mail, ChevronDown, Database
+  Edit, Eye, UserCheck, UserX, Mail, ChevronDown, Database,
+  Wifi, WifiOff, Calendar, CalendarOff
 } from "lucide-react";
 
 export default function AdminContractors() {
@@ -49,6 +50,7 @@ export default function AdminContractors() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [tierFilter, setTierFilter] = useState("all");
+  const [availabilityFilter, setAvailabilityFilter] = useState("all");
   const [selectedContractor, setSelectedContractor] = useState<any>(null);
   const [editedContractor, setEditedContractor] = useState<any>(null);
   const [showContractorDetails, setShowContractorDetails] = useState(false);
@@ -70,6 +72,7 @@ export default function AdminContractors() {
     const params = new URLSearchParams();
     if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter);
     if (tierFilter && tierFilter !== 'all') params.append('tier', tierFilter);
+    if (availabilityFilter && availabilityFilter !== 'all') params.append('availability', availabilityFilter);
     if (searchQuery) params.append('search', searchQuery);
     return params.toString() ? `?${params.toString()}` : '';
   };
@@ -578,6 +581,17 @@ export default function AdminContractors() {
                 <SelectItem value="gold">Gold</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
+              <SelectTrigger className="w-[180px]" data-testid="select-availability-filter">
+                <SelectValue placeholder="Filter by availability" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="online">Online</SelectItem>
+                <SelectItem value="offline">Offline</SelectItem>
+                <SelectItem value="working">Within Working Hours</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Bulk Actions */}
@@ -664,6 +678,7 @@ export default function AdminContractors() {
                     />
                   </TableHead>
                   <TableHead>Contractor</TableHead>
+                  <TableHead>Availability</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="hidden md:table-cell">Tier</TableHead>
                   <TableHead className="hidden lg:table-cell">Rating</TableHead>
@@ -708,6 +723,26 @@ export default function AdminContractors() {
                           <p className="font-medium">{contractor.name}</p>
                           <p className="text-sm text-muted-foreground">{contractor.company}</p>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {contractor.isOnline ? (
+                            <>
+                              <Wifi className="h-4 w-4 text-green-500" />
+                              <span className="text-sm text-green-600">Online</span>
+                            </>
+                          ) : (
+                            <>
+                              <WifiOff className="h-4 w-4 text-gray-400" />
+                              <span className="text-sm text-gray-500">Offline</span>
+                            </>
+                          )}
+                        </div>
+                        {contractor.nextOnlineAt && !contractor.isOnline && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Back at {format(new Date(contractor.nextOnlineAt), 'h:mm a')}
+                          </p>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant={getStatusColor(contractor.status) as any}>
@@ -815,8 +850,9 @@ export default function AdminContractors() {
           
           {selectedContractor && editedContractor && (
             <Tabs defaultValue="info" className="mt-4">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="info">Information</TabsTrigger>
+                <TabsTrigger value="availability">Availability</TabsTrigger>
                 <TabsTrigger value="performance">Performance</TabsTrigger>
                 <TabsTrigger value="earnings">Earnings</TabsTrigger>
                 <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -941,6 +977,118 @@ export default function AdminContractors() {
                       'Save Changes'
                     )}
                   </Button>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="availability" className="space-y-4">
+                <div className="space-y-4">
+                  {/* Online Status */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Current Status</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {selectedContractor.isOnline ? (
+                            <>
+                              <Wifi className="h-5 w-5 text-green-500" />
+                              <span className="font-semibold text-green-600">Online</span>
+                            </>
+                          ) : (
+                            <>
+                              <WifiOff className="h-5 w-5 text-gray-400" />
+                              <span className="font-semibold text-gray-500">Offline</span>
+                            </>
+                          )}
+                        </div>
+                        {selectedContractor.nextOnlineAt && !selectedContractor.isOnline && (
+                          <span className="text-sm text-muted-foreground">
+                            Returns at {format(new Date(selectedContractor.nextOnlineAt), 'MMM d, h:mm a')}
+                          </span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Working Hours */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Working Hours</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {selectedContractor.workingHours ? (
+                        <div className="space-y-2">
+                          {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => {
+                            const dayHours = selectedContractor.workingHours[day];
+                            return (
+                              <div key={day} className="flex items-center justify-between py-1">
+                                <span className="capitalize font-medium">{day}</span>
+                                {dayHours?.enabled ? (
+                                  <span className="text-sm">{dayHours.start} - {dayHours.end}</span>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">Closed</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">No working hours set</p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Upcoming Time Off */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Upcoming Time Off</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {selectedContractor.vacations && selectedContractor.vacations.length > 0 ? (
+                        <div className="space-y-2">
+                          {selectedContractor.vacations.map((vacation: any) => (
+                            <div key={vacation.id} className="flex items-center justify-between py-1 border-l-4 border-l-orange-400 pl-3">
+                              <div>
+                                <p className="font-medium">
+                                  {format(new Date(vacation.startDate), 'MMM d')} - {format(new Date(vacation.endDate), 'MMM d, yyyy')}
+                                </p>
+                                {vacation.reason && (
+                                  <p className="text-sm text-muted-foreground">{vacation.reason}</p>
+                                )}
+                              </div>
+                              <Badge variant="secondary">{vacation.status}</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">No scheduled time off</p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Settings */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Availability Settings</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Max Jobs Per Day</span>
+                          <span className="font-medium">{selectedContractor.maxJobsPerDay || 10}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Auto-Accept Jobs</span>
+                          <span className="font-medium">{selectedContractor.autoAcceptJobs ? 'Yes' : 'No'}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Service Areas</span>
+                          <span className="font-medium">{selectedContractor.serviceAreas?.length || 0} areas</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               </TabsContent>
 

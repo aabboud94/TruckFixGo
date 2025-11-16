@@ -9,6 +9,96 @@ class JobMonitor {
   private readonly ADMIN_ALERT_COOLDOWN = 60 * 60 * 1000; // 1 hour
   private readonly CUSTOMER_NOTIFICATION_COOLDOWN = 30 * 60 * 1000; // 30 minutes
 
+  // Enhanced contractor availability check
+  private async isContractorAvailable(contractorId: string, profile: any): Promise<boolean> {
+    if (!profile) {
+      console.log(`[JobMonitor] No profile found for contractor ${contractorId}`);
+      return false;
+    }
+
+    // Check 1: Online status
+    if (!profile.isOnline) {
+      console.log(`[JobMonitor] Contractor ${contractorId} is offline`);
+      return false;
+    }
+
+    // Check 2: Basic availability flag
+    if (!profile.isAvailable) {
+      console.log(`[JobMonitor] Contractor ${contractorId} is not available`);
+      return false;
+    }
+
+    // Check 3: Working hours
+    if (profile.workingHours) {
+      const now = new Date();
+      const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()];
+      const dayHours = profile.workingHours[dayOfWeek];
+      
+      if (dayHours && dayHours.enabled) {
+        const currentTime = now.getHours() * 60 + now.getMinutes(); // Convert to minutes
+        const [startHour, startMin] = dayHours.start.split(':').map(Number);
+        const [endHour, endMin] = dayHours.end.split(':').map(Number);
+        const startTime = startHour * 60 + startMin;
+        const endTime = endHour * 60 + endMin;
+        
+        if (currentTime < startTime || currentTime > endTime) {
+          console.log(`[JobMonitor] Contractor ${contractorId} is outside working hours`);
+          return false;
+        }
+      } else if (dayHours && !dayHours.enabled) {
+        console.log(`[JobMonitor] Contractor ${contractorId} doesn't work on ${dayOfWeek}`);
+        return false;
+      }
+    }
+
+    // Check 4: Scheduled time off/vacation
+    try {
+      const vacations = await storage.findVacationRequests({
+        contractorId,
+        status: ['approved'],
+        startDate: new Date().toISOString()
+      });
+      
+      const now = new Date();
+      const isOnVacation = vacations.some((vacation: any) => {
+        const start = new Date(vacation.startDate);
+        const end = new Date(vacation.endDate);
+        return now >= start && now <= end;
+      });
+      
+      if (isOnVacation) {
+        console.log(`[JobMonitor] Contractor ${contractorId} is on vacation`);
+        return false;
+      }
+    } catch (error) {
+      console.error(`[JobMonitor] Error checking vacation for contractor ${contractorId}:`, error);
+    }
+
+    // Check 5: Current job load vs maximum
+    if (profile.maxJobsPerDay) {
+      try {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        
+        const todayJobs = await storage.findJobs({
+          contractorId,
+          status: ['assigned', 'en_route', 'on_site', 'completed'],
+          createdAt: todayStart.toISOString()
+        });
+        
+        if (todayJobs.length >= profile.maxJobsPerDay) {
+          console.log(`[JobMonitor] Contractor ${contractorId} has reached max jobs per day (${todayJobs.length}/${profile.maxJobsPerDay})`);
+          return false;
+        }
+      } catch (error) {
+        console.error(`[JobMonitor] Error checking job load for contractor ${contractorId}:`, error);
+      }
+    }
+
+    console.log(`[JobMonitor] Contractor ${contractorId} is available for assignment`);
+    return true;
+  }
+
   public start() {
     console.log('[JobMonitor] Starting job monitoring service');
     console.log('[JobMonitor] Cooldown periods: Admin alerts = 1 hour, Customer notifications = 30 minutes');
@@ -184,7 +274,9 @@ class JobMonitor {
                   
                   // Check if contractor is still available
                   const profile = await storage.getContractorProfile(candidateScore.contractorId);
-                  if (profile?.isAvailable && profile?.isOnline) {
+                  
+                  // Enhanced availability check
+                  if (await this.isContractorAvailable(candidateScore.contractorId, profile)) {
                     selectedContractorId = candidateScore.contractorId;
                     console.log(`[JobMonitor] Selected available contractor: ${selectedContractorId}`);
                     break;

@@ -2421,6 +2421,233 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Get contractor settings
+  app.get('/api/contractor/settings',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        
+        // Get contractor profile
+        const contractorProfile = await storage.getContractorProfile(contractorId);
+        if (!contractorProfile) {
+          return res.status(404).json({ message: 'Contractor profile not found' });
+        }
+
+        // Get vacation requests
+        const vacations = await storage.findVacationRequests({
+          contractorId,
+          status: ['approved', 'pending'],
+          startDate: new Date().toISOString()
+        });
+
+        // Get service types and service areas
+        const serviceTypes = await storage.getAllServiceTypes();
+        const serviceAreas = await storage.getAllServiceAreas();
+        
+        // Get contractor services and areas
+        const contractorServices = await storage.getContractorServices(contractorId);
+        const contractorAreas = await storage.getContractorServiceAreas(contractorId);
+
+        res.json({
+          workingHours: contractorProfile.workingHours || {
+            monday: { enabled: true, start: "08:00", end: "18:00" },
+            tuesday: { enabled: true, start: "08:00", end: "18:00" },
+            wednesday: { enabled: true, start: "08:00", end: "18:00" },
+            thursday: { enabled: true, start: "08:00", end: "18:00" },
+            friday: { enabled: true, start: "08:00", end: "18:00" },
+            saturday: { enabled: false, start: "08:00", end: "18:00" },
+            sunday: { enabled: false, start: "08:00", end: "18:00" }
+          },
+          preferences: {
+            maxJobsPerDay: contractorProfile.maxJobsPerDay || 10,
+            autoAcceptJobs: contractorProfile.autoAcceptJobs || false,
+            preferredServiceTypes: contractorServices.map(s => s.serviceTypeId),
+            serviceAreas: contractorAreas.map(a => a.areaId),
+            minimumJobAmount: contractorProfile.minimumJobAmount || 100,
+            notifyOnNewJobs: contractorProfile.notifyOnNewJobs !== false,
+            notifyOnEmergencyJobs: contractorProfile.notifyOnEmergencyJobs !== false
+          },
+          vacations: vacations.map(v => ({
+            id: v.id,
+            startDate: v.startDate,
+            endDate: v.endDate,
+            reason: v.reason,
+            status: v.status
+          })),
+          availableServiceTypes: serviceTypes,
+          availableServiceAreas: serviceAreas
+        });
+      } catch (error) {
+        console.error('Get contractor settings error:', error);
+        res.status(500).json({ message: 'Failed to get settings' });
+      }
+    }
+  );
+
+  // Update contractor working hours
+  app.put('/api/contractor/settings/working-hours',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const workingHours = req.body;
+
+        // Update contractor profile with new working hours
+        await storage.updateContractorProfile(contractorId, {
+          workingHours
+        });
+
+        res.json({ 
+          message: 'Working hours updated successfully',
+          workingHours
+        });
+      } catch (error) {
+        console.error('Update working hours error:', error);
+        res.status(500).json({ message: 'Failed to update working hours' });
+      }
+    }
+  );
+
+  // Add vacation/time off
+  app.post('/api/contractor/settings/vacation',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const { startDate, endDate, reason } = req.body;
+
+        const vacation = await storage.createVacationRequest({
+          contractorId,
+          startDate: new Date(startDate).toISOString(),
+          endDate: new Date(endDate).toISOString(),
+          reason,
+          status: 'approved', // Auto-approve for now
+          requestedAt: new Date().toISOString()
+        });
+
+        res.json({ 
+          message: 'Vacation scheduled successfully',
+          vacation
+        });
+      } catch (error) {
+        console.error('Add vacation error:', error);
+        res.status(500).json({ message: 'Failed to schedule vacation' });
+      }
+    }
+  );
+
+  // Delete vacation
+  app.delete('/api/contractor/settings/vacation/:id',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const vacationId = req.params.id;
+
+        // Verify vacation belongs to contractor
+        const vacation = await storage.getVacationRequest(vacationId);
+        if (!vacation || vacation.contractorId !== contractorId) {
+          return res.status(404).json({ message: 'Vacation not found' });
+        }
+
+        await storage.deleteVacationRequest(vacationId);
+
+        res.json({ message: 'Vacation removed successfully' });
+      } catch (error) {
+        console.error('Delete vacation error:', error);
+        res.status(500).json({ message: 'Failed to remove vacation' });
+      }
+    }
+  );
+
+  // Update contractor preferences
+  app.put('/api/contractor/settings/preferences',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const {
+          maxJobsPerDay,
+          autoAcceptJobs,
+          preferredServiceTypes,
+          serviceAreas,
+          minimumJobAmount,
+          notifyOnNewJobs,
+          notifyOnEmergencyJobs
+        } = req.body;
+
+        // Update contractor profile
+        await storage.updateContractorProfile(contractorId, {
+          maxJobsPerDay,
+          autoAcceptJobs,
+          minimumJobAmount,
+          notifyOnNewJobs,
+          notifyOnEmergencyJobs
+        });
+
+        // Update contractor service types
+        if (preferredServiceTypes) {
+          await storage.updateContractorServices(contractorId, preferredServiceTypes);
+        }
+
+        // Update contractor service areas
+        if (serviceAreas) {
+          await storage.updateContractorServiceAreas(contractorId, serviceAreas);
+        }
+
+        res.json({ 
+          message: 'Preferences updated successfully',
+          preferences: req.body
+        });
+      } catch (error) {
+        console.error('Update preferences error:', error);
+        res.status(500).json({ message: 'Failed to update preferences' });
+      }
+    }
+  );
+
+  // Toggle contractor online/offline status
+  app.put('/api/contractor/status/toggle',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const { isOnline, nextOnlineAt, message } = req.body;
+
+        // Update contractor profile with new online status
+        await storage.updateContractorProfile(contractorId, {
+          isOnline,
+          lastStatusChange: new Date(),
+          nextOnlineAt: nextOnlineAt ? new Date(nextOnlineAt) : null
+        });
+
+        // Broadcast status change via WebSocket
+        const { trackingWSServer } = await import('./websocket');
+        await trackingWSServer.broadcastContractorStatusChange(contractorId, {
+          isOnline,
+          nextOnlineAt: nextOnlineAt ? new Date(nextOnlineAt) : undefined,
+          message
+        });
+
+        res.json({ 
+          message: `Status updated to ${isOnline ? 'online' : 'offline'}`,
+          isOnline,
+          nextOnlineAt
+        });
+      } catch (error) {
+        console.error('Toggle status error:', error);
+        res.status(500).json({ message: 'Failed to toggle status' });
+      }
+    }
+  );
+
   // Get contractor's active job
   app.get('/api/contractor/active-job', 
     requireAuth,

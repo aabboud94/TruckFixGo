@@ -21,6 +21,7 @@ import {
   RatingSummaryCard 
 } from "@/components/rating-display";
 import { ReviewItem } from "@/components/review-item";
+import { AvailabilityCalendar } from "@/components/availability-calendar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +32,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import {
   DollarSign,
   TrendingUp,
@@ -58,9 +65,14 @@ import {
   Upload,
   FastForward,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Settings,
+  Power,
+  CalendarDays,
+  CircleCheck,
+  CircleX
 } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, addHours } from "date-fns";
 import PerformanceWidget from "@/components/performance-widget";
 import { SOSButton } from "@/components/sos-button";
 import { FuelPriceWidget } from "@/components/fuel-price-widget";
@@ -155,6 +167,8 @@ export default function ContractorDashboard() {
   const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<GeolocationPosition | null>(null);
   const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
+  const [showOfflineDialog, setShowOfflineDialog] = useState(false);
+  const [returnTime, setReturnTime] = useState<string>("");
 
   // Fetch dashboard data
   const { data: dashboardData, isLoading, refetch } = useQuery<DashboardData>({
@@ -387,7 +401,110 @@ export default function ContractorDashboard() {
               </Badge>
             </div>
 
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4">
+              {/* Enhanced Online/Offline Toggle */}
+              <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border ${
+                isOnline ? 'bg-green-50 border-green-300 dark:bg-green-900/20' : 'bg-gray-100 border-gray-300 dark:bg-gray-800'
+              }`}>
+                <div className="flex items-center gap-2">
+                  {isOnline ? (
+                    <CircleCheck className="w-6 h-6 text-green-600" />
+                  ) : (
+                    <CircleX className="w-6 h-6 text-gray-500" />
+                  )}
+                  <div>
+                    <Label className="text-sm font-semibold">
+                      {isOnline ? 'ONLINE' : 'OFFLINE'}
+                    </Label>
+                    {!isOnline && returnTime && (
+                      <p className="text-xs text-muted-foreground">
+                        Back at {returnTime}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {isOnline ? (
+                  <Popover open={showOfflineDialog} onOpenChange={setShowOfflineDialog}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700"
+                        data-testid="button-toggle-status"
+                      >
+                        <Power className="w-4 h-4 mr-1" />
+                        Go Offline
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80">
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <h4 className="font-medium">Going Offline</h4>
+                          <p className="text-sm text-muted-foreground">
+                            When will you be back online?
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="return-time">Return Time (Optional)</Label>
+                          <Input
+                            id="return-time"
+                            type="time"
+                            value={returnTime}
+                            onChange={(e) => setReturnTime(e.target.value)}
+                            data-testid="input-return-time"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setShowOfflineDialog(false);
+                              setReturnTime("");
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setIsOnline(false);
+                              toggleOnlineMutation.mutate(false);
+                              setShowOfflineDialog(false);
+                              toast({
+                                title: "You're now offline",
+                                description: returnTime ? `You'll be back at ${returnTime}` : "You won't receive new job requests",
+                              });
+                            }}
+                            data-testid="button-confirm-offline"
+                          >
+                            Confirm
+                          </Button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setIsOnline(true);
+                      toggleOnlineMutation.mutate(true);
+                      setReturnTime("");
+                      toast({
+                        title: "You're back online!",
+                        description: "You can now receive job requests"
+                      });
+                    }}
+                    data-testid="button-go-online"
+                  >
+                    <Power className="w-4 h-4 mr-1" />
+                    Go Online
+                  </Button>
+                )}
+              </div>
+
               {/* Location Sharing Status */}
               <div className="flex items-center gap-2">
                 {isSharingLocation ? (
@@ -396,7 +513,7 @@ export default function ContractorDashboard() {
                   <WifiOff className="w-4 h-4 text-muted-foreground" />
                 )}
                 <Label htmlFor="location-sharing" className="text-sm">
-                  Location Sharing
+                  GPS
                 </Label>
                 <Switch
                   id="location-sharing"
@@ -406,26 +523,20 @@ export default function ContractorDashboard() {
                 />
               </div>
 
-              {/* Online/Offline Toggle */}
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-600 animate-pulse' : 'bg-gray-400'}`} />
-                <Label htmlFor="online-status" className="text-sm">
-                  {isOnline ? 'Online' : 'Offline'}
-                </Label>
-                <Switch
-                  id="online-status"
-                  checked={isOnline}
-                  onCheckedChange={(checked) => {
-                    setIsOnline(checked);
-                    toggleOnlineMutation.mutate(checked);
-                  }}
-                  data-testid="switch-online"
-                />
-              </div>
+              {/* Settings Link */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/contractor/settings")}
+                data-testid="button-settings"
+              >
+                <Settings className="w-4 h-4 mr-1" />
+                Settings
+              </Button>
 
               {/* WebSocket Connection Status */}
               <Badge variant={isConnected ? "default" : "secondary"}>
-                {isConnected ? "Connected" : "Offline"}
+                {isConnected ? "Connected" : "Disconnected"}
               </Badge>
               
               {/* Emergency SOS Button */}
