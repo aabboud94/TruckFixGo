@@ -20,7 +20,15 @@ import weatherService from "./services/weather-service";
 import { trackingWSServer } from "./websocket";
 import { healthMonitor } from "./health-monitor";
 import { pushNotificationService } from "./services/push-notification-service";
-import { isTestModeEnabled, createTestUsers } from "./test-mode-service";
+import { 
+  isTestModeEnabled, 
+  createTestUsers,
+  generateTestContractors,
+  generateTestJobs,
+  generateTestDrivers,
+  getTestEmails,
+  clearTestEmails
+} from "./test-mode-service";
 import multer from "multer";
 import sharp from "sharp";
 import path from "path";
@@ -74,6 +82,9 @@ import {
   jobs,
   passwordResetTokens,
   fleetContacts,
+  users,
+  driverProfiles,
+  fleetAccounts,
   insertFleetContractSchema,
   insertContractSlaMetricSchema,
   insertContractPenaltySchema,
@@ -389,6 +400,228 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ testMode: false });
     }
   });
+
+  // ==================== TEST TOOLS ROUTES ====================
+  // Only available when TEST_MODE is enabled
+  
+  // Get test data statistics
+  app.get('/api/admin/test-tools/stats', 
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        if (!isTestModeEnabled()) {
+          return res.status(403).json({ message: 'Test mode is not enabled' });
+        }
+
+        // Get counts from database
+        const [contractors] = await db.select({ count: sql<number>`count(*)::int` })
+          .from(contractorProfiles);
+        const [jobsCount] = await db.select({ count: sql<number>`count(*)::int` })
+          .from(jobs);
+        const [drivers] = await db.select({ count: sql<number>`count(*)::int` })
+          .from(driverProfiles);
+        const [fleets] = await db.select({ count: sql<number>`count(*)::int` })
+          .from(fleetAccounts);
+        const [usersCount] = await db.select({ count: sql<number>`count(*)::int` })
+          .from(users);
+        
+        const emails = getTestEmails();
+
+        res.json({
+          contractors: contractors?.count || 0,
+          jobs: jobsCount?.count || 0,
+          drivers: drivers?.count || 0,
+          fleets: fleets?.count || 0,
+          users: usersCount?.count || 0,
+          emails: emails.length
+        });
+      } catch (error) {
+        console.error('Error getting test stats:', error);
+        res.status(500).json({ message: 'Failed to get test statistics' });
+      }
+    }
+  );
+
+  // Generate test contractors
+  app.post('/api/admin/test-tools/generate-contractors',
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        if (!isTestModeEnabled()) {
+          return res.status(403).json({ message: 'Test mode is not enabled' });
+        }
+
+        const count = req.body.count || 5;
+        const contractors = await generateTestContractors(count);
+        
+        res.json({ 
+          message: `Generated ${contractors.length} test contractors successfully`,
+          count: contractors.length
+        });
+      } catch (error) {
+        console.error('Error generating test contractors:', error);
+        res.status(500).json({ message: 'Failed to generate test contractors' });
+      }
+    }
+  );
+
+  // Generate test jobs
+  app.post('/api/admin/test-tools/generate-jobs',
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        if (!isTestModeEnabled()) {
+          return res.status(403).json({ message: 'Test mode is not enabled' });
+        }
+
+        const count = req.body.count || 10;
+        const jobsList = await generateTestJobs(count);
+        
+        res.json({ 
+          message: `Generated ${jobsList.length} test jobs successfully`,
+          count: jobsList.length
+        });
+      } catch (error) {
+        console.error('Error generating test jobs:', error);
+        res.status(500).json({ message: 'Failed to generate test jobs' });
+      }
+    }
+  );
+
+  // Generate test drivers
+  app.post('/api/admin/test-tools/generate-drivers',
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        if (!isTestModeEnabled()) {
+          return res.status(403).json({ message: 'Test mode is not enabled' });
+        }
+
+        const count = req.body.count || 5;
+        const drivers = await generateTestDrivers(count);
+        
+        res.json({ 
+          message: `Generated ${drivers.length} test drivers successfully`,
+          count: drivers.length
+        });
+      } catch (error) {
+        console.error('Error generating test drivers:', error);
+        res.status(500).json({ message: 'Failed to generate test drivers' });
+      }
+    }
+  );
+
+  // Get test emails
+  app.get('/api/admin/test-tools/emails',
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        if (!isTestModeEnabled()) {
+          return res.status(403).json({ message: 'Test mode is not enabled' });
+        }
+
+        const emails = getTestEmails();
+        res.json(emails);
+      } catch (error) {
+        console.error('Error getting test emails:', error);
+        res.status(500).json({ message: 'Failed to get test emails' });
+      }
+    }
+  );
+
+  // Clear test emails
+  app.post('/api/admin/test-tools/clear-emails',
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        if (!isTestModeEnabled()) {
+          return res.status(403).json({ message: 'Test mode is not enabled' });
+        }
+
+        clearTestEmails();
+        res.json({ message: 'Test emails cleared successfully' });
+      } catch (error) {
+        console.error('Error clearing test emails:', error);
+        res.status(500).json({ message: 'Failed to clear test emails' });
+      }
+    }
+  );
+
+  // Clear test data
+  app.post('/api/admin/test-tools/clear-data',
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        if (!isTestModeEnabled()) {
+          return res.status(403).json({ message: 'Test mode is not enabled' });
+        }
+
+        // Delete test contractors (email pattern: testcontractor*@example.com)
+        await db.delete(contractorProfiles)
+          .where(
+            inArray(
+              contractorProfiles.userId,
+              db.select({ id: users.id })
+                .from(users)
+                .where(like(users.email, 'testcontractor%@example.com'))
+            )
+          );
+
+        // Delete test drivers (email pattern: testdriver*@example.com)
+        await db.delete(driverProfiles)
+          .where(
+            inArray(
+              driverProfiles.userId,
+              db.select({ id: users.id })
+                .from(users)
+                .where(like(users.email, 'testdriver%@example.com'))
+            )
+          );
+
+        // Delete test users
+        await db.delete(users)
+          .where(
+            or(
+              like(users.email, 'testcontractor%@example.com'),
+              like(users.email, 'testdriver%@example.com'),
+              like(users.email, 'testcustomer%@example.com')
+            )
+          );
+
+        res.json({ message: 'Test data cleared successfully' });
+      } catch (error) {
+        console.error('Error clearing test data:', error);
+        res.status(500).json({ message: 'Failed to clear test data' });
+      }
+    }
+  );
+
+  // Reset database (dangerous - clears ALL data)
+  app.post('/api/admin/test-tools/reset-database',
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        if (!isTestModeEnabled()) {
+          return res.status(403).json({ message: 'Test mode is not enabled' });
+        }
+
+        // Additional confirmation check
+        if (req.body.confirm !== 'RESET_DATABASE') {
+          return res.status(400).json({ 
+            message: 'Confirmation required. Send { confirm: "RESET_DATABASE" } to proceed' 
+          });
+        }
+
+        // This would typically truncate tables, but for safety we'll just return an error
+        res.status(501).json({ 
+          message: 'Database reset is not implemented for safety reasons. Use clear-data instead.' 
+        });
+      } catch (error) {
+        console.error('Error resetting database:', error);
+        res.status(500).json({ message: 'Failed to reset database' });
+      }
+    }
+  );
   
   // Register new user
   app.post('/api/auth/register', 

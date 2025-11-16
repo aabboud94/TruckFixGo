@@ -197,7 +197,7 @@ export async function generateTestContractors(count: number = 5) {
   for (let i = 0; i < count; i++) {
     const cityIndex = i % DETROIT_METRO_CITIES.length;
     const skillSetIndex = i % CONTRACTOR_SKILLS.length;
-    const isOnline = i % 2 === 0; // Half online, half offline
+    const isOnline = true; // All contractors online as requested
     const activeJobs = Math.floor(Math.random() * 4); // 0-3 active jobs
 
     const email = `testcontractor${i + 1}@example.com`;
