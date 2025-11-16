@@ -6,7 +6,7 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { db } from "./db";
 import { storage } from "./storage";
-import { desc, asc, and, eq, gte, sql, inArray, isNull } from "drizzle-orm";
+import { desc, asc, and, eq, gte, sql, inArray, isNull, like, or } from "drizzle-orm";
 import aiService from "./ai-service";
 import { reminderService } from "./reminder-service";
 import { reminderScheduler } from "./reminder-scheduler";

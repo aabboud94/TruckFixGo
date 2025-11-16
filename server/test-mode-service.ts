@@ -200,7 +200,9 @@ export async function generateTestContractors(count: number = 5) {
     const isOnline = true; // All contractors online as requested
     const activeJobs = Math.floor(Math.random() * 4); // 0-3 active jobs
 
-    const email = `testcontractor${i + 1}@example.com`;
+    // Use timestamp and index to ensure unique emails even when run multiple times
+    const timestamp = Date.now();
+    const email = `testcontractor_${timestamp}_${i + 1}@example.com`;
     
     // Create user
     const [user] = await db.insert(users).values({
@@ -218,42 +220,28 @@ export async function generateTestContractors(count: number = 5) {
     // Create contractor profile
     const [contractor] = await db.insert(contractorProfiles).values({
       userId: user.id,
-      businessName: `Quick Fix ${DETROIT_METRO_CITIES[cityIndex]} #${i + 1}`,
-      businessAddress: `${100 + i} Main St, ${DETROIT_METRO_CITIES[cityIndex]}, MI`,
-      businessPhone: `555-03${String(i).padStart(2, '0')}`,
-      yearsInBusiness: Math.floor(Math.random() * 10) + 1,
-      numberOfTechnicians: Math.floor(Math.random() * 5) + 1,
-      insuranceProvider: 'Test Insurance Co',
-      insurancePolicyNumber: `POL-${String(i).padStart(4, '0')}`,
-      insuranceExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
-      certifications: ['ASE', 'DOT'].slice(0, Math.floor(Math.random() * 2) + 1),
+      companyName: `Quick Fix ${DETROIT_METRO_CITIES[cityIndex]} #${i + 1}`,
       serviceRadius: 25 + Math.floor(Math.random() * 25), // 25-50 miles
       isOnline,
       isAvailable: isOnline,
-      activeJobs,
-      completedJobs: Math.floor(Math.random() * 50),
-      totalEarnings: Math.random() * 50000,
-      rating: 4 + Math.random(), // 4.0 - 5.0
-      responseTime: Math.floor(Math.random() * 30) + 10, // 10-40 minutes
-      preferredPaymentMethod: 'direct_deposit',
-      routingNumber: '123456789',
-      accountNumber: `ACC${String(i).padStart(6, '0')}`,
-      taxId: `TAX${String(i).padStart(6, '0')}`,
-      wcProvider: 'Workers Comp Inc',
-      wcPolicyNumber: `WC-${String(i).padStart(4, '0')}`,
-      wcExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-      backgroundCheckDate: new Date(),
-      drugTestDate: new Date(),
-      licenseNumber: `LIC${String(i).padStart(6, '0')}`,
-      licenseState: 'MI',
-      licenseExpiry: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000), // 2 years
-      emergencyContact: `Emergency Contact ${i + 1}`,
-      emergencyPhone: `555-09${String(i).padStart(2, '0')}`,
-      onboardingCompleted: true,
-      documentsVerified: true,
-      bankVerified: true,
-      contractorType: i % 3 === 0 ? 'company' : 'individual',
-      fleetExperience: ['Semi Trucks', 'Box Trucks', 'Trailers']
+      currentJobCount: activeJobs,
+      totalJobsCompleted: Math.floor(Math.random() * 50),
+      averageRating: String(4 + Math.random()), // 4.0 - 5.0
+      averageResponseTime: Math.floor(Math.random() * 30) + 10, // 10-40 minutes
+      performanceTier: 'bronze' as const,
+      totalReviews: Math.floor(Math.random() * 30),
+      fiveStarCount: Math.floor(Math.random() * 15),
+      fourStarCount: Math.floor(Math.random() * 10),
+      threeStarCount: Math.floor(Math.random() * 3),
+      twoStarCount: Math.floor(Math.random() * 2),
+      oneStarCount: 0,
+      isFleetCapable: i % 2 === 0,
+      hasMobileWaterSource: i % 3 === 0,
+      hasWastewaterRecovery: i % 4 === 0,
+      maxJobsPerDay: 5 + Math.floor(Math.random() * 5),
+      specializations: ['engine_repair', 'transmission', 'electrical', 'brakes', 'tires'].slice(0, Math.floor(Math.random() * 3) + 2),
+      languageSkills: ['English', 'Spanish'].slice(0, Math.floor(Math.random() * 2) + 1),
+      serviceCities: [DETROIT_METRO_CITIES[cityIndex], DETROIT_METRO_CITIES[(cityIndex + 1) % DETROIT_METRO_CITIES.length]]
     }).returning();
 
     // Add services
@@ -331,6 +319,9 @@ export async function generateTestJobs(count: number = 10) {
   const testContractors = await db.select().from(contractorProfiles)
     .limit(5);
 
+  // Use timestamp for unique job generation
+  const timestamp = Date.now();
+  
   for (let i = 0; i < count; i++) {
     const cityIndex = i % DETROIT_METRO_CITIES.length;
     const serviceIndex = i % SERVICE_TYPES.length;
@@ -361,7 +352,7 @@ export async function generateTestJobs(count: number = 10) {
       customerId: customer?.id || randomUUID(),
       customerName: customer ? `${customer.firstName} ${customer.lastName}` : `Test Customer ${i + 1}`,
       customerPhone: customer?.phone || `555-10${String(i).padStart(2, '0')}`,
-      customerEmail: customer?.email || `testcustomer${i + 1}@example.com`,
+      customerEmail: customer?.email || `testcustomer_${timestamp}_${i + 1}@example.com`,
       vehicleInfo: {
         make: ['Freightliner', 'Peterbilt', 'Volvo', 'Kenworth'][i % 4],
         model: ['Cascadia', '579', 'VNL', 'T680'][i % 4],
@@ -411,7 +402,9 @@ export async function generateTestDrivers(count: number = 5) {
   const drivers = [];
 
   for (let i = 0; i < count; i++) {
-    const email = `testdriver${i + 1}@example.com`;
+    // Use timestamp and index to ensure unique emails even when run multiple times
+    const timestamp = Date.now();
+    const email = `testdriver_${timestamp}_${i + 1}@example.com`;
     const cityIndex = i % DETROIT_METRO_CITIES.length;
 
     // Create user
