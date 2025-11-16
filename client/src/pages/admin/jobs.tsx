@@ -611,8 +611,8 @@ export default function AdminJobs() {
                   <div className="space-y-2">
                     <Label>Customer Email</Label>
                     <Input 
-                      value={editedJob.email || editedJob.customer?.email || editedJob.guestEmail || ''} 
-                      onChange={(e) => setEditedJob({ ...editedJob, email: e.target.value })}
+                      value={editedJob.customerEmail || editedJob.email || editedJob.customer?.email || editedJob.guestEmail || ''} 
+                      onChange={(e) => setEditedJob({ ...editedJob, customerEmail: e.target.value })}
                       placeholder="Enter customer email"
                       type="email"
                     />
