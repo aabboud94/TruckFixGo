@@ -262,8 +262,8 @@ export default function FleetDashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold">Fleet Dashboard</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl md:text-3xl font-bold">Fleet Dashboard</h1>
+          <p className="text-base md:text-sm text-muted-foreground leading-relaxed">
             Welcome back, {fleetAccount.companyName || 'Fleet Manager'}
           </p>
         </div>

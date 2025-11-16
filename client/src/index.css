@@ -319,6 +319,241 @@
     color: hsl(var(--muted-foreground));
     pointer-events: none;
   }
+  
+  /* ========================================
+     MOBILE-FIRST RESPONSIVE TYPOGRAPHY
+     Optimized for better readability on mobile devices
+     Mobile sizes are larger, desktop sizes remain unchanged
+     ======================================== */
+  
+  /* Responsive text sizes - mobile first approach */
+  .text-responsive-xs {
+    @apply text-sm md:text-xs;  /* 14px mobile, 12px desktop */
+  }
+  
+  .text-responsive-sm {
+    @apply text-base md:text-sm;  /* 16px mobile, 14px desktop */
+  }
+  
+  .text-responsive-base {
+    @apply text-lg md:text-base;  /* 18px mobile, 16px desktop */
+  }
+  
+  .text-responsive-lg {
+    @apply text-xl md:text-lg;  /* 20px mobile, 18px desktop */
+  }
+  
+  .text-responsive-xl {
+    @apply text-2xl md:text-xl;  /* 24px mobile, 20px desktop */
+  }
+  
+  .text-responsive-2xl {
+    @apply text-3xl md:text-2xl;  /* 30px mobile, 24px desktop */
+  }
+  
+  .text-responsive-3xl {
+    @apply text-4xl md:text-3xl;  /* 36px mobile, 30px desktop */
+  }
+  
+  .text-responsive-4xl {
+    @apply text-5xl md:text-4xl;  /* 48px mobile, 36px desktop */
+  }
+  
+  /* Responsive line heights for better readability */
+  .leading-responsive-tight {
+    @apply leading-snug md:leading-tight;
+  }
+  
+  .leading-responsive-normal {
+    @apply leading-relaxed md:leading-normal;  /* 1.5 mobile, 1.5 desktop */
+  }
+  
+  .leading-responsive-relaxed {
+    @apply leading-relaxed md:leading-relaxed;  /* 1.625 mobile, 1.625 desktop */
+  }
+  
+  .leading-responsive-loose {
+    @apply leading-loose md:leading-relaxed;  /* 2 mobile, 1.625 desktop */
+  }
+  
+  /* Responsive spacing between elements */
+  .space-y-responsive {
+    @apply space-y-3 md:space-y-2;
+  }
+  
+  .space-y-responsive-lg {
+    @apply space-y-4 md:space-y-3;
+  }
+  
+  /* Typography presets for common use cases */
+  
+  /* Paragraphs with optimized mobile readability */
+  .text-paragraph {
+    @apply text-base leading-relaxed md:text-sm md:leading-normal;
+  }
+  
+  /* Labels with minimum 14px on mobile */
+  .text-label {
+    @apply text-sm md:text-xs font-medium;
+  }
+  
+  /* Helper/description text */
+  .text-helper {
+    @apply text-sm md:text-xs text-muted-foreground leading-relaxed md:leading-normal;
+  }
+  
+  /* Headers with better mobile hierarchy */
+  .text-h1 {
+    @apply text-3xl md:text-4xl font-bold leading-tight tracking-tight;
+  }
+  
+  .text-h2 {
+    @apply text-2xl md:text-3xl font-semibold leading-snug tracking-tight;
+  }
+  
+  .text-h3 {
+    @apply text-xl md:text-2xl font-semibold leading-snug;
+  }
+  
+  .text-h4 {
+    @apply text-lg md:text-xl font-medium leading-normal;
+  }
+  
+  .text-h5 {
+    @apply text-base md:text-lg font-medium leading-normal;
+  }
+  
+  /* Table cells optimized for mobile */
+  .text-table-cell {
+    @apply text-sm md:text-xs leading-relaxed md:leading-normal;
+  }
+  
+  .text-table-header {
+    @apply text-sm md:text-xs font-medium leading-normal;
+  }
+  
+  /* Card content optimization */
+  .text-card-title {
+    @apply text-xl md:text-2xl font-semibold leading-tight;
+  }
+  
+  .text-card-description {
+    @apply text-base md:text-sm text-muted-foreground leading-relaxed md:leading-normal;
+  }
+  
+  .text-card-content {
+    @apply text-base md:text-sm leading-relaxed md:leading-normal;
+  }
+  
+  /* Button text for better tap targets */
+  .text-button {
+    @apply text-base md:text-sm font-medium;
+  }
+  
+  .text-button-sm {
+    @apply text-sm md:text-xs font-medium;
+  }
+  
+  /* Badge text */
+  .text-badge {
+    @apply text-xs font-medium;
+  }
+  
+  /* Form elements */
+  .text-input {
+    @apply text-base md:text-sm;
+  }
+  
+  .text-input-label {
+    @apply text-sm md:text-xs font-medium;
+  }
+  
+  .text-input-helper {
+    @apply text-sm md:text-xs text-muted-foreground;
+  }
+  
+  /* Dialog text optimization */
+  .text-dialog-title {
+    @apply text-xl md:text-lg font-semibold leading-tight;
+  }
+  
+  .text-dialog-description {
+    @apply text-base md:text-sm text-muted-foreground leading-relaxed md:leading-normal;
+  }
+  
+  /* List items */
+  .text-list-item {
+    @apply text-base md:text-sm leading-relaxed md:leading-normal;
+  }
+  
+  /* Navigation text */
+  .text-nav {
+    @apply text-base md:text-sm font-medium;
+  }
+  
+  .text-nav-sm {
+    @apply text-sm md:text-xs font-medium;
+  }
+  
+  /* Dashboard metrics */
+  .text-metric-value {
+    @apply text-2xl md:text-3xl font-bold;
+  }
+  
+  .text-metric-label {
+    @apply text-sm md:text-xs text-muted-foreground;
+  }
+  
+  /* Stat cards */
+  .text-stat-value {
+    @apply text-2xl md:text-2xl font-bold;
+  }
+  
+  .text-stat-label {
+    @apply text-sm md:text-sm font-medium text-muted-foreground;
+  }
+  
+  .text-stat-change {
+    @apply text-sm md:text-xs;
+  }
+  
+  /* Mobile-optimized link text */
+  .text-link {
+    @apply text-base md:text-sm underline-offset-4 hover:underline;
+  }
+  
+  /* Breadcrumb text */
+  .text-breadcrumb {
+    @apply text-sm md:text-xs;
+  }
+  
+  /* Toast/notification text */
+  .text-toast-title {
+    @apply text-base md:text-sm font-semibold;
+  }
+  
+  .text-toast-description {
+    @apply text-sm md:text-xs leading-relaxed;
+  }
+  
+  /* Tab text */
+  .text-tab {
+    @apply text-base md:text-sm font-medium;
+  }
+  
+  /* Dropdown/Select text */
+  .text-dropdown-item {
+    @apply text-base md:text-sm;
+  }
+  
+  /* Alert text */
+  .text-alert-title {
+    @apply text-base md:text-sm font-medium leading-tight;
+  }
+  
+  .text-alert-description {
+    @apply text-base md:text-sm leading-relaxed md:leading-normal;
+  }
 
   .no-default-hover-elevate {}
 
