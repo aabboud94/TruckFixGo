@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { LogIn, Truck, Shield, AlertCircle, Home } from "lucide-react";
+import { LogIn, Truck, Shield, AlertCircle, Home, TestTube, User, UserCog, Users } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 const loginSchema = z.object({
@@ -25,6 +25,21 @@ export default function Login() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [isTestMode, setIsTestMode] = useState(false);
+
+  // Check if test mode is enabled
+  useEffect(() => {
+    const checkTestMode = async () => {
+      try {
+        const response = await fetch('/api/test-mode');
+        const data = await response.json();
+        setIsTestMode(data.testMode === true);
+      } catch (error) {
+        console.error('Failed to check test mode:', error);
+      }
+    };
+    checkTestMode();
+  }, []);
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -33,6 +48,59 @@ export default function Login() {
       password: ""
     }
   });
+
+  const quickLogin = async (email: string, password: string, role: string) => {
+    setIsLoading(true);
+    setLoginError(null);
+    
+    try {
+      // Make API call to test quick login endpoint
+      const result = await apiRequest("POST", "/api/auth/test-login", {
+        email,
+        password,
+        role
+      });
+      
+      if (result.user && result.user.role) {
+        const userName = result.user.firstName || result.user.companyName || result.user.email;
+        
+        toast({
+          title: "Test Login Successful",
+          description: `Logged in as ${role}: ${userName}`,
+        });
+        
+        // Redirect based on user role
+        switch (result.user.role) {
+          case "admin":
+          case "system_admin":
+            setLocation("/admin");
+            break;
+          case "fleet_manager":
+            setLocation("/fleet/dashboard");
+            break;
+          case "contractor":
+            setLocation("/contractor/dashboard");
+            break;
+          case "driver":
+            setLocation("/");
+            break;
+          default:
+            setLocation("/");
+        }
+      }
+    } catch (error) {
+      console.error("Quick login error:", error);
+      setLoginError("Quick login failed. Please try manual login.");
+      
+      toast({
+        title: "Quick Login Failed",
+        description: "Please ensure test users are created.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true);
@@ -139,6 +207,65 @@ export default function Login() {
               Sign in to access your TruckFixGo account
             </CardDescription>
           </CardHeader>
+          
+          {/* Test Mode Quick Login Section */}
+          {isTestMode && (
+            <CardContent className="pt-0 pb-4">
+              <Alert className="bg-orange-50 border-orange-300 dark:bg-orange-950/20 dark:border-orange-800">
+                <TestTube className="h-4 w-4 text-orange-600" />
+                <AlertDescription className="text-orange-800 dark:text-orange-300">
+                  <div className="font-semibold mb-2">Test Mode Active - Quick Login Available</div>
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => quickLogin("testadmin@example.com", "Test123456!", "admin")}
+                      disabled={isLoading}
+                      data-testid="button-quick-login-admin"
+                    >
+                      <UserCog className="w-3 h-3 mr-1" />
+                      Admin
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => quickLogin("testcontractor@example.com", "Test123456!", "contractor")}
+                      disabled={isLoading}
+                      data-testid="button-quick-login-contractor"
+                    >
+                      <Shield className="w-3 h-3 mr-1" />
+                      Contractor
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => quickLogin("testfleet@example.com", "Test123456!", "fleet_manager")}
+                      disabled={isLoading}
+                      data-testid="button-quick-login-fleet"
+                    >
+                      <Users className="w-3 h-3 mr-1" />
+                      Fleet Manager
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => quickLogin("testdriver@example.com", "Test123456!", "driver")}
+                      disabled={isLoading}
+                      data-testid="button-quick-login-driver"
+                    >
+                      <User className="w-3 h-3 mr-1" />
+                      Driver
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            </CardContent>
+          )}
+          
           <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

@@ -1342,6 +1342,7 @@ export default function AdminJobs() {
                 </>
               )}
             </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
