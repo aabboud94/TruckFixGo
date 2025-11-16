@@ -376,15 +376,15 @@ export default function AdminJobs() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Job ID</TableHead>
-                  <TableHead>Type</TableHead>
+                  <TableHead className="hidden md:table-cell">Type</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Service</TableHead>
+                  <TableHead className="hidden lg:table-cell">Service</TableHead>
                   <TableHead>Customer</TableHead>
-                  <TableHead>Contractor</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Weather</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Created</TableHead>
+                  <TableHead className="hidden md:table-cell">Contractor</TableHead>
+                  <TableHead className="hidden lg:table-cell">Location</TableHead>
+                  <TableHead className="hidden xl:table-cell">Weather</TableHead>
+                  <TableHead className="hidden md:table-cell">Price</TableHead>
+                  <TableHead className="hidden lg:table-cell">Created</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -407,7 +407,7 @@ export default function AdminJobs() {
                     return (
                       <TableRow key={job.id}>
                         <TableCell className="font-mono">{job.jobNumber || job.id}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           <Badge variant={job.type === 'emergency' ? 'destructive' : 'default'}>
                             {job.type}
                           </Badge>
@@ -427,14 +427,14 @@ export default function AdminJobs() {
                             );
                           })()}
                         </TableCell>
-                        <TableCell>{job.service}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{job.service}</TableCell>
                         <TableCell>
                           <div>
                             <p className="font-medium">{job.customer?.name || job.customerName || 'Guest'}</p>
                             <p className="text-sm text-muted-foreground">{job.customer?.phone || job.customerPhone || 'N/A'}</p>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           {job.contractor ? (
                             <div>
                               <p className="font-medium">{job.contractor.name}</p>
@@ -444,7 +444,7 @@ export default function AdminJobs() {
                             <span className="text-muted-foreground">Unassigned</span>
                           )}
                         </TableCell>
-                        <TableCell className="max-w-[200px]">
+                        <TableCell className="hidden lg:table-cell max-w-[200px]">
                           <p className="truncate" title={
                             typeof job.location === 'object' && job.location 
                               ? job.locationAddress || `${job.location.lat?.toFixed(4)}, ${job.location.lng?.toFixed(4)}`
@@ -455,15 +455,15 @@ export default function AdminJobs() {
                               : job.location || 'Unknown'}
                           </p>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden xl:table-cell">
                           {job.location && typeof job.location === 'object' && job.location.lat && job.location.lng ? (
                             <WeatherBadge lat={job.location.lat} lng={job.location.lng} />
                           ) : (
                             <span className="text-muted-foreground">-</span>
                           )}
                         </TableCell>
-                        <TableCell>${job.price}</TableCell>
-                        <TableCell>{format(job.createdAt, 'MMM d, h:mm a')}</TableCell>
+                        <TableCell className="hidden md:table-cell">${job.price}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{format(job.createdAt, 'MMM d, h:mm a')}</TableCell>
                         <TableCell>
                           <div className="flex gap-1">
                             <Button

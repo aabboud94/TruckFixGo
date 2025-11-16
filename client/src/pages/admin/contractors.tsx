@@ -619,13 +619,13 @@ export default function AdminContractors() {
                   </TableHead>
                   <TableHead>Contractor</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Tier</TableHead>
-                  <TableHead>Rating</TableHead>
-                  <TableHead>Jobs</TableHead>
-                  <TableHead>Avg Response</TableHead>
-                  <TableHead>Total Earnings</TableHead>
-                  <TableHead>Balance</TableHead>
-                  <TableHead>Joined</TableHead>
+                  <TableHead className="hidden md:table-cell">Tier</TableHead>
+                  <TableHead className="hidden lg:table-cell">Rating</TableHead>
+                  <TableHead className="hidden md:table-cell">Jobs</TableHead>
+                  <TableHead className="hidden xl:table-cell">Avg Response</TableHead>
+                  <TableHead className="hidden lg:table-cell">Total Earnings</TableHead>
+                  <TableHead className="hidden xl:table-cell">Balance</TableHead>
+                  <TableHead className="hidden lg:table-cell">Joined</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -668,18 +668,18 @@ export default function AdminContractors() {
                           {contractor.status}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <Badge className={getTierColor(contractor.tier)}>
                           {contractor.tier}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden lg:table-cell">
                         <div className="flex items-center gap-1">
                           <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
                           <span>{contractor.rating}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <div>
                           <p>{contractor.completedJobs}/{contractor.totalJobs}</p>
                           <Progress 
@@ -688,10 +688,10 @@ export default function AdminContractors() {
                           />
                         </div>
                       </TableCell>
-                      <TableCell>{contractor.avgResponseTime} min</TableCell>
-                      <TableCell>${contractor.totalEarnings.toLocaleString()}</TableCell>
-                      <TableCell>${contractor.currentBalance.toLocaleString()}</TableCell>
-                      <TableCell>{format(contractor.joinedAt, 'MMM d, yyyy')}</TableCell>
+                      <TableCell className="hidden xl:table-cell">{contractor.avgResponseTime} min</TableCell>
+                      <TableCell className="hidden lg:table-cell">${contractor.totalEarnings.toLocaleString()}</TableCell>
+                      <TableCell className="hidden xl:table-cell">${contractor.currentBalance.toLocaleString()}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{format(contractor.joinedAt, 'MMM d, yyyy')}</TableCell>
                       <TableCell>
                         <div className="flex gap-1 relative z-10">
                           <Button

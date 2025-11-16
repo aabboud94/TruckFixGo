@@ -556,11 +556,11 @@ export default function AdminUsers() {
                   <TableHead>User</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Verified</TableHead>
-                  <TableHead>2FA</TableHead>
-                  <TableHead>Jobs</TableHead>
-                  <TableHead>Joined</TableHead>
-                  <TableHead>Last Login</TableHead>
+                  <TableHead className="hidden md:table-cell">Verified</TableHead>
+                  <TableHead className="hidden lg:table-cell">2FA</TableHead>
+                  <TableHead className="hidden md:table-cell">Jobs</TableHead>
+                  <TableHead className="hidden lg:table-cell">Joined</TableHead>
+                  <TableHead className="hidden xl:table-cell">Last Login</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -600,25 +600,25 @@ export default function AdminUsers() {
                       </TableCell>
                       <TableCell>{getRoleBadge(user.role)}</TableCell>
                       <TableCell>{getStatusBadge(user.status)}</TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         {user.emailVerified ? (
                           <CheckCircle className="h-4 w-4 text-green-600" />
                         ) : (
                           <XCircle className="h-4 w-4 text-red-600" />
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden lg:table-cell">
                         {user.twoFactorEnabled ? (
                           <Shield className="h-4 w-4 text-green-600" />
                         ) : (
                           <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
-                      <TableCell>{user.totalJobs}</TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">{user.totalJobs}</TableCell>
+                      <TableCell className="hidden lg:table-cell">
                         {user.createdAt ? format(new Date(user.createdAt), 'MMM d, yyyy') : 'Never'}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden xl:table-cell">
                         <div className="flex items-center gap-1">
                           <Clock className="h-3 w-3 text-muted-foreground" />
                           <span className="text-sm">

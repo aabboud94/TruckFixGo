@@ -6,12 +6,37 @@ const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
 >(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
-    <table
-      ref={ref}
-      className={cn("w-full caption-bottom text-sm", className)}
-      {...props}
-    />
+  <div className="relative w-full">
+    {/* Horizontal scroll container with enhanced mobile experience */}
+    <div className="overflow-x-auto 
+                    relative
+                    -mx-4 px-4 md:mx-0 md:px-0
+                    [&::-webkit-scrollbar]:h-2 
+                    [&::-webkit-scrollbar-track]:bg-gray-100 
+                    [&::-webkit-scrollbar-thumb]:bg-gray-300 
+                    [&::-webkit-scrollbar-thumb]:rounded-full
+                    dark:[&::-webkit-scrollbar-track]:bg-gray-800 
+                    dark:[&::-webkit-scrollbar-thumb]:bg-gray-600">
+      {/* Left shadow indicator */}
+      <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-4 
+                      bg-gradient-to-r from-background/80 to-transparent z-10 
+                      opacity-0 md:hidden
+                      [.overflow-x-auto:hover>&]:opacity-100" />
+      {/* Right shadow indicator */}
+      <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-4 
+                      bg-gradient-to-l from-background/80 to-transparent z-10 
+                      opacity-0 md:hidden
+                      [.overflow-x-auto:hover>&]:opacity-100" />
+      <table
+        ref={ref}
+        className={cn("min-w-full caption-bottom text-sm", className)}
+        {...props}
+      />
+    </div>
+    {/* Mobile scroll hint */}
+    <div className="text-xs text-muted-foreground text-center mt-1 md:hidden">
+      ← Scroll horizontally to see more →
+    </div>
   </div>
 ))
 Table.displayName = "Table"
@@ -73,7 +98,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
+      "h-12 px-2 md:px-4 text-left align-middle font-medium text-muted-foreground whitespace-nowrap [&:has([role=checkbox])]:pr-0",
       className
     )}
     {...props}
@@ -87,7 +112,7 @@ const TableCell = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <td
     ref={ref}
-    className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0", className)}
+    className={cn("p-2 md:p-4 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0", className)}
     {...props}
   />
 ))
