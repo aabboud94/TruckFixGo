@@ -143,10 +143,10 @@ export function NotificationsPanel() {
         <Button
           variant="ghost"
           size="icon"
-          className="relative"
+          className="relative h-11 w-11 md:h-9 md:w-9"
           data-testid="button-notifications"
         >
-          <Bell className="h-5 w-5" />
+          <Bell className="h-5 w-5 md:h-4 md:w-4" />
           {unreadCount > 0 && (
             <Badge
               className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 flex items-center justify-center"
