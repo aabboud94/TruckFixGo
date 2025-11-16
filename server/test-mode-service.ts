@@ -337,6 +337,9 @@ export async function generateTestContractors(count: number = 5) {
 export async function generateTestJobs(count: number = 10) {
   const jobsList = [];
   
+  // Ensure service types exist and get their IDs
+  const serviceTypeMap = await ensureServiceTypes();
+  
   // Get some test users to be customers
   const testDrivers = await db.select().from(users)
     .where(eq(users.role, 'driver'))
@@ -389,6 +392,7 @@ export async function generateTestJobs(count: number = 10) {
         unitNumber: `UNIT-${String(i).padStart(3, '0')}`
       },
       serviceType: service.name,
+      serviceTypeId: serviceTypeMap.get(service.code),
       description: TRUCK_ISSUES[issueIndex],
       location: {
         address: `${1000 + i * 100} Highway ${i + 1}`,
