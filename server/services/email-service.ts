@@ -437,16 +437,6 @@ class EmailService {
                           </table>
                         </td>
                       </tr>
-                      <tr>
-                        <td style="padding-top: 10px; border-top: 2px solid #e2e8f0;">
-                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                            <tr>
-                              <td width="40%" style="padding-top: 15px; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; font-weight: 600; color: #718096;">${this.getIconHtml('dollar')} Estimated Payout:</td>
-                              <td style="padding-top: 15px; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 20px; color: #28a745; font-weight: 700;">$${data.estimatedPrice}</td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
                     </table>
                   </td>
                 </tr>
@@ -488,8 +478,8 @@ class EmailService {
         
         return {
           subject: `🔧 New Job Assignment - #${data.jobNumber}`,
-          html: this.getBaseEmailTemplate(contractorContent, `New job assignment #${data.jobNumber} - Estimated payout $${data.estimatedPrice}`),
-          text: `New Job Assignment - ${data.jobNumber}\n\nHello ${data.contractorName},\n\nYou have been assigned a new job!\n\nJob Details:\n- Customer: ${data.customerName}\n- Location: ${data.address}\n- Issue: ${data.issueDescription}\n- Service Type: ${data.serviceType}\n- Estimated Payout: $${data.estimatedPrice}\n\nPlease accept or decline this job in your dashboard: ${appUrl}/contractor/dashboard\n\nThank you,\nTruckFixGo Team`
+          html: this.getBaseEmailTemplate(contractorContent, `New job assignment #${data.jobNumber}`),
+          text: `New Job Assignment - ${data.jobNumber}\n\nHello ${data.contractorName},\n\nYou have been assigned a new job!\n\nJob Details:\n- Customer: ${data.customerName}\n- Location: ${data.address}\n- Issue: ${data.issueDescription}\n- Service Type: ${data.serviceType}\n\nPlease accept or decline this job in your dashboard: ${appUrl}/contractor/dashboard\n\nThank you,\nTruckFixGo Team`
         };
 
       case 'JOB_ASSIGNED_CUSTOMER':

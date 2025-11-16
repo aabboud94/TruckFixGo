@@ -92,7 +92,7 @@ export default function AdminContractors() {
       queryClient.invalidateQueries({ 
         predicate: (query) => {
           const key = query.queryKey[0] as string;
-          return key && key.startsWith('/api/admin/contractors');
+          return !!key && key.startsWith('/api/admin/contractors');
         }
       });
       toast({
@@ -112,7 +112,7 @@ export default function AdminContractors() {
       queryClient.invalidateQueries({ 
         predicate: (query) => {
           const key = query.queryKey[0] as string;
-          return key && key.startsWith('/api/admin/contractors');
+          return !!key && key.startsWith('/api/admin/contractors');
         }
       });
       toast({
@@ -131,7 +131,7 @@ export default function AdminContractors() {
       queryClient.invalidateQueries({ 
         predicate: (query) => {
           const key = query.queryKey[0] as string;
-          return key && key.startsWith('/api/admin/contractors');
+          return !!key && key.startsWith('/api/admin/contractors');
         }
       });
       toast({
@@ -157,7 +157,7 @@ export default function AdminContractors() {
       queryClient.invalidateQueries({ 
         predicate: (query) => {
           const key = query.queryKey[0] as string;
-          return key && key.startsWith('/api/admin/contractors');
+          return !!key && key.startsWith('/api/admin/contractors');
         }
       });
       setSelectedContractors([]);
@@ -183,7 +183,7 @@ export default function AdminContractors() {
       queryClient.invalidateQueries({ 
         predicate: (query) => {
           const key = query.queryKey[0] as string;
-          return key && key.startsWith('/api/admin/contractors');
+          return !!key && key.startsWith('/api/admin/contractors');
         }
       });
       setSelectedContractors([]);
@@ -210,7 +210,7 @@ export default function AdminContractors() {
       queryClient.invalidateQueries({ 
         predicate: (query) => {
           const key = query.queryKey[0] as string;
-          return key && key.startsWith('/api/admin/contractors');
+          return !!key && key.startsWith('/api/admin/contractors');
         }
       });
       setSelectedContractors([]);
@@ -236,7 +236,7 @@ export default function AdminContractors() {
       queryClient.invalidateQueries({ 
         predicate: (query) => {
           const key = query.queryKey[0] as string;
-          return key && key.startsWith('/api/admin/contractors');
+          return !!key && key.startsWith('/api/admin/contractors');
         }
       });
       setSelectedContractors([]);
@@ -301,7 +301,7 @@ export default function AdminContractors() {
       queryClient.invalidateQueries({ 
         predicate: (query) => {
           const key = query.queryKey[0] as string;
-          return key && key.startsWith('/api/admin/contractors');
+          return !!key && key.startsWith('/api/admin/contractors');
         }
       });
       
@@ -330,7 +330,7 @@ export default function AdminContractors() {
     },
   });
 
-  const contractorsData = contractors || [];
+  const contractorsData = Array.isArray(contractors) ? contractors : [];
 
   const getTierColor = (tier: string) => {
     switch (tier) {
