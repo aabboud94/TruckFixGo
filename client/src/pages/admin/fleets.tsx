@@ -297,13 +297,13 @@ export default function AdminFleets() {
                     />
                   </TableHead>
                   <TableHead>Fleet Account</TableHead>
-                  <TableHead>Tier</TableHead>
-                  <TableHead>Credit Status</TableHead>
+                  <TableHead className="hidden md:table-cell">Tier</TableHead>
+                  <TableHead className="hidden lg:table-cell">Credit Status</TableHead>
                   <TableHead>Vehicles</TableHead>
-                  <TableHead>Total Spent</TableHead>
-                  <TableHead>Monthly Avg</TableHead>
-                  <TableHead>Total Jobs</TableHead>
-                  <TableHead>Last Active</TableHead>
+                  <TableHead className="hidden lg:table-cell">Total Spent</TableHead>
+                  <TableHead className="hidden xl:table-cell">Monthly Avg</TableHead>
+                  <TableHead className="hidden md:table-cell">Total Jobs</TableHead>
+                  <TableHead className="hidden lg:table-cell">Last Active</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -341,7 +341,7 @@ export default function AdminFleets() {
                           <p className="text-sm text-muted-foreground">{fleet.contactName}</p>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <div className="flex items-center gap-2">
                           {getTierBadge(fleet.tier)}
                           {fleet.status === 'active' ? (
@@ -366,7 +366,7 @@ export default function AdminFleets() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden lg:table-cell">
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-sm">
@@ -388,10 +388,10 @@ export default function AdminFleets() {
                           {fleet.vehicles ?? 0}
                         </div>
                       </TableCell>
-                      <TableCell>${(fleet.totalSpent ?? 0).toLocaleString()}</TableCell>
-                      <TableCell>${(fleet.avgMonthlySpend ?? 0).toLocaleString()}</TableCell>
-                      <TableCell>{fleet.totalJobs ?? 0}</TableCell>
-                      <TableCell>{fleet.lastJobDate ? format(fleet.lastJobDate, 'MMM d, yyyy') : 'Never'}</TableCell>
+                      <TableCell className="hidden lg:table-cell">${(fleet.totalSpent ?? 0).toLocaleString()}</TableCell>
+                      <TableCell className="hidden xl:table-cell">${(fleet.avgMonthlySpend ?? 0).toLocaleString()}</TableCell>
+                      <TableCell className="hidden md:table-cell">{fleet.totalJobs ?? 0}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{fleet.lastJobDate ? format(fleet.lastJobDate, 'MMM d, yyyy') : 'Never'}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
                           <Button
@@ -462,11 +462,11 @@ export default function AdminFleets() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Company Name</TableHead>
-                    <TableHead>Contact Name</TableHead>
-                    <TableHead>Email</TableHead>
+                    <TableHead className="hidden md:table-cell">Contact Name</TableHead>
+                    <TableHead className="hidden lg:table-cell">Email</TableHead>
                     <TableHead>Phone</TableHead>
-                    <TableHead>Fleet Size</TableHead>
-                    <TableHead>Submitted</TableHead>
+                    <TableHead className="hidden lg:table-cell">Fleet Size</TableHead>
+                    <TableHead className="hidden md:table-cell">Submitted</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -498,11 +498,11 @@ export default function AdminFleets() {
                           : ''}
                       >
                         <TableCell className="font-medium">{application.companyName}</TableCell>
-                        <TableCell>{application.primaryContactName}</TableCell>
-                        <TableCell>{application.primaryContactEmail}</TableCell>
+                        <TableCell className="hidden md:table-cell">{application.primaryContactName}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{application.primaryContactEmail}</TableCell>
                         <TableCell>{application.primaryContactPhone}</TableCell>
-                        <TableCell>{application.fleetSize} vehicles</TableCell>
-                        <TableCell>{new Date(application.submittedAt || application.createdAt).toLocaleDateString()}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{application.fleetSize} vehicles</TableCell>
+                        <TableCell className="hidden md:table-cell">{new Date(application.submittedAt || application.createdAt).toLocaleDateString()}</TableCell>
                         <TableCell>
                           <Badge 
                             variant={

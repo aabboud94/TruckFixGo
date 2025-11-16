@@ -400,11 +400,11 @@ export default function FleetDashboard() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Unit #</TableHead>
-                      <TableHead>Make/Model</TableHead>
-                      <TableHead>Last Service</TableHead>
-                      <TableHead>Next PM Due</TableHead>
+                      <TableHead className="hidden md:table-cell">Make/Model</TableHead>
+                      <TableHead className="hidden lg:table-cell">Last Service</TableHead>
+                      <TableHead className="hidden lg:table-cell">Next PM Due</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Location</TableHead>
+                      <TableHead className="hidden md:table-cell">Location</TableHead>
                       <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -413,9 +413,9 @@ export default function FleetDashboard() {
                       vehiclesList.map((vehicle: any) => (
                         <TableRow key={vehicle.id} data-testid={`vehicle-row-${vehicle.id}`}>
                           <TableCell className="font-medium">{vehicle.unitNumber}</TableCell>
-                          <TableCell>{vehicle.make} {vehicle.model}</TableCell>
-                          <TableCell>{vehicle.lastService || 'N/A'}</TableCell>
-                          <TableCell>
+                          <TableCell className="hidden md:table-cell">{vehicle.make} {vehicle.model}</TableCell>
+                          <TableCell className="hidden lg:table-cell">{vehicle.lastService || 'N/A'}</TableCell>
+                          <TableCell className="hidden lg:table-cell">
                             <div className="flex items-center gap-1">
                               {vehicle.nextPMDue && new Date(vehicle.nextPMDue) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) && (
                                 <AlertCircle className="h-4 w-4 text-yellow-500" />
@@ -424,7 +424,7 @@ export default function FleetDashboard() {
                             </div>
                           </TableCell>
                           <TableCell>{getStatusBadge(vehicle.status)}</TableCell>
-                          <TableCell>{vehicle.location || 'Unknown'}</TableCell>
+                          <TableCell className="hidden md:table-cell">{vehicle.location || 'Unknown'}</TableCell>
                           <TableCell>
                             <Button 
                               variant="ghost" 
