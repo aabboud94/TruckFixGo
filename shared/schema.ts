@@ -26,6 +26,7 @@ export const fleetPricingTierEnum = pgEnum('fleet_pricing_tier', ['standard', 's
 export const driverApprovalStatusEnum = pgEnum('driver_approval_status', ['pending', 'approved', 'rejected']);
 export const jobTypeEnum = pgEnum('job_type', ['emergency', 'scheduled']);
 export const jobStatusEnum = pgEnum('job_status', ['new', 'assigned', 'en_route', 'on_site', 'completed', 'cancelled']);
+export const jobAssignmentMethodEnum = pgEnum('job_assignment_method', ['round_robin', 'manual', 'ai_dispatch']);
 export const paymentMethodTypeEnum = pgEnum('payment_method_type', ['credit_card', 'efs_check', 'comdata_check', 'fleet_account', 'cash']);
 export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'processing', 'completed', 'failed', 'refunded']);
 export const refundStatusEnum = pgEnum('refund_status', ['requested', 'approved', 'rejected', 'processed']);
@@ -563,6 +564,7 @@ export const jobs = pgTable("jobs", {
   // Assignment tracking
   assignmentAttempts: integer("assignment_attempts").notNull().default(0),
   lastAssignmentAttemptAt: timestamp("last_assignment_attempt_at"),
+  assignmentMethod: jobAssignmentMethodEnum("assignment_method").default('manual'),
   
   // Assignment tracking - commented out until migration is run
   // assignmentAttemptedAt: timestamp("assignment_attempted_at"),

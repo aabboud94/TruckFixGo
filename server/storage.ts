@@ -1519,6 +1519,19 @@ export interface IStorage {
   updateContractorStatus(contractorId: string, status: string): Promise<boolean>;
   getPendingContractors(): Promise<any[]>;
   
+  // Round-robin assignment methods
+  getNextAvailableContractor(serviceTypeId?: string, cityId?: string): Promise<ContractorProfile | null>;
+  assignJobToContractor(jobId: string, contractorId: string, method: 'round_robin' | 'manual' | 'ai_dispatch'): Promise<Job | null>;
+  getContractorAssignmentStats(): Promise<Array<{
+    contractorId: string;
+    contractorName: string;
+    totalAssignments: number;
+    lastAssignedAt: Date | null;
+    isAvailable: boolean;
+    currentJobCount: number;
+  }>>;
+  toggleContractorAvailability(contractorId: string, isAvailable: boolean): Promise<ContractorProfile | null>;
+  
   checkUserRole(userId: string, requiredRole: string): Promise<boolean>;
   hasAdminUsers(): Promise<boolean>;
   
@@ -2984,6 +2997,150 @@ export class PostgreSQLStorage implements IStorage {
       .from(contractorApplications)
       .where(eq(contractorApplications.status, 'pending'))
       .orderBy(desc(contractorApplications.createdAt));
+  }
+
+  // ==================== ROUND-ROBIN ASSIGNMENT METHODS ====================
+  
+  async getNextAvailableContractor(serviceTypeId?: string, cityId?: string): Promise<ContractorProfile | null> {
+    try {
+      console.log('[RoundRobin] Getting next available contractor', { serviceTypeId, cityId });
+      
+      // Query to get all available contractors, ordered by lastAssignedAt (nulls first for new contractors)
+      const query = db
+        .select()
+        .from(contractorProfiles)
+        .innerJoin(users, eq(users.id, contractorProfiles.userId))
+        .where(
+          and(
+            eq(users.role, 'contractor'),
+            eq(users.isActive, true),
+            eq(contractorProfiles.isAvailable, true)
+          )
+        )
+        .orderBy(
+          asc(sql`COALESCE(${contractorProfiles.lastAssignedAt}, '1970-01-01'::timestamp)`),
+          asc(contractorProfiles.createdAt)
+        )
+        .limit(1);
+      
+      const result = await query;
+      
+      if (result.length === 0) {
+        console.log('[RoundRobin] No available contractors found');
+        return null;
+      }
+      
+      return result[0].contractor_profiles;
+    } catch (error) {
+      console.error('[RoundRobin] Error getting next contractor:', error);
+      return null;
+    }
+  }
+  
+  async assignJobToContractor(jobId: string, contractorId: string, method: 'round_robin' | 'manual' | 'ai_dispatch'): Promise<Job | null> {
+    try {
+      console.log('[RoundRobin] Assigning job to contractor', { jobId, contractorId, method });
+      
+      // Update the job with contractor assignment
+      const updatedJob = await db.update(jobs)
+        .set({
+          contractorId,
+          assignmentMethod: method,
+          assignedAt: new Date(),
+          status: 'assigned',
+          updatedAt: new Date()
+        })
+        .where(eq(jobs.id, jobId))
+        .returning();
+      
+      if (updatedJob.length === 0) {
+        console.error('[RoundRobin] Failed to update job');
+        return null;
+      }
+      
+      // Update contractor's lastAssignedAt timestamp
+      await db.update(contractorProfiles)
+        .set({
+          lastAssignedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(contractorProfiles.userId, contractorId));
+      
+      // Add to job status history
+      await db.insert(jobStatusHistory).values({
+        jobId,
+        fromStatus: 'new',
+        toStatus: 'assigned',
+        changedBy: 'system',
+        reason: `Auto-assigned via ${method}`
+      });
+      
+      return updatedJob[0];
+    } catch (error) {
+      console.error('[RoundRobin] Error assigning job:', error);
+      return null;
+    }
+  }
+  
+  async getContractorAssignmentStats(): Promise<Array<{
+    contractorId: string;
+    contractorName: string;
+    totalAssignments: number;
+    lastAssignedAt: Date | null;
+    isAvailable: boolean;
+    currentJobCount: number;
+  }>> {
+    try {
+      // Get all contractors with their assignment stats
+      const stats = await db
+        .select({
+          contractorId: users.id,
+          contractorName: sql<string>`COALESCE(${users.firstName} || ' ' || ${users.lastName}, ${contractorProfiles.companyName}, 'Unknown')`,
+          lastAssignedAt: contractorProfiles.lastAssignedAt,
+          isAvailable: contractorProfiles.isAvailable,
+          totalAssignments: sql<number>`COALESCE(
+            (SELECT COUNT(*) FROM ${jobs} WHERE ${jobs.contractorId} = ${users.id}), 
+            0
+          )`,
+          currentJobCount: sql<number>`COALESCE(
+            (SELECT COUNT(*) FROM ${jobs} WHERE ${jobs.contractorId} = ${users.id} AND ${jobs.status} IN ('assigned', 'en_route', 'on_site')), 
+            0
+          )`
+        })
+        .from(users)
+        .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
+        .where(eq(users.role, 'contractor'))
+        .orderBy(asc(sql`COALESCE(${contractorProfiles.lastAssignedAt}, '1970-01-01'::timestamp)`));
+      
+      return stats;
+    } catch (error) {
+      console.error('[RoundRobin] Error getting assignment stats:', error);
+      return [];
+    }
+  }
+  
+  async toggleContractorAvailability(contractorId: string, isAvailable: boolean): Promise<ContractorProfile | null> {
+    try {
+      console.log('[RoundRobin] Toggling contractor availability', { contractorId, isAvailable });
+      
+      const result = await db.update(contractorProfiles)
+        .set({
+          isAvailable,
+          updatedAt: new Date()
+        })
+        .where(eq(contractorProfiles.userId, contractorId))
+        .returning();
+      
+      if (result.length === 0) {
+        console.error('[RoundRobin] Contractor not found');
+        return null;
+      }
+      
+      return result[0];
+    } catch (error) {
+      console.error('[RoundRobin] Error toggling availability:', error);
+      return null;
+    }
   }
 
   async checkUserRole(userId: string, requiredRole: string): Promise<boolean> {

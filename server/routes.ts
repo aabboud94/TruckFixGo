@@ -100,6 +100,7 @@ import {
   amendmentStatusEnum,
   jobStatusEnum,
   jobTypeEnum,
+  jobAssignmentMethodEnum,
   paymentStatusEnum,
   refundStatusEnum,
   bidStatusEnum,
@@ -1620,7 +1621,141 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: 'new' as const
         };
 
+        // Create the job first
         const job = await storage.createJob(jobData);
+        
+        // If no contractor is specified, try round-robin assignment
+        let assignedContractor = null;
+        let assignmentMessage = null;
+        
+        if (!job.contractorId) {
+          console.log('[JobCreate] No contractor specified, attempting auto-assignment');
+          
+          // Check if contractors exist
+          const contractors = await storage.findContractors({ limit: 1 });
+          
+          if (contractors.length === 0) {
+            console.log('[JobCreate] No contractors exist, generating test data');
+            
+            // Auto-generate test contractors if none exist
+            try {
+              const testContractors = [
+                {
+                  name: "Mike's Mobile Repair",
+                  firstName: 'Mike',
+                  lastName: 'Johnson',
+                  email: 'mike@mobiletirerepair.com',
+                  phone: '(313) 555-0101',
+                  companyName: "Mike's Mobile Tire Repair",
+                  serviceRadius: 30,
+                  baseLocationLat: 42.3314,
+                  baseLocationLon: -83.0458
+                },
+                {
+                  name: "Detroit Diesel Docs",
+                  firstName: 'Sarah',
+                  lastName: 'Williams',
+                  email: 'sarah@dieseldocs.com',
+                  phone: '(313) 555-0102',
+                  companyName: "Detroit Diesel Docs",
+                  serviceRadius: 40,
+                  baseLocationLat: 42.3870,
+                  baseLocationLon: -83.1020
+                },
+                {
+                  name: "Quick Fix Fleet Services",
+                  firstName: 'Robert',
+                  lastName: 'Brown',
+                  email: 'robert@quickfixfleet.com',
+                  phone: '(313) 555-0103',
+                  companyName: "Quick Fix Fleet Services",
+                  serviceRadius: 50,
+                  baseLocationLat: 42.3486,
+                  baseLocationLon: -83.0567
+                },
+                {
+                  name: "24/7 Road Rescue",
+                  firstName: 'John',
+                  lastName: 'Davis',
+                  email: 'john@roadrescue247.com',
+                  phone: '(313) 555-0104',
+                  companyName: "24/7 Road Rescue",
+                  serviceRadius: 60,
+                  baseLocationLat: 42.3623,
+                  baseLocationLon: -82.9855
+                },
+                {
+                  name: "Metro Truck Solutions",
+                  firstName: 'Lisa',
+                  lastName: 'Martinez',
+                  email: 'lisa@metrotrucksolutions.com',
+                  phone: '(313) 555-0105',
+                  companyName: "Metro Truck Solutions",
+                  serviceRadius: 45,
+                  baseLocationLat: 42.3759,
+                  baseLocationLon: -83.0945
+                }
+              ];
+              
+              const defaultPassword = await bcrypt.hash('Test123!', 10);
+              
+              for (const contractorData of testContractors.slice(0, 3)) { // Create first 3 for quick setup
+                const user = await storage.createUser({
+                  email: contractorData.email,
+                  phone: contractorData.phone,
+                  role: 'contractor',
+                  firstName: contractorData.firstName,
+                  lastName: contractorData.lastName,
+                  password: defaultPassword,
+                  isActive: true
+                });
+                
+                await storage.createContractorProfile({
+                  userId: user.id,
+                  companyName: contractorData.companyName,
+                  performanceTier: 'silver',
+                  serviceRadius: contractorData.serviceRadius,
+                  isAvailable: true,
+                  baseLocationLat: contractorData.baseLocationLat.toString(),
+                  baseLocationLon: contractorData.baseLocationLon.toString(),
+                });
+              }
+              
+              console.log('[JobCreate] Auto-generated test contractors');
+            } catch (error) {
+              console.error('[JobCreate] Failed to auto-generate contractors:', error);
+            }
+          }
+          
+          // Attempt round-robin assignment
+          try {
+            const nextContractor = await storage.getNextAvailableContractor(
+              job.serviceTypeId,
+              undefined // cityId if available
+            );
+            
+            if (nextContractor) {
+              const updatedJob = await storage.assignJobToContractor(
+                job.id,
+                nextContractor.userId,
+                'round_robin'
+              );
+              
+              if (updatedJob) {
+                Object.assign(job, updatedJob);
+                assignedContractor = nextContractor;
+                assignmentMessage = `Job automatically assigned to ${nextContractor.companyName} using round-robin algorithm`;
+                console.log(`[JobCreate] Assigned job to contractor ${nextContractor.userId}`);
+              }
+            } else {
+              assignmentMessage = 'No available contractors found for auto-assignment';
+              console.log('[JobCreate] No available contractors for round-robin assignment');
+            }
+          } catch (error) {
+            console.error('[JobCreate] Round-robin assignment failed:', error);
+            assignmentMessage = 'Auto-assignment failed, job created without contractor';
+          }
+        }
         
         // Schedule reminders for scheduled jobs
         if (job.jobType === 'scheduled' && job.scheduledAt) {
@@ -1634,7 +1769,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         res.status(201).json({
           message: 'Job created successfully',
-          job
+          job,
+          assignmentInfo: {
+            method: job.contractorId ? (job.assignmentMethod || 'manual') : 'none',
+            message: assignmentMessage,
+            contractor: assignedContractor ? {
+              id: assignedContractor.userId,
+              company: assignedContractor.companyName,
+              rating: assignedContractor.averageRating,
+              responseTime: assignedContractor.averageResponseTime
+            } : null
+          }
         });
       } catch (error) {
         console.error('Create job error:', error);
@@ -7347,6 +7492,235 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // ==================== CONTRACTOR ROUTES ====================
+
+  // ==================== TEST DATA GENERATION ====================
+  
+  // Generate test contractors
+  app.post('/api/contractors/generate-test-data',
+    requireAuth,
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        console.log('[TestData] Starting test contractor generation...');
+        
+        // Check if contractors already exist
+        const existingContractors = await storage.findContractors({ limit: 1 });
+        if (existingContractors.length > 0 && !req.query.force) {
+          return res.status(400).json({ 
+            message: 'Contractors already exist. Add ?force=true to override.',
+            existingCount: existingContractors.length 
+          });
+        }
+        
+        // Define test contractors for Detroit area
+        const testContractors = [
+          {
+            name: "Mike's Mobile Repair",
+            firstName: 'Mike',
+            lastName: 'Johnson',
+            email: 'mike@mobiletirerepair.com',
+            phone: '(313) 555-0101',
+            companyName: "Mike's Mobile Tire Repair",
+            serviceRadius: 30,
+            specialties: ['Tire Repair', 'Tire Replacement', 'Roadside Assistance'],
+            baseLocationLat: 42.3314,
+            baseLocationLon: -83.0458,
+            isAvailable: true,
+            emergencyAvailable: true,
+            nightShiftAvailable: true,
+            weekendAvailable: true
+          },
+          {
+            name: "Detroit Diesel Docs",
+            firstName: 'Sarah',
+            lastName: 'Williams',
+            email: 'sarah@dieseldocs.com',
+            phone: '(313) 555-0102',
+            companyName: "Detroit Diesel Docs",
+            serviceRadius: 40,
+            specialties: ['Engine Diagnostics', 'ECM Repair', 'Emissions Testing'],
+            baseLocationLat: 42.3870,
+            baseLocationLon: -83.1020,
+            isAvailable: true,
+            emergencyAvailable: true,
+            nightShiftAvailable: false,
+            weekendAvailable: true
+          },
+          {
+            name: "Quick Fix Fleet Services",
+            firstName: 'Robert',
+            lastName: 'Brown',
+            email: 'robert@quickfixfleet.com',
+            phone: '(313) 555-0103',
+            companyName: "Quick Fix Fleet Services",
+            serviceRadius: 50,
+            specialties: ['General Maintenance', 'Oil Changes', 'Brake Service'],
+            baseLocationLat: 42.3486,
+            baseLocationLon: -83.0567,
+            isAvailable: true,
+            emergencyAvailable: false,
+            nightShiftAvailable: false,
+            weekendAvailable: true
+          },
+          {
+            name: "24/7 Road Rescue",
+            firstName: 'John',
+            lastName: 'Davis',
+            email: 'john@roadrescue247.com',
+            phone: '(313) 555-0104',
+            companyName: "24/7 Road Rescue",
+            serviceRadius: 60,
+            specialties: ['Emergency Services', 'Towing', 'Jump Starts', 'Fuel Delivery'],
+            baseLocationLat: 42.3623,
+            baseLocationLon: -82.9855,
+            isAvailable: true,
+            emergencyAvailable: true,
+            nightShiftAvailable: true,
+            weekendAvailable: true
+          },
+          {
+            name: "Metro Truck Solutions",
+            firstName: 'Lisa',
+            lastName: 'Martinez',
+            email: 'lisa@metrotrucksolutions.com',
+            phone: '(313) 555-0105',
+            companyName: "Metro Truck Solutions",
+            serviceRadius: 45,
+            specialties: ['Comprehensive Repairs', 'Transmission Service', 'HVAC Repair', 'Electrical Systems'],
+            baseLocationLat: 42.3759,
+            baseLocationLon: -83.0945,
+            isAvailable: true,
+            emergencyAvailable: true,
+            nightShiftAvailable: false,
+            weekendAvailable: false
+          }
+        ];
+        
+        const createdContractors = [];
+        const defaultPassword = await bcrypt.hash('Test123!', 10);
+        
+        for (const contractorData of testContractors) {
+          try {
+            // Create user account
+            const user = await storage.createUser({
+              email: contractorData.email,
+              phone: contractorData.phone,
+              role: 'contractor',
+              firstName: contractorData.firstName,
+              lastName: contractorData.lastName,
+              password: defaultPassword,
+              isActive: true
+            });
+            
+            // Create contractor profile
+            const profile = await storage.createContractorProfile({
+              userId: user.id,
+              companyName: contractorData.companyName,
+              performanceTier: 'silver',
+              serviceRadius: contractorData.serviceRadius,
+              averageResponseTime: Math.floor(Math.random() * 20) + 10, // 10-30 minutes
+              totalJobsCompleted: Math.floor(Math.random() * 100),
+              averageRating: (4.0 + Math.random()).toFixed(2), // 4.0 - 5.0
+              totalReviews: Math.floor(Math.random() * 50),
+              isVerifiedContractor: true,
+              isAvailable: contractorData.isAvailable,
+              baseLocationLat: contractorData.baseLocationLat.toString(),
+              baseLocationLon: contractorData.baseLocationLon.toString(),
+              emergencyAvailable: contractorData.emergencyAvailable,
+              nightShiftAvailable: contractorData.nightShiftAvailable,
+              weekendAvailable: contractorData.weekendAvailable,
+              lastAssignedAt: null // New contractors start with null
+            });
+            
+            // Get all service types
+            const serviceTypes = await storage.getServiceTypes();
+            
+            // Link contractor to relevant service types based on specialties
+            for (const specialty of contractorData.specialties) {
+              const serviceType = serviceTypes.find(st => 
+                st.name.toLowerCase().includes(specialty.toLowerCase()) ||
+                specialty.toLowerCase().includes(st.name.toLowerCase())
+              );
+              
+              if (serviceType) {
+                await storage.linkContractorService({
+                  contractorId: user.id,
+                  serviceTypeId: serviceType.id,
+                  customPrice: null,
+                  isActive: true
+                });
+              }
+            }
+            
+            // Set contractor availability (Mon-Fri 8am-6pm, with variations)
+            const days = [0, 1, 2, 3, 4]; // Monday to Friday
+            if (contractorData.weekendAvailable) {
+              days.push(5, 6); // Add Saturday and Sunday
+            }
+            
+            for (const day of days) {
+              let startTime = '08:00';
+              let endTime = '18:00';
+              
+              if (contractorData.nightShiftAvailable) {
+                startTime = '00:00';
+                endTime = '23:59';
+              } else if (contractorData.emergencyAvailable) {
+                startTime = '06:00';
+                endTime = '22:00';
+              }
+              
+              await storage.setContractorAvailability({
+                contractorId: user.id,
+                dayOfWeek: day,
+                startTime,
+                endTime,
+                isAvailable: true
+              });
+            }
+            
+            createdContractors.push({
+              id: user.id,
+              name: contractorData.name,
+              email: contractorData.email,
+              phone: contractorData.phone,
+              company: contractorData.companyName,
+              serviceRadius: contractorData.serviceRadius,
+              specialties: contractorData.specialties,
+              location: {
+                lat: contractorData.baseLocationLat,
+                lng: contractorData.baseLocationLon
+              },
+              availability: {
+                emergency: contractorData.emergencyAvailable,
+                nightShift: contractorData.nightShiftAvailable,
+                weekend: contractorData.weekendAvailable
+              },
+              credentials: {
+                email: contractorData.email,
+                password: 'Test123!' // Note: Only for test data
+              }
+            });
+            
+            console.log(`[TestData] Created contractor: ${contractorData.name}`);
+          } catch (error) {
+            console.error(`[TestData] Failed to create contractor ${contractorData.name}:`, error);
+          }
+        }
+        
+        console.log(`[TestData] Successfully created ${createdContractors.length} test contractors`);
+        
+        res.json({
+          message: `Generated ${createdContractors.length} test contractors`,
+          contractors: createdContractors,
+          note: 'All contractors use password: Test123! (for testing only)'
+        });
+      } catch (error) {
+        console.error('[TestData] Error generating test contractors:', error);
+        res.status(500).json({ message: 'Failed to generate test contractors', error: error.message });
+      }
+    }
+  );
 
   // ==================== CONTRACTOR PRICING ====================
   
