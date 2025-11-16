@@ -1,8 +1,10 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
 import Homepage from "@/pages/Homepage";
 import Login from "@/pages/login";
 import EmergencyBooking from "@/pages/emergency-booking";
@@ -211,14 +213,55 @@ function Router() {
   );
 }
 
+function AppWithSidebar() {
+  const [location] = useLocation();
+  
+  // Check if we're on admin pages (which have their own layout) or other special pages
+  const isAdminPage = location.startsWith('/admin');
+  const isAuthPage = location === '/login' || location === '/contractor/auth' || 
+                     location === '/fleet/login' || location === '/fleet/auth' ||
+                     location === '/forgot-password' || location.startsWith('/reset-password');
+  const isFullWidthPage = location === '/track' || location.startsWith('/track/');
+  
+  // Don't show sidebar on admin, auth, or tracking pages
+  const shouldShowSidebar = !isAdminPage && !isAuthPage && !isFullWidthPage;
+
+  if (!shouldShowSidebar) {
+    return (
+      <ErrorBoundary componentName="Main Router">
+        <Router />
+      </ErrorBoundary>
+    );
+  }
+
+  return (
+    <SidebarProvider defaultOpen={false}>
+      <div className="flex h-screen w-full">
+        <AppSidebar />
+        <SidebarInset className="flex flex-col flex-1">
+          <header className="flex h-16 items-center gap-4 border-b bg-background px-4">
+            <SidebarTrigger className="md:hidden" data-testid="button-sidebar-toggle" />
+            <div className="flex-1">
+              <h1 className="text-lg font-semibold md:text-xl">TruckFixGo</h1>
+            </div>
+          </header>
+          <main className="flex-1 overflow-y-auto">
+            <ErrorBoundary componentName="Main Router">
+              <Router />
+            </ErrorBoundary>
+          </main>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <ErrorBoundary componentName="Main Router">
-          <Router />
-        </ErrorBoundary>
+        <AppWithSidebar />
         <ErrorBoundary componentName="AI Chatbot">
           <AIChatbot />
         </ErrorBoundary>
