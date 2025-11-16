@@ -87,6 +87,7 @@ import AdminLiveMap from "@/pages/admin/live-map";
 import AdminInvoiceDefaults from "@/pages/admin/invoice-defaults";
 import AdminStatus from "@/pages/admin/status";
 import AIDispatchDashboard from "@/pages/admin/ai-dispatch-dashboard";
+import AdminTestTools from "@/pages/admin/test-tools";
 import EmergencyResponsePage from "@/pages/emergency-response";
 import PaymentReconciliation from "@/pages/payment-reconciliation";
 import PartsInventory from "@/pages/admin/parts-inventory";
@@ -103,6 +104,7 @@ import ResetPassword from "@/pages/reset-password";
 import ForgotPassword from "@/pages/forgot-password";
 import ProfilePage from "@/pages/profile";
 import { BottomNav } from "@/components/bottom-nav";
+import TestToolbar from "@/components/test-toolbar";
 
 function Router() {
   return (
@@ -211,6 +213,8 @@ function Router() {
       <Route path="/admin/payment-reconciliation" component={PaymentReconciliation} />
       <Route path="/admin/emergency-response" component={EmergencyResponsePage} />
       <Route path="/admin/parts" component={PartsInventory} />
+      <Route path="/admin/test-tools" component={AdminTestTools} />
+      <Route path="/admin/test-tools/emails" component={AdminTestTools} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />
@@ -270,6 +274,9 @@ function App() {
         <BottomNav />
         <ErrorBoundary componentName="AI Chatbot">
           <AIChatbot />
+        </ErrorBoundary>
+        <ErrorBoundary componentName="Test Toolbar">
+          <TestToolbar />
         </ErrorBoundary>
         <InstallPrompt />
       </TooltipProvider>
