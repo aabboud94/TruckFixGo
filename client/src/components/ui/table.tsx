@@ -29,12 +29,12 @@ const Table = React.forwardRef<
                       [.overflow-x-auto:hover>&]:opacity-100" />
       <table
         ref={ref}
-        className={cn("min-w-full caption-bottom text-sm", className)}
+        className={cn("min-w-full caption-bottom text-base md:text-sm", className)}
         {...props}
       />
     </div>
     {/* Mobile scroll hint */}
-    <div className="text-xs text-muted-foreground text-center mt-1 md:hidden">
+    <div className="text-sm md:text-xs text-muted-foreground text-center mt-1 md:hidden">
       ← Scroll horizontally to see more →
     </div>
   </div>

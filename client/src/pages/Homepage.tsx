@@ -59,8 +59,8 @@ export default function Homepage() {
       <div className="bg-destructive text-destructive-foreground py-2 text-center animate-pulse">
         <div className="flex items-center justify-center gap-2">
           <AlertCircle className="w-4 h-4" />
-          <span className="font-semibold text-sm">EMERGENCY? Get help with fast response</span>
-          <a href="tel:1-800-TRUCK-FIX" className="underline font-bold">Call Now</a>
+          <span className="font-semibold text-base md:text-sm">EMERGENCY? Get help with fast response</span>
+          <a href="tel:1-800-TRUCK-FIX" className="underline font-bold text-base md:text-sm">Call Now</a>
         </div>
       </div>
 
@@ -75,16 +75,16 @@ export default function Homepage() {
             </div>
 
             <nav className="hidden md:flex items-center space-x-8">
-              <a href="/services" className="text-foreground hover:text-primary transition-colors" data-testid="link-services">
+              <a href="/services" className="text-sm text-foreground hover:text-primary transition-colors" data-testid="link-services">
                 Services
               </a>
-              <a href="/pricing" className="text-foreground hover:text-primary transition-colors" data-testid="link-pricing">
+              <a href="/pricing" className="text-sm text-foreground hover:text-primary transition-colors" data-testid="link-pricing">
                 Pricing
               </a>
-              <a href="/fleet" className="text-foreground hover:text-primary transition-colors" data-testid="link-fleet">
+              <a href="/fleet" className="text-sm text-foreground hover:text-primary transition-colors" data-testid="link-fleet">
                 Fleet Solutions
               </a>
-              <a href="/contractor/apply" className="text-foreground hover:text-primary transition-colors" data-testid="link-become-contractor">
+              <a href="/contractor/apply" className="text-sm text-foreground hover:text-primary transition-colors" data-testid="link-become-contractor">
                 Become a Contractor
               </a>
             </nav>
@@ -117,16 +117,16 @@ export default function Homepage() {
 
           {mobileMenuOpen && (
             <div className="md:hidden py-4 space-y-4">
-              <a href="/services" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-services">
+              <a href="/services" className="block px-3 py-2 text-base text-foreground hover:text-primary transition-colors" data-testid="mobile-link-services">
                 Services
               </a>
-              <a href="/pricing" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-pricing">
+              <a href="/pricing" className="block px-3 py-2 text-base text-foreground hover:text-primary transition-colors" data-testid="mobile-link-pricing">
                 Pricing
               </a>
-              <a href="/fleet" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-fleet">
+              <a href="/fleet" className="block px-3 py-2 text-base text-foreground hover:text-primary transition-colors" data-testid="mobile-link-fleet">
                 Fleet Solutions
               </a>
-              <a href="/contractor/apply" className="block px-3 py-2 text-foreground hover:text-primary transition-colors" data-testid="mobile-link-become-contractor">
+              <a href="/contractor/apply" className="block px-3 py-2 text-base text-foreground hover:text-primary transition-colors" data-testid="mobile-link-become-contractor">
                 Become a Contractor
               </a>
               <div className="flex flex-col space-y-2 pt-4">
@@ -166,12 +166,12 @@ export default function Homepage() {
               Fast response time
             </Badge>
             
-            <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold text-white mb-6 leading-tight">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight">
               Stranded?<br/>
               <span className="text-destructive">We're Already on Our Way</span>
             </h1>
             
-            <p className="text-xl sm:text-2xl text-gray-100 mb-8">
+            <p className="text-lg sm:text-xl md:text-2xl text-gray-100 mb-8 leading-relaxed">
               <strong>Service First Policy:</strong> We fix your truck NOW, handle paperwork later. 
               No credit checks. No upfront payment. Just immediate help when you need it most.
             </p>
@@ -206,16 +206,16 @@ export default function Homepage() {
             
             <div className="grid grid-cols-3 gap-4 max-w-2xl">
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold text-white">2,847</div>
-                <div className="text-xs text-gray-200">Trucks Rescued This Month</div>
+                <div className="text-xl md:text-2xl font-bold text-white">2,847</div>
+                <div className="text-sm md:text-xs text-gray-200">Trucks Rescued This Month</div>
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold text-white">Fast</div>
-                <div className="text-xs text-gray-200">Average Response Time</div>
+                <div className="text-xl md:text-2xl font-bold text-white">Fast</div>
+                <div className="text-sm md:text-xs text-gray-200">Average Response Time</div>
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold text-white">24/7</div>
-                <div className="text-xs text-gray-200">Always Available</div>
+                <div className="text-xl md:text-2xl font-bold text-white">24/7</div>
+                <div className="text-sm md:text-xs text-gray-200">Always Available</div>
               </div>
             </div>
           </div>

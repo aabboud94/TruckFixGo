@@ -146,8 +146,8 @@ export default function AdminDashboard() {
             <Briefcase className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.activeJobs}</div>
-            <div className="flex items-center text-xs text-muted-foreground">
+            <div className="text-xl md:text-2xl font-bold">{stats.activeJobs}</div>
+            <div className="flex items-center text-sm md:text-xs text-muted-foreground">
               <TrendingUp className="h-3 w-3 mr-1 text-green-600" />
               <span className="text-green-600">+12%</span> from yesterday
             </div>
@@ -160,8 +160,8 @@ export default function AdminDashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.onlineContractors}</div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-xl md:text-2xl font-bold">{stats.onlineContractors}</div>
+            <div className="text-sm md:text-xs text-muted-foreground">
               Out of {stats.totalContractors} total
             </div>
             <Progress value={safePercentage(stats.onlineContractors, stats.totalContractors, 0)} className="mt-2" />
