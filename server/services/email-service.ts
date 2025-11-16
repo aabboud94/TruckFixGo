@@ -177,178 +177,1181 @@ class EmailService {
     }
   }
 
+  // Helper function to generate a base email template with consistent styling
+  private getBaseEmailTemplate(content: string, preheader?: string): string {
+    const appUrl = process.env.APP_URL || 'https://truckfixgo.com';
+    
+    return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>TruckFixGo</title>
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
+  <!--[if !mso]><!-->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" type="text/css">
+  <!--<![endif]-->
+  <style type="text/css">
+    /* Reset styles */
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
+    
+    /* Remove link styles */
+    a[x-apple-data-detectors] {
+      color: inherit !important;
+      text-decoration: inherit !important;
+      font-size: inherit !important;
+      font-family: inherit !important;
+      font-weight: inherit !important;
+      line-height: inherit !important;
+    }
+    
+    /* Mobile styles */
+    @media only screen and (max-width: 600px) {
+      .mobile-hide { display: none !important; }
+      .mobile-center { text-align: center !important; }
+      .mobile-full { width: 100% !important; max-width: 100% !important; }
+      .mobile-padding { padding: 20px !important; }
+      .mobile-padding-sm { padding: 10px !important; }
+      h1 { font-size: 28px !important; line-height: 36px !important; }
+      h2 { font-size: 22px !important; line-height: 28px !important; }
+      h3 { font-size: 18px !important; line-height: 24px !important; }
+      p { font-size: 15px !important; line-height: 24px !important; }
+      .button-td { padding: 14px 28px !important; }
+      .button-text { font-size: 16px !important; }
+      .footer-text { font-size: 13px !important; line-height: 20px !important; }
+      .card-padding { padding: 20px !important; }
+      .container-padding { padding: 20px 20px !important; }
+    }
+    
+    /* Dark mode styles */
+    @media (prefers-color-scheme: dark) {
+      .dark-bg { background-color: #1a1a1a !important; }
+      .dark-text { color: #ffffff !important; }
+      .dark-card { background-color: #2d2d2d !important; }
+      .dark-border { border-color: #404040 !important; }
+      .dark-highlight { background-color: #333333 !important; }
+    }
+    
+    /* Button hover effect for supported clients */
+    .button-primary:hover {
+      background-color: #357abd !important;
+    }
+    
+    .button-success:hover {
+      background-color: #218838 !important;
+    }
+    
+    .button-danger:hover {
+      background-color: #c82333 !important;
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; word-spacing: normal; background-color: #f7f8fa;">
+  ${preheader ? `<div style="display: none; font-size: 1px; color: #f7f8fa; line-height: 1px; max-height: 0; max-width: 0; opacity: 0; overflow: hidden; mso-hide: all; font-family: sans-serif;">${preheader}&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;</div>` : ''}
+  
+  <div role="article" aria-roledescription="email" lang="en" style="text-size-adjust: 100%; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0; padding: 0; background-color: #f7f8fa;" class="dark-bg">
+      <tr>
+        <td align="center" style="padding: 0;">
+          <!--[if mso]>
+          <table role="presentation" align="center" style="width: 600px;">
+          <tr>
+          <td>
+          <![endif]-->
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width: 600px; margin: 0 auto;" class="mobile-full">
+            ${content}
+          </table>
+          <!--[if mso]>
+          </td>
+          </tr>
+          </table>
+          <![endif]-->
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>`;
+  }
+
+  // Helper function for creating responsive buttons
+  private getButtonHtml(text: string, url: string, variant: 'primary' | 'success' | 'danger' | 'secondary' = 'primary'): string {
+    const colors = {
+      primary: { bg: '#4a90e2', text: '#ffffff', hover: '#357abd' },
+      success: { bg: '#28a745', text: '#ffffff', hover: '#218838' },
+      danger: { bg: '#dc3545', text: '#ffffff', hover: '#c82333' },
+      secondary: { bg: '#6c757d', text: '#ffffff', hover: '#5a6268' }
+    };
+    
+    const color = colors[variant];
+    
+    return `<!--[if mso]>
+    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${url}" style="height:44px;v-text-anchor:middle;width:200px;" arcsize="12%" stroke="f" fillcolor="${color.bg}">
+      <w:anchorlock/>
+      <center style="color:${color.text};font-family:Inter, Arial, sans-serif;font-size:16px;font-weight:600;">${text}</center>
+    </v:roundrect>
+    <![endif]-->
+    <!--[if !mso]><!-->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
+      <tr>
+        <td style="border-radius: 6px; background-color: ${color.bg};" class="button-${variant}">
+          <a href="${url}" target="_blank" style="display: inline-block; background-color: ${color.bg}; color: ${color.text}; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; font-weight: 600; line-height: 44px; text-align: center; text-decoration: none; min-width: 150px; padding: 0 30px; border-radius: 6px; mso-padding-alt: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);" class="button-text">
+            ${text}
+          </a>
+        </td>
+      </tr>
+    </table>
+    <!--<![endif]-->`;
+  }
+
+  // Helper function for icon display
+  private getIconHtml(icon: 'truck' | 'check' | 'clock' | 'alert' | 'star' | 'dollar' | 'location' | 'phone'): string {
+    const icons = {
+      truck: '&#128666;',
+      check: '&#10003;',
+      clock: '&#128337;',
+      alert: '&#9888;',
+      star: '&#11088;',
+      dollar: '&#128176;',
+      location: '&#128205;',
+      phone: '&#128222;'
+    };
+    
+    return `<span style="font-size: 20px; vertical-align: middle; margin-right: 8px;">${icons[icon]}</span>`;
+  }
+
   private generateTemplate(type: EmailType, data: any): EmailTemplate {
+    const appUrl = process.env.APP_URL || 'https://truckfixgo.com';
+    
     switch (type) {
       case 'JOB_ASSIGNED_CONTRACTOR':
+        const contractorContent = `
+          <!-- Header -->
+          <tr>
+            <td style="padding: 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);">
+                <tr>
+                  <td style="padding: 30px 40px; text-align: center;" class="mobile-padding">
+                    <h1 style="margin: 0; color: #ffffff; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 32px; font-weight: 700; line-height: 40px;">
+                      ${this.getIconHtml('truck')} TruckFixGo
+                    </h1>
+                    <p style="margin: 10px 0 0 0; color: #e3f2fd; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                      New Job Assignment
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px 40px 20px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td>
+                    <h2 style="margin: 0 0 20px; color: #1e3a5f; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 24px; font-weight: 600; line-height: 32px;">
+                      Hello ${data.contractorName},
+                    </h2>
+                    <p style="margin: 0 0 30px; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                      Great news! You've been assigned a new job. Please review the details below and accept or decline as soon as possible.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Job Details Card -->
+          <tr>
+            <td style="padding: 0 40px 30px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); overflow: hidden;">
+                <tr>
+                  <td style="padding: 0;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f7fafc; border-bottom: 1px solid #e2e8f0;">
+                      <tr>
+                        <td style="padding: 20px 30px;" class="card-padding">
+                          <h3 style="margin: 0; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; font-weight: 600;">
+                            ${this.getIconHtml('alert')} Job #${data.jobNumber}
+                          </h3>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 25px 30px;" class="card-padding">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="padding-bottom: 15px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="40%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 500; color: #718096;">Customer:</td>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748; font-weight: 600;">${data.customerName}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 15px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="40%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 500; color: #718096;">${this.getIconHtml('location')} Location:</td>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748;">${data.address}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 15px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="40%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 500; color: #718096;">Service Type:</td>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748;">${data.serviceType}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 15px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="40%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 500; color: #718096;">Issue Description:</td>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748;">${data.issueDescription}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-top: 10px; border-top: 2px solid #e2e8f0;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="40%" style="padding-top: 15px; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; font-weight: 600; color: #718096;">${this.getIconHtml('dollar')} Estimated Payout:</td>
+                              <td style="padding-top: 15px; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 20px; color: #28a745; font-weight: 700;">$${data.estimatedPrice}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- CTA Button -->
+          <tr>
+            <td style="padding: 0 40px 40px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="center">
+                    ${this.getButtonHtml('View in Dashboard', `${appUrl}/contractor/dashboard`, 'primary')}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #1e3a5f;">
+                <tr>
+                  <td style="padding: 30px 40px; text-align: center;" class="mobile-padding">
+                    <p style="margin: 0 0 10px; color: #e3f2fd; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px;" class="footer-text">
+                      Please respond to this job assignment promptly
+                    </p>
+                    <p style="margin: 0; color: #cbd5e0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px;" class="footer-text">
+                      © ${new Date().getFullYear()} TruckFixGo • Professional Truck Repair Services
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        `;
+        
         return {
-          subject: `New Job Assignment - ${data.jobNumber}`,
-          html: `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <style>
-                body { font-family: Arial, sans-serif; color: #333; }
-                .header { background: #1e3a5f; color: white; padding: 20px; }
-                .content { padding: 20px; }
-                .job-details { background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 15px 0; }
-                .button { background: #4a90e2; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; }
-              </style>
-            </head>
-            <body>
-              <div class="header">
-                <h2>New Job Assignment</h2>
-              </div>
-              <div class="content">
-                <p>Hello ${data.contractorName},</p>
-                <p>You have been assigned a new job!</p>
-                
-                <div class="job-details">
-                  <h3>Job Details:</h3>
-                  <p><strong>Job Number:</strong> ${data.jobNumber}</p>
-                  <p><strong>Customer:</strong> ${data.customerName}</p>
-                  <p><strong>Location:</strong> ${data.address}</p>
-                  <p><strong>Issue:</strong> ${data.issueDescription}</p>
-                  <p><strong>Service Type:</strong> ${data.serviceType}</p>
-                  <p><strong>Estimated Payout:</strong> $${data.estimatedPrice}</p>
-                </div>
-                
-                <p>Please accept or decline this job in your dashboard as soon as possible.</p>
-                <a href="${process.env.APP_URL || 'https://truckfixgo.com'}/contractor/dashboard" class="button">View in Dashboard</a>
-                
-                <p style="margin-top: 20px;">Thank you,<br>TruckFixGo Team</p>
-              </div>
-            </body>
-            </html>
-          `,
-          text: `New Job Assignment - ${data.jobNumber}\n\nCustomer: ${data.customerName}\nLocation: ${data.address}\nIssue: ${data.issueDescription}`
+          subject: `🔧 New Job Assignment - #${data.jobNumber}`,
+          html: this.getBaseEmailTemplate(contractorContent, `New job assignment #${data.jobNumber} - Estimated payout $${data.estimatedPrice}`),
+          text: `New Job Assignment - ${data.jobNumber}\n\nHello ${data.contractorName},\n\nYou have been assigned a new job!\n\nJob Details:\n- Customer: ${data.customerName}\n- Location: ${data.address}\n- Issue: ${data.issueDescription}\n- Service Type: ${data.serviceType}\n- Estimated Payout: $${data.estimatedPrice}\n\nPlease accept or decline this job in your dashboard: ${appUrl}/contractor/dashboard\n\nThank you,\nTruckFixGo Team`
         };
 
       case 'JOB_ASSIGNED_CUSTOMER':
+        const customerContent = `
+          <!-- Header with gradient -->
+          <tr>
+            <td style="padding: 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: linear-gradient(135deg, #4a90e2 0%, #63a4ff 100%);">
+                <tr>
+                  <td style="padding: 30px 40px; text-align: center;" class="mobile-padding">
+                    <h1 style="margin: 0; color: #ffffff; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 32px; font-weight: 700; line-height: 40px;">
+                      ${this.getIconHtml('truck')} Help is On The Way!
+                    </h1>
+                    <p style="margin: 10px 0 0 0; color: #e3f2fd; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                      Your mechanic has been assigned
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Welcome Message -->
+          <tr>
+            <td style="padding: 40px 40px 20px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td>
+                    <h2 style="margin: 0 0 20px; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 24px; font-weight: 600; line-height: 32px;">
+                      Hello ${data.customerName},
+                    </h2>
+                    <p style="margin: 0 0 30px; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                      Good news! We've assigned a qualified mechanic to help you. They're preparing to head your way now.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Mechanic Info Card -->
+          <tr>
+            <td style="padding: 0 40px 30px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); overflow: hidden;">
+                <tr>
+                  <td style="padding: 0;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%); border-bottom: 2px solid #4a90e2;">
+                      <tr>
+                        <td style="padding: 20px 30px;" class="card-padding">
+                          <h3 style="margin: 0; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; font-weight: 600;">
+                            Your Assigned Mechanic
+                          </h3>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 25px 30px;" class="card-padding">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="padding-bottom: 20px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="40%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 500; color: #718096;">Mechanic Name:</td>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; color: #2d3748; font-weight: 600;">${data.contractorName}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 20px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="40%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 500; color: #718096;">Rating:</td>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; color: #f59e0b; font-weight: 600;">
+                                ${this.getIconHtml('star')} ${data.contractorRating}/5.0
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 20px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="40%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 500; color: #718096;">Jobs Completed:</td>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; color: #2d3748;">${data.contractorTotalJobs} jobs</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-top: 10px; border-top: 2px solid #e2e8f0;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="40%" style="padding-top: 20px; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 500; color: #718096;">${this.getIconHtml('clock')} Estimated Arrival:</td>
+                              <td style="padding-top: 20px; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; color: #28a745; font-weight: 700;">${data.eta || 'Within 45 minutes'}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Track Button -->
+          <tr>
+            <td style="padding: 0 40px 30px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="center">
+                    ${this.getButtonHtml('Track Your Mechanic', `${appUrl}/tracking?jobId=${data.jobId}`, 'success')}
+                    <p style="margin: 20px 0 0; color: #718096; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px; text-align: center;">
+                      You'll receive a notification when your mechanic is nearby
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Help Section -->
+          <tr>
+            <td style="padding: 0 40px 40px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #edf2f7; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 20px; text-align: center;">
+                    <p style="margin: 0 0 10px; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px;">
+                      Need immediate assistance?
+                    </p>
+                    <p style="margin: 0; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; font-weight: 600;">
+                      ${this.getIconHtml('phone')} Call 1-800-TRUCK-FIX
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #2d3748;">
+                <tr>
+                  <td style="padding: 30px 40px; text-align: center;" class="mobile-padding">
+                    <p style="margin: 0 0 10px; color: #e2e8f0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px;" class="footer-text">
+                      Thank you for choosing TruckFixGo
+                    </p>
+                    <p style="margin: 0; color: #a0aec0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px;" class="footer-text">
+                      © ${new Date().getFullYear()} TruckFixGo • Fast & Reliable Truck Repair
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        `;
+        
         return {
-          subject: 'Help is on the way!',
-          html: `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <style>
-                body { font-family: Arial, sans-serif; color: #333; }
-                .header { background: #1e3a5f; color: white; padding: 20px; }
-                .content { padding: 20px; }
-                .contractor-info { background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 15px 0; }
-                .button { background: #4a90e2; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; }
-              </style>
-            </head>
-            <body>
-              <div class="header">
-                <h2>Your Mechanic is On The Way!</h2>
-              </div>
-              <div class="content">
-                <p>Hello ${data.customerName},</p>
-                <p>Good news! We've assigned a qualified mechanic to help you.</p>
-                
-                <div class="contractor-info">
-                  <h3>Your Mechanic:</h3>
-                  <p><strong>Name:</strong> ${data.contractorName}</p>
-                  <p><strong>Rating:</strong> ${data.contractorRating} ⭐</p>
-                  <p><strong>Total Jobs:</strong> ${data.contractorTotalJobs}</p>
-                  <p><strong>ETA:</strong> ${data.eta || 'Approximately 45 minutes'}</p>
-                </div>
-                
-                <p>You can track your mechanic's location in real-time:</p>
-                <a href="${process.env.APP_URL || 'https://truckfixgo.com'}/tracking?jobId=${data.jobId}" class="button">Track Mechanic</a>
-                
-                <p>Your mechanic will contact you when they're close to arrival.</p>
-                
-                <p style="margin-top: 20px;">Thank you for choosing TruckFixGo!</p>
-              </div>
-            </body>
-            </html>
-          `,
-          text: `Your mechanic ${data.contractorName} is on the way! ETA: ${data.eta || 'Approximately 45 minutes'}`
+          subject: '🚛 Help is on the way! Your mechanic has been assigned',
+          html: this.getBaseEmailTemplate(customerContent, `Your mechanic ${data.contractorName} is on the way!`),
+          text: `Help is on the way!\n\nHello ${data.customerName},\n\nGood news! We've assigned a qualified mechanic to help you.\n\nYour Mechanic:\n- Name: ${data.contractorName}\n- Rating: ${data.contractorRating} stars\n- Experience: ${data.contractorTotalJobs} completed jobs\n- ETA: ${data.eta || 'Within 45 minutes'}\n\nTrack your mechanic: ${appUrl}/tracking?jobId=${data.jobId}\n\nNeed help? Call 1-800-TRUCK-FIX\n\nThank you for choosing TruckFixGo!`
         };
 
       case 'JOB_UNASSIGNED_ADMIN':
+        const adminContent = `
+          <!-- Urgent Header -->
+          <tr>
+            <td style="padding: 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: linear-gradient(135deg, #dc3545 0%, #ff6b6b 100%);">
+                <tr>
+                  <td style="padding: 30px 40px; text-align: center;" class="mobile-padding">
+                    <h1 style="margin: 0; color: #ffffff; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 32px; font-weight: 700; line-height: 40px;">
+                      ${this.getIconHtml('alert')} URGENT: Unassigned Job
+                    </h1>
+                    <p style="margin: 10px 0 0 0; color: #ffe0e0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                      Immediate attention required
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Alert Message -->
+          <tr>
+            <td style="padding: 40px 40px 20px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #fff3cd; border: 2px solid #ffc107; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 20px;">
+                    <p style="margin: 0; color: #856404; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px; font-weight: 600;">
+                      This job has been waiting for ${data.minutesWaiting} minutes without assignment!
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Job Details -->
+          <tr>
+            <td style="padding: 0 40px 30px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); overflow: hidden;">
+                <tr>
+                  <td style="padding: 0;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #fee2e2; border-bottom: 2px solid #dc3545;">
+                      <tr>
+                        <td style="padding: 20px 30px;" class="card-padding">
+                          <h3 style="margin: 0; color: #991b1b; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; font-weight: 600;">
+                            Job #${data.jobNumber}
+                          </h3>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 25px 30px;" class="card-padding">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="padding-bottom: 15px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="35%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 600; color: #718096;">Created:</td>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #dc3545; font-weight: 600;">${data.createdAt}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 15px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="35%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 600; color: #718096;">Customer:</td>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748;">${data.customerName}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 15px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="35%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 600; color: #718096;">Location:</td>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748;">${data.address}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 0;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="35%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 600; color: #718096;">Issue:</td>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748;">${data.issueDescription}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Action Button -->
+          <tr>
+            <td style="padding: 0 40px 40px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="center">
+                    ${this.getButtonHtml('Assign Contractor Now', `${appUrl}/admin/jobs`, 'danger')}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #1a202c;">
+                <tr>
+                  <td style="padding: 30px 40px; text-align: center;" class="mobile-padding">
+                    <p style="margin: 0; color: #e2e8f0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px;" class="footer-text">
+                      This is an automated urgent notification from TruckFixGo Admin System
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        `;
+        
         return {
-          subject: `URGENT: Job ${data.jobNumber} needs assignment`,
-          html: `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <style>
-                body { font-family: Arial, sans-serif; color: #333; }
-                .urgent { background: #ff4444; color: white; padding: 20px; }
-                .content { padding: 20px; }
-                .job-info { background: #fff3cd; padding: 15px; border-left: 4px solid #ff9800; margin: 15px 0; }
-              </style>
-            </head>
-            <body>
-              <div class="urgent">
-                <h2>⚠️ URGENT: Unassigned Job</h2>
-              </div>
-              <div class="content">
-                <div class="job-info">
-                  <p><strong>Job Number:</strong> ${data.jobNumber}</p>
-                  <p><strong>Created:</strong> ${data.createdAt}</p>
-                  <p><strong>Minutes Waiting:</strong> ${data.minutesWaiting}</p>
-                  <p><strong>Customer:</strong> ${data.customerName}</p>
-                  <p><strong>Location:</strong> ${data.address}</p>
-                  <p><strong>Issue:</strong> ${data.issueDescription}</p>
-                </div>
-                
-                <p>This job has been unassigned for over ${data.minutesWaiting} minutes and needs immediate attention.</p>
-                
-                <a href="${process.env.APP_URL || 'https://truckfixgo.com'}/admin/jobs" style="background: #ff4444; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block;">Assign Contractor</a>
-              </div>
-            </body>
-            </html>
-          `,
-          text: `URGENT: Job ${data.jobNumber} has been unassigned for ${data.minutesWaiting} minutes`
+          subject: `🚨 URGENT: Job #${data.jobNumber} needs assignment (${data.minutesWaiting} min waiting)`,
+          html: this.getBaseEmailTemplate(adminContent, `Urgent: Job ${data.jobNumber} has been waiting ${data.minutesWaiting} minutes`),
+          text: `URGENT: Unassigned Job Alert\n\nJob #${data.jobNumber} has been waiting for ${data.minutesWaiting} minutes without assignment!\n\nDetails:\n- Created: ${data.createdAt}\n- Customer: ${data.customerName}\n- Location: ${data.address}\n- Issue: ${data.issueDescription}\n\nPlease assign a contractor immediately: ${appUrl}/admin/jobs\n\nTruckFixGo Admin System`
         };
 
       case 'JOB_PENDING_CUSTOMER':
+        const pendingContent = `
+          <!-- Header -->
+          <tr>
+            <td style="padding: 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <tr>
+                  <td style="padding: 30px 40px; text-align: center;" class="mobile-padding">
+                    <h1 style="margin: 0; color: #ffffff; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 32px; font-weight: 700; line-height: 40px;">
+                      ${this.getIconHtml('clock')} We're On It!
+                    </h1>
+                    <p style="margin: 10px 0 0 0; color: #e9d5ff; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                      Finding the best mechanic for you
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px 40px 20px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td>
+                    <h2 style="margin: 0 0 20px; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 24px; font-weight: 600; line-height: 32px;">
+                      Hello ${data.customerName},
+                    </h2>
+                    <p style="margin: 0 0 30px; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                      Thank you for your patience. We're actively searching for the best available mechanic in your area to handle your request.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Status Card -->
+          <tr>
+            <td style="padding: 0 40px 30px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); overflow: hidden;">
+                <tr>
+                  <td style="padding: 0;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%); border-bottom: 2px solid #667eea;">
+                      <tr>
+                        <td style="padding: 20px 30px;" class="card-padding">
+                          <h3 style="margin: 0; color: #4338ca; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; font-weight: 600;">
+                            Current Status
+                          </h3>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 25px 30px;" class="card-padding">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="padding-bottom: 20px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="40%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 500; color: #718096;">Job Number:</td>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; color: #2d3748; font-weight: 600;">#${data.jobNumber}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 20px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="40%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 500; color: #718096;">Status:</td>
+                              <td style="padding: 0;">
+                                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                                  <tr>
+                                    <td style="background-color: #fbbf24; color: #78350f; padding: 4px 12px; border-radius: 4px; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 600;">
+                                      Finding Mechanic
+                                    </td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td width="40%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 500; color: #718096;">Expected Time:</td>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; color: #059669; font-weight: 600;">Within 10 minutes</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Next Steps -->
+          <tr>
+            <td style="padding: 0 40px 30px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td>
+                    <h3 style="margin: 0 0 15px; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; font-weight: 600;">
+                      What happens next?
+                    </h3>
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="padding: 0 0 10px 0;">
+                          <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #4a5568;">
+                                ${this.getIconHtml('check')} We're matching you with qualified mechanics
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 0 0 10px 0;">
+                          <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #4a5568;">
+                                ${this.getIconHtml('check')} You'll receive an email once assigned
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 0;">
+                          <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #4a5568;">
+                                ${this.getIconHtml('check')} You can track your mechanic in real-time
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Help Section -->
+          <tr>
+            <td style="padding: 0 40px 40px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f3f4f6; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 20px; text-align: center;">
+                    <p style="margin: 0 0 10px; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px;">
+                      Need immediate assistance?
+                    </p>
+                    <p style="margin: 0; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; font-weight: 600;">
+                      ${this.getIconHtml('phone')} Call 1-800-TRUCK-FIX
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #4338ca;">
+                <tr>
+                  <td style="padding: 30px 40px; text-align: center;" class="mobile-padding">
+                    <p style="margin: 0 0 10px; color: #e0e7ff; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px;" class="footer-text">
+                      We appreciate your patience while we find the best help
+                    </p>
+                    <p style="margin: 0; color: #c7d2fe; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px;" class="footer-text">
+                      © ${new Date().getFullYear()} TruckFixGo • Your Trusted Repair Partner
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        `;
+        
         return {
-          subject: 'We\'re finding a mechanic for you',
-          html: `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <style>
-                body { font-family: Arial, sans-serif; color: #333; }
-                .header { background: #1e3a5f; color: white; padding: 20px; }
-                .content { padding: 20px; }
-                .info-box { background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 15px 0; }
-              </style>
-            </head>
-            <body>
-              <div class="header">
-                <h2>We're Working on Your Request</h2>
-              </div>
-              <div class="content">
-                <p>Hello ${data.customerName},</p>
-                <p>Thank you for your patience. We're currently finding the best available mechanic for your needs.</p>
-                
-                <div class="info-box">
-                  <p><strong>Job Number:</strong> ${data.jobNumber}</p>
-                  <p><strong>Status:</strong> Finding a mechanic</p>
-                  <p><strong>Expected Assignment:</strong> Within the next 10 minutes</p>
-                </div>
-                
-                <p>You'll receive another notification as soon as a mechanic is assigned and on their way to help you.</p>
-                
-                <p>If you need immediate assistance, please call us at 1-800-TRUCK-FIX.</p>
-                
-                <p style="margin-top: 20px;">Thank you for your patience,<br>TruckFixGo Team</p>
-              </div>
-            </body>
-            </html>
-          `,
-          text: `We're finding a mechanic for your job ${data.jobNumber}. You'll be notified once assigned.`
+          subject: '🔍 We\'re finding a mechanic for you - Job #' + data.jobNumber,
+          html: this.getBaseEmailTemplate(pendingContent, `We're actively searching for a mechanic for job #${data.jobNumber}`),
+          text: `We're finding a mechanic for you\n\nHello ${data.customerName},\n\nThank you for your patience. We're currently finding the best available mechanic for your needs.\n\nStatus:\n- Job Number: #${data.jobNumber}\n- Current Status: Finding a mechanic\n- Expected Assignment: Within the next 10 minutes\n\nWhat happens next:\n✓ We're matching you with qualified mechanics\n✓ You'll receive an email once assigned\n✓ You can track your mechanic in real-time\n\nNeed immediate help? Call 1-800-TRUCK-FIX\n\nThank you,\nTruckFixGo Team`
+        };
+
+      case 'JOB_COMPLETED':
+        const completedContent = `
+          <!-- Header -->
+          <tr>
+            <td style="padding: 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: linear-gradient(135deg, #10b981 0%, #34d399 100%);">
+                <tr>
+                  <td style="padding: 30px 40px; text-align: center;" class="mobile-padding">
+                    <h1 style="margin: 0; color: #ffffff; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 32px; font-weight: 700; line-height: 40px;">
+                      ${this.getIconHtml('check')} Job Completed Successfully!
+                    </h1>
+                    <p style="margin: 10px 0 0 0; color: #d1fae5; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                      Your service has been completed
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Thank You Message -->
+          <tr>
+            <td style="padding: 40px 40px 20px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td>
+                    <h2 style="margin: 0 0 20px; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 24px; font-weight: 600; line-height: 32px;">
+                      Hello ${data.customerName},
+                    </h2>
+                    <p style="margin: 0 0 30px; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                      Thank you for choosing TruckFixGo! Your service has been completed successfully. Below is your service summary and invoice details.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Invoice Card -->
+          <tr>
+            <td style="padding: 0 40px 30px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden;">
+                <tr>
+                  <td style="padding: 0;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #1e3a5f;">
+                      <tr>
+                        <td style="padding: 20px 30px;" class="card-padding">
+                          <h3 style="margin: 0; color: #ffffff; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 20px; font-weight: 600;">
+                            Service Invoice
+                          </h3>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 25px 30px;" class="card-padding">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="padding-bottom: 20px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td style="padding: 0;">
+                                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                  <tr>
+                                    <td width="50%" style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;">Job Number</td>
+                                    <td width="50%" style="padding: 0; text-align: right; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;">Completion Date</td>
+                                  </tr>
+                                  <tr>
+                                    <td style="padding: 5px 0 0 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; color: #2d3748; font-weight: 600;">#${data.jobNumber}</td>
+                                    <td style="padding: 5px 0 0 0; text-align: right; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; color: #2d3748; font-weight: 600;">${data.completionDate}</td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 20px 0; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td style="padding-bottom: 12px;">
+                                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                  <tr>
+                                    <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #4a5568;">Service Performed:</td>
+                                    <td style="padding: 0; text-align: right; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748; font-weight: 600;">${data.serviceType}</td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding-bottom: 12px;">
+                                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                  <tr>
+                                    <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #4a5568;">Labor:</td>
+                                    <td style="padding: 0; text-align: right; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748;">$${data.laborCost || '0.00'}</td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding-bottom: 12px;">
+                                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                  <tr>
+                                    <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #4a5568;">Parts:</td>
+                                    <td style="padding: 0; text-align: right; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748;">$${data.partsCost || '0.00'}</td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                  <tr>
+                                    <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #4a5568;">Service Fee:</td>
+                                    <td style="padding: 0; text-align: right; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748;">$${data.serviceFee || '0.00'}</td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-top: 20px;">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f7fafc; border-radius: 6px;">
+                            <tr>
+                              <td style="padding: 15px 20px;">
+                                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                  <tr>
+                                    <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; color: #2d3748; font-weight: 700;">Total Paid:</td>
+                                    <td style="padding: 0; text-align: right; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 24px; color: #10b981; font-weight: 700;">$${data.totalAmount}</td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Rate Your Experience -->
+          <tr>
+            <td style="padding: 0 40px 40px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="center">
+                    <h3 style="margin: 0 0 20px; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; font-weight: 600; text-align: center;">
+                      How was your experience?
+                    </h3>
+                    ${this.getButtonHtml('Rate Your Service', `${appUrl}/jobs?review=${data.jobId}`, 'primary')}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #2d3748;">
+                <tr>
+                  <td style="padding: 30px 40px; text-align: center;" class="mobile-padding">
+                    <p style="margin: 0 0 10px; color: #e2e8f0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px;" class="footer-text">
+                      Thank you for choosing TruckFixGo!
+                    </p>
+                    <p style="margin: 0; color: #a0aec0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px;" class="footer-text">
+                      © ${new Date().getFullYear()} TruckFixGo • Your Trusted Repair Partner
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        `;
+        
+        return {
+          subject: `✅ Service Completed - Invoice #${data.jobNumber}`,
+          html: this.getBaseEmailTemplate(completedContent, `Service completed successfully - Total: $${data.totalAmount}`),
+          text: `Job Completed Successfully!\n\nHello ${data.customerName},\n\nYour service has been completed successfully.\n\nInvoice Details:\n- Job Number: #${data.jobNumber}\n- Completion Date: ${data.completionDate}\n- Service: ${data.serviceType}\n- Total Paid: $${data.totalAmount}\n\nPlease rate your experience: ${appUrl}/jobs?review=${data.jobId}\n\nThank you for choosing TruckFixGo!`
+        };
+
+      case 'WELCOME_CONTRACTOR':
+        const welcomeContent = `
+          <!-- Header -->
+          <tr>
+            <td style="padding: 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);">
+                <tr>
+                  <td style="padding: 40px 40px;" class="mobile-padding">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td align="center">
+                          <h1 style="margin: 0 0 10px; color: #ffffff; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 36px; font-weight: 700; line-height: 44px;">
+                            Welcome to TruckFixGo!
+                          </h1>
+                          <p style="margin: 0; color: #e3f2fd; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; line-height: 26px;">
+                            Your contractor account has been approved
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Welcome Message -->
+          <tr>
+            <td style="padding: 40px 40px 20px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td>
+                    <h2 style="margin: 0 0 20px; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 24px; font-weight: 600; line-height: 32px;">
+                      Hello ${data.contractorName},
+                    </h2>
+                    <p style="margin: 0 0 30px; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                      Congratulations! You're now an approved TruckFixGo contractor. We're excited to have you join our network of professional mechanics.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Getting Started Steps -->
+          <tr>
+            <td style="padding: 0 40px 30px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); overflow: hidden;">
+                <tr>
+                  <td style="padding: 0;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f7fafc; border-bottom: 1px solid #e2e8f0;">
+                      <tr>
+                        <td style="padding: 20px 30px;" class="card-padding">
+                          <h3 style="margin: 0; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; font-weight: 600;">
+                            🚀 Getting Started
+                          </h3>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 25px 30px;" class="card-padding">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="padding-bottom: 20px;">
+                          <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td style="padding: 0 15px 0 0; vertical-align: top; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 20px; color: #4a90e2; font-weight: 700;">1.</td>
+                              <td style="padding: 0;">
+                                <h4 style="margin: 0 0 5px; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; font-weight: 600;">Complete Your Profile</h4>
+                                <p style="margin: 0; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px;">Add your service areas, specialties, and availability</p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 20px;">
+                          <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td style="padding: 0 15px 0 0; vertical-align: top; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 20px; color: #4a90e2; font-weight: 700;">2.</td>
+                              <td style="padding: 0;">
+                                <h4 style="margin: 0 0 5px; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; font-weight: 600;">Set Your Availability</h4>
+                                <p style="margin: 0; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px;">Let us know when you're available to receive job requests</p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-bottom: 0;">
+                          <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                              <td style="padding: 0 15px 0 0; vertical-align: top; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 20px; color: #4a90e2; font-weight: 700;">3.</td>
+                              <td style="padding: 0;">
+                                <h4 style="margin: 0 0 5px; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; font-weight: 600;">Start Accepting Jobs</h4>
+                                <p style="margin: 0; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px;">You'll receive notifications when new jobs match your criteria</p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Login Credentials -->
+          <tr>
+            <td style="padding: 0 40px 30px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #e0f2fe; border: 2px solid #0ea5e9; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 20px; text-align: center;">
+                    <h3 style="margin: 0 0 15px; color: #0c4a6e; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; font-weight: 600;">
+                      Your Login Credentials
+                    </h3>
+                    <p style="margin: 0 0 5px; color: #0c4a6e; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px;">
+                      <strong>Email:</strong> ${data.email}
+                    </p>
+                    <p style="margin: 0; color: #0c4a6e; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px;">
+                      <strong>Password:</strong> ${data.temporaryPassword || 'Use the password you created'}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- CTA Button -->
+          <tr>
+            <td style="padding: 0 40px 40px;" class="container-padding">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="center">
+                    ${this.getButtonHtml('Go to Dashboard', `${appUrl}/contractor/dashboard`, 'primary')}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #1e3a5f;">
+                <tr>
+                  <td style="padding: 30px 40px; text-align: center;" class="mobile-padding">
+                    <p style="margin: 0 0 10px; color: #e3f2fd; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px;" class="footer-text">
+                      Welcome to the TruckFixGo contractor network!
+                    </p>
+                    <p style="margin: 0; color: #cbd5e0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px;" class="footer-text">
+                      © ${new Date().getFullYear()} TruckFixGo • Professional Truck Repair Services
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        `;
+        
+        return {
+          subject: '🎉 Welcome to TruckFixGo - Your Account is Approved!',
+          html: this.getBaseEmailTemplate(welcomeContent, `Welcome to TruckFixGo! Start accepting jobs today.`),
+          text: `Welcome to TruckFixGo!\n\nHello ${data.contractorName},\n\nCongratulations! You're now an approved TruckFixGo contractor.\n\nGetting Started:\n1. Complete Your Profile - Add your service areas and specialties\n2. Set Your Availability - Let us know when you can receive jobs\n3. Start Accepting Jobs - You'll receive notifications for matching jobs\n\nYour Login Credentials:\nEmail: ${data.email}\nPassword: ${data.temporaryPassword || 'Use the password you created'}\n\nAccess your dashboard: ${appUrl}/contractor/dashboard\n\nWelcome to the team!\nTruckFixGo`
         };
 
       default:
         return {
           subject: 'TruckFixGo Notification',
-          html: '<p>Notification from TruckFixGo</p>',
+          html: this.getBaseEmailTemplate('<tr><td style="padding: 40px; text-align: center;"><p>Notification from TruckFixGo</p></td></tr>', 'TruckFixGo Notification'),
           text: 'Notification from TruckFixGo'
         };
     }
