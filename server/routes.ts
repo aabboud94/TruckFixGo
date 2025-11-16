@@ -15358,6 +15358,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Admin impersonation - Login as contractor
+  app.post('/api/admin/contractors/:id/impersonate',
+    requireAuth,
+    requireRole('admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { id: contractorId } = req.params;
+        const adminUserId = req.session.userId;
+        const adminRole = req.session.role;
+        
+        // Get contractor details
+        const contractor = await storage.getUser(contractorId);
+        if (!contractor || contractor.role !== 'contractor') {
+          return res.status(404).json({ message: 'Contractor not found' });
+        }
+        
+        // Store original admin session for audit
+        const originalSession = {
+          adminUserId,
+          adminRole,
+          impersonationStart: new Date().toISOString(),
+          targetContractorId: contractorId
+        };
+        
+        // Log impersonation action
+        console.log('[AUDIT] Admin impersonation:', {
+          adminId: adminUserId,
+          contractorId: contractorId,
+          timestamp: new Date().toISOString(),
+          ip: req.ip
+        });
+        
+        // Store audit record in database
+        try {
+          await storage.createAuditLog({
+            userId: adminUserId,
+            action: 'contractor_impersonation',
+            entityType: 'user',
+            entityId: contractorId,
+            details: {
+              adminId: adminUserId,
+              contractorId: contractorId,
+              contractorName: `${contractor.firstName} ${contractor.lastName}`,
+              contractorEmail: contractor.email,
+              timestamp: new Date().toISOString(),
+              ip: req.ip
+            },
+            performedAt: new Date()
+          });
+        } catch (auditError) {
+          console.error('Failed to create audit log:', auditError);
+          // Continue with impersonation even if audit fails
+        }
+        
+        // Store original admin info in session for later restoration
+        req.session.originalAdmin = originalSession;
+        
+        // Switch session to contractor
+        req.session.userId = contractorId;
+        req.session.role = 'contractor';
+        
+        res.json({
+          success: true,
+          message: `Now logged in as contractor: ${contractor.firstName} ${contractor.lastName}`,
+          contractor: {
+            id: contractor.id,
+            name: `${contractor.firstName} ${contractor.lastName}`,
+            email: contractor.email,
+            role: contractor.role
+          },
+          isImpersonating: true
+        });
+      } catch (error) {
+        console.error('Contractor impersonation error:', error);
+        res.status(500).json({ message: 'Failed to impersonate contractor' });
+      }
+    }
+  );
+
+  // Stop impersonation - Return to admin session
+  app.post('/api/admin/stop-impersonation',
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const originalAdmin = req.session.originalAdmin;
+        
+        if (!originalAdmin) {
+          return res.status(400).json({ message: 'Not currently impersonating' });
+        }
+        
+        // Log end of impersonation
+        console.log('[AUDIT] Ending impersonation:', {
+          adminId: originalAdmin.adminUserId,
+          contractorId: req.session.userId,
+          duration: new Date().getTime() - new Date(originalAdmin.impersonationStart).getTime(),
+          timestamp: new Date().toISOString()
+        });
+        
+        // Restore admin session
+        req.session.userId = originalAdmin.adminUserId;
+        req.session.role = originalAdmin.adminRole;
+        delete req.session.originalAdmin;
+        
+        res.json({
+          success: true,
+          message: 'Returned to admin session',
+          isImpersonating: false
+        });
+      } catch (error) {
+        console.error('Stop impersonation error:', error);
+        res.status(500).json({ message: 'Failed to stop impersonation' });
+      }
+    }
+  );
+
   // ==================== CONTRACTOR BULK OPERATIONS ====================
   
   // Bulk approve contractors

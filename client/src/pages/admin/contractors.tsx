@@ -935,8 +935,52 @@ export default function AdminContractors() {
                   </div>
                 </div>
                 
-                {/* Save Changes Button */}
-                <div className="flex justify-end pt-4">
+                {/* Action Buttons */}
+                <div className="flex justify-between pt-4">
+                  {/* Login as Contractor Button */}
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      if (!selectedContractor?.id) {
+                        toast({
+                          variant: "destructive",
+                          title: "Error",
+                          description: "Unable to impersonate: no contractor selected",
+                        });
+                        return;
+                      }
+                      
+                      try {
+                        const response = await apiRequest(
+                          "POST",
+                          `/api/admin/contractors/${selectedContractor.id}/impersonate`
+                        );
+                        
+                        if (response.success) {
+                          toast({
+                            title: "Impersonation Started",
+                            description: response.message,
+                          });
+                          
+                          // Redirect to contractor dashboard
+                          window.location.href = '/contractor/dashboard';
+                        }
+                      } catch (error: any) {
+                        console.error('Impersonation error:', error);
+                        toast({
+                          variant: "destructive",
+                          title: "Impersonation Failed",
+                          description: error.message || "Failed to login as contractor",
+                        });
+                      }
+                    }}
+                    data-testid="button-login-as-contractor"
+                  >
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Login as Contractor
+                  </Button>
+
+                  {/* Save Changes Button */}
                   <Button
                     onClick={() => {
                       console.log('[Save Changes] Selected Contractor:', selectedContractor);
