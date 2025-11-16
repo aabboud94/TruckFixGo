@@ -2917,6 +2917,7 @@ export class PostgreSQLStorage implements IStorage {
         currentBalance: sql<number>`0`, // Simplified to avoid join issue
         documentsVerified: contractorProfiles.isVerifiedContractor,
         isAvailable: contractorProfiles.isAvailable,
+        isOnline: contractorProfiles.isAvailable, // Map isAvailable to isOnline for frontend compatibility
         joinedAt: users.createdAt
       })
       .from(users)
