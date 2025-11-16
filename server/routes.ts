@@ -20,6 +20,7 @@ import weatherService from "./services/weather-service";
 import { trackingWSServer } from "./websocket";
 import { healthMonitor } from "./health-monitor";
 import { pushNotificationService } from "./services/push-notification-service";
+import { isTestModeEnabled, createTestUsers } from "./test-mode-service";
 import multer from "multer";
 import sharp from "sharp";
 import path from "path";
@@ -72,6 +73,7 @@ import {
   contractorProfiles,
   jobs,
   passwordResetTokens,
+  fleetContacts,
   insertFleetContractSchema,
   insertContractSlaMetricSchema,
   insertContractPenaltySchema,
@@ -377,6 +379,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== AUTHENTICATION & USER ROUTES ====================
   
+  // Check if test mode is enabled
+  app.get('/api/test-mode', (req: Request, res: Response) => {
+    try {
+      const testMode = isTestModeEnabled();
+      res.json({ testMode });
+    } catch (error) {
+      console.error('Error checking test mode:', error);
+      res.json({ testMode: false });
+    }
+  });
+  
   // Register new user
   app.post('/api/auth/register', 
     rateLimiter(5, 60000), // 5 requests per minute
@@ -539,6 +552,150 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ message: 'Login failed' });
+      }
+    }
+  );
+
+  // Test login endpoint for quick login functionality
+  app.post('/api/auth/test-login',
+    rateLimiter(20, 60000), // Less restrictive for test logins
+    validateRequest(z.object({
+      email: z.string().email(),
+      password: z.string(),
+      role: z.enum(['admin', 'contractor', 'driver', 'fleet_manager'])
+    })),
+    async (req: Request, res: Response) => {
+      try {
+        // Only allow test login when test mode is enabled
+        if (!isTestModeEnabled()) {
+          return res.status(403).json({ 
+            message: 'Test login is not available' 
+          });
+        }
+
+        const { email, password, role } = req.body;
+        
+        // Define expected test users
+        const testCredentials = [
+          { email: 'testadmin@example.com', password: 'Test123456!', role: 'admin' },
+          { email: 'testcontractor@example.com', password: 'Test123456!', role: 'contractor' },
+          { email: 'testdriver@example.com', password: 'Test123456!', role: 'driver' },
+          { email: 'testfleet@example.com', password: 'Test123456!', role: 'fleet_manager' }
+        ];
+        
+        // Check if the provided credentials match any test user
+        const matchingTestUser = testCredentials.find(
+          cred => cred.email === email && cred.password === password && cred.role === role
+        );
+        
+        if (!matchingTestUser) {
+          return res.status(401).json({ 
+            message: 'Invalid test credentials' 
+          });
+        }
+        
+        // Ensure test users exist in the database
+        await createTestUsers();
+        
+        // Look up the test user
+        const user = await storage.getUserByEmail(email);
+        
+        if (!user) {
+          console.error(`[test-login] Test user not found after creation: ${email}`);
+          return res.status(500).json({ 
+            message: 'Failed to create or find test user' 
+          });
+        }
+        
+        // Verify the user's role matches
+        if (user.role !== role) {
+          console.error(`[test-login] Role mismatch for ${email}: expected ${role}, got ${user.role}`);
+          return res.status(401).json({ 
+            message: 'Role mismatch' 
+          });
+        }
+        
+        // Ensure user is active
+        if (!user.isActive) {
+          return res.status(403).json({ 
+            message: 'Test account is disabled' 
+          });
+        }
+        
+        // Update last login
+        await storage.updateUser(user.id, { lastLoginAt: new Date() });
+        
+        // Create session
+        req.session.userId = user.id;
+        req.session.role = user.role;
+        
+        // Save session explicitly to ensure it persists
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) {
+              console.error('[test-login] Session save error:', err);
+              reject(err);
+            } else {
+              console.log(`[test-login] Session saved for user ${user.id}`);
+              resolve();
+            }
+          });
+        });
+        
+        // Get profile data if applicable
+        let profile = null;
+        if (user.role === 'driver') {
+          try {
+            profile = await storage.getDriverProfile(user.id);
+          } catch (e) {
+            // Profile might not exist yet
+            console.log(`[test-login] Driver profile not found for ${user.id}`);
+          }
+        } else if (user.role === 'contractor') {
+          try {
+            profile = await storage.getContractorProfile(user.id);
+          } catch (e) {
+            // Profile might not exist yet
+            console.log(`[test-login] Contractor profile not found for ${user.id}`);
+          }
+        } else if (user.role === 'fleet_manager') {
+          try {
+            // Get fleet contact and associated fleet account for fleet managers
+            const fleetContacts = await db.select()
+              .from(fleetContacts)
+              .where(eq(fleetContacts.userId, user.id))
+              .limit(1);
+            
+            if (fleetContacts.length > 0) {
+              const fleetAccount = await storage.getFleetAccount(fleetContacts[0].fleetAccountId);
+              profile = fleetAccount;
+            }
+          } catch (e) {
+            console.log(`[test-login] Fleet account not found for ${user.id}`);
+          }
+        }
+        
+        console.log(`[test-login] Successful test login for ${email} with role ${role}`);
+        
+        res.json({
+          message: 'Test login successful',
+          user: {
+            id: user.id,
+            email: user.email,
+            phone: user.phone,
+            role: user.role,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            profile
+          }
+        });
+        
+      } catch (error) {
+        console.error('[test-login] Error:', error);
+        res.status(500).json({ 
+          message: 'Test login failed', 
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined 
+        });
       }
     }
   );
