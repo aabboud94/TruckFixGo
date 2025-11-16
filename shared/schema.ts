@@ -218,6 +218,13 @@ export const contractorProfiles = pgTable("contractor_profiles", {
   lastAssignedAt: timestamp("last_assigned_at"),
   isOnline: boolean("is_online").notNull().default(false),
   lastHeartbeatAt: timestamp("last_heartbeat_at"),
+  
+  // New fields for smart assignment
+  workingHours: jsonb("working_hours").default(sql`'{"monday":{"start":"08:00","end":"18:00"},"tuesday":{"start":"08:00","end":"18:00"},"wednesday":{"start":"08:00","end":"18:00"},"thursday":{"start":"08:00","end":"18:00"},"friday":{"start":"08:00","end":"18:00"},"saturday":{"start":"09:00","end":"16:00"},"sunday":{"start":"10:00","end":"14:00"}}'::jsonb`),
+  currentJobCount: integer("current_job_count").notNull().default(0),
+  maxJobsPerDay: integer("max_jobs_per_day").notNull().default(5),
+  serviceCities: text("service_cities").array().default(sql`ARRAY[]::text[]`),
+  
   baseLocationLat: decimal("base_location_lat", { precision: 10, scale: 8 }),
   baseLocationLon: decimal("base_location_lon", { precision: 11, scale: 8 }),
   
@@ -3814,6 +3821,50 @@ export const notifications = pgTable("notifications", {
   entityIdx: index("idx_notifications_entity").on(table.relatedEntityType, table.relatedEntityId)
 }));
 
+// ====================
+// EMAIL LOGS
+// ====================
+
+export const emailStatusEnum = pgEnum('email_status', ['pending', 'sent', 'delivered', 'opened', 'clicked', 'failed']);
+export const emailTypeEnum = pgEnum('email_type', [
+  'job_assigned_contractor',
+  'job_assigned_customer',
+  'job_unassigned_admin',
+  'job_pending_customer',
+  'job_completed',
+  'welcome_contractor',
+  'password_reset',
+  'invoice_sent',
+  'test_email',
+  'custom'
+]);
+
+export const emailLogs = pgTable("email_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  recipientEmail: varchar("recipient_email").notNull(),
+  emailType: emailTypeEnum("email_type").notNull(),
+  subject: text("subject").notNull(),
+  bodyHtml: text("body_html"),
+  bodyText: text("body_text"),
+  status: emailStatusEnum("status").notNull().default('pending'),
+  messageId: varchar("message_id"),
+  errorMessage: text("error_message"),
+  sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  openedAt: timestamp("opened_at"),
+  clickedAt: timestamp("clicked_at"),
+  jobId: varchar("job_id").references(() => jobs.id),
+  contractorId: varchar("contractor_id").references(() => contractorProfiles.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
+}, (table) => ({
+  recipientIdx: index("idx_email_logs_recipient").on(table.recipientEmail),
+  statusIdx: index("idx_email_logs_status").on(table.status),
+  jobIdx: index("idx_email_logs_job").on(table.jobId),
+  contractorIdx: index("idx_email_logs_contractor").on(table.contractorId),
+  createdIdx: index("idx_email_logs_created").on(table.createdAt)
+}));
+
 // Location tracking types
 export type LocationTracking = typeof locationTracking.$inferSelect;
 export type InsertLocationTracking = typeof locationTracking.$inferInsert;
@@ -3843,6 +3894,20 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 });
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
+
+// Email Log schemas and types
+export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({
+  id: true,
+  status: true,
+  sentAt: true,
+  deliveredAt: true,
+  openedAt: true,
+  clickedAt: true,
+  createdAt: true,
+  updatedAt: true
+});
+export type InsertEmailLog = z.infer<typeof insertEmailLogSchema>;
+export type EmailLog = typeof emailLogs.$inferSelect;
 
 // Route management schemas and types
 export const insertContractorRouteSchema = createInsertSchema(contractorRoutes).omit({

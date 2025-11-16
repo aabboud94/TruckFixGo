@@ -56,7 +56,9 @@ import {
   ArrowDown,
   Sparkles,
   Upload,
-  FastForward
+  FastForward,
+  CheckCircle2,
+  XCircle
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import PerformanceWidget from "@/components/performance-widget";
@@ -341,6 +343,23 @@ export default function ContractorDashboard() {
   const availableJobs = dashboardData?.availableJobs || [];
   const scheduledJobs = dashboardData?.scheduledJobs || [];
   const queueInfo = dashboardData?.queueInfo;
+  
+  // Helper function to check if job was assigned recently (within last hour)
+  const isNewJob = (job: any) => {
+    if (!job.assignedAt) return false;
+    const assignedTime = new Date(job.assignedAt);
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    return assignedTime > hourAgo;
+  };
+  
+  // Separate and sort jobs: new jobs first
+  const sortedQueuedJobs = [...queuedJobs].sort((a, b) => {
+    const aIsNew = isNewJob(a);
+    const bIsNew = isNewJob(b);
+    if (aIsNew && !bIsNew) return -1;
+    if (!aIsNew && bIsNew) return 1;
+    return 0;
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -660,12 +679,20 @@ export default function ContractorDashboard() {
             ) : (
               <ScrollArea className="h-[300px] pr-4">
                 <div className="space-y-3">
-                  {queuedJobs.map((job, index) => (
-                    <Card key={job.id} className="border-l-2 border-l-muted">
+                  {sortedQueuedJobs.map((job, index) => {
+                    const isNew = isNewJob(job);
+                    return (
+                    <Card key={job.id} className={`border-l-2 ${isNew ? 'border-l-green-500 bg-green-50/5' : 'border-l-muted'}`}>
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between">
                           <div className="space-y-2 flex-1">
                             <div className="flex items-center gap-3">
+                              {isNew && (
+                                <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                                  <Sparkles className="w-3 h-3 mr-1" />
+                                  NEW
+                                </Badge>
+                              )}
                               <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
                                 #{job.queuePosition}
                               </div>
@@ -703,6 +730,31 @@ export default function ContractorDashboard() {
                               )}
                             </div>
                             <p className="text-sm text-muted-foreground line-clamp-1">{job.description}</p>
+                            {isNew && (
+                              <div className="flex gap-2 mt-3">
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="bg-green-600 hover:bg-green-700"
+                                  onClick={() => acceptJobMutation.mutate(job.id)}
+                                  disabled={acceptJobMutation.isPending}
+                                  data-testid={`button-accept-${job.id}`}
+                                >
+                                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                                  Accept Job
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => declineJobMutation.mutate(job.id)}
+                                  disabled={declineJobMutation.isPending}
+                                  data-testid={`button-decline-${job.id}`}
+                                >
+                                  <XCircle className="w-4 h-4 mr-1" />
+                                  Decline
+                                </Button>
+                              </div>
+                            )}
                           </div>
                           {currentLocation && job.location && (
                             <div className="ml-4">
@@ -720,7 +772,8 @@ export default function ContractorDashboard() {
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                  );
+                })}
                 </div>
               </ScrollArea>
             )}
