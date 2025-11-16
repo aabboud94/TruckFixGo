@@ -13,13 +13,15 @@ import {
   serviceAreas,
   vehicleMaintenanceLogs,
   contractorServiceAreas,
+  serviceTypes,
   type InsertUser,
   type InsertContractorProfile,
   type InsertJob,
   type InsertFleetAccount,
   type InsertDriverProfile,
   type InsertContractorService,
-  type InsertContractorAvailability
+  type InsertContractorAvailability,
+  type InsertServiceType
 } from "@shared/schema";
 import { eq, sql, and, like, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -126,6 +128,39 @@ export function clearTestEmails(): void {
   testEmails = [];
 }
 
+// Ensure service types exist in the database
+export async function ensureServiceTypes() {
+  const serviceTypeMap = new Map<string, string>(); // code -> id
+  
+  for (const serviceType of SERVICE_TYPES) {
+    // Check if service type exists
+    const existing = await db.select()
+      .from(serviceTypes)
+      .where(eq(serviceTypes.code, serviceType.code))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      serviceTypeMap.set(serviceType.code, existing[0].id);
+    } else {
+      // Create the service type
+      const [created] = await db.insert(serviceTypes).values({
+        code: serviceType.code,
+        name: serviceType.name,
+        description: `${serviceType.name} service for trucks`,
+        category: 'Repair',
+        estimatedDuration: 60, // Default to 60 minutes
+        requiresSpecialist: serviceType.urgency === 'high',
+        isActive: true
+      }).returning();
+      
+      serviceTypeMap.set(serviceType.code, created.id);
+      console.log(`✅ Created service type: ${serviceType.name}`);
+    }
+  }
+  
+  return serviceTypeMap;
+}
+
 // Generate test users
 export async function createTestUsers() {
   const password = await bcrypt.hash('Test123456!', 10);
@@ -194,6 +229,9 @@ export async function generateTestContractors(count: number = 5) {
   const password = await bcrypt.hash('Test123456!', 10);
   const contractors = [];
 
+  // Ensure service types exist and get their IDs
+  const serviceTypeMap = await ensureServiceTypes();
+
   for (let i = 0; i < count; i++) {
     const cityIndex = i % DETROIT_METRO_CITIES.length;
     const skillSetIndex = i % CONTRACTOR_SKILLS.length;
@@ -217,88 +255,76 @@ export async function generateTestContractors(count: number = 5) {
       phoneVerified: true
     }).returning();
 
-    // Create contractor profile
+    // Create contractor profile - using only valid fields
     const [contractor] = await db.insert(contractorProfiles).values({
       userId: user.id,
       companyName: `Quick Fix ${DETROIT_METRO_CITIES[cityIndex]} #${i + 1}`,
-      serviceRadius: 25 + Math.floor(Math.random() * 25), // 25-50 miles
+      phoneNumber: `555-02${String(i).padStart(2, '0')}`,
+      serviceArea: `${DETROIT_METRO_CITIES[cityIndex]}, MI`,
+      services: CONTRACTOR_SKILLS[skillSetIndex].join(', '),
+      maxDistance: 25 + Math.floor(Math.random() * 25), // 25-50 miles
+      emergencyAvailable: true,
+      nightTimeAvailable: i % 2 === 0, // Half available at night
+      weekendAvailable: i % 3 !== 0, // Two thirds available on weekends
       isOnline,
-      isAvailable: isOnline,
       currentJobCount: activeJobs,
       totalJobsCompleted: Math.floor(Math.random() * 50),
       averageRating: String(4 + Math.random()), // 4.0 - 5.0
       averageResponseTime: Math.floor(Math.random() * 30) + 10, // 10-40 minutes
-      performanceTier: 'bronze' as const,
-      totalReviews: Math.floor(Math.random() * 30),
-      fiveStarCount: Math.floor(Math.random() * 15),
-      fourStarCount: Math.floor(Math.random() * 10),
-      threeStarCount: Math.floor(Math.random() * 3),
-      twoStarCount: Math.floor(Math.random() * 2),
-      oneStarCount: 0,
-      isFleetCapable: i % 2 === 0,
-      hasMobileWaterSource: i % 3 === 0,
-      hasWastewaterRecovery: i % 4 === 0,
-      maxJobsPerDay: 5 + Math.floor(Math.random() * 5),
-      specializations: ['engine_repair', 'transmission', 'electrical', 'brakes', 'tires'].slice(0, Math.floor(Math.random() * 3) + 2),
-      languageSkills: ['English', 'Spanish'].slice(0, Math.floor(Math.random() * 2) + 1),
-      serviceCities: [DETROIT_METRO_CITIES[cityIndex], DETROIT_METRO_CITIES[(cityIndex + 1) % DETROIT_METRO_CITIES.length]]
+      fleetDiscount: i % 2 === 0 ? 10 : 0, // Half offer fleet discounts
+      regularRate: 100 + Math.floor(Math.random() * 50), // $100-$150
+      emergencyRate: 150 + Math.floor(Math.random() * 100), // $150-$250
+      profileComplete: true
     }).returning();
 
-    // Add services
+    // Add services with proper serviceTypeId
     const skills = CONTRACTOR_SKILLS[skillSetIndex];
     for (const skill of skills) {
       if (skill === 'all') {
         // Add all services
         for (const service of SERVICE_TYPES) {
-          await db.insert(contractorServices).values({
-            contractorId: contractor.id,
-            serviceType: service.name,
-            price: 100 + Math.random() * 200,
-            estimatedDuration: 30 + Math.floor(Math.random() * 90)
-          });
+          const serviceTypeId = serviceTypeMap.get(service.code);
+          if (serviceTypeId) {
+            await db.insert(contractorServices).values({
+              contractorId: user.id, // Use user.id since contractorServices references users, not contractorProfiles
+              serviceTypeId: serviceTypeId,
+              isAvailable: true,
+              customRate: 100 + Math.random() * 200,
+              experienceYears: Math.floor(Math.random() * 10) + 1,
+              certificationLevel: ['basic', 'intermediate', 'expert'][Math.floor(Math.random() * 3)]
+            });
+          }
         }
       } else {
-        const service = SERVICE_TYPES.find(s => s.code === skill);
-        if (service) {
+        const serviceTypeId = serviceTypeMap.get(skill);
+        if (serviceTypeId) {
           await db.insert(contractorServices).values({
-            contractorId: contractor.id,
-            serviceType: service.name,
-            price: 100 + Math.random() * 200,
-            estimatedDuration: 30 + Math.floor(Math.random() * 90)
+            contractorId: user.id, // Use user.id since contractorServices references users, not contractorProfiles
+            serviceTypeId: serviceTypeId,
+            isAvailable: true,
+            customRate: 100 + Math.random() * 200,
+            experienceYears: Math.floor(Math.random() * 10) + 1,
+            certificationLevel: ['basic', 'intermediate', 'expert'][Math.floor(Math.random() * 3)]
           });
         }
       }
     }
 
-    // Add availability
+    // Add availability - using user.id since contractorAvailability references users
     await db.insert(contractorAvailability).values({
-      contractorId: contractor.id,
+      contractorId: user.id,
       dayOfWeek: 1, // Monday through Friday
       startTime: '08:00',
       endTime: '18:00',
-      isAvailable: true
+      isOnCall: false
     });
 
-    // Add service areas
-    await db.insert(contractorServiceAreas).values({
-      contractorId: contractor.id,
-      city: DETROIT_METRO_CITIES[cityIndex],
-      state: 'MI',
-      zipCode: `4820${i}`,
-      isPrimary: true,
-      surchargeAmount: i % 3 === 0 ? 25 : 0
-    });
-
-    // Add neighboring city as secondary service area
-    const nextCityIndex = (cityIndex + 1) % DETROIT_METRO_CITIES.length;
-    await db.insert(contractorServiceAreas).values({
-      contractorId: contractor.id,
-      city: DETROIT_METRO_CITIES[nextCityIndex],
-      state: 'MI',
-      zipCode: `4821${i}`,
-      isPrimary: false,
-      surchargeAmount: 50
-    });
+    // Note: Skip service areas for now as they would need to reference existing serviceAreas records
+    // The contractorServiceAreas table requires a serviceAreaId that references the serviceAreas table
+    // To properly implement this, we would need to:
+    // 1. Query or create service areas in the serviceAreas table
+    // 2. Then link contractors to those areas using contractorServiceAreas
+    // For now, the contractors are created without specific service area assignments
 
     contractors.push(contractor);
     console.log(`✅ Created test contractor: ${email} in ${DETROIT_METRO_CITIES[cityIndex]}`);
@@ -329,16 +355,16 @@ export async function generateTestJobs(count: number = 10) {
     const service = SERVICE_TYPES[serviceIndex];
     
     // Determine status based on index for variety
-    let status: 'pending' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
+    let status: 'new' | 'assigned' | 'en_route' | 'on_site' | 'completed' | 'cancelled';
     let assignedTo = null;
     
     if (i < 3) {
-      status = 'pending';
+      status = 'new';
     } else if (i < 6) {
       status = 'assigned';
       assignedTo = testContractors[i % testContractors.length]?.id || null;
     } else if (i < 8) {
-      status = 'in_progress';
+      status = 'on_site';
       assignedTo = testContractors[i % testContractors.length]?.id || null;
     } else {
       status = 'completed';
@@ -349,6 +375,7 @@ export async function generateTestJobs(count: number = 10) {
     const isEmergency = service.urgency === 'high';
 
     const [job] = await db.insert(jobs).values({
+      jobNumber: `JOB-${timestamp}-${i}`, // Add unique job number
       customerId: customer?.id || randomUUID(),
       customerName: customer ? `${customer.firstName} ${customer.lastName}` : `Test Customer ${i + 1}`,
       customerPhone: customer?.phone || `555-10${String(i).padStart(2, '0')}`,
