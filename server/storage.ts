@@ -1712,6 +1712,12 @@ export interface IStorage {
   approveTimeOff(requestId: string, adminId: string, notes?: string): Promise<VacationRequest | null>;
   rejectTimeOff(requestId: string, adminId: string, reason: string): Promise<VacationRequest | null>;
   getTimeOffRequests(contractorId?: string, status?: typeof timeOffStatusEnum.enumValues[number]): Promise<VacationRequest[]>;
+  findVacationRequests(filters: {
+    contractorId?: string;
+    status?: string[];
+    startDate?: string;
+    endDate?: string;
+  }): Promise<VacationRequest[]>;
   checkAvailabilityConflicts(contractorId: string, startDate: Date, endDate: Date): Promise<Job[]>;
   assignCoverageContractor(requestId: string, coveringContractorId: string): Promise<VacationRequest | null>;
   getAvailabilityCalendar(contractorId: string, month: number, year: number): Promise<{
@@ -6035,6 +6041,41 @@ export class PostgreSQLStorage implements IStorage {
     }
     if (status) {
       conditions.push(eq(vacationRequests.status, status));
+    }
+    
+    return await db.select().from(vacationRequests)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(vacationRequests.createdAt));
+  }
+  
+  async findVacationRequests(filters: {
+    contractorId?: string;
+    status?: string[];
+    startDate?: string;
+    endDate?: string;
+  }): Promise<VacationRequest[]> {
+    const conditions = [];
+    
+    if (filters.contractorId) {
+      conditions.push(eq(vacationRequests.contractorId, filters.contractorId));
+    }
+    
+    if (filters.status && filters.status.length > 0) {
+      // Check if any of the status values are valid
+      const validStatuses = filters.status.filter((s): s is typeof timeOffStatusEnum.enumValues[number] => 
+        ['pending', 'approved', 'rejected', 'cancelled'].includes(s)
+      );
+      if (validStatuses.length > 0) {
+        conditions.push(sql`${vacationRequests.status} = ANY(${validStatuses})`);
+      }
+    }
+    
+    if (filters.startDate) {
+      conditions.push(gte(vacationRequests.startDate, new Date(filters.startDate)));
+    }
+    
+    if (filters.endDate) {
+      conditions.push(lte(vacationRequests.endDate, new Date(filters.endDate)));
     }
     
     return await db.select().from(vacationRequests)
