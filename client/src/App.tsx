@@ -97,6 +97,7 @@ import AIChatbot from "@/components/ai-chatbot";
 import InstallPrompt from "@/components/install-prompt";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import TestLocationInput from "@/pages/test-location-input";
+import TestDialogs from "@/pages/test-dialogs";
 import SplitPaymentPage from "@/pages/split-payment";
 import ResetPassword from "@/pages/reset-password";
 import ForgotPassword from "@/pages/forgot-password";
@@ -126,6 +127,7 @@ function Router() {
       
       {/* Test Pages */}
       <Route path="/test-location" component={TestLocationInput} />
+      <Route path="/test-dialogs" component={TestDialogs} />
       
       {/* Tracking Pages */}
       <Route path="/track/:jobId" component={TrackingPage} />
