@@ -303,7 +303,7 @@ export default function ContractorSignup() {
                       <FormItem>
                         <FormLabel>Phone Number</FormLabel>
                         <FormControl>
-                          <Input placeholder="(555) 123-4567" {...field} data-testid="input-phone" />
+                          <Input type="tel" placeholder="(555) 123-4567" {...field} data-testid="input-phone" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -815,7 +815,7 @@ export default function ContractorSignup() {
                           <FormItem>
                             <FormLabel>ZIP Code</FormLabel>
                             <FormControl>
-                              <Input placeholder="75001" {...field} data-testid="input-base-zip" />
+                              <Input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="75001" {...field} data-testid="input-base-zip" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>

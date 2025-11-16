@@ -305,7 +305,7 @@ export default function ContractorAuth() {
                             <FormItem>
                               <FormLabel>Phone Number</FormLabel>
                               <FormControl>
-                                <Input placeholder="+1234567890" {...field} data-testid="input-phone" />
+                                <Input type="tel" placeholder="+1234567890" {...field} data-testid="input-phone" />
                               </FormControl>
                               <FormMessage />
                             </FormItem>

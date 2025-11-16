@@ -498,7 +498,7 @@ export default function ContractorApply() {
                 <FormItem>
                   <FormLabel>Phone Number</FormLabel>
                   <FormControl>
-                    <Input placeholder="5551234567" {...field} data-testid="input-phone" />
+                    <Input type="tel" placeholder="5551234567" {...field} data-testid="input-phone" />
                   </FormControl>
                   <FormDescription>
                     Enter 10 digits without spaces or dashes
@@ -569,7 +569,7 @@ export default function ContractorApply() {
                   <FormItem>
                     <FormLabel>ZIP Code</FormLabel>
                     <FormControl>
-                      <Input placeholder="75201" {...field} data-testid="input-zip" />
+                      <Input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="75201" {...field} data-testid="input-zip" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

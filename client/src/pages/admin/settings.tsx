@@ -346,6 +346,7 @@ export default function AdminSettings() {
                   <Label htmlFor="supportPhone">Support Phone</Label>
                   <Input
                     id="supportPhone"
+                    type="tel"
                     defaultValue={currentSettings.general.supportPhone}
                     placeholder="1-800-FIX-TRUCK"
                     data-testid="input-support-phone"
