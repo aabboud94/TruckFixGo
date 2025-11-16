@@ -1372,7 +1372,7 @@ export default function ContractorDashboard() {
             </div>
             
             {/* Quick Fuel Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <Card>
                 <CardHeader className="pb-2">
                   <CardDescription>Avg Local Price</CardDescription>
@@ -1417,7 +1417,7 @@ export default function ContractorDashboard() {
         </Tabs>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <Button 
             variant="outline" 
             className="h-auto py-4"

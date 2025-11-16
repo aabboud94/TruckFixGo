@@ -473,7 +473,7 @@ export default function AdminSurgePricing() {
                   </div>
                   <Badge variant="default">Active</Badge>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                   <div>
                     <span className="text-muted-foreground">Time: </span>
                     <span>6:00 AM - 9:00 AM</span>
@@ -493,7 +493,7 @@ export default function AdminSurgePricing() {
                   </div>
                   <Badge variant="default">Active</Badge>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                   <div>
                     <span className="text-muted-foreground">Time: </span>
                     <span>5:00 PM - 8:00 PM</span>
@@ -513,7 +513,7 @@ export default function AdminSurgePricing() {
                   </div>
                   <Badge variant="default">Active</Badge>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                   <div>
                     <span className="text-muted-foreground">Time: </span>
                     <span>10:00 PM - 2:00 AM</span>

@@ -717,7 +717,7 @@ export default function AdminApplications() {
                     <User className="h-4 w-4" />
                     Applicant Information
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-muted-foreground">Name</Label>
                       <p className="font-medium">
@@ -760,7 +760,7 @@ export default function AdminApplications() {
                     <Building className="h-4 w-4" />
                     Business Information
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-muted-foreground">Company Name</Label>
                       <p className="font-medium">

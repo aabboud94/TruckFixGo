@@ -422,7 +422,7 @@ export default function AIDispatchDashboard() {
                     </div>
                     <Progress value={effectiveness?.metrics.averageScore || 0} />
                   </div>
-                  <div className="grid grid-cols-3 gap-2 mt-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
                     <div className="text-center">
                       <CheckCircle className="w-8 h-8 text-green-600 mx-auto" />
                       <p className="text-lg font-bold">{effectiveness?.metrics.successfulAssignments || 0}</p>
@@ -515,7 +515,7 @@ export default function AIDispatchDashboard() {
                           </div>
                         </div>
                         <p className="text-sm text-muted-foreground mb-2">{score.recommendation}</p>
-                        <div className="grid grid-cols-4 gap-2 text-xs">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                           <div>
                             <span className="text-muted-foreground">Proximity:</span>
                             <span className="ml-1 font-medium">{score.factors.proximityScore.toFixed(0)}</span>
