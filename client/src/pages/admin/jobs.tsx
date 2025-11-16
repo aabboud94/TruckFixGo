@@ -44,7 +44,6 @@ export default function AdminJobs() {
   
   // State for editable job details
   const [editedJob, setEditedJob] = useState<any>(null);
-  const [selectedServices, setSelectedServices] = useState<string[]>([]);
 
   // Query for jobs
   const { data: jobs, isLoading, refetch } = useQuery({
@@ -187,12 +186,6 @@ export default function AdminJobs() {
   useEffect(() => {
     if (selectedJob) {
       setEditedJob({ ...selectedJob });
-      // Initialize selected services from the job's service field
-      if (selectedJob.service) {
-        setSelectedServices(Array.isArray(selectedJob.service) ? selectedJob.service : [selectedJob.service]);
-      } else {
-        setSelectedServices([]);
-      }
     }
   }, [selectedJob]);
   
@@ -205,12 +198,13 @@ export default function AdminJobs() {
       updates: {
         customerName: editedJob.customerName || editedJob.customer?.name,
         customerPhone: editedJob.customerPhone || editedJob.customer?.phone,
+        email: editedJob.email || editedJob.customer?.email || editedJob.guestEmail,
         location: editedJob.location,
         locationAddress: editedJob.locationAddress,
         vin: editedJob.vin || editedJob.vehicle?.vin,
         unitNumber: editedJob.unitNumber || editedJob.vehicle?.unit,
         price: parseFloat(editedJob.price),
-        service: selectedServices.join(', '), // Join services for now
+        service: editedJob.service || editedJob.serviceType,
         status: editedJob.status,
       }
     });
@@ -537,7 +531,7 @@ export default function AdminJobs() {
 
       {/* Job Details Dialog */}
       <Dialog open={showJobDetails} onOpenChange={setShowJobDetails}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto z-[200]" style={{ pointerEvents: 'auto' }}>
+        <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto z-[200]" style={{ pointerEvents: 'auto' }}>
           <DialogHeader>
             <DialogTitle>Job Details - {editedJob?.jobNumber || editedJob?.id}</DialogTitle>
             <DialogDescription>
@@ -582,61 +576,18 @@ export default function AdminJobs() {
                   </div>
                   
                   <div className="space-y-2">
-                    <Label>Service Types</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="w-full justify-between font-normal"
-                        >
-                          <span className="truncate">
-                            {selectedServices.length > 0
-                              ? `${selectedServices.length} selected`
-                              : "Select services"}
-                          </span>
-                          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0 z-[110]" align="start" style={{ zIndex: 110 }}>
-                        <ScrollArea className="h-[200px]">
-                          <div className="p-2 space-y-1">
-                            {serviceTypes && serviceTypes.map((service: any) => (
-                              <div 
-                                key={service.id} 
-                                className="flex items-center space-x-2 p-2 hover:bg-muted rounded-md cursor-pointer"
-                                onClick={() => {
-                                  if (selectedServices.includes(service.name)) {
-                                    setSelectedServices(selectedServices.filter(s => s !== service.name));
-                                  } else {
-                                    setSelectedServices([...selectedServices, service.name]);
-                                  }
-                                }}
-                              >
-                                <Checkbox 
-                                  checked={selectedServices.includes(service.name)}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setSelectedServices([...selectedServices, service.name]);
-                                    } else {
-                                      setSelectedServices(selectedServices.filter(s => s !== service.name));
-                                    }
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">
-                                  {service.name}
-                                </label>
-                              </div>
-                            ))}
-                          </div>
-                        </ScrollArea>
-                      </PopoverContent>
-                    </Popover>
-                    {selectedServices.length > 0 && (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Selected: {selectedServices.join(', ')}
-                      </div>
-                    )}
+                    <Label>Service Type</Label>
+                    <Input 
+                      value={editedJob.service || editedJob.serviceType || 
+                             (serviceTypes?.find((s: any) => s.id === editedJob.serviceTypeId)?.name) || 
+                             'Not specified'} 
+                      readOnly
+                      className="bg-muted"
+                      placeholder="No service type specified"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The service type for this job
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -654,6 +605,16 @@ export default function AdminJobs() {
                       value={editedJob.customerPhone || editedJob.customer?.phone || ''} 
                       onChange={(e) => setEditedJob({ ...editedJob, customerPhone: e.target.value })}
                       placeholder="Enter customer phone"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Customer Email</Label>
+                    <Input 
+                      value={editedJob.email || editedJob.customer?.email || editedJob.guestEmail || ''} 
+                      onChange={(e) => setEditedJob({ ...editedJob, email: e.target.value })}
+                      placeholder="Enter customer email"
+                      type="email"
                     />
                   </div>
 
