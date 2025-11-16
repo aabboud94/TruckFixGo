@@ -100,6 +100,8 @@ import TestLocationInput from "@/pages/test-location-input";
 import SplitPaymentPage from "@/pages/split-payment";
 import ResetPassword from "@/pages/reset-password";
 import ForgotPassword from "@/pages/forgot-password";
+import ProfilePage from "@/pages/profile";
+import { BottomNav } from "@/components/bottom-nav";
 
 function Router() {
   return (
@@ -120,6 +122,7 @@ function Router() {
       <Route path="/services" component={Services} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/notifications" component={NotificationsPage} />
+      <Route path="/profile" component={ProfilePage} />
       
       {/* Test Pages */}
       <Route path="/test-location" component={TestLocationInput} />
@@ -245,7 +248,7 @@ function AppWithSidebar() {
               <h1 className="text-lg font-semibold md:text-xl">TruckFixGo</h1>
             </div>
           </header>
-          <main className="flex-1 overflow-y-auto">
+          <main className="flex-1 overflow-y-auto pb-[60px] md:pb-0">
             <ErrorBoundary componentName="Main Router">
               <Router />
             </ErrorBoundary>
@@ -262,6 +265,7 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <AppWithSidebar />
+        <BottomNav />
         <ErrorBoundary componentName="AI Chatbot">
           <AIChatbot />
         </ErrorBoundary>
