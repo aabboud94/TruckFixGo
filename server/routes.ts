@@ -6220,26 +6220,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: 'Job not found' });
         }
         
-        // Check if job is available (status should be 'new' and no contractor assigned)
-        if (job.status !== 'new') {
+        // Check if job can be accepted
+        // Case 1: Job is 'new' (available for pickup)
+        // Case 2: Job is 'assigned' to this specific contractor (admin assigned)
+        if (job.status === 'new') {
+          // Available job - contractor can pick it up
+          if (job.contractorId) {
+            return res.status(400).json({ 
+              message: 'Job has already been assigned to another contractor' 
+            });
+          }
+        } else if (job.status === 'assigned') {
+          // Assigned job - check if it's assigned to this contractor
+          if (job.contractorId !== contractorId) {
+            return res.status(400).json({ 
+              message: 'This job is assigned to another contractor',
+              currentStatus: job.status 
+            });
+          }
+          // Job is already assigned to this contractor, they're just accepting it
+          // Skip the assignment step below since they're already assigned
+        } else {
+          // Job is in a state that doesn't allow acceptance (en_route, on_site, completed, etc.)
           return res.status(400).json({ 
             message: 'Job is not available for acceptance',
             currentStatus: job.status 
           });
         }
         
-        if (job.contractorId) {
-          return res.status(400).json({ 
-            message: 'Job has already been assigned to another contractor' 
-          });
-        }
-        
-        // Assign the contractor and update status to 'assigned'
-        // This also automatically adds to job status history
-        const updatedJob = await storage.assignContractorToJob(jobId, contractorId);
-        
-        if (!updatedJob) {
-          return res.status(500).json({ message: 'Failed to accept job' });
+        // Assign the contractor if not already assigned (for 'new' jobs)
+        let updatedJob = job;
+        if (job.status === 'new') {
+          // This also automatically adds to job status history
+          const assignedJob = await storage.assignContractorToJob(jobId, contractorId);
+          if (!assignedJob) {
+            return res.status(500).json({ message: 'Failed to accept job' });
+          }
+          updatedJob = assignedJob;
         }
         
         // AUTOMATIC STATUS UPDATE: Set status to 'en_route' immediately after acceptance
