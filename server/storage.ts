@@ -4235,46 +4235,103 @@ export class PostgreSQLStorage implements IStorage {
   }
 
   async assignContractorToJob(jobId: string, contractorId: string): Promise<Job | undefined> {
-    console.log(`[AssignJob] Assigning job ${jobId} to contractor ${contractorId}`);
+    console.log(`[ASSIGN JOB DEBUG] Starting assignContractorToJob - JobID: ${jobId}, ContractorID: ${contractorId}`);
     
-    // Get current job to retrieve assignment attempts
-    const currentJob = await this.getJob(jobId);
-    const currentAttempts = currentJob?.assignmentAttempts || 0;
-    
-    const result = await db.update(jobs)
-      .set({ 
+    try {
+      // Get current job to retrieve assignment attempts
+      console.log(`[ASSIGN JOB DEBUG] Fetching current job details...`);
+      const currentJob = await this.getJob(jobId);
+      console.log(`[ASSIGN JOB DEBUG] Current job:`, {
+        exists: !!currentJob,
+        id: currentJob?.id,
+        status: currentJob?.status,
+        currentContractorId: currentJob?.contractorId,
+        assignmentAttempts: currentJob?.assignmentAttempts
+      });
+      
+      if (!currentJob) {
+        console.error(`[ASSIGN JOB DEBUG] Job ${jobId} not found!`);
+        return undefined;
+      }
+      
+      const currentAttempts = currentJob?.assignmentAttempts || 0;
+      console.log(`[ASSIGN JOB DEBUG] Current assignment attempts: ${currentAttempts}`);
+      
+      const updateData = {
         contractorId, 
-        status: 'assigned',
+        status: 'assigned' as const,
         assignedAt: new Date(),
         assignmentAttempts: currentAttempts + 1,
         lastAssignmentAttemptAt: new Date(),
-        updatedAt: new Date() 
-      })
-      .where(eq(jobs.id, jobId))
-      .returning();
-    
-    if (result.length > 0) {
-      // Update contractor's last assigned timestamp for round-robin tracking
-      await db.update(contractorProfiles)
-        .set({ 
-          lastAssignedAt: new Date(),
-          updatedAt: new Date()
-        })
-        .where(eq(contractorProfiles.userId, contractorId));
+        updatedAt: new Date()
+      };
       
-      console.log(`[AssignJob] Updated lastAssignedAt for contractor ${contractorId}, attempt #${currentAttempts + 1}`);
+      console.log(`[ASSIGN JOB DEBUG] Updating job with data:`, updateData);
       
-      // Add to job status history
-      await db.insert(jobStatusHistory).values({
-        jobId,
-        fromStatus: currentJob?.status || 'new',
-        toStatus: 'assigned',
-        changedBy: contractorId,
-        notes: `Assignment attempt #${currentAttempts + 1}`
+      const result = await db.update(jobs)
+        .set(updateData)
+        .where(eq(jobs.id, jobId))
+        .returning();
+      
+      console.log(`[ASSIGN JOB DEBUG] Update result:`, {
+        rowsReturned: result.length,
+        success: result.length > 0,
+        updatedJob: result[0] ? { id: result[0].id, status: result[0].status, contractorId: result[0].contractorId } : null
       });
+      
+      if (result.length > 0) {
+        console.log(`[ASSIGN JOB DEBUG] Job successfully updated, now updating contractor profile...`);
+        
+        // Update contractor's last assigned timestamp for round-robin tracking
+        const contractorUpdateResult = await db.update(contractorProfiles)
+          .set({ 
+            lastAssignedAt: new Date(),
+            updatedAt: new Date()
+          })
+          .where(eq(contractorProfiles.userId, contractorId))
+          .returning();
+        
+        console.log(`[ASSIGN JOB DEBUG] Contractor profile update result:`, {
+          updated: contractorUpdateResult.length > 0,
+          contractorId: contractorId
+        });
+        
+        console.log(`[ASSIGN JOB DEBUG] Updated lastAssignedAt for contractor ${contractorId}, attempt #${currentAttempts + 1}`);
+        
+        // Add to job status history
+        console.log(`[ASSIGN JOB DEBUG] Adding to job status history...`);
+        const historyResult = await db.insert(jobStatusHistory).values({
+          jobId,
+          fromStatus: currentJob?.status || 'new',
+          toStatus: 'assigned',
+          changedBy: contractorId,
+          notes: `Assignment attempt #${currentAttempts + 1}`
+        }).returning();
+        
+        console.log(`[ASSIGN JOB DEBUG] Status history added:`, {
+          success: historyResult.length > 0,
+          historyId: historyResult[0]?.id
+        });
+      } else {
+        console.error(`[ASSIGN JOB DEBUG] Job update failed - no rows returned from update`);
+      }
+      
+      console.log(`[ASSIGN JOB DEBUG] Returning result:`, {
+        success: !!result[0],
+        jobId: result[0]?.id,
+        status: result[0]?.status,
+        contractorId: result[0]?.contractorId
+      });
+      
+      return result[0];
+    } catch (error) {
+      console.error(`[ASSIGN JOB DEBUG] Error in assignContractorToJob:`, error);
+      console.error(`[ASSIGN JOB DEBUG] Error details:`, {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      return undefined;
     }
-    
-    return result[0];
   }
 
   async addJobPhoto(photo: InsertJobPhoto): Promise<JobPhoto> {
