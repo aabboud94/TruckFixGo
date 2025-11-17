@@ -16805,7 +16805,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const jobs = await storage.findJobs(filters);
         
-        res.json({ jobs });
+        // Helper function to fetch contractor details
+        const getContractorDetails = async (contractorId: string) => {
+          try {
+            // Get the user details first
+            const user = await storage.getUser(contractorId);
+            if (!user) return null;
+            
+            // Get the contractor profile for additional details
+            const contractorProfile = await storage.getContractorProfile(contractorId);
+            
+            return {
+              id: contractorId,
+              name: user.firstName && user.lastName 
+                ? `${user.firstName} ${user.lastName}` 
+                : user.firstName || user.email || 'Unknown',
+              email: user.email,
+              phone: user.phone || null,
+              company: contractorProfile?.companyName || null
+            };
+          } catch (error) {
+            console.error(`Error fetching contractor details for ${contractorId}:`, error);
+            return null;
+          }
+        };
+        
+        // Enhance each job with contractor details
+        const jobsWithContractorDetails = await Promise.all(
+          jobs.map(async (job: Job) => {
+            if (job.contractorId) {
+              const contractorDetails = await getContractorDetails(job.contractorId);
+              return {
+                ...job,
+                contractor: contractorDetails
+              };
+            } else {
+              return {
+                ...job,
+                contractor: null
+              };
+            }
+          })
+        );
+        
+        res.json({ jobs: jobsWithContractorDetails });
       } catch (error) {
         console.error('Admin get jobs error:', error);
         res.status(500).json({ message: 'Failed to get jobs' });
