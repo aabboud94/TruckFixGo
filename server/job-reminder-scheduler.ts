@@ -114,27 +114,88 @@ class JobReminderScheduler {
       
       // Get service type details
       let serviceTypeName = 'Service';
+      let estimatedDuration = 60; // Default estimated duration
       if (job.serviceTypeId) {
         const serviceType = await storage.getServiceType(job.serviceTypeId);
         if (serviceType) {
           serviceTypeName = serviceType.name;
+          // Use base price as a rough estimate for duration (30 min per $100)
+          if (serviceType.basePrice) {
+            estimatedDuration = Math.max(30, Math.round(Number(serviceType.basePrice) / 100 * 30));
+          }
         }
       }
       
-      // Prepare job data for email
+      // Map urgency level to urgency string
+      const urgencyMapping: { [key: number]: string } = {
+        1: 'low',
+        2: 'normal',
+        3: 'medium',
+        4: 'high',
+        5: 'urgent'
+      };
+      const urgency = urgencyMapping[job.urgencyLevel] || 'normal';
+      
+      // Get customer name with proper fallback
+      let customerName = 'Customer';
+      if (job.customerName) {
+        customerName = job.customerName;
+      } else if (job.customerId) {
+        const customer = await storage.getUser(job.customerId);
+        if (customer) {
+          customerName = `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || customer.email || 'Customer';
+        }
+      } else if (job.fleetAccountId) {
+        const fleet = await storage.getFleetAccount(job.fleetAccountId);
+        if (fleet) {
+          customerName = fleet.companyName || 'Fleet Customer';
+        }
+      }
+      
+      // Build vehicle info string if available
+      let vehicleInfo = '';
+      if (job.vehicleMake || job.vehicleModel || job.vehicleYear) {
+        const parts = [];
+        if (job.vehicleYear) parts.push(job.vehicleYear);
+        if (job.vehicleMake) parts.push(job.vehicleMake);
+        if (job.vehicleModel) parts.push(job.vehicleModel);
+        vehicleInfo = parts.join(' ');
+      }
+      if (job.unitNumber) {
+        vehicleInfo = vehicleInfo ? `${vehicleInfo} (Unit: ${job.unitNumber})` : `Unit: ${job.unitNumber}`;
+      }
+      
+      // Build comprehensive description
+      let fullDescription = job.description || 'No additional details provided';
+      if (vehicleInfo) {
+        fullDescription = `Vehicle: ${vehicleInfo}\n${fullDescription}`;
+      }
+      if (job.locationNotes) {
+        fullDescription = `${fullDescription}\nLocation Notes: ${job.locationNotes}`;
+      }
+      
+      // Prepare job data for email with all required fields
       const jobData = {
         id: job.id,
-        customerName: job.customerName || job.fleetAccountId || 'Customer',
+        customerName: customerName,
         location: job.locationAddress || 'Location provided in app',
         serviceType: serviceTypeName,
-        urgency: job.urgency || 'normal',
-        estimatedDuration: job.estimatedDuration || 60,
-        description: job.description || 'Please check the app for full details'
+        urgency: urgency,
+        estimatedDuration: estimatedDuration,
+        description: fullDescription
       };
       
-      console.log(`[JobReminderScheduler] Sending 3-minute reminder for job ${job.jobNumber} to ${contractor.email}`);
+      // Enhanced logging to verify data
+      console.log(`[JobReminderScheduler] Preparing reminder for job ${job.jobNumber}:`);
+      console.log(`[JobReminderScheduler] - Contractor: ${contractor.firstName} ${contractor.lastName} (${contractor.email})`);
+      console.log(`[JobReminderScheduler] - Customer: ${jobData.customerName}`);
+      console.log(`[JobReminderScheduler] - Service: ${jobData.serviceType}`);
+      console.log(`[JobReminderScheduler] - Location: ${jobData.location}`);
+      console.log(`[JobReminderScheduler] - Urgency: ${jobData.urgency} (level ${job.urgencyLevel})`);
+      console.log(`[JobReminderScheduler] - Est. Duration: ${jobData.estimatedDuration} minutes`);
+      console.log(`[JobReminderScheduler] - Description length: ${jobData.description.length} chars`);
       
-      // Send reminder email using the new mobile-optimized template
+      // Send reminder email using the mobile-optimized template
       const success = await emailService.sendJobAssignmentEmail(
         contractor.email,
         `${contractor.firstName} ${contractor.lastName}`,
@@ -143,21 +204,31 @@ class JobReminderScheduler {
       );
       
       if (success) {
-        console.log(`[JobReminderScheduler] Reminder sent successfully for job ${job.jobNumber}`);
+        console.log(`[JobReminderScheduler] ✅ Reminder sent successfully for job ${job.jobNumber} to ${contractor.email}`);
         
-        // Note: addJobEvent method doesn't exist on storage
-        // Commenting out for now - would need to be implemented if job event tracking is needed
-        // await storage.addJobEvent(job.id, 'reminder_sent', {
-        //   contractorId: job.contractorId,
-        //   reminderType: '3_minute',
-        //   timestamp: new Date().toISOString()
-        // });
+        // Track reminder sent in job status history
+        try {
+          await storage.addJobStatusHistory({
+            jobId: job.id,
+            status: job.status,
+            changedBy: 'system',
+            notes: `3-minute reminder email sent to contractor ${contractor.email}`,
+            metadata: {
+              reminderType: '3_minute',
+              contractorId: job.contractorId,
+              sentAt: new Date().toISOString()
+            }
+          });
+        } catch (historyError) {
+          console.error(`[JobReminderScheduler] Error adding status history:`, historyError);
+        }
       } else {
-        console.error(`[JobReminderScheduler] Failed to send reminder for job ${job.jobNumber}`);
+        console.error(`[JobReminderScheduler] ❌ Failed to send reminder for job ${job.jobNumber} to ${contractor.email}`);
       }
       
     } catch (error) {
       console.error(`[JobReminderScheduler] Error sending reminder for job ${job.id}:`, error);
+      console.error(`[JobReminderScheduler] Error details:`, error);
     }
   }
   
