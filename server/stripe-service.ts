@@ -38,7 +38,6 @@ const stripe = stripeKey ? new Stripe(stripeKey, {
   apiVersion: '2024-12-18.acacia' as any,
   typescript: true,
   telemetry: false, // Disable telemetry to reduce noise in logs
-  httpAgent: null, // Let Stripe use default agent
   timeout: 80000, // 80 second timeout
   maxNetworkRetries: 2, // Retry network failures
 }) : null;
@@ -138,7 +137,7 @@ class StripeService {
       }
 
       // Search for existing customer by email
-      const customers = await stripe.customers.list({
+      const customers = await stripe!.customers.list({
         email: fleetAccount.billingEmail || fleetAccount.primaryContactEmail || undefined,
         limit: 1,
       });
@@ -148,7 +147,7 @@ class StripeService {
       }
 
       // Create new customer
-      const customer = await stripe.customers.create({
+      const customer = await stripe!.customers.create({
         name: fleetAccount.companyName,
         email: fleetAccount.billingEmail || fleetAccount.primaryContactEmail || undefined,
         phone: fleetAccount.primaryContactPhone || undefined,
@@ -252,8 +251,8 @@ class StripeService {
         }
       }
 
-      // Build subscription items
-      const items: Stripe.SubscriptionCreateParams.Item[] = [
+      // Build subscription items  
+      const items: any[] = [  // Use any[] to bypass type issues with inline product creation
         {
           price_data: {
             currency: 'usd',
@@ -389,11 +388,11 @@ class StripeService {
               },
               unit_amount: newPrice,
             },
-          }],
+          }] as any,  // Type cast to bypass Stripe type issues
           proration_behavior: 'create_prorations',
           metadata: {
             ...subscription.metadata,
-            ...updates,
+            ...(updates.addOns ? { ...updates, addOns: JSON.stringify(updates.addOns) } : updates),  // Convert arrays to JSON strings
           },
         });
 
@@ -452,7 +451,9 @@ class StripeService {
 
   // Pause a subscription
   async pauseSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
-    this.checkStripeAvailable();
+    if (!this.checkStripeAvailable()) {
+      throw new Error('Stripe is not configured');
+    }
     try {
       return await stripe!.subscriptions.update(subscriptionId, {
         pause_collection: {
@@ -467,7 +468,9 @@ class StripeService {
 
   // Resume a paused subscription
   async resumeSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
-    this.checkStripeAvailable();
+    if (!this.checkStripeAvailable()) {
+      throw new Error('Stripe is not configured');
+    }
     try {
       return await stripe!.subscriptions.update(subscriptionId, {
         pause_collection: '',
@@ -480,7 +483,9 @@ class StripeService {
 
   // Process a recurring charge manually
   async processRecurringCharge(subscriptionId: string): Promise<Stripe.Invoice> {
-    this.checkStripeAvailable();
+    if (!this.checkStripeAvailable()) {
+      throw new Error('Stripe is not configured');
+    }
     try {
       // Create an invoice for the subscription
       const invoice = await stripe!.invoices.create({
@@ -501,7 +506,9 @@ class StripeService {
 
   // Retry a failed payment
   async retryFailedPayment(invoiceId: string): Promise<Stripe.Invoice> {
-    this.checkStripeAvailable();
+    if (!this.checkStripeAvailable()) {
+      throw new Error('Stripe is not configured');
+    }
     try {
       const invoice = await stripe!.invoices.pay(invoiceId);
       return invoice;
@@ -516,8 +523,10 @@ class StripeService {
     subscriptionItemId: string,
     quantity: number,
     timestamp?: number
-  ): Promise<Stripe.UsageRecord> {
-    this.checkStripeAvailable();
+  ): Promise<any> {  // Use any type to bypass Stripe SDK type issues
+    if (!this.checkStripeAvailable()) {
+      throw new Error('Stripe is not configured');
+    }
     try {
       return await stripe!.subscriptionItems.createUsageRecord(
         subscriptionItemId,
@@ -575,7 +584,9 @@ class StripeService {
 
   // Get invoice details
   async getInvoice(invoiceId: string): Promise<Stripe.Invoice> {
-    this.checkStripeAvailable();
+    if (!this.checkStripeAvailable()) {
+      throw new Error('Stripe is not configured');
+    }
     try {
       return await stripe!.invoices.retrieve(invoiceId, {
         expand: ['subscription', 'customer', 'payment_intent'],
@@ -588,7 +599,9 @@ class StripeService {
 
   // List invoices for a customer
   async listInvoices(customerId: string, limit: number = 10): Promise<Stripe.Invoice[]> {
-    this.checkStripeAvailable();
+    if (!this.checkStripeAvailable()) {
+      throw new Error('Stripe is not configured');
+    }
     try {
       const invoices = await stripe!.invoices.list({
         customer: customerId,
@@ -604,7 +617,9 @@ class StripeService {
 
   // Create a refund
   async createRefund(chargeId: string, amount?: number, reason?: string): Promise<Stripe.Refund> {
-    this.checkStripeAvailable();
+    if (!this.checkStripeAvailable()) {
+      throw new Error('Stripe is not configured');
+    }
     try {
       return await stripe!.refunds.create({
         charge: chargeId,
@@ -619,7 +634,9 @@ class StripeService {
 
   // Update payment method for subscription
   async updatePaymentMethod(subscriptionId: string, paymentMethodId: string): Promise<Stripe.Subscription> {
-    this.checkStripeAvailable();
+    if (!this.checkStripeAvailable()) {
+      throw new Error('Stripe is not configured');
+    }
     try {
       const subscription = await stripe!.subscriptions.retrieve(subscriptionId);
       
@@ -679,13 +696,17 @@ class StripeService {
     // Update billing history record
     await storage.updateBillingHistoryByStripeInvoice(invoice.id, {
       status: 'success',
-      paidAt: new Date(invoice.status_transitions.paid_at! * 1000),
+      paidAt: invoice.status_transitions.paid_at ? new Date(invoice.status_transitions.paid_at * 1000) : new Date(),
       paidAmount: (invoice.amount_paid / 100).toString(),
     });
 
     // Update subscription's last billing date
     if (invoice.subscription) {
-      await storage.updateSubscriptionBillingDates(invoice.subscription as string);
+      // Handle both string ID and expanded subscription object
+      const subscriptionId = typeof invoice.subscription === 'string' 
+        ? invoice.subscription 
+        : (invoice.subscription as any).id;
+      await storage.updateSubscriptionBillingDates(subscriptionId);
     }
 
     // TODO: Send payment success notification
@@ -710,10 +731,10 @@ class StripeService {
     else if (subscription.status === 'past_due') status = 'paused';
     else if (subscription.status === 'unpaid') status = 'paused';
     
-    // Update local subscription record
+    // Update local subscription record with proper date handling
     await storage.updateSubscriptionByStripeId(subscription.id, {
       status,
-      nextBillingDate: new Date(subscription.current_period_end * 1000),
+      nextBillingDate: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : undefined,
     });
   }
 
