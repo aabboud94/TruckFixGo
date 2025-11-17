@@ -293,9 +293,32 @@ export default function ContractorDashboard() {
   // Accept job mutation
   const acceptJobMutation = useMutation({
     mutationFn: async (jobId: string) => {
-      return await apiRequest(`/api/jobs/${jobId}/accept`, "POST");
+      console.log('[CLIENT ACCEPT DEBUG] Starting job acceptance for jobId:', jobId);
+      console.log('[CLIENT ACCEPT DEBUG] User session:', { 
+        isLoggedIn: !!data?.contractor,
+        contractorId: data?.contractor?.id,
+        email: data?.contractor?.email,
+        role: data?.contractor?.role
+      });
+      
+      try {
+        console.log('[CLIENT ACCEPT DEBUG] Sending POST request to:', `/api/jobs/${jobId}/accept`);
+        const response = await apiRequest(`/api/jobs/${jobId}/accept`, "POST");
+        console.log('[CLIENT ACCEPT DEBUG] Response received:', response);
+        return response;
+      } catch (error) {
+        console.error('[CLIENT ACCEPT DEBUG] Accept request failed:', error);
+        console.error('[CLIENT ACCEPT DEBUG] Error details:', {
+          message: error instanceof Error ? error.message : 'Unknown error',
+          response: (error as any)?.response,
+          status: (error as any)?.status,
+          data: (error as any)?.data
+        });
+        throw error;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
+      console.log('[CLIENT ACCEPT DEBUG] Job accepted successfully:', response);
       toast({
         title: "Job Accepted",
         description: "Navigating to job details..."
@@ -305,10 +328,12 @@ export default function ContractorDashboard() {
       const audio = new Audio("/notification.mp3");
       audio.play().catch(() => {});
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('[CLIENT ACCEPT DEBUG] Mutation error handler:', error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to accept job";
       toast({
         title: "Error",
-        description: "Failed to accept job",
+        description: errorMessage,
         variant: "destructive"
       });
     }
