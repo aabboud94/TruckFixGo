@@ -278,45 +278,67 @@ class TrackingWebSocketServer {
   private pingInterval: NodeJS.Timeout | null = null;
 
   public async initialize(server: HTTPServer) {
-    this.wss = new WebSocketServer({ 
-      server,
-      path: '/ws/tracking'
-    });
+    try {
+      // Check if WebSocket server is already initialized
+      if (this.wss) {
+        console.log('[WebSocket] Server already initialized, skipping...');
+        return;
+      }
 
-    this.wss.on('connection', (ws: ExtendedWebSocket, request) => {
-      console.log('New WebSocket connection');
-      ws.isAlive = true;
-
-      // Handle ping-pong for connection health
-      ws.on('pong', () => {
-        ws.isAlive = true;
+      this.wss = new WebSocketServer({ 
+        server,
+        path: '/ws/tracking',
+        noServer: false  // Use the HTTP server for upgrade
       });
 
-      ws.on('message', async (data) => {
-        try {
-          const message = JSON.parse(data.toString());
-          const validatedMessage = WebSocketMessageSchema.parse(message);
-          await this.handleMessage(ws, validatedMessage);
-        } catch (error) {
-          console.error('WebSocket message error:', error);
-          this.sendError(ws, 'Invalid message format');
+      this.wss.on('connection', (ws: ExtendedWebSocket, request) => {
+        console.log('[WebSocket] New connection established');
+        ws.isAlive = true;
+
+        // Handle ping-pong for connection health
+        ws.on('pong', () => {
+          ws.isAlive = true;
+        });
+
+        ws.on('message', async (data) => {
+          try {
+            const message = JSON.parse(data.toString());
+            console.log('[WebSocket] Received message:', message.type);
+            const validatedMessage = WebSocketMessageSchema.parse(message);
+            await this.handleMessage(ws, validatedMessage);
+          } catch (error) {
+            console.error('[WebSocket] Message error:', error);
+            this.sendError(ws, 'Invalid message format');
+          }
+        });
+
+        ws.on('close', () => {
+          console.log('[WebSocket] Connection closed');
+          this.handleDisconnect(ws);
+        });
+
+        ws.on('error', (error) => {
+          console.error('[WebSocket] Connection error:', error);
+          this.handleDisconnect(ws);
+        });
+      });
+
+      // Handle WebSocket server errors
+      this.wss.on('error', (error: any) => {
+        console.error('[WebSocket] Server error:', error);
+        if (error.code === 'EADDRINUSE') {
+          console.error('[WebSocket] Port is already in use, will retry on restart');
         }
       });
 
-      ws.on('close', () => {
-        this.handleDisconnect(ws);
-      });
+      // Start ping interval to check connection health
+      this.startPingInterval();
 
-      ws.on('error', (error) => {
-        console.error('WebSocket error:', error);
-        this.handleDisconnect(ws);
-      });
-    });
-
-    // Start ping interval to check connection health
-    this.startPingInterval();
-
-    console.log('WebSocket tracking server initialized');
+      console.log('[WebSocket] Server initialized successfully');
+    } catch (error) {
+      console.error('[WebSocket] Failed to initialize server:', error);
+      throw error;
+    }
   }
 
   private startPingInterval() {
