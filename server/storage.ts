@@ -3649,25 +3649,6 @@ export class PostgreSQLStorage implements IStorage {
     return result.length > 0;
   }
 
-  async createPasswordResetToken(userId: string, email: string): Promise<string> {
-    // Generate a secure random token
-    const token = randomBytes(32).toString('hex');
-    
-    // Calculate expiration time (24 hours from now)
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 24);
-    
-    // Insert into passwordResetTokens table
-    await db.insert(passwordResetTokens).values({
-      userId,
-      token,
-      email,
-      expiresAt
-    });
-    
-    // Return the token
-    return token;
-  }
 
   async validatePasswordResetToken(token: string): Promise<{ userId: string; email: string } | null> {
     // Query passwordResetTokens table by token
@@ -6475,17 +6456,6 @@ export class PostgreSQLStorage implements IStorage {
     return R * c;
   }
 
-  async updateContractorLocation(contractorId: string, location: {lat: number, lng: number}): Promise<boolean> {
-    const result = await db.update(contractorProfiles)
-      .set({ 
-        currentLocation: location,
-        lastLocationUpdate: new Date(),
-        updatedAt: new Date()
-      })
-      .where(eq(contractorProfiles.userId, contractorId))
-      .returning();
-    return result.length > 0;
-  }
 
   async addContractorEarning(earning: InsertContractorEarning): Promise<ContractorEarning> {
     const result = await db.insert(contractorEarnings).values(earning).returning();
@@ -6946,10 +6916,6 @@ export class PostgreSQLStorage implements IStorage {
     return result[0];
   }
 
-  async deletePaymentMethod(id: string): Promise<boolean> {
-    const result = await db.delete(paymentMethods).where(eq(paymentMethods.id, id)).returning();
-    return result.length > 0;
-  }
 
   async getPaymentMethods(userId: string): Promise<PaymentMethod[]> {
     return await db.select().from(paymentMethods)
@@ -9366,7 +9332,7 @@ export class PostgreSQLStorage implements IStorage {
       .limit(limit);
   }
 
-  async getUnpaidInvoices(fleetAccountId?: string): Promise<BillingHistory[]> {
+  async getUnpaidBillingInvoices(fleetAccountId?: string): Promise<BillingHistory[]> {
     const conditions = [
       inArray(billingHistory.status, ['pending', 'failed']),
       gt(billingHistory.balanceDue, '0')
@@ -11501,21 +11467,6 @@ export class PostgreSQLStorage implements IStorage {
     return reassignments;
   }
   
-  // Helper function for distance calculation
-  private calculateDistance(loc1: { lat: number; lng: number }, loc2: { lat: number; lng: number }): number {
-    const R = 3959; // Earth's radius in miles
-    const dLat = (loc2.lat - loc1.lat) * Math.PI / 180;
-    const dLng = (loc2.lng - loc1.lng) * Math.PI / 180;
-    
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(loc1.lat * Math.PI / 180) * Math.cos(loc2.lat * Math.PI / 180) *
-              Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const distance = R * c;
-    
-    return Math.round(distance * 10) / 10; // Round to 1 decimal place
-  }
 
   // ==================== BATCH JOB SCHEDULING ====================
   
@@ -13962,7 +13913,7 @@ export class PostgreSQLStorage implements IStorage {
       .where(eq(assignmentPreferences.contractorId, contractorId));
   }
 
-  async getAvailableContractors(): Promise<ContractorProfile[]> {
+  async getOnlineAvailableContractors(): Promise<ContractorProfile[]> {
     return await db
       .select()
       .from(contractorProfiles)
