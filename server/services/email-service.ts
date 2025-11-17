@@ -1842,6 +1842,307 @@ class EmailService {
       console.error('[Email Service] Error sending contractor application notifications:', error);
     }
   }
+
+  // Send invoice email to customer
+  async sendInvoiceEmail(data: {
+    to: string;
+    invoice: any;
+    job: any;
+    customer: any;
+    contractor?: any;
+    fleetAccount?: any;
+    personalMessage?: string;
+    pdfBuffer: Buffer;
+    amountDue: number;
+  }): Promise<{ success: boolean; error?: string; messageId?: string }> {
+    try {
+      if (!this.isReady()) {
+        console.error('[Email Service] Not ready to send emails');
+        return { success: false, error: 'Email service not configured' };
+      }
+
+      const appUrl = process.env.APP_URL || 'https://truckfixgo.com';
+      const fromEmail = process.env.OFFICE365_EMAIL || 'noreply@truckfixgo.com';
+      
+      // Generate invoice email content
+      const invoiceContent = `
+        <!-- Header with invoice branding -->
+        <tr>
+          <td style="padding: 0;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
+              <tr>
+                <td style="padding: 30px 40px; text-align: center;" class="mobile-padding">
+                  <h1 style="margin: 0; color: #ffffff; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 32px; font-weight: 700; line-height: 40px;">
+                    Invoice #${data.invoice.invoiceNumber}
+                  </h1>
+                  <p style="margin: 10px 0 0 0; color: #dbeafe; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                    TruckFixGo - Professional Truck Repair Services
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        
+        <!-- Main Content -->
+        <tr>
+          <td style="padding: 40px 40px 20px;" class="container-padding">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+              <tr>
+                <td>
+                  <h2 style="margin: 0 0 20px; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 24px; font-weight: 600; line-height: 32px;">
+                    Hello ${data.customer.firstName || 'Valued Customer'},
+                  </h2>
+                  <p style="margin: 0 0 30px; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                    Thank you for choosing TruckFixGo. Please find attached your invoice for the recently completed service.
+                  </p>
+                  ${data.personalMessage ? `
+                    <div style="background-color: #f7fafc; border-left: 4px solid #3b82f6; padding: 15px; margin-bottom: 30px; border-radius: 4px;">
+                      <p style="margin: 0; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px; font-style: italic;">
+                        ${data.personalMessage}
+                      </p>
+                    </div>
+                  ` : ''}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        
+        <!-- Invoice Summary Card -->
+        <tr>
+          <td style="padding: 0 40px 30px;" class="container-padding">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden;">
+              <tr>
+                <td style="padding: 0;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #1e3a8a;">
+                    <tr>
+                      <td style="padding: 20px 30px;" class="card-padding">
+                        <h3 style="margin: 0; color: #ffffff; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 20px; font-weight: 600;">
+                          Invoice Summary
+                        </h3>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 25px 30px;" class="card-padding">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                    <tr>
+                      <td style="padding-bottom: 15px;">
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                          <tr>
+                            <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #718096;">Invoice Number:</td>
+                            <td style="padding: 0; text-align: right; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; color: #2d3748; font-weight: 600;">${data.invoice.invoiceNumber}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding-bottom: 15px;">
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                          <tr>
+                            <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #718096;">Service Date:</td>
+                            <td style="padding: 0; text-align: right; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748;">${new Date(data.job.completedAt || data.job.createdAt).toLocaleDateString()}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding-bottom: 15px;">
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                          <tr>
+                            <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #718096;">Service Type:</td>
+                            <td style="padding: 0; text-align: right; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748;">${data.job.jobType === 'emergency' ? 'Emergency Service' : 'Scheduled Service'}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding-bottom: 15px;">
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                          <tr>
+                            <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #718096;">Due Date:</td>
+                            <td style="padding: 0; text-align: right; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #2d3748;">${data.invoice.dueDate ? new Date(data.invoice.dueDate).toLocaleDateString() : 'Net 30'}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding-top: 20px; border-top: 2px solid #e2e8f0;">
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f7fafc; border-radius: 6px;">
+                          <tr>
+                            <td style="padding: 15px 20px;">
+                              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                  <td style="padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; color: #2d3748; font-weight: 700;">Amount Due:</td>
+                                  <td style="padding: 0; text-align: right; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 24px; color: #1e3a8a; font-weight: 700;">$${data.amountDue.toFixed(2)}</td>
+                                </tr>
+                              </table>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        
+        <!-- Payment Options -->
+        ${data.invoice.status !== 'paid' ? `
+        <tr>
+          <td style="padding: 0 40px 30px;" class="container-padding">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+              <tr>
+                <td align="center">
+                  <h3 style="margin: 0 0 20px; color: #2d3748; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 18px; font-weight: 600; text-align: center;">
+                    Payment Options
+                  </h3>
+                  <p style="margin: 0 0 20px; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 22px; text-align: center;">
+                    We accept Credit Cards, Fleet Checks (EFS/Comdata), and Cash
+                  </p>
+                  ${this.getButtonHtml('Pay Online', `${appUrl}/pay/${data.invoice.id}`, 'primary')}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        ` : ''}
+        
+        <!-- Terms and Support -->
+        <tr>
+          <td style="padding: 0 40px 40px;" class="container-padding">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f3f4f6; border-radius: 8px;">
+              <tr>
+                <td style="padding: 20px;">
+                  <p style="margin: 0 0 10px; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px;">
+                    <strong>Payment Terms:</strong> Payment is due within 30 days of invoice date. Late payments subject to 1.5% monthly interest.
+                  </p>
+                  <p style="margin: 0 0 10px; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px;">
+                    <strong>Warranty:</strong> 90 days on parts, 30 days on labor. All services performed in accordance with TruckFixGo service agreement.
+                  </p>
+                  <p style="margin: 0; color: #4a5568; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px;">
+                    <strong>Questions?</strong> Contact our billing department at invoices@truckfixgo.com or 1-800-TRUCKFIX
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        
+        <!-- Footer -->
+        <tr>
+          <td style="padding: 0;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #2d3748;">
+              <tr>
+                <td style="padding: 30px 40px; text-align: center;" class="mobile-padding">
+                  <p style="margin: 0 0 10px; color: #e2e8f0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px;" class="footer-text">
+                    Thank you for your business!
+                  </p>
+                  <p style="margin: 0; color: #cbd5e0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px;" class="footer-text">
+                    © ${new Date().getFullYear()} TruckFixGo • Professional Truck Repair Services
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      `;
+
+      const htmlContent = this.getBaseEmailTemplate(invoiceContent, `Invoice #${data.invoice.invoiceNumber} from TruckFixGo`);
+
+      // Plain text version
+      const textContent = `
+Invoice #${data.invoice.invoiceNumber}
+
+Hello ${data.customer.firstName || 'Valued Customer'},
+
+Thank you for choosing TruckFixGo. Please find attached your invoice for the recently completed service.
+
+${data.personalMessage ? `\nMessage from your contractor:\n${data.personalMessage}\n` : ''}
+
+INVOICE SUMMARY
+-----------------
+Invoice Number: ${data.invoice.invoiceNumber}
+Service Date: ${new Date(data.job.completedAt || data.job.createdAt).toLocaleDateString()}
+Service Type: ${data.job.jobType === 'emergency' ? 'Emergency Service' : 'Scheduled Service'}
+Due Date: ${data.invoice.dueDate ? new Date(data.invoice.dueDate).toLocaleDateString() : 'Net 30'}
+
+Amount Due: $${data.amountDue.toFixed(2)}
+
+${data.invoice.status !== 'paid' ? `
+PAYMENT OPTIONS
+-----------------
+We accept Credit Cards, Fleet Checks (EFS/Comdata), and Cash
+Pay online: ${appUrl}/pay/${data.invoice.id}
+` : ''}
+
+TERMS & CONDITIONS
+-----------------
+Payment Terms: Payment is due within 30 days of invoice date. Late payments subject to 1.5% monthly interest.
+Warranty: 90 days on parts, 30 days on labor. All services performed in accordance with TruckFixGo service agreement.
+
+Questions? Contact our billing department at invoices@truckfixgo.com or 1-800-TRUCKFIX
+
+Thank you for your business!
+
+© ${new Date().getFullYear()} TruckFixGo
+Professional Truck Repair Services
+`;
+
+      // Send the email with PDF attachment
+      const info = await this.transporter!.sendMail({
+        from: `"TruckFixGo Billing" <${fromEmail}>`,
+        to: data.to,
+        subject: `Invoice #${data.invoice.invoiceNumber} - TruckFixGo`,
+        text: textContent,
+        html: htmlContent,
+        attachments: [
+          {
+            filename: `Invoice_${data.invoice.invoiceNumber}.pdf`,
+            content: data.pdfBuffer,
+            contentType: 'application/pdf'
+          }
+        ]
+      });
+
+      console.log('[Email Service] Invoice email sent successfully:', info.messageId);
+      
+      this.successCount++;
+      return {
+        success: true,
+        messageId: info.messageId
+      };
+
+    } catch (error) {
+      console.error('[Email Service] Failed to send invoice email:', error);
+      
+      this.failureCount++;
+      this.lastVerificationError = `Invoice email failed: ${(error as Error).message}`;
+      
+      // Add to failed queue for retry
+      this.queuedEmails.push({
+        to: data.to,
+        subject: `Invoice #${data.invoice.invoiceNumber}`,
+        timestamp: new Date(),
+        error: (error as Error).message
+      });
+      
+      // Trim queue if too large
+      if (this.queuedEmails.length > this.maxQueueSize) {
+        this.queuedEmails = this.queuedEmails.slice(-this.maxQueueSize);
+      }
+      
+      return {
+        success: false,
+        error: (error as Error).message
+      };
+    }
+  }
 }
 
 // Export singleton instance

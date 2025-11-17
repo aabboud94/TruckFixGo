@@ -70,7 +70,8 @@ import {
   Power,
   CalendarDays,
   CircleCheck,
-  CircleX
+  CircleX,
+  FileText
 } from "lucide-react";
 import { format, formatDistanceToNow, addHours } from "date-fns";
 import PerformanceWidget from "@/components/performance-widget";
@@ -1613,6 +1614,17 @@ export default function ContractorDashboard() {
             <div className="flex flex-col items-center gap-2">
               <DollarSign className="w-5 h-5" />
               <span>View Earnings</span>
+            </div>
+          </Button>
+          <Button 
+            variant="outline" 
+            className="h-auto py-4"
+            onClick={() => navigate("/contractor/invoices")}
+            data-testid="button-manage-invoices"
+          >
+            <div className="flex flex-col items-center gap-2">
+              <FileText className="w-5 h-5" />
+              <span>Invoices</span>
             </div>
           </Button>
           <Button 
