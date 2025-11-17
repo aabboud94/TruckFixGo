@@ -5952,9 +5952,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(500).json({ message: 'Failed to accept job' });
         }
         
+        // AUTOMATIC STATUS UPDATE: Set status to 'en_route' immediately after acceptance
+        console.log(`[Job Acceptance] Automatically updating job ${jobId} status to 'en_route' after contractor acceptance`);
+        const enRouteJob = await storage.updateJobStatus(jobId, 'en_route', contractorId, 'Contractor approved job and is en route');
+        
+        if (!enRouteJob) {
+          console.error(`[Job Acceptance] Failed to update job ${jobId} to 'en_route' status`);
+          // Don't fail the whole request, job was still accepted
+        }
+        
+        // Send WebSocket notification about status change
+        trackingWSServer.broadcastJobUpdate(jobId, {
+          type: 'STATUS_UPDATE',
+          payload: {
+            status: 'en_route',
+            timestamp: new Date().toISOString(),
+            message: 'Contractor has accepted the job and is en route'
+          }
+        });
+        
         res.json({
           message: 'Job accepted successfully',
-          job: updatedJob
+          job: enRouteJob || updatedJob,
+          statusUpdated: enRouteJob ? 'en_route' : 'assigned'
         });
       } catch (error) {
         console.error('Accept job error:', error);
