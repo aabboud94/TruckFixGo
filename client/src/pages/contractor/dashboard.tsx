@@ -279,7 +279,7 @@ export default function ContractorDashboard() {
   // Toggle online status
   const toggleOnlineMutation = useMutation({
     mutationFn: async (status: boolean) => {
-      return await apiRequest("/api/contractor/status", "PATCH", { isAvailable: status });
+      return await apiRequest("PATCH", "/api/contractor/status", { isAvailable: status });
     },
     onSuccess: (_, status) => {
       toast({
@@ -298,7 +298,7 @@ export default function ContractorDashboard() {
       
       try {
         console.log('[CLIENT ACCEPT DEBUG] Sending POST request to:', `/api/jobs/${jobId}/accept`);
-        const response = await apiRequest(`/api/jobs/${jobId}/accept`, "POST");
+        const response = await apiRequest("POST", `/api/jobs/${jobId}/accept`);
         console.log('[CLIENT ACCEPT DEBUG] Response received:', response);
         return response;
       } catch (error) {
@@ -337,7 +337,7 @@ export default function ContractorDashboard() {
   // Decline job mutation
   const declineJobMutation = useMutation({
     mutationFn: async (jobId: string) => {
-      return await apiRequest(`/api/jobs/${jobId}/decline`, "POST");
+      return await apiRequest("POST", `/api/jobs/${jobId}/decline`);
     },
     onSuccess: () => {
       toast({
