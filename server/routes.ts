@@ -3041,6 +3041,238 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Get contractor invoices
+  app.get('/api/contractor/invoices',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        
+        // Get all jobs for the contractor that have been completed
+        const jobs = await storage.findJobs({
+          contractorId,
+          status: 'completed'
+        });
+        
+        // Get invoices for these jobs
+        const invoices = await Promise.all(
+          jobs.map(async (job) => {
+            const invoice = await storage.getInvoiceByJobId(job.id);
+            if (!invoice) return null;
+            
+            // Get customer details
+            const customer = job.customerId ? await storage.getUser(job.customerId) : null;
+            
+            // Get line items for the invoice
+            const lineItems = await storage.getInvoiceLineItems(invoice.id);
+            
+            return {
+              ...invoice,
+              customerName: customer ? `${customer.firstName} ${customer.lastName}` : job.customerName || 'Guest',
+              jobNumber: job.jobNumber,
+              serviceType: job.serviceTypeId,
+              lineItems
+            };
+          })
+        );
+        
+        // Filter out null invoices and sort by creation date
+        const validInvoices = invoices
+          .filter(inv => inv !== null)
+          .sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime());
+        
+        res.json(validInvoices);
+      } catch (error) {
+        console.error('Get contractor invoices error:', error);
+        res.status(500).json({ message: 'Failed to get invoices' });
+      }
+    }
+  );
+
+  // Update invoice line items
+  app.patch('/api/contractor/invoices/:invoiceId',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const { invoiceId } = req.params;
+        const { lineItems } = req.body;
+        
+        // Verify invoice belongs to a job assigned to this contractor
+        const invoice = await storage.getInvoice(invoiceId);
+        if (!invoice) {
+          return res.status(404).json({ message: 'Invoice not found' });
+        }
+        
+        // Get the job for this invoice
+        if (invoice.jobId) {
+          const job = await storage.getJob(invoice.jobId);
+          if (!job || job.contractorId !== contractorId) {
+            return res.status(403).json({ message: 'Unauthorized to edit this invoice' });
+          }
+        } else {
+          return res.status(403).json({ message: 'Invoice not associated with a job' });
+        }
+        
+        // Delete existing line items and create new ones
+        await storage.deleteInvoiceLineItems(invoiceId);
+        
+        // Calculate new totals
+        let subtotal = 0;
+        const createdLineItems = [];
+        
+        for (let i = 0; i < lineItems.length; i++) {
+          const item = lineItems[i];
+          const totalPrice = parseFloat(item.quantity) * parseFloat(item.unitPrice);
+          subtotal += totalPrice;
+          
+          const lineItem = await storage.createInvoiceLineItem({
+            invoiceId,
+            type: item.type || 'other',
+            description: item.description,
+            quantity: item.quantity.toString(),
+            unitPrice: item.unitPrice.toString(),
+            totalPrice: totalPrice.toString(),
+            sortOrder: i
+          });
+          
+          createdLineItems.push(lineItem);
+        }
+        
+        // Update invoice totals
+        const taxAmount = subtotal * 0.1; // 10% tax (can be configurable)
+        const totalAmount = subtotal + taxAmount;
+        
+        await storage.updateInvoice(invoiceId, {
+          subtotal: subtotal.toString(),
+          taxAmount: taxAmount.toString(),
+          totalAmount: totalAmount.toString(),
+          amountDue: totalAmount.toString()
+        });
+        
+        // Get updated invoice
+        const updatedInvoice = await storage.getInvoice(invoiceId);
+        
+        res.json({
+          ...updatedInvoice,
+          lineItems: createdLineItems
+        });
+      } catch (error) {
+        console.error('Update invoice error:', error);
+        res.status(500).json({ message: 'Failed to update invoice' });
+      }
+    }
+  );
+
+  // Send invoice via email
+  app.post('/api/contractor/invoices/:invoiceId/send',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const { invoiceId } = req.params;
+        const { email, message } = req.body;
+
+        // Validate email
+        if (!email || !z.string().email().safeParse(email).success) {
+          return res.status(400).json({ message: 'Valid email address is required' });
+        }
+
+        // Get and verify invoice ownership
+        const invoice = await storage.getInvoice(invoiceId);
+        if (!invoice) {
+          return res.status(404).json({ message: 'Invoice not found' });
+        }
+
+        // Get the job and verify contractor owns it
+        if (!invoice.jobId) {
+          return res.status(400).json({ message: 'Invoice not associated with a job' });
+        }
+
+        const job = await storage.getJob(invoice.jobId);
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+
+        if (job.contractorId !== contractorId) {
+          return res.status(403).json({ message: 'Unauthorized to send this invoice' });
+        }
+
+        // Get related data for the invoice
+        const [customer, contractor, fleetAccount, transactions, lineItems] = await Promise.all([
+          storage.getUser(invoice.customerId),
+          storage.getContractorProfile(contractorId),
+          invoice.fleetAccountId ? storage.getFleetAccount(invoice.fleetAccountId) : null,
+          storage.getTransactionsByJobId(invoice.jobId),
+          storage.getInvoiceLineItems(invoiceId)
+        ]);
+
+        if (!customer) {
+          return res.status(404).json({ message: 'Customer not found' });
+        }
+
+        // Generate PDF
+        const pdfData = {
+          invoice,
+          job,
+          customer,
+          contractor,
+          fleetAccount,
+          transactions,
+          laborHours: job.actualDuration ? job.actualDuration / 60 : 0,
+          taxRate: 0.0825,
+          fleetDiscount: fleetAccount?.pricingTier === 'gold' ? 0.1 :
+                         fleetAccount?.pricingTier === 'silver' ? 0.05 :
+                         fleetAccount?.pricingTier === 'platinum' ? 0.15 : 0
+        };
+
+        const pdfBuffer = await pdfService.generateInvoice(pdfData);
+
+        // Send email with invoice
+        const emailSent = await emailService.sendInvoiceEmail({
+          to: email,
+          invoice,
+          job,
+          customer,
+          contractor,
+          fleetAccount,
+          personalMessage: message,
+          pdfBuffer,
+          amountDue: parseFloat(invoice.amountDue.toString())
+        });
+
+        if (!emailSent.success) {
+          console.error('Failed to send invoice email:', emailSent.error);
+          return res.status(500).json({ 
+            message: 'Failed to send invoice email', 
+            error: emailSent.error 
+          });
+        }
+
+        // Update invoice sentAt timestamp
+        await storage.updateInvoice(invoiceId, {
+          sentAt: new Date(),
+          status: invoice.status === 'draft' ? 'pending' : invoice.status
+        });
+
+        res.json({
+          message: 'Invoice sent successfully',
+          sentTo: email,
+          messageId: emailSent.messageId
+        });
+      } catch (error) {
+        console.error('Send invoice error:', error);
+        res.status(500).json({ 
+          message: 'Failed to send invoice',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+  );
+
   // Get contractor's active job
   app.get('/api/contractor/active-job', 
     requireAuth,

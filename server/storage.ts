@@ -1822,6 +1822,7 @@ export interface IStorage {
   createInvoiceLineItem(data: InsertInvoiceLineItem): Promise<InvoiceLineItem>;
   updateInvoiceLineItem(id: string, updates: Partial<InsertInvoiceLineItem>): Promise<InvoiceLineItem | undefined>;
   deleteInvoiceLineItem(id: string): Promise<boolean>;
+  deleteInvoiceLineItems(invoiceId: string): Promise<boolean>;
   getInvoiceLineItems(invoiceId: string): Promise<InvoiceLineItem[]>;
   getInvoiceLineItemById(id: string): Promise<InvoiceLineItem | undefined>;
   getInvoiceWithLineItems(invoiceId: string): Promise<Invoice & { lineItems: InvoiceLineItem[] } | undefined>;
@@ -6104,7 +6105,7 @@ export class PostgreSQLStorage implements IStorage {
         ['pending', 'approved', 'rejected', 'cancelled'].includes(s)
       );
       if (validStatuses.length > 0) {
-        conditions.push(sql`${vacationRequests.status} = ANY(${validStatuses})`);
+        conditions.push(inArray(vacationRequests.status, validStatuses));
       }
     }
     
@@ -7106,6 +7107,13 @@ export class PostgreSQLStorage implements IStorage {
   async deleteInvoiceLineItem(id: string): Promise<boolean> {
     const result = await db.delete(invoiceLineItems)
       .where(eq(invoiceLineItems.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  async deleteInvoiceLineItems(invoiceId: string): Promise<boolean> {
+    const result = await db.delete(invoiceLineItems)
+      .where(eq(invoiceLineItems.invoiceId, invoiceId))
       .returning();
     return result.length > 0;
   }
