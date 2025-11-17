@@ -3463,113 +3463,121 @@ export class PostgreSQLStorage implements IStorage {
     }
   }
 
+  // SIMPLIFIED: Find best contractor for a job based on distance and availability only
+  async findBestContractorForJob(jobId: string): Promise<ContractorProfile | null> {
+    try {
+      // Get the job details
+      const job = await this.getJob(jobId);
+      if (!job) {
+        console.log('[FindBestContractor] Job not found:', jobId);
+        return null;
+      }
+
+      let jobLat: number | undefined;
+      let jobLon: number | undefined;
+
+      // Extract location coordinates from job
+      if (job.location) {
+        const location = job.location as any;
+        jobLat = location.lat || location.latitude;
+        jobLon = location.lng || location.lon || location.longitude;
+      }
+
+      // Get available contractors using simplified logic
+      const availableContractors = await this.getAvailableContractorsForAssignment(jobLat, jobLon);
+
+      if (availableContractors.length === 0) {
+        console.log('[FindBestContractor] No available contractors found for job:', jobId);
+        return null;
+      }
+
+      // The first contractor in the sorted list is the best match
+      const bestContractor = availableContractors[0];
+      console.log(`[FindBestContractor] Best contractor for job ${jobId}: ${bestContractor.name} (distance: ${bestContractor.distance}mi)`);
+
+      // Return the contractor profile
+      const profile = await db.select()
+        .from(contractorProfiles)
+        .where(eq(contractorProfiles.userId, bestContractor.id))
+        .limit(1);
+
+      return profile[0] || null;
+    } catch (error) {
+      console.error('[FindBestContractor] Error finding best contractor:', error);
+      return null;
+    }
+  }
+
   async getAvailableContractorsForAssignment(jobLat?: number, jobLon?: number): Promise<any[]> {
     try {
-      console.log('[AssignJob] Getting available contractors for assignment with queue info');
+      console.log('[AssignJob] Getting available contractors (SIMPLIFIED) - location:', { jobLat, jobLon });
       
-      // Get ALL contractors with their profiles (LEFT JOIN ensures we get all contractors)
-      // Even if they don't have a profile entry
+      // Get ALL contractors with their profiles (no vacation or time off checks)
       const contractors = await db
         .select()
         .from(users)
         .leftJoin(contractorProfiles, eq(users.id, contractorProfiles.userId))
         .where(
-          eq(users.role, 'contractor')  // Only filter by role
+          eq(users.role, 'contractor')
         );
 
-      console.log(`[AssignJob] Found ${contractors.length} contractors (including those without profiles)`);
+      console.log(`[AssignJob] Found ${contractors.length} total contractors`);
 
-      // Process and calculate distance for each contractor
+      // Process contractors and calculate distance
       const processedContractors = await Promise.all(contractors.map(async row => {
-        // Log contractor details for debugging
-        console.log(`[AssignJob] Processing contractor: ID=${row.users.id}, Email=${row.users.email}, HasProfile=${!!row.contractor_profiles}`);
-        
-        // Check if contractor is on vacation
-        const today = new Date();
-        const contractorVacations = await db.select()
-          .from(vacationRequests)
-          .where(
-            and(
-              eq(vacationRequests.contractorId, row.users.id),
-              eq(vacationRequests.status, 'approved'),
-              sql`${vacationRequests.startDate} <= ${today}`,
-              sql`${vacationRequests.endDate} >= ${today}`
-            )
-          )
-          .limit(1);
-        
-        if (contractorVacations.length > 0) {
-          console.log(`[AssignJob] Contractor ${row.users.id} is on vacation, skipping`);
-          return null; // Skip contractors on vacation
+        // Skip contractors without profiles (they don't have location data)
+        if (!row.contractor_profiles) {
+          console.log(`[AssignJob] Contractor ${row.users.id} has no profile, skipping`);
+          return null;
         }
-        
-        // Check availability overrides for today
-        const todayOverrides = await db.select()
-          .from(availabilityOverrides)
-          .where(
-            and(
-              eq(availabilityOverrides.contractorId, row.users.id),
-              eq(availabilityOverrides.date, today),
-              eq(availabilityOverrides.isAvailable, false)
-            )
-          )
-          .limit(1);
-        
-        if (todayOverrides.length > 0) {
-          console.log(`[AssignJob] Contractor ${row.users.id} is unavailable today, skipping`);
-          return null; // Skip unavailable contractors
-        }
-        
+
         const fullName = `${row.users.firstName || ''} ${row.users.lastName || ''}`.trim() || row.users.email || 'Unknown';
         let distance = 0;
+        let withinServiceRadius = true; // Default to true if no location provided
         
-        // Calculate distance if coordinates available
-        if (jobLat && jobLon && row.contractor_profiles?.baseLocationLat && row.contractor_profiles?.baseLocationLon) {
-          const contractorLat = row.contractor_profiles.baseLocationLat;
-          const contractorLon = row.contractor_profiles.baseLocationLon;
+        // Calculate distance using proper Haversine formula
+        if (jobLat && jobLon) {
+          const contractorLat = row.contractor_profiles?.baseLocationLat;
+          const contractorLon = row.contractor_profiles?.baseLocationLon;
           
-          // Haversine formula for distance calculation
-          const R = 3959; // Earth radius in miles
-          const lat1 = jobLat * Math.PI / 180;
-          const lat2 = Number(contractorLat) * Math.PI / 180;
-          const deltaLat = (Number(contractorLat) - jobLat) * Math.PI / 180;
-          const deltaLon = (Number(contractorLon) - jobLon) * Math.PI / 180;
-          
-          const a = Math.sin(deltaLat/2) * Math.sin(deltaLat/2) +
-                   Math.cos(lat1) * Math.cos(lat2) *
-                   Math.sin(deltaLon/2) * Math.sin(deltaLon/2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          distance = R * c;
+          if (contractorLat && contractorLon) {
+            // Haversine formula for accurate distance calculation
+            distance = this.calculateHaversineDistance(
+              jobLat, 
+              jobLon, 
+              Number(contractorLat), 
+              Number(contractorLon)
+            );
+            
+            // Check if within service radius (default to 50 miles if not set)
+            const serviceRadius = row.contractor_profiles?.serviceRadius || 50;
+            withinServiceRadius = distance <= serviceRadius;
+            
+            console.log(`[AssignJob] Contractor ${row.users.id}: distance=${distance.toFixed(1)}mi, serviceRadius=${serviceRadius}mi, withinRadius=${withinServiceRadius}`);
+          } else {
+            console.log(`[AssignJob] Contractor ${row.users.id} has no location data`);
+          }
         }
 
-        // Get queue information for this contractor
-        const queue = await this.getContractorQueue(row.users.id);
-        const currentJobInfo = await this.getContractorCurrentJob(row.users.id);
-        
-        // Count jobs in different statuses in the queue
-        const queueLength = queue.filter(q => q.status === 'pending').length;
-        const activeJobCount = queue.filter(q => q.status === 'active').length;
-        
-        // Get current job details if the contractor is busy
-        let currentJob = null;
-        let currentJobNumber = null;
-        if (currentJobInfo.job) {
-          currentJob = {
-            id: currentJobInfo.job.id,
-            jobNumber: currentJobInfo.job.jobNumber,
-            serviceType: currentJobInfo.job.serviceTypeId || 'Service',
-            customerName: currentJobInfo.job.customerName || 'Customer',
-            status: currentJobInfo.job.status
-          };
-          currentJobNumber = `#${activeJobCount + 1} of ${activeJobCount + queueLength + 1}`;
+        // SIMPLIFIED: Only check if contractor is available (not vacation/time off)
+        // Both online AND offline contractors are considered
+        const isAvailable = row.contractor_profiles?.isAvailable !== undefined 
+          ? row.contractor_profiles.isAvailable 
+          : true; // Default to available if not specified
+
+        // Skip if not within service radius
+        if (!withinServiceRadius) {
+          console.log(`[AssignJob] Contractor ${row.users.id} is outside service radius, skipping`);
+          return null;
         }
 
-        const isCurrentlyBusy = activeJobCount > 0;
-
-        // Default values for contractors without profiles
-        const defaultServiceRadius = 50;
-        const defaultPerformanceTier = 'bronze';
-        const defaultIsAvailable = true;  // Assume available if no profile
+        // Get current job count (for sorting purposes only)
+        const activeJobs = await db.select()
+          .from(jobs)
+          .where(and(
+            eq(jobs.contractorId, row.users.id),
+            inArray(jobs.status, ['assigned', 'en_route', 'on_site'])
+          ));
 
         const contractor = {
           id: row.users.id,
@@ -3578,60 +3586,48 @@ export class PostgreSQLStorage implements IStorage {
           lastName: row.users.lastName,
           phone: row.users.phone,
           name: fullName,
-          // Use defaults if no profile exists
-          performanceTier: row.contractor_profiles?.performanceTier || defaultPerformanceTier,
+          performanceTier: row.contractor_profiles?.performanceTier || 'bronze',
           averageRating: row.contractor_profiles?.averageRating ? Number(row.contractor_profiles.averageRating) : 0,
           totalJobsCompleted: row.contractor_profiles?.totalJobsCompleted || 0,
-          serviceRadius: row.contractor_profiles?.serviceRadius || defaultServiceRadius,
+          serviceRadius: row.contractor_profiles?.serviceRadius || 50,
+          // Include both online and offline contractors
           isOnline: row.contractor_profiles?.isOnline || false,
-          isAvailable: row.contractor_profiles?.isAvailable !== undefined ? row.contractor_profiles.isAvailable : defaultIsAvailable,
+          isAvailable: isAvailable,
           lastAssignedAt: row.contractor_profiles?.lastAssignedAt || null,
-          lastHeartbeatAt: row.contractor_profiles?.lastHeartbeatAt || null,
           distance: Math.round(distance * 10) / 10,
-          withinServiceRadius: !jobLat || !jobLon || distance <= (row.contractor_profiles?.serviceRadius || defaultServiceRadius),
-          // Add queue information
-          queueLength,
-          isCurrentlyBusy,
-          currentJob,
-          currentJobNumber,
-          totalQueuedJobs: activeJobCount + queueLength,
-          // Debug field to track contractors without profiles
-          hasProfile: !!row.contractor_profiles
+          withinServiceRadius: withinServiceRadius,
+          activeJobCount: activeJobs.length,
+          // Base location for debugging
+          baseLocationLat: row.contractor_profiles?.baseLocationLat,
+          baseLocationLon: row.contractor_profiles?.baseLocationLon
         };
         
-        console.log(`[AssignJob] Contractor: ${contractor.name}, Tier: ${contractor.performanceTier}, Queue: ${contractor.queueLength}, Busy: ${contractor.isCurrentlyBusy}, HasProfile: ${contractor.hasProfile}`);
+        console.log(`[AssignJob] Contractor ${contractor.name}: Available=${contractor.isAvailable}, Online=${contractor.isOnline}, Distance=${contractor.distance}mi, ActiveJobs=${contractor.activeJobCount}`);
         
         return contractor;
       }));
 
-      // Filter out null values (contractors on vacation or unavailable)
+      // Filter out null values (contractors outside service radius)
       const availableContractors = processedContractors.filter(c => c !== null);
 
-      // Filter contractors within service radius if location provided
-      const eligibleContractors = jobLat && jobLon 
-        ? availableContractors.filter(c => c.withinServiceRadius)
-        : availableContractors;
+      // Filter only available contractors
+      const eligibleContractors = availableContractors.filter(c => c.isAvailable);
 
-      console.log(`[AssignJob] ${eligibleContractors.length} contractors within service radius`);
+      console.log(`[AssignJob] ${eligibleContractors.length} contractors are available and within service radius`);
 
-      // Sort contractors: first by queue length (less busy first), then by tier and round-robin
+      // SIMPLIFIED SORT: Distance first, then active jobs, then round-robin
       const sortedContractors = eligibleContractors.sort((a, b) => {
-        // First priority: Available contractors (no queue) come first
-        if (a.totalQueuedJobs === 0 && b.totalQueuedJobs > 0) return -1;
-        if (b.totalQueuedJobs === 0 && a.totalQueuedJobs > 0) return 1;
-        
-        // Second priority: Tier (gold > silver > bronze)
-        const tierOrder = { gold: 3, silver: 2, bronze: 1 };
-        const tierA = tierOrder[a.performanceTier as keyof typeof tierOrder] || 1;
-        const tierB = tierOrder[b.performanceTier as keyof typeof tierOrder] || 1;
-        if (tierA !== tierB) return tierB - tierA;
-        
-        // Third priority: Less queued jobs
-        if (a.totalQueuedJobs !== b.totalQueuedJobs) {
-          return a.totalQueuedJobs - b.totalQueuedJobs;
+        // First priority: Closer contractors come first
+        if (a.distance !== b.distance) {
+          return a.distance - b.distance;
         }
         
-        // Fourth priority: Round-robin (least recently assigned)
+        // Second priority: Fewer active jobs
+        if (a.activeJobCount !== b.activeJobCount) {
+          return a.activeJobCount - b.activeJobCount;
+        }
+        
+        // Third priority: Round-robin (least recently assigned)
         if (!a.lastAssignedAt && b.lastAssignedAt) return -1;
         if (a.lastAssignedAt && !b.lastAssignedAt) return 1;
         if (a.lastAssignedAt && b.lastAssignedAt) {
@@ -14661,6 +14657,22 @@ export class PostgreSQLStorage implements IStorage {
       Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R * c;
+  }
+
+  // Proper Haversine distance calculation for service area checks (used in simplified assignment)
+  private calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 3959; // Earth's radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const distance = R * c;
+    
+    return distance; // Returns exact distance in miles
   }
 
   // ==================== EMERGENCY SOS METHODS ====================

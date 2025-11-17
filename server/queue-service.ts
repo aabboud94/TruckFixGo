@@ -9,6 +9,7 @@ import { and, eq, gte, lte, inArray, sql } from 'drizzle-orm';
 export class QueueProcessingService {
   private storage: PostgreSQLStorage;
   private processingJobs: Set<string> = new Set();
+  private assignmentTimers: Map<string, NodeJS.Timeout> = new Map();
 
   constructor(storage: PostgreSQLStorage) {
     this.storage = storage;
@@ -36,6 +37,11 @@ export class QueueProcessingService {
     // Check for idle contractors every 30 minutes
     cron.schedule('*/30 * * * *', () => {
       this.checkIdleContractors();
+    });
+
+    // Check for auto-assignment timeouts every minute
+    cron.schedule('* * * * *', () => {
+      this.checkAutoAssignmentTimeouts();
     });
 
     console.log('Queue processing service initialized');
@@ -516,6 +522,268 @@ export class QueueProcessingService {
     } catch (error) {
       console.error('Error getting queue analytics:', error);
       return null;
+    }
+  }
+
+  /**
+   * Handle automatic job assignment with 3-minute timer
+   */
+  async autoAssignJob(jobId: string, isAutomatic: boolean = true): Promise<{ success: boolean; contractorId?: string }> {
+    try {
+      console.log(`[AutoAssign] Starting auto-assignment for job ${jobId}`);
+
+      // Find best contractor using simplified logic
+      const bestContractor = await this.storage.findBestContractorForJob(jobId);
+
+      if (!bestContractor) {
+        console.log('[AutoAssign] No available contractor found');
+        return { success: false };
+      }
+
+      // Assign the job to the contractor
+      const assignedJob = await db.update(jobs)
+        .set({
+          contractorId: bestContractor.userId,
+          status: 'assigned',
+          assignedAt: new Date(),
+          assignmentMethod: 'ai_dispatch',
+          autoAssigned: isAutomatic,
+          updatedAt: new Date()
+        })
+        .where(eq(jobs.id, jobId))
+        .returning();
+
+      if (assignedJob.length === 0) {
+        console.log('[AutoAssign] Failed to assign job');
+        return { success: false };
+      }
+
+      console.log(`[AutoAssign] Job ${jobId} ${isAutomatic ? 'automatically' : 'manually'} assigned to contractor ${bestContractor.userId}`);
+
+      // Notify contractor about the assignment
+      const job = assignedJob[0];
+      const contractor = await this.storage.getUser(bestContractor.userId);
+      const customer = job.customerId ? await this.storage.getUser(job.customerId) : null;
+
+      if (contractor) {
+        await emailService.sendEmail(contractor.email, 'JOB_ASSIGNED_CONTRACTOR', {
+          contractorName: `${contractor.firstName} ${contractor.lastName}`,
+          jobNumber: job.jobNumber,
+          jobId: job.id,
+          serviceType: job.serviceType,
+          customerName: customer ? `${customer.firstName} ${customer.lastName}` : 'Customer',
+          assignedAutomatically: isAutomatic
+        });
+
+        // Send WebSocket notification
+        await trackingWSServer.broadcastJobAssignment(bestContractor.userId, bestContractor.userId, {
+          type: isAutomatic ? 'job:auto-assigned' : 'job:assigned',
+          data: {
+            job,
+            assignedAutomatically: isAutomatic,
+            message: isAutomatic 
+              ? 'You have been automatically assigned a new job. Please accept within 3 minutes.' 
+              : 'You have been assigned a new job.'
+          }
+        });
+      }
+
+      // Set a 3-minute timer for automatic assignments
+      if (isAutomatic) {
+        const timerId = setTimeout(() => {
+          this.handleAssignmentTimeout(jobId, bestContractor.userId);
+        }, 3 * 60 * 1000); // 3 minutes
+
+        // Store the timer so we can cancel it if contractor accepts
+        this.assignmentTimers.set(jobId, timerId);
+      }
+
+      return { success: true, contractorId: bestContractor.userId };
+    } catch (error) {
+      console.error('[AutoAssign] Error in auto-assignment:', error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Handle assignment timeout after 3 minutes
+   */
+  async handleAssignmentTimeout(jobId: string, contractorId: string) {
+    try {
+      console.log(`[AutoAssign] Handling 3-minute timeout for job ${jobId}`);
+
+      // Check if job is still assigned to same contractor and not accepted
+      const job = await this.storage.getJob(jobId);
+      if (!job || job.contractorId !== contractorId || job.status !== 'assigned') {
+        console.log('[AutoAssign] Job already accepted or reassigned');
+        return;
+      }
+
+      // Send reminder email
+      const contractor = await this.storage.getUser(contractorId);
+      if (contractor) {
+        console.log(`[AutoAssign] Sending reminder email to contractor ${contractorId}`);
+        await emailService.sendEmail(contractor.email, 'JOB_ASSIGNMENT_REMINDER', {
+          contractorName: `${contractor.firstName} ${contractor.lastName}`,
+          jobNumber: job.jobNumber,
+          timeRemaining: '1 minute'
+        });
+      }
+
+      // Wait another minute before reassigning
+      setTimeout(async () => {
+        // Check again if job is still not accepted
+        const updatedJob = await this.storage.getJob(jobId);
+        if (!updatedJob || updatedJob.contractorId !== contractorId || updatedJob.status !== 'assigned') {
+          console.log('[AutoAssign] Job accepted after reminder');
+          return;
+        }
+
+        // Reassign to next available ONLINE contractor
+        console.log(`[AutoAssign] Reassigning job ${jobId} after timeout`);
+        await this.reassignToNextOnlineContractor(jobId, contractorId);
+      }, 60 * 1000); // 1 more minute
+
+    } catch (error) {
+      console.error('[AutoAssign] Error handling assignment timeout:', error);
+    }
+  }
+
+  /**
+   * Reassign job to next available online contractor
+   */
+  async reassignToNextOnlineContractor(jobId: string, currentContractorId: string) {
+    try {
+      const job = await this.storage.getJob(jobId);
+      if (!job) return;
+
+      let jobLat: number | undefined;
+      let jobLon: number | undefined;
+
+      if (job.location) {
+        const location = job.location as any;
+        jobLat = location.lat || location.latitude;
+        jobLon = location.lng || location.lon || location.longitude;
+      }
+
+      // Get available contractors excluding the current one
+      const contractors = await this.storage.getAvailableContractorsForAssignment(jobLat, jobLon);
+      
+      // Filter for ONLINE contractors only, excluding current contractor
+      const onlineContractors = contractors.filter(c => 
+        c.id !== currentContractorId && c.isOnline === true
+      );
+
+      if (onlineContractors.length === 0) {
+        console.log('[AutoAssign] No online contractors available for reassignment');
+        // Cancel the job if no online contractors available
+        await db.update(jobs)
+          .set({
+            status: 'new',
+            contractorId: null,
+            assignedAt: null,
+            updatedAt: new Date()
+          })
+          .where(eq(jobs.id, jobId));
+        return;
+      }
+
+      const nextContractor = onlineContractors[0];
+      console.log(`[AutoAssign] Reassigning job ${jobId} from ${currentContractorId} to ${nextContractor.id}`);
+
+      // Update job with new contractor
+      await db.update(jobs)
+        .set({
+          contractorId: nextContractor.id,
+          assignedAt: new Date(),
+          assignmentAttempts: (job.assignmentAttempts || 0) + 1,
+          updatedAt: new Date()
+        })
+        .where(eq(jobs.id, jobId));
+
+      // Notify old contractor about reassignment
+      const oldContractor = await this.storage.getUser(currentContractorId);
+      if (oldContractor) {
+        await emailService.sendEmail(oldContractor.email, 'JOB_REASSIGNED_FROM', {
+          contractorName: `${oldContractor.firstName} ${oldContractor.lastName}`,
+          jobNumber: job.jobNumber,
+          reason: 'Did not accept within 3 minutes'
+        });
+      }
+
+      // Notify new contractor
+      const newContractor = await this.storage.getUser(nextContractor.id);
+      const customer = job.customerId ? await this.storage.getUser(job.customerId) : null;
+      
+      if (newContractor) {
+        await emailService.sendEmail(newContractor.email, 'JOB_REASSIGNED_TO', {
+          contractorName: `${newContractor.firstName} ${newContractor.lastName}`,
+          jobNumber: job.jobNumber,
+          jobId: job.id,
+          serviceType: job.serviceType,
+          customerName: customer ? `${customer.firstName} ${customer.lastName}` : 'Customer',
+          assignedAutomatically: true
+        });
+
+        await trackingWSServer.broadcastJobAssignment(nextContractor.id, nextContractor.id, {
+          type: 'job:reassigned',
+          data: {
+            job,
+            assignedAutomatically: true,
+            message: 'You have been reassigned a job. Please accept within 3 minutes.'
+          }
+        });
+      }
+
+      // Set new timer for the reassigned contractor
+      const timerId = setTimeout(() => {
+        this.handleAssignmentTimeout(jobId, nextContractor.id);
+      }, 3 * 60 * 1000);
+
+      this.assignmentTimers.set(jobId, timerId);
+
+    } catch (error) {
+      console.error('[AutoAssign] Error reassigning job:', error);
+    }
+  }
+
+  /**
+   * Cancel assignment timer when contractor accepts
+   */
+  cancelAssignmentTimer(jobId: string) {
+    const timerId = this.assignmentTimers.get(jobId);
+    if (timerId) {
+      clearTimeout(timerId);
+      this.assignmentTimers.delete(jobId);
+      console.log(`[AutoAssign] Cancelled timer for job ${jobId}`);
+    }
+  }
+
+  /**
+   * Check for jobs that need auto-assignment timeout handling
+   */
+  async checkAutoAssignmentTimeouts() {
+    try {
+      // Find jobs that were auto-assigned more than 3 minutes ago and still not accepted
+      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+      
+      const unacceptedJobs = await db.select()
+        .from(jobs)
+        .where(and(
+          eq(jobs.status, 'assigned'),
+          eq(jobs.autoAssigned, true),
+          lte(jobs.assignedAt, threeMinutesAgo)
+        ));
+
+      for (const job of unacceptedJobs) {
+        // Check if we're already handling this job
+        if (!this.assignmentTimers.has(job.id) && job.contractorId) {
+          console.log(`[AutoAssign] Found unaccepted job ${job.id}, handling timeout`);
+          await this.handleAssignmentTimeout(job.id, job.contractorId);
+        }
+      }
+    } catch (error) {
+      console.error('[AutoAssign] Error checking auto-assignment timeouts:', error);
     }
   }
 }

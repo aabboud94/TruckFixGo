@@ -16666,12 +16666,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole('admin', 'dispatcher'),
     validateRequest(z.object({
-      contractorId: z.string()
+      contractorId: z.string(),
+      isAutomatic: z.boolean().optional()
     })),
     async (req: Request, res: Response) => {
       try {
         const jobId = req.params.id;
-        const { contractorId } = req.body;
+        const { contractorId, isAutomatic = false } = req.body;
+        
+        console.log(`[API-Assign] Assignment request for job ${jobId} to contractor ${contractorId}, automatic=${isAutomatic}`);
         
         // Get job to check current status
         const job = await storage.getJob(jobId);
@@ -16685,66 +16688,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
+        // SIMPLIFIED: Use findBestContractorForJob if no contractor specified
+        let targetContractorId = contractorId;
+        
+        if (!contractorId || contractorId === 'auto') {
+          console.log(`[API-Assign] Auto-selecting best contractor for job ${jobId}`);
+          const bestContractor = await storage.findBestContractorForJob(jobId);
+          if (!bestContractor) {
+            return res.status(404).json({ message: 'No available contractors found' });
+          }
+          targetContractorId = bestContractor.userId;
+        }
+        
         // Check contractor exists
-        const contractor = await storage.getContractorProfile(contractorId);
+        const contractor = await storage.getContractorProfile(targetContractorId);
         if (!contractor) {
           return res.status(404).json({ message: 'Contractor not found' });
         }
         
-        // Get contractor current job to check if busy
-        const currentJobInfo = await storage.getContractorCurrentJob(contractorId);
-        const isContractorBusy = currentJobInfo.job !== null;
+        // SIMPLIFIED: Just assign the job directly
+        console.log(`[API-Assign] ${isAutomatic ? 'Automatically' : 'Manually'} assigning job ${jobId} to contractor ${targetContractorId}`);
         
-        if (isContractorBusy) {
-          // Contractor is busy, enqueue the job
-          console.log(`[AssignJob] Contractor ${contractorId} is busy, enqueueing job ${jobId}`);
-          
-          // Enqueue the job for later
-          const queueEntry = await storage.enqueueJob(contractorId, jobId);
-          
-          // Update job status to 'assigned' but contractor will handle it when ready
-          await storage.updateJob(jobId, {
-            contractorId,
-            status: 'assigned',
-            assignedAt: new Date()
-          });
-          
-          res.json({ 
-            message: 'Job queued for contractor',
-            jobId,
-            contractorId,
-            queuePosition: queueEntry.position,
-            isQueued: true
-          });
-        } else {
-          // Contractor is available, assign immediately
-          console.log(`[AssignJob] Contractor ${contractorId} is available, assigning job ${jobId} immediately`);
-          
-          // Assign the contractor
-          await storage.updateJob(jobId, {
-            contractorId,
-            status: 'assigned',
-            assignedAt: new Date()
-          });
-          
-          // Update contractor's active job
-          await storage.updateContractorProfile(contractorId, {
-            activeJobId: jobId
-          });
-          
-          // Send notification to contractor (if WebSocket connected)
-          const { trackingWSServer } = await import('./websocket');
-          trackingWSServer.notifyJobAssignment(jobId, contractorId);
-          
-          res.json({ 
-            message: 'Contractor assigned successfully',
-            jobId,
-            contractorId,
-            isQueued: false
-          });
+        // Update job with simplified assignment
+        const updatedJob = await storage.assignJobToContractor(jobId, targetContractorId, isAutomatic ? 'ai_dispatch' : 'manual');
+        
+        if (!updatedJob) {
+          return res.status(500).json({ message: 'Failed to assign contractor' });
         }
+        
+        // If automatic assignment, use queue service for 3-minute timer
+        if (isAutomatic) {
+          const queueService = (req.app as any).queueService;
+          if (queueService) {
+            await queueService.autoAssignJob(jobId, true);
+          }
+        }
+        
+        // Log the assignment
+        console.log(`[API-Assign] Successfully assigned job ${jobId} to contractor ${targetContractorId} (${isAutomatic ? 'automatic' : 'manual'})`);
+        
+        // Send notifications
+        const { trackingWSServer } = await import('./websocket');
+        trackingWSServer.notifyJobAssignment(jobId, targetContractorId);
+        
+        res.json({
+          message: `Job ${isAutomatic ? 'automatically' : 'manually'} assigned successfully`,
+          jobId,
+          contractorId: targetContractorId,
+          isAutomatic,
+          assignmentMethod: isAutomatic ? 'ai_dispatch' : 'manual',
+          status: 'assigned'
+        });
       } catch (error) {
-        console.error('Assign contractor error:', error);
+        console.error('[API-Assign] Assignment error:', error);
         res.status(500).json({ message: 'Failed to assign contractor' });
       }
     }
@@ -16757,12 +16753,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     validateRequest(z.object({
       contractorId: z.string(),
       driverId: z.string().optional(),
-      forceQueue: z.boolean().optional() // Allow forcing enqueue even if available
+      isAutomatic: z.boolean().optional()
     })),
     async (req: Request, res: Response) => {
       try {
         const jobId = req.params.id;
-        const { contractorId, driverId, forceQueue } = req.body;
+        const { contractorId, driverId, isAutomatic = false } = req.body;
+        
+        console.log(`[API-Assign-PUT] Assignment request for job ${jobId} to contractor ${contractorId}, automatic=${isAutomatic}`);
         
         // Get job to check current status
         const job = await storage.getJob(jobId);
@@ -16776,70 +16774,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
+        // SIMPLIFIED: Use findBestContractorForJob if no contractor specified
+        let targetContractorId = contractorId;
+        
+        if (!contractorId || contractorId === 'auto') {
+          console.log(`[API-Assign-PUT] Auto-selecting best contractor for job ${jobId}`);
+          const bestContractor = await storage.findBestContractorForJob(jobId);
+          if (!bestContractor) {
+            return res.status(404).json({ message: 'No available contractors found' });
+          }
+          targetContractorId = bestContractor.userId;
+        }
+        
         // Check contractor exists
-        const contractor = await storage.getContractorProfile(contractorId);
+        const contractor = await storage.getContractorProfile(targetContractorId);
         if (!contractor) {
           return res.status(404).json({ message: 'Contractor not found' });
         }
         
-        // Get contractor current job and queue info
-        const currentJobInfo = await storage.getContractorCurrentJob(contractorId);
-        const contractorQueue = await storage.getContractorQueue(contractorId);
-        const isContractorBusy = currentJobInfo.job !== null;
-        const queueLength = contractorQueue.filter(q => q.status === 'pending').length;
+        // SIMPLIFIED: Just assign the job directly
+        console.log(`[API-Assign-PUT] ${isAutomatic ? 'Automatically' : 'Manually'} assigning job ${jobId} to contractor ${targetContractorId}`);
         
-        if (isContractorBusy || forceQueue) {
-          // Contractor is busy or force queue requested, enqueue the job
-          console.log(`[AssignJob] Contractor ${contractorId} is busy or force queue, enqueueing job ${jobId}`);
-          
-          // Enqueue the job for later
-          const queueEntry = await storage.enqueueJob(contractorId, jobId);
-          
-          // Update job status to 'assigned' but contractor will handle it when ready
-          await storage.updateJob(jobId, {
-            contractorId,
-            status: 'assigned',
-            assignedAt: new Date()
-          });
-          
-          // Get position info for response
-          const positionInfo = await storage.getQueuePositionForJob(jobId);
-          
-          res.json({ 
-            message: `Job queued for contractor (position #${positionInfo?.position || queueLength + 1} in queue)`,
-            jobId,
-            contractorId,
-            queuePosition: positionInfo?.position || queueLength + 1,
-            totalInQueue: positionInfo?.totalInQueue || queueLength + 1,
-            isQueued: true
-          });
-        } else {
-          // Contractor is available, assign immediately
-          console.log(`[AssignJob] Contractor ${contractorId} is available, assigning job ${jobId} immediately`);
-          
-          // Assign the contractor
-          await storage.updateJob(jobId, {
-            contractorId,
-            status: 'assigned',
-            assignedAt: new Date()
-          });
-          
-          // Update contractor's active job
-          await storage.updateContractorProfile(contractorId, {
-            activeJobId: jobId
-          });
-          
-          // Send notification to contractor (if WebSocket connected)
-          const { trackingWSServer } = await import('./websocket');
-          trackingWSServer.notifyJobAssignment(jobId, contractorId);
-          
-          res.json({ 
-            message: 'Contractor assigned successfully',
-            jobId,
-            contractorId,
-            isQueued: false
-          });
+        // Update job with simplified assignment
+        const updatedJob = await storage.assignJobToContractor(jobId, targetContractorId, isAutomatic ? 'ai_dispatch' : 'manual');
+        
+        if (!updatedJob) {
+          return res.status(500).json({ message: 'Failed to assign contractor' });
         }
+        
+        // If automatic assignment, use queue service for 3-minute timer
+        if (isAutomatic) {
+          const queueService = (req.app as any).queueService;
+          if (queueService) {
+            await queueService.autoAssignJob(jobId, true);
+          }
+        }
+        
+        // Update driver if specified
+        if (driverId && updatedJob) {
+          await storage.updateJob(jobId, { driverId });
+        }
+        
+        // Log the assignment
+        console.log(`[API-Assign-PUT] Successfully assigned job ${jobId} to contractor ${targetContractorId} (${isAutomatic ? 'automatic' : 'manual'})`);
+        
+        // Send notifications
+        const { trackingWSServer } = await import('./websocket');
+        trackingWSServer.notifyJobAssignment(jobId, targetContractorId);
+        
+        res.json({
+          message: `Job ${isAutomatic ? 'automatically' : 'manually'} assigned successfully`,
+          jobId,
+          contractorId: targetContractorId,
+          isAutomatic,
+          assignmentMethod: isAutomatic ? 'ai_dispatch' : 'manual',
+          status: 'assigned'
+        });
       } catch (error) {
         console.error('Assign contractor error:', error);
         res.status(500).json({ message: 'Failed to assign contractor' });
