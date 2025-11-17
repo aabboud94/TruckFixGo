@@ -6295,6 +6295,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Decline job (contractor declines an assigned job)
+  app.post('/api/jobs/:id/decline',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.id;
+        const contractorId = req.session.userId!;
+        
+        console.log(`[Job Decline] Contractor ${contractorId} declining job ${jobId}`);
+        
+        // Get the job
+        const job = await storage.getJob(jobId);
+        
+        if (!job) {
+          return res.status(404).json({ message: 'Job not found' });
+        }
+        
+        // Check if this contractor is assigned to this job
+        if (job.contractorId !== contractorId) {
+          return res.status(403).json({ 
+            message: 'You can only decline jobs assigned to you' 
+          });
+        }
+        
+        // Get contractor details for logging
+        const contractor = await storage.getUser(contractorId);
+        const contractorName = contractor ? 
+          `${contractor.firstName || ''} ${contractor.lastName || ''}`.trim() || contractor.email : 
+          'Unknown Contractor';
+        
+        console.log(`[Job Decline] ${contractorName} is declining job ${jobId}`);
+        
+        // Reset job to 'new' status and remove contractor assignment
+        await db.update(jobs)
+          .set({
+            contractorId: null,
+            assignedAt: null,
+            assignmentMethod: null,
+            status: 'new',
+            updatedAt: new Date()
+          })
+          .where(eq(jobs.id, jobId));
+        
+        // Add to job status history
+        await db.insert(jobStatusHistory).values({
+          jobId,
+          fromStatus: job.status,
+          toStatus: 'new',
+          changedBy: contractorId,
+          reason: `Declined by contractor ${contractorName}`
+        });
+        
+        console.log(`[Job Decline] Job ${jobId} reset to 'new' status`);
+        
+        // Now auto-reassign to the next available contractor
+        console.log(`[Job Decline] Auto-reassigning job ${jobId} to next available contractor`);
+        
+        // Find the best contractor for this job (excluding the one who declined)
+        const availableContractors = await storage.getAvailableContractorsForAssignment(
+          job.location?.lat,
+          job.location?.lng || job.location?.lon
+        );
+        
+        // Filter out the contractor who just declined
+        const eligibleContractors = availableContractors.filter(c => c.id !== contractorId);
+        
+        if (eligibleContractors.length > 0) {
+          const nextContractor = eligibleContractors[0]; // Get the best match
+          console.log(`[Job Decline] Found next contractor: ${nextContractor.name} (distance: ${nextContractor.distance}mi)`);
+          
+          // Assign to the new contractor
+          const reassignedJob = await storage.assignJobToContractor(
+            jobId, 
+            nextContractor.id, 
+            'round_robin'
+          );
+          
+          if (reassignedJob) {
+            console.log(`[Job Decline] Successfully reassigned job ${jobId} to contractor ${nextContractor.id} (${nextContractor.name})`);
+            
+            // Send email notification to new contractor
+            try {
+              const newContractor = await storage.getUser(nextContractor.id);
+              if (newContractor?.email) {
+                await emailService.sendJobAssignmentEmail(
+                  newContractor.email,
+                  newContractor.firstName || 'Contractor',
+                  {
+                    id: jobId,
+                    customerName: job.customerName || 'Customer',
+                    location: job.location?.address || 'Location not specified',
+                    serviceType: job.serviceType || 'Service',
+                    urgency: job.urgency || 'normal',
+                    estimatedDuration: job.estimatedDuration || 60,
+                    description: job.description || ''
+                  }
+                );
+              }
+            } catch (emailError) {
+              console.error('[Job Decline] Failed to send email to new contractor:', emailError);
+            }
+            
+            // Send WebSocket notification to new contractor
+            try {
+              trackingWSServer.notifyContractorAssignment(nextContractor.id, jobId);
+            } catch (wsError) {
+              console.error('[Job Decline] Failed to send WebSocket notification:', wsError);
+            }
+            
+            res.json({
+              message: 'Job declined and reassigned successfully',
+              reassigned: true,
+              newContractor: {
+                id: nextContractor.id,
+                name: nextContractor.name
+              }
+            });
+          } else {
+            // Reassignment failed, but decline was successful
+            console.error(`[Job Decline] Failed to reassign job ${jobId} to contractor ${nextContractor.id}`);
+            res.json({
+              message: 'Job declined. Failed to auto-reassign to next contractor',
+              reassigned: false
+            });
+          }
+        } else {
+          console.log(`[Job Decline] No available contractors found for reassignment of job ${jobId}`);
+          res.json({
+            message: 'Job declined. No available contractors for reassignment',
+            reassigned: false
+          });
+        }
+      } catch (error) {
+        console.error('[Job Decline Error]:', error);
+        res.status(500).json({ 
+          message: 'Failed to decline job', 
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+  );
+
   // Configure multer for memory storage (we'll process and save to object storage)
   const upload = multer({
     storage: multer.memoryStorage(),
