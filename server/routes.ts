@@ -6213,34 +6213,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const jobId = req.params.id;
         const contractorId = req.session.userId!;
         
+        console.log(`[JOB ACCEPT DEBUG] Starting job acceptance - JobID: ${jobId}, ContractorID: ${contractorId}`);
+        console.log(`[JOB ACCEPT DEBUG] Session data:`, { 
+          userId: req.session.userId, 
+          role: req.session.role,
+          email: req.session.email 
+        });
+        
         // Get the job
         const job = await storage.getJob(jobId);
+        console.log(`[JOB ACCEPT DEBUG] Retrieved job:`, {
+          id: job?.id,
+          status: job?.status,
+          contractorId: job?.contractorId,
+          customerId: job?.customerId,
+          exists: !!job
+        });
         
         if (!job) {
+          console.error(`[JOB ACCEPT DEBUG] Job ${jobId} not found in database`);
           return res.status(404).json({ message: 'Job not found' });
         }
         
         // Check if job can be accepted
         // Case 1: Job is 'new' (available for pickup)
         // Case 2: Job is 'assigned' to this specific contractor (admin assigned)
+        console.log(`[JOB ACCEPT DEBUG] Checking job acceptance eligibility...`);
+        console.log(`[JOB ACCEPT DEBUG] Job status: ${job.status}, Job contractorId: ${job.contractorId}`);
+        
         if (job.status === 'new') {
+          console.log(`[JOB ACCEPT DEBUG] Job is 'new' status - checking if already assigned...`);
           // Available job - contractor can pick it up
           if (job.contractorId) {
+            console.error(`[JOB ACCEPT DEBUG] Job already has contractorId: ${job.contractorId}`);
             return res.status(400).json({ 
               message: 'Job has already been assigned to another contractor' 
             });
           }
+          console.log(`[JOB ACCEPT DEBUG] Job is available for pickup`);
         } else if (job.status === 'assigned') {
+          console.log(`[JOB ACCEPT DEBUG] Job is 'assigned' status - checking contractor match...`);
           // Assigned job - check if it's assigned to this contractor
           if (job.contractorId !== contractorId) {
+            console.error(`[JOB ACCEPT DEBUG] Job assigned to different contractor. Expected: ${contractorId}, Got: ${job.contractorId}`);
             return res.status(400).json({ 
               message: 'This job is assigned to another contractor',
               currentStatus: job.status 
             });
           }
+          console.log(`[JOB ACCEPT DEBUG] Job is assigned to this contractor - can accept`);
           // Job is already assigned to this contractor, they're just accepting it
           // Skip the assignment step below since they're already assigned
         } else {
+          console.error(`[JOB ACCEPT DEBUG] Job in non-acceptable status: ${job.status}`);
           // Job is in a state that doesn't allow acceptance (en_route, on_site, completed, etc.)
           return res.status(400).json({ 
             message: 'Job is not available for acceptance',
@@ -6251,12 +6276,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Assign the contractor if not already assigned (for 'new' jobs)
         let updatedJob = job;
         if (job.status === 'new') {
+          console.log(`[JOB ACCEPT DEBUG] Assigning contractor ${contractorId} to job ${jobId}...`);
           // This also automatically adds to job status history
           const assignedJob = await storage.assignContractorToJob(jobId, contractorId);
+          console.log(`[JOB ACCEPT DEBUG] Assignment result:`, {
+            success: !!assignedJob,
+            newStatus: assignedJob?.status,
+            newContractorId: assignedJob?.contractorId
+          });
           if (!assignedJob) {
+            console.error(`[JOB ACCEPT DEBUG] Failed to assign contractor - storage.assignContractorToJob returned null`);
             return res.status(500).json({ message: 'Failed to accept job' });
           }
           updatedJob = assignedJob;
+          console.log(`[JOB ACCEPT DEBUG] Successfully assigned contractor to job`);
+        } else {
+          console.log(`[JOB ACCEPT DEBUG] Skipping assignment - job already assigned`);
         }
         
         // AUTOMATIC STATUS UPDATE: Set status to 'en_route' immediately after acceptance
