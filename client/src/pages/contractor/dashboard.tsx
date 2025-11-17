@@ -164,7 +164,7 @@ const tierIcons = {
 export default function ContractorDashboard() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState<boolean | null>(null); // Initialize as null to wait for data
   const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<GeolocationPosition | null>(null);
   const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
@@ -177,18 +177,24 @@ export default function ContractorDashboard() {
     refetchInterval: 10000, // Refresh every 10 seconds for faster updates
   });
 
-  // Handle dashboard data updates
+  // Handle dashboard data updates and sync availability status
   useEffect(() => {
     if (dashboardData) {
+      // Sync the isOnline state with the actual contractor's availability from database
+      if (isOnline === null && dashboardData.contractor) {
+        setIsOnline(dashboardData.contractor.isAvailable);
+        console.log('[ContractorDashboard] Syncing availability status from database:', dashboardData.contractor.isAvailable);
+      }
       // Log for debugging
       console.log('[ContractorDashboard] Dashboard data loaded:', {
         contractorId: dashboardData?.contractor?.id,
         activeJob: dashboardData?.activeJob,
         availableJobs: dashboardData?.availableJobs?.length,
-        scheduledJobs: dashboardData?.scheduledJobs?.length
+        scheduledJobs: dashboardData?.scheduledJobs?.length,
+        isAvailable: dashboardData?.contractor?.isAvailable
       });
     }
-  }, [dashboardData]);
+  }, [dashboardData, isOnline]);
 
   // WebSocket for real-time updates
   const {
@@ -405,26 +411,26 @@ export default function ContractorDashboard() {
             <div className="flex items-center gap-4">
               {/* Enhanced Online/Offline Toggle */}
               <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border ${
-                isOnline ? 'bg-green-50 border-green-300 dark:bg-green-900/20' : 'bg-gray-100 border-gray-300 dark:bg-gray-800'
+                isOnline !== false ? 'bg-green-50 border-green-300 dark:bg-green-900/20' : 'bg-gray-100 border-gray-300 dark:bg-gray-800'
               }`}>
                 <div className="flex items-center gap-2">
-                  {isOnline ? (
+                  {isOnline !== false ? (
                     <CircleCheck className="w-6 h-6 text-green-600" />
                   ) : (
                     <CircleX className="w-6 h-6 text-gray-500" />
                   )}
                   <div>
                     <Label className="text-sm font-semibold">
-                      {isOnline ? 'ONLINE' : 'OFFLINE'}
+                      {isOnline !== false ? 'ONLINE' : 'OFFLINE'}
                     </Label>
-                    {!isOnline && returnTime && (
+                    {isOnline === false && returnTime && (
                       <p className="text-xs text-muted-foreground">
                         Back at {returnTime}
                       </p>
                     )}
                   </div>
                 </div>
-                {isOnline ? (
+                {isOnline !== false ? (
                   <Popover open={showOfflineDialog} onOpenChange={setShowOfflineDialog}>
                     <PopoverTrigger asChild>
                       <Button
