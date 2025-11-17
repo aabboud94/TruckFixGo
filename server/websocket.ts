@@ -563,6 +563,63 @@ class TrackingWebSocketServer {
           await storage.updateJob(ws.jobId, {
             estimatedArrival: new Date(eta)
           });
+
+          // AUTOMATIC ARRIVAL DETECTION: Check if contractor is within geofence
+          // Only trigger if job status is 'en_route' (prevent multiple triggers)
+          if (job.status === 'en_route') {
+            const distance = this.calculateDistance(
+              { lat: location.lat, lng: location.lng },
+              job.location as { lat: number; lng: number }
+            );
+
+            // Check if within 0.1 miles (approximately 160 meters)
+            const ARRIVAL_RADIUS_MILES = 0.1;
+            
+            if (distance <= ARRIVAL_RADIUS_MILES) {
+              console.log(`[Geofencing] Contractor within ${distance.toFixed(2)} miles of job location - triggering automatic arrival`);
+              
+              // Update job status to 'on_site'
+              const updatedJob = await storage.updateJobStatus(
+                ws.jobId, 
+                'on_site', 
+                ws.userId,
+                `Automatic arrival detection - contractor within ${(distance * 1609.34).toFixed(0)} meters of job location`
+              );
+
+              if (updatedJob) {
+                console.log(`[Geofencing] Job ${ws.jobId} automatically updated to 'on_site' status`);
+                
+                // Update room status
+                room.status = 'on_site';
+                
+                // Broadcast status update to all room members
+                this.broadcastToRoom(ws.jobId, {
+                  type: 'STATUS_UPDATE',
+                  payload: {
+                    status: 'on_site',
+                    timestamp: new Date().toISOString(),
+                    message: 'Contractor has arrived at the job location',
+                    automatic: true,
+                    distance: distance
+                  }
+                });
+
+                // Send specific notification to contractor
+                this.sendMessage(ws, {
+                  type: 'STATUS_UPDATE',
+                  payload: {
+                    status: 'on_site',
+                    message: 'You have been automatically marked as on-site',
+                    automatic: true
+                  }
+                });
+              } else {
+                console.error(`[Geofencing] Failed to update job ${ws.jobId} to 'on_site' status`);
+              }
+            } else {
+              console.log(`[Geofencing] Contractor ${distance.toFixed(2)} miles from job - not yet within arrival radius`);
+            }
+          }
         }
 
         // Broadcast location update to all room members
@@ -578,6 +635,19 @@ class TrackingWebSocketServer {
       console.error('Location update error:', error);
       this.sendError(ws, 'Failed to update location');
     }
+  }
+  
+  // Helper function for distance calculation (using Haversine formula)
+  private calculateDistance(from: { lat: number; lng: number }, to: { lat: number; lng: number }): number {
+    const R = 3959; // Earth's radius in miles
+    const dLat = (to.lat - from.lat) * Math.PI / 180;
+    const dLon = (to.lng - from.lng) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(from.lat * Math.PI / 180) * Math.cos(to.lat * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
   }
 
   private async handleStatusUpdate(ws: ExtendedWebSocket, payload: any) {

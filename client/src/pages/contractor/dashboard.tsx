@@ -203,7 +203,30 @@ export default function ContractorDashboard() {
   } = useTrackingWebSocket({
     jobId: dashboardData?.activeJob?.id || "",
     userId: dashboardData?.contractor?.id || "",
-    role: "contractor"
+    role: "contractor",
+    onStatusUpdate: (status) => {
+      // Show toast notification for automatic status updates
+      if (status === 'en_route') {
+        toast({
+          title: "Status Updated",
+          description: "You've been marked as EN ROUTE to the job location",
+          className: "bg-blue-50 border-blue-200"
+        });
+        // Refresh dashboard data
+        refetch();
+      } else if (status === 'on_site') {
+        toast({
+          title: "Arrival Detected",
+          description: "You've been automatically marked as ON SITE",
+          className: "bg-green-50 border-green-200"
+        });
+        // Play arrival sound
+        const audio = new Audio("/notification.mp3");
+        audio.play().catch(() => {});
+        // Refresh dashboard data
+        refetch();
+      }
+    }
   });
 
   // Toggle online status
@@ -650,8 +673,21 @@ export default function ContractorDashboard() {
                     Job #{activeJob.jobNumber}
                   </Badge>
                 </div>
-                <Badge variant="outline">
-                  {activeJob.status?.toUpperCase()}
+                <Badge 
+                  variant={
+                    activeJob.status === 'on_site' ? 'default' :
+                    activeJob.status === 'en_route' ? 'secondary' : 
+                    'outline'
+                  }
+                  className={
+                    activeJob.status === 'on_site' ? 'bg-green-500 hover:bg-green-600' :
+                    activeJob.status === 'en_route' ? 'bg-blue-500 hover:bg-blue-600 text-white' :
+                    ''
+                  }
+                >
+                  {activeJob.status === 'en_route' ? 'EN ROUTE' :
+                   activeJob.status === 'on_site' ? 'ON SITE' :
+                   activeJob.status?.toUpperCase()}
                 </Badge>
               </div>
             </CardHeader>
