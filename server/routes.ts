@@ -4533,6 +4533,237 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Complete job with invoice
+  app.post('/api/contractor/jobs/:jobId/complete-with-invoice',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const jobId = req.params.jobId;
+        const contractorId = req.session.userId!;
+        const { lineItems, notes, sendMethod, recipientEmail, recipientPhone } = req.body;
+
+        // Verify this is the contractor's current job
+        const currentJobs = await storage.findJobs({
+          id: jobId,
+          contractorId,
+          status: ['assigned', 'en_route', 'on_site'],
+          limit: 1
+        });
+
+        if (currentJobs.length === 0) {
+          return res.status(403).json({ 
+            message: 'This is not your current active job' 
+          });
+        }
+
+        const job = currentJobs[0];
+        
+        // Get customer details
+        const customer = await storage.getUser(job.customerId);
+        
+        // Get contractor details
+        const contractor = await storage.getContractorProfile(contractorId);
+        
+        // Calculate invoice totals
+        let subtotal = 0;
+        lineItems.forEach((item: any) => {
+          subtotal += parseFloat(item.quantity) * parseFloat(item.unitPrice);
+        });
+        
+        const tax = subtotal * 0.0825; // 8.25% tax rate
+        const total = subtotal + tax;
+        
+        // Generate invoice number
+        const invoiceNumber = pdfService.generateInvoiceNumber('JOB');
+        
+        // Create invoice in database
+        const invoice = await storage.createInvoice({
+          jobId,
+          customerId: job.customerId,
+          contractorId,
+          invoiceNumber,
+          issueDate: new Date(),
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // NET 30
+          subtotal: subtotal.toFixed(2),
+          tax: tax.toFixed(2),
+          totalAmount: total.toFixed(2),
+          amountPaid: '0',
+          status: 'pending'
+        });
+        
+        // Create invoice line items
+        for (let i = 0; i < lineItems.length; i++) {
+          const item = lineItems[i];
+          const totalPrice = parseFloat(item.quantity) * parseFloat(item.unitPrice);
+          await storage.createInvoiceLineItem({
+            invoiceId: invoice.id,
+            type: item.type || 'other',
+            description: item.description,
+            quantity: item.quantity.toString(),
+            unitPrice: item.unitPrice.toString(),
+            totalPrice: totalPrice.toFixed(2),
+            sortOrder: i
+          });
+        }
+        
+        // Generate payment link using Stripe
+        const paymentLink = await stripeService.createPaymentLink({
+          amount: Math.round(total * 100), // Convert to cents
+          description: `Invoice ${invoiceNumber} - Job #${job.jobNumber}`,
+          metadata: {
+            invoiceId: invoice.id,
+            jobId: job.id,
+            customerId: job.customerId,
+            contractorId: contractorId
+          }
+        });
+        
+        let sentVia = 'none';
+        let sendSuccess = false;
+        
+        // Send invoice based on method
+        if (sendMethod === 'email') {
+          const email = recipientEmail || customer?.email;
+          if (!email) {
+            return res.status(400).json({ message: 'Customer email address required' });
+          }
+          
+          try {
+            // Generate PDF
+            const pdfData = {
+              invoice: {
+                id: invoice.id,
+                number: invoiceNumber,
+                date: new Date(),
+                dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                status: 'sent'
+              },
+              customer: {
+                name: customer?.firstName + ' ' + customer?.lastName,
+                email: customer?.email,
+                phone: customer?.phone
+              },
+              contractor: {
+                name: contractor?.companyName || (contractor?.firstName + ' ' + contractor?.lastName),
+                email: contractor?.email,
+                phone: contractor?.phone
+              },
+              lineItems: lineItems.map((item: any) => ({
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: parseFloat(item.unitPrice),
+                total: parseFloat(item.quantity) * parseFloat(item.unitPrice)
+              })),
+              totals: {
+                subtotal: subtotal,
+                tax: tax,
+                total: total
+              },
+              paymentLink: paymentLink?.url || '',
+              notes: notes || ''
+            };
+            
+            const pdfBuffer = await pdfService.generateInvoice(pdfData);
+            
+            // Send email with invoice
+            await emailService.sendInvoiceEmail({
+              to: email,
+              invoice,
+              job,
+              customer,
+              contractor,
+              fleetAccount: null,
+              personalMessage: notes,
+              pdfBuffer,
+              paymentLink: paymentLink?.url || ''
+            });
+            
+            sentVia = 'email';
+            sendSuccess = true;
+          } catch (emailError) {
+            console.error('Failed to send invoice email:', emailError);
+            return res.status(500).json({ 
+              message: 'Failed to send invoice via email',
+              error: (emailError as Error).message
+            });
+          }
+        } else if (sendMethod === 'sms') {
+          const phone = recipientPhone || customer?.phone;
+          if (!phone) {
+            return res.status(400).json({ message: 'Customer phone number required' });
+          }
+          
+          // Check if Twilio is configured
+          const twilioConfig = await storage.getIntegrationsConfig('twilio');
+          if (!twilioConfig?.config || !twilioConfig.isActive) {
+            return res.status(400).json({ 
+              message: 'SMS service is not configured. Please use email instead.'
+            });
+          }
+          
+          try {
+            // Send SMS with invoice link
+            const smsMessage = `Hi ${customer?.firstName || 'Customer'},\n\n` +
+              `Your invoice for Job #${job.jobNumber} is ready.\n` +
+              `Amount Due: $${total.toFixed(2)}\n` +
+              `Pay now: ${paymentLink?.url || 'Payment link not available'}\n\n` +
+              `Thank you for your business!`;
+            
+            // Use reminder service to send SMS (it has Twilio integration)
+            const reminderService = (await import('./reminder-service')).reminderService;
+            await reminderService.sendSms(phone, smsMessage);
+            
+            sentVia = 'sms';
+            sendSuccess = true;
+          } catch (smsError) {
+            console.error('Failed to send invoice SMS:', smsError);
+            // Fallback to email if SMS fails
+            return res.status(400).json({ 
+              message: 'SMS service not available. Please use email instead.',
+              error: (smsError as Error).message
+            });
+          }
+        }
+        
+        // Update invoice status
+        if (sendSuccess) {
+          await storage.updateInvoice(invoice.id, {
+            status: 'sent',
+            sentAt: new Date()
+          });
+        }
+        
+        // Mark job as completed
+        await storage.updateJob(jobId, {
+          status: 'completed',
+          completedAt: new Date(),
+          actualPrice: total.toFixed(2),
+          paymentStatus: 'pending'
+        });
+        
+        // Update contractor availability for next job
+        await storage.updateContractorAvailability(contractorId, true);
+        
+        res.json({
+          success: true,
+          message: `Job completed and invoice sent via ${sentVia}`,
+          sentVia,
+          invoiceId: invoice.id,
+          invoiceNumber,
+          paymentLink: paymentLink?.url
+        });
+        
+      } catch (error) {
+        console.error('Complete job with invoice error:', error);
+        res.status(500).json({ 
+          message: 'Failed to complete job with invoice',
+          error: (error as Error).message
+        });
+      }
+    }
+  );
+
   // Complete current job and advance to next job in queue
   app.post('/api/contractor/jobs/:jobId/complete-and-advance',
     requireAuth,

@@ -33,6 +33,30 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -71,13 +95,28 @@ import {
   CalendarDays,
   CircleCheck,
   CircleX,
-  FileText
+  FileText,
+  Plus,
+  Trash2,
+  Mail,
+  MessageCircle,
+  Send,
+  Edit
 } from "lucide-react";
 import { format, formatDistanceToNow, addHours } from "date-fns";
 import PerformanceWidget from "@/components/performance-widget";
 import { SOSButton } from "@/components/sos-button";
 import { FuelPriceWidget } from "@/components/fuel-price-widget";
 import { FuelCalculator } from "@/components/fuel-calculator";
+
+interface InvoiceLineItem {
+  id?: string;
+  type: "part" | "labor" | "fee" | "tax" | "other";
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice?: number;
+}
 
 interface QueuedJob {
   id: string;
@@ -170,6 +209,14 @@ export default function ContractorDashboard() {
   const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
   const [showOfflineDialog, setShowOfflineDialog] = useState(false);
   const [returnTime, setReturnTime] = useState<string>("");
+  
+  // Invoice editing states
+  const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
+  const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([]);
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [invoiceNotes, setInvoiceNotes] = useState("");
+  const [sendMethod, setSendMethod] = useState<"email" | "sms" | null>(null);
 
   // Fetch dashboard data
   const { data: dashboardData, isLoading, refetch } = useQuery<DashboardData>({
@@ -314,6 +361,191 @@ export default function ContractorDashboard() {
       setShowAdvanceDialog(false);
     }
   });
+
+  // Complete job with invoice mutation
+  const completeJobWithInvoiceMutation = useMutation({
+    mutationFn: async ({ 
+      jobId, 
+      lineItems, 
+      notes, 
+      sendMethod,
+      recipientEmail,
+      recipientPhone 
+    }: { 
+      jobId: string; 
+      lineItems: InvoiceLineItem[]; 
+      notes: string;
+      sendMethod: "email" | "sms";
+      recipientEmail?: string;
+      recipientPhone?: string;
+    }) => {
+      return await apiRequest(`/api/contractor/jobs/${jobId}/complete-with-invoice`, "POST", {
+        lineItems,
+        notes,
+        sendMethod,
+        recipientEmail,
+        recipientPhone
+      });
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Job Completed & Invoice Sent!",
+        description: `Invoice sent via ${data.sentVia === 'sms' ? 'SMS' : 'email'} successfully`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/contractor/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contractor/active-job"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contractor/invoices"] });
+      setShowInvoiceDialog(false);
+      resetInvoiceForm();
+      refetch();
+    },
+    onError: (error: any) => {
+      // Check if it's a Twilio error
+      if (error?.message?.includes('SMS') || error?.message?.includes('Twilio')) {
+        toast({
+          title: "SMS Service Not Available",
+          description: "SMS service is not configured. Using email instead.",
+          variant: "destructive"
+        });
+        // Retry with email
+        if (activeJob?.id) {
+          completeJobWithInvoiceMutation.mutate({
+            jobId: activeJob.id,
+            lineItems,
+            notes: invoiceNotes,
+            sendMethod: "email",
+            recipientEmail: customerEmail
+          });
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: error?.message || "Failed to complete job with invoice",
+          variant: "destructive"
+        });
+      }
+    }
+  });
+
+  // Helper functions for invoice editing
+  const resetInvoiceForm = () => {
+    setLineItems([]);
+    setCustomerEmail("");
+    setCustomerPhone("");
+    setInvoiceNotes("");
+    setSendMethod(null);
+  };
+
+  const initializeInvoiceForm = () => {
+    if (activeJob) {
+      // Initialize with default line items based on the service
+      const defaultItems: InvoiceLineItem[] = [
+        {
+          type: "labor",
+          description: activeJob.serviceType || "Service",
+          quantity: 1,
+          unitPrice: activeJob.totalAmount || 0,
+          totalPrice: activeJob.totalAmount || 0
+        }
+      ];
+      setLineItems(defaultItems);
+      setCustomerEmail(activeJob.customerEmail || "");
+      setCustomerPhone(activeJob.customerPhone || "");
+      setInvoiceNotes("");
+      setSendMethod(null);
+    }
+  };
+
+  const handleAddLineItem = () => {
+    setLineItems([
+      ...lineItems,
+      {
+        type: "other",
+        description: "",
+        quantity: 1,
+        unitPrice: 0,
+        totalPrice: 0
+      }
+    ]);
+  };
+
+  const handleRemoveLineItem = (index: number) => {
+    setLineItems(lineItems.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateLineItem = (index: number, field: keyof InvoiceLineItem, value: any) => {
+    const newLineItems = [...lineItems];
+    newLineItems[index] = {
+      ...newLineItems[index],
+      [field]: value
+    };
+    
+    // Recalculate total price if quantity or unit price changes
+    if (field === "quantity" || field === "unitPrice") {
+      const quantity = field === "quantity" ? value : newLineItems[index].quantity;
+      const unitPrice = field === "unitPrice" ? value : newLineItems[index].unitPrice;
+      newLineItems[index].totalPrice = quantity * unitPrice;
+    }
+    
+    setLineItems(newLineItems);
+  };
+
+  const calculateInvoiceTotal = () => {
+    return lineItems.reduce((sum, item) => {
+      return sum + (item.quantity * item.unitPrice);
+    }, 0);
+  };
+
+  const handleOpenInvoiceDialog = () => {
+    initializeInvoiceForm();
+    setShowInvoiceDialog(true);
+  };
+
+  const handleSendInvoice = (method: "email" | "sms") => {
+    if (!activeJob) return;
+
+    // Validate line items
+    const invalidItems = lineItems.filter(
+      item => !item.description || item.quantity <= 0 || item.unitPrice < 0
+    );
+    
+    if (invalidItems.length > 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all line item details correctly",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate recipient info
+    if (method === "email" && !customerEmail) {
+      toast({
+        title: "Email Required",
+        description: "Please enter customer email address",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (method === "sms" && !customerPhone) {
+      toast({
+        title: "Phone Number Required",
+        description: "Please enter customer phone number",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    completeJobWithInvoiceMutation.mutate({
+      jobId: activeJob.id,
+      lineItems,
+      notes: invoiceNotes,
+      sendMethod: method,
+      recipientEmail: method === "email" ? customerEmail : undefined,
+      recipientPhone: method === "sms" ? customerPhone : undefined
+    });
+  };
 
   // Handle location sharing
   useEffect(() => {
@@ -764,20 +996,20 @@ export default function ContractorDashboard() {
                     </div>
                     <Button
                       variant="default"
-                      className="bg-blue-600 hover:bg-blue-700"
-                      onClick={() => setShowAdvanceDialog(true)}
-                      disabled={advanceToNextJobMutation.isPending}
-                      data-testid="button-next-job"
+                      className="bg-green-600 hover:bg-green-700"
+                      onClick={handleOpenInvoiceDialog}
+                      disabled={completeJobWithInvoiceMutation.isPending}
+                      data-testid="button-complete-job"
                     >
-                      {advanceToNextJobMutation.isPending ? (
+                      {completeJobWithInvoiceMutation.isPending ? (
                         <>
                           <Timer className="w-4 h-4 mr-2 animate-spin" />
-                          Advancing...
+                          Processing...
                         </>
                       ) : (
                         <>
-                          <FastForward className="w-4 h-4 mr-2" />
-                          Next Job
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          Mark Complete
                         </>
                       )}
                     </Button>
@@ -1704,6 +1936,236 @@ export default function ContractorDashboard() {
           </Button>
         </div>
       </div>
+
+      {/* Invoice Editing Dialog */}
+      <Dialog open={showInvoiceDialog} onOpenChange={setShowInvoiceDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Complete Job & Send Invoice</DialogTitle>
+            <DialogDescription>
+              Review and edit the invoice details before sending to customer
+            </DialogDescription>
+          </DialogHeader>
+          
+          {activeJob && (
+            <div className="space-y-6">
+              {/* Job Details */}
+              <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                <div className="flex justify-between">
+                  <span className="font-medium">Job #:</span>
+                  <span>{activeJob.jobNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Customer:</span>
+                  <span>{activeJob.customerName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Service:</span>
+                  <span>{activeJob.serviceType}</span>
+                </div>
+              </div>
+
+              {/* Line Items Table */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-medium">Invoice Line Items</Label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddLineItem}
+                    data-testid="button-add-line-item"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add Item
+                  </Button>
+                </div>
+                
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="w-24">Quantity</TableHead>
+                      <TableHead className="w-32">Unit Price</TableHead>
+                      <TableHead className="w-32">Total</TableHead>
+                      <TableHead className="w-16"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {lineItems.map((item, index) => (
+                      <TableRow key={index}>
+                        <TableCell>
+                          <Select
+                            value={item.type}
+                            onValueChange={(value) => handleUpdateLineItem(index, "type", value)}
+                          >
+                            <SelectTrigger className="w-24" data-testid={`select-type-${index}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="part">Part</SelectItem>
+                              <SelectItem value="labor">Labor</SelectItem>
+                              <SelectItem value="fee">Fee</SelectItem>
+                              <SelectItem value="tax">Tax</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={item.description}
+                            onChange={(e) => handleUpdateLineItem(index, "description", e.target.value)}
+                            placeholder="Enter description"
+                            data-testid={`input-description-${index}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => handleUpdateLineItem(index, "quantity", parseFloat(e.target.value) || 0)}
+                            min="0"
+                            step="1"
+                            data-testid={`input-quantity-${index}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            value={item.unitPrice}
+                            onChange={(e) => handleUpdateLineItem(index, "unitPrice", parseFloat(e.target.value) || 0)}
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            data-testid={`input-unitprice-${index}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          ${(item.quantity * item.unitPrice).toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveLineItem(index)}
+                            data-testid={`button-remove-${index}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                
+                {/* Total */}
+                <div className="flex justify-end">
+                  <div className="text-right space-y-2">
+                    <div className="text-2xl font-bold">
+                      Total: ${calculateInvoiceTotal().toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Customer Contact Info */}
+              <div className="space-y-4">
+                <Label className="text-base font-medium">Customer Contact Information</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="customer-email">Email Address</Label>
+                    <Input
+                      id="customer-email"
+                      type="email"
+                      value={customerEmail}
+                      onChange={(e) => setCustomerEmail(e.target.value)}
+                      placeholder="customer@email.com"
+                      data-testid="input-customer-email"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="customer-phone">Phone Number</Label>
+                    <Input
+                      id="customer-phone"
+                      type="tel"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder="+1 (555) 123-4567"
+                      data-testid="input-customer-phone"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-2">
+                <Label htmlFor="invoice-notes">Invoice Notes (Optional)</Label>
+                <Textarea
+                  id="invoice-notes"
+                  value={invoiceNotes}
+                  onChange={(e) => setInvoiceNotes(e.target.value)}
+                  placeholder="Add any special instructions or notes for the customer..."
+                  className="min-h-[80px]"
+                  data-testid="textarea-notes"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowInvoiceDialog(false);
+                resetInvoiceForm();
+              }}
+              disabled={completeJobWithInvoiceMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button
+                variant="default"
+                onClick={() => handleSendInvoice("email")}
+                disabled={completeJobWithInvoiceMutation.isPending || !customerEmail}
+                className="flex-1"
+                data-testid="button-send-email"
+              >
+                {completeJobWithInvoiceMutation.isPending && sendMethod === "email" ? (
+                  <>
+                    <Timer className="w-4 h-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-4 h-4 mr-2" />
+                    Send via Email
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => handleSendInvoice("sms")}
+                disabled={completeJobWithInvoiceMutation.isPending || !customerPhone}
+                className="flex-1"
+                data-testid="button-send-sms"
+              >
+                {completeJobWithInvoiceMutation.isPending && sendMethod === "sms" ? (
+                  <>
+                    <Timer className="w-4 h-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    Send via SMS
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmation Dialog for Advancing to Next Job */}
       <AlertDialog open={showAdvanceDialog} onOpenChange={setShowAdvanceDialog}>
