@@ -359,17 +359,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Apply CORS FIRST to handle preflight OPTIONS requests
   app.use(corsMiddleware);
   
-  // Setup session middleware with PostgreSQL store for production
+  // Setup session middleware with PostgreSQL store
   // IMPORTANT: Session middleware must be set up AFTER CORS for proper cookie handling
   const PgStore = connectPgSimple(session);
-  const sessionStore = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL
+  // Use PostgreSQL session store whenever DATABASE_URL is available (both dev and prod)
+  const sessionStore = process.env.DATABASE_URL
     ? new PgStore({
         conString: process.env.DATABASE_URL,
         tableName: 'user_sessions',
         createTableIfMissing: true,
         ttl: 24 * 60 * 60 // 24 hours in seconds
       })
-    : undefined; // Use default MemoryStore in development
+    : undefined; // Only use MemoryStore if no database is available
 
   app.use(session({
     store: sessionStore,
