@@ -294,12 +294,7 @@ export default function ContractorDashboard() {
   const acceptJobMutation = useMutation({
     mutationFn: async (jobId: string) => {
       console.log('[CLIENT ACCEPT DEBUG] Starting job acceptance for jobId:', jobId);
-      console.log('[CLIENT ACCEPT DEBUG] User session:', { 
-        isLoggedIn: !!data?.contractor,
-        contractorId: data?.contractor?.id,
-        email: data?.contractor?.email,
-        role: data?.contractor?.role
-      });
+      // Note: Contractor data is available in component scope if needed
       
       try {
         console.log('[CLIENT ACCEPT DEBUG] Sending POST request to:', `/api/jobs/${jobId}/accept`);
@@ -312,7 +307,7 @@ export default function ContractorDashboard() {
           message: error instanceof Error ? error.message : 'Unknown error',
           response: (error as any)?.response,
           status: (error as any)?.status,
-          data: (error as any)?.data
+          responseData: (error as any)?.data
         });
         throw error;
       }
