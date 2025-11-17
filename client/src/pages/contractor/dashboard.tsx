@@ -620,21 +620,29 @@ export default function ContractorDashboard() {
   const scheduledJobs = dashboardData?.scheduledJobs || [];
   const queueInfo = dashboardData?.queueInfo;
   
-  // Helper function to check if job was assigned recently (within last hour)
-  const isNewJob = (job: any) => {
+  // Helper function to check if job needs acceptance (assigned status)
+  const needsAcceptance = (job: any) => {
+    // Job needs acceptance if it has status 'assigned' or has the isAssigned flag
+    return job.status === 'assigned' || job.isAssigned === true;
+  };
+  
+  // Helper function to check if job was assigned recently (for visual highlighting)
+  const isRecentlyAssigned = (job: any) => {
     if (!job.assignedAt) return false;
     const assignedTime = new Date(job.assignedAt);
     const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
     return assignedTime > hourAgo;
   };
   
-  // Separate and sort jobs: new jobs first
+  // Separate and sort jobs: assigned jobs first, then by position
   const sortedQueuedJobs = [...queuedJobs].sort((a, b) => {
-    const aIsNew = isNewJob(a);
-    const bIsNew = isNewJob(b);
-    if (aIsNew && !bIsNew) return -1;
-    if (!aIsNew && bIsNew) return 1;
-    return 0;
+    const aNeedsAcceptance = needsAcceptance(a);
+    const bNeedsAcceptance = needsAcceptance(b);
+    // Assigned jobs should appear first
+    if (aNeedsAcceptance && !bNeedsAcceptance) return -1;
+    if (!aNeedsAcceptance && bNeedsAcceptance) return 1;
+    // Then sort by queue position
+    return (a.queuePosition || 0) - (b.queuePosition || 0);
   });
 
   return (
@@ -1066,17 +1074,24 @@ export default function ContractorDashboard() {
               <ScrollArea className="h-[300px] pr-4">
                 <div className="space-y-3">
                   {sortedQueuedJobs.map((job, index) => {
-                    const isNew = isNewJob(job);
+                    const showAcceptReject = needsAcceptance(job);
+                    const isRecent = isRecentlyAssigned(job);
                     return (
-                    <Card key={job.id} className={`border-l-2 ${isNew ? 'border-l-green-500 bg-green-50/5' : 'border-l-muted'}`}>
+                    <Card key={job.id} className={`border-l-2 ${showAcceptReject ? 'border-l-orange-500 bg-orange-50/5' : 'border-l-muted'}`}>
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between">
                           <div className="space-y-2 flex-1">
                             <div className="flex items-center gap-3">
-                              {isNew && (
+                              {showAcceptReject && (
+                                <Badge variant="default" className="bg-orange-500 hover:bg-orange-600">
+                                  <AlertCircle className="w-3 h-3 mr-1" />
+                                  NEEDS APPROVAL
+                                </Badge>
+                              )}
+                              {isRecent && !showAcceptReject && (
                                 <Badge variant="default" className="bg-green-500 hover:bg-green-600">
                                   <Sparkles className="w-3 h-3 mr-1" />
-                                  NEW
+                                  RECENTLY ADDED
                                 </Badge>
                               )}
                               <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
@@ -1116,7 +1131,7 @@ export default function ContractorDashboard() {
                               )}
                             </div>
                             <p className="text-sm text-muted-foreground line-clamp-1">{job.description}</p>
-                            {isNew && (
+                            {showAcceptReject && (
                               <div className="flex gap-2 mt-3">
                                 <Button
                                   variant="default"
