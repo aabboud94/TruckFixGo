@@ -100,7 +100,7 @@ export default function ContractorJobs() {
     },
     onSuccess: () => {
       toast({
-        title: "Job Accepted! ✅",
+        title: "Job Accepted!",
         description: "Navigating to your active job..."
       });
       // Invalidate both available and active jobs queries

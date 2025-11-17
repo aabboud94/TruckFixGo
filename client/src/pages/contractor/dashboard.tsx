@@ -849,7 +849,8 @@ export default function ContractorDashboard() {
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <div className="w-3 h-3 bg-green-600 rounded-full animate-pulse" />
-                    🚛 Current Active Job
+                    <Truck className="w-4 h-4 text-green-600" />
+                    Current Active Job
                   </CardTitle>
                   <Badge variant="default" className="bg-green-600 w-fit animate-pulse">
                     <Truck className="w-3 h-3 mr-1" />
