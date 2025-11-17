@@ -88,6 +88,7 @@ import {
   Zap
 } from "lucide-react";
 import { format } from "date-fns";
+import ServiceAreaMap from "@/components/service-area-map";
 
 // Profile form schema
 const profileSchema = z.object({
@@ -704,6 +705,7 @@ export default function ContractorProfile() {
           <ScrollArea className="w-full">
             <TabsList className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full">
               <TabsTrigger value="personal" data-testid="tab-personal">Profile</TabsTrigger>
+              <TabsTrigger value="service-area" data-testid="tab-service-area">Service Area</TabsTrigger>
               <TabsTrigger value="earnings" data-testid="tab-earnings">Earnings</TabsTrigger>
               <TabsTrigger value="performance" data-testid="tab-performance">Performance</TabsTrigger>
               <TabsTrigger value="inventory" data-testid="tab-inventory">Parts Inventory</TabsTrigger>
@@ -776,6 +778,30 @@ export default function ContractorProfile() {
                 </Form>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* SERVICE AREA TAB */}
+          <TabsContent value="service-area" className="space-y-4">
+            <ServiceAreaMap
+              initialLat={profileData?.contractor?.baseLocationLat ? parseFloat(profileData.contractor.baseLocationLat) : 39.8283}
+              initialLng={profileData?.contractor?.baseLocationLon ? parseFloat(profileData.contractor.baseLocationLon) : -98.5795}
+              initialRadius={profileData?.contractor?.serviceRadius || 25}
+              onSave={(lat, lng, radius) => {
+                // Update the service area data
+                updateServiceAreaMutation.mutate({
+                  baseLocation: {
+                    address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+                    lat: lat,
+                    lng: lng
+                  },
+                  serviceRadius: radius,
+                  services: profileData?.contractor?.services || [],
+                  hasMobileWaterSource: profileData?.contractor?.hasMobileWaterSource || false,
+                  hasWastewaterRecovery: profileData?.contractor?.hasWastewaterRecovery || false
+                });
+              }}
+              isLoading={updateServiceAreaMutation.isPending}
+            />
           </TabsContent>
 
           {/* PRICING TAB */}
