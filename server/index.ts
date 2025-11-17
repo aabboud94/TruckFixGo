@@ -5,6 +5,7 @@ import { trackingWSServer } from "./websocket";
 import { reminderScheduler } from "./reminder-scheduler";
 import billingScheduler from "./billing-scheduler";
 import { jobReassignmentScheduler } from "./job-reassignment-scheduler";
+import { jobReminderScheduler } from "./job-reminder-scheduler";
 import { jobMonitor } from "./job-monitor";
 import { storage } from "./storage";
 import { QueueProcessingService } from "./queue-service";
@@ -235,13 +236,12 @@ app.use((req, res, next) => {
             // Also create default pricing
             await storage.createServicePricing({
               serviceTypeId: service.id,
-              basePrice: 150,
-              perMileRate: 3,
-              emergencySurcharge: 50,
-              weekendSurcharge: 25,
-              nightSurcharge: 35,
-              effectiveDate: new Date(),
-              isActive: true
+              basePrice: '150',
+              perMileRate: '3',
+              emergencySurcharge: '50',
+              weekendSurcharge: '25',
+              nightSurcharge: '35',
+              effectiveDate: new Date()
             });
             created++;
             console.log(`✅ Created service type: ${service.name}`);
@@ -304,6 +304,10 @@ app.use((req, res, next) => {
   // Start the job reassignment scheduler
   jobReassignmentScheduler.start();
   log(`Job reassignment scheduler started - checking for staled jobs every 5 minutes`);
+
+  // Start the 3-minute job reminder scheduler  
+  jobReminderScheduler.start();
+  log(`Job reminder scheduler started - sending 3-minute reminders for unaccepted jobs`);
 
   // Start the job monitor for unassigned job alerts
   jobMonitor.start();

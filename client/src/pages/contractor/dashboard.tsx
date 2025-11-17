@@ -821,53 +821,53 @@ export default function ContractorDashboard() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Today's Earnings</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+        {/* Key Metrics - Mobile Optimized */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
+              <CardTitle className="text-base sm:text-sm font-medium">Today's Earnings</CardTitle>
+              <DollarSign className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-today-earnings">
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-3xl sm:text-2xl font-bold" data-testid="text-today-earnings">
                 ${metrics?.todayEarnings?.toFixed(2) || '0.00'}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm sm:text-xs text-muted-foreground mt-1">
                 Week: ${metrics?.weekEarnings?.toFixed(2) || '0.00'}
               </p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Jobs Completed</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
+              <CardTitle className="text-base sm:text-sm font-medium">Jobs Completed</CardTitle>
+              <TrendingUp className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-jobs-today">
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-3xl sm:text-2xl font-bold" data-testid="text-jobs-today">
                 {metrics?.todayJobs || 0}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm sm:text-xs text-muted-foreground mt-1">
                 This week: {metrics?.weekJobs || 0} | Total: {contractor?.totalJobsCompleted || 0}
               </p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Average Rating</CardTitle>
-              <Star className="h-4 w-4 text-muted-foreground" />
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
+              <CardTitle className="text-base sm:text-sm font-medium">Average Rating</CardTitle>
+              <Star className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-1">
-                <span className="text-2xl font-bold" data-testid="text-rating">
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="flex items-center gap-2">
+                <span className="text-3xl sm:text-2xl font-bold" data-testid="text-rating">
                   {contractor?.averageRating?.toFixed(1) || '0.0'}
                 </span>
                 <div className="flex">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <Star
                       key={star}
-                      className={`w-4 h-4 ${
+                      className={`w-5 h-5 sm:w-4 sm:h-4 ${
                         star <= Math.round(contractor?.averageRating || 0)
                           ? 'fill-yellow-500 text-yellow-500'
                           : 'text-gray-300'
@@ -876,39 +876,39 @@ export default function ContractorDashboard() {
                   ))}
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm sm:text-xs text-muted-foreground mt-1">
                 Based on {contractor?.totalJobsCompleted || 0} jobs
               </p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Response Time</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
+              <CardTitle className="text-base sm:text-sm font-medium">Response Time</CardTitle>
+              <Clock className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-response-time">
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-3xl sm:text-2xl font-bold" data-testid="text-response-time">
                 {contractor?.averageResponseTime || 0} min
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm sm:text-xs text-muted-foreground mt-1">
                 Average response time
               </p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Active Job Section */}
+        {/* Active Job Section - Mobile Optimized */}
         {activeJob && (
           <Card className="border-l-4 border-l-green-600">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+            <CardHeader className="p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                   <CardTitle className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse" />
                     Current Active Job
                   </CardTitle>
-                  <Badge variant="default" className="bg-green-600">
+                  <Badge variant="default" className="bg-green-600 w-fit">
                     <Truck className="w-3 h-3 mr-1" />
                     Job #{activeJob.jobNumber}
                   </Badge>
@@ -920,9 +920,9 @@ export default function ContractorDashboard() {
                     'outline'
                   }
                   className={
-                    activeJob.status === 'on_site' ? 'bg-green-500 hover:bg-green-600' :
-                    activeJob.status === 'en_route' ? 'bg-blue-500 hover:bg-blue-600 text-white' :
-                    ''
+                    activeJob.status === 'on_site' ? 'bg-green-500 hover:bg-green-600 w-fit' :
+                    activeJob.status === 'en_route' ? 'bg-blue-500 hover:bg-blue-600 text-white w-fit' :
+                    'w-fit'
                   }
                 >
                   {activeJob.status === 'en_route' ? 'EN ROUTE' :
@@ -931,34 +931,35 @@ export default function ContractorDashboard() {
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start justify-between">
-                <div className="space-y-2">
+            <CardContent className="space-y-4 p-4 sm:p-6 pt-0">
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                <div className="space-y-3 flex-1">
                   <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium">{activeJob.customerName}</span>
+                    <Users className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    <span className="font-medium text-base">{activeJob.customerName}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-muted-foreground" />
+                  <div className="flex items-start gap-2">
+                    <MapPin className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
                     <span className="text-sm text-muted-foreground">{activeJob.locationAddress}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-muted-foreground" />
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
                     <span className="text-sm">{activeJob.serviceType} - {activeJob.description}</span>
                   </div>
                   {activeJob.estimatedArrival && (
                     <div className="flex items-center gap-2">
-                      <Timer className="w-4 h-4 text-muted-foreground" />
+                      <Timer className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                       <span className="text-sm text-muted-foreground">
                         ETA: {format(new Date(activeJob.estimatedArrival), 'h:mm a')}
                       </span>
                     </div>
                   )}
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col sm:flex-row lg:flex-col gap-2 w-full lg:w-auto">
                   <Button 
                     variant="outline" 
-                    size="sm"
+                    size="default"
+                    className="h-12 sm:h-10 text-base sm:text-sm w-full sm:w-auto"
                     onClick={() => {
                       if (activeJob.location) {
                         const url = `https://www.google.com/maps/dir/?api=1&destination=${activeJob.location.lat},${activeJob.location.lng}`;
@@ -967,24 +968,27 @@ export default function ContractorDashboard() {
                     }}
                     data-testid="button-navigate-job"
                   >
-                    <Navigation className="w-4 h-4 mr-1" />
+                    <Navigation className="w-5 h-5 sm:w-4 sm:h-4 mr-2" />
                     Navigate
                   </Button>
                   <Button 
                     variant="outline" 
-                    size="sm"
+                    size="default"
+                    className="h-12 sm:h-10 text-base sm:text-sm w-full sm:w-auto"
                     onClick={() => window.location.href = `tel:${activeJob.customerPhone}`}
                     data-testid="button-call-customer"
                   >
-                    <Phone className="w-4 h-4 mr-1" />
+                    <Phone className="w-5 h-5 sm:w-4 sm:h-4 mr-2" />
                     Call
                   </Button>
                   <Button 
+                    size="default"
+                    className="h-12 sm:h-10 text-base sm:text-sm w-full sm:w-auto"
                     onClick={() => navigate("/contractor/active-job")}
                     data-testid="button-view-details"
                   >
                     View Details
-                    <ChevronRight className="w-4 h-4 ml-1" />
+                    <ChevronRight className="w-5 h-5 sm:w-4 sm:h-4 ml-2" />
                   </Button>
                 </div>
               </div>
@@ -1081,33 +1085,37 @@ export default function ContractorDashboard() {
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between">
                           <div className="space-y-2 flex-1">
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                               {showAcceptReject && (
-                                <Badge variant="default" className="bg-orange-500 hover:bg-orange-600">
-                                  <AlertCircle className="w-3 h-3 mr-1" />
+                                <Badge variant="default" className="bg-orange-500 hover:bg-orange-600 px-3 py-1.5 text-sm font-semibold animate-pulse w-fit">
+                                  <AlertCircle className="w-4 h-4 mr-1.5" />
                                   NEEDS APPROVAL
                                 </Badge>
                               )}
                               {isRecent && !showAcceptReject && (
-                                <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                                <Badge variant="default" className="bg-green-500 hover:bg-green-600 px-3 py-1 w-fit">
                                   <Sparkles className="w-3 h-3 mr-1" />
                                   RECENTLY ADDED
                                 </Badge>
                               )}
-                              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
-                                #{job.queuePosition}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">Job #{job.jobNumber}</span>
-                                <Badge variant={job.jobType === 'emergency' ? 'destructive' : 'default'} className="text-xs">
-                                  {job.jobType?.toUpperCase()}
-                                </Badge>
-                                {job.urgencyLevel === 'high' && (
-                                  <Badge variant="outline" className="text-xs gap-1">
-                                    <AlertCircle className="w-3 h-3" />
-                                    High Priority
-                                  </Badge>
-                                )}
+                              <div className="flex items-center gap-2 sm:gap-3">
+                                <div className="flex items-center justify-center w-10 h-10 sm:w-8 sm:h-8 rounded-full bg-primary text-primary-foreground text-base sm:text-sm font-bold">
+                                  #{job.queuePosition}
+                                </div>
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                  <span className="font-medium text-base sm:text-sm">Job #{job.jobNumber}</span>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant={job.jobType === 'emergency' ? 'destructive' : 'default'} className="text-xs">
+                                      {job.jobType?.toUpperCase()}
+                                    </Badge>
+                                    {job.urgencyLevel === 'high' && (
+                                      <Badge variant="outline" className="text-xs gap-1">
+                                        <AlertCircle className="w-3 h-3" />
+                                        High Priority
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
@@ -1132,26 +1140,27 @@ export default function ContractorDashboard() {
                             </div>
                             <p className="text-sm text-muted-foreground line-clamp-1">{job.description}</p>
                             {showAcceptReject && (
-                              <div className="flex gap-2 mt-3">
+                              <div className="flex flex-col sm:flex-row gap-3 mt-4">
                                 <Button
                                   variant="default"
-                                  size="sm"
-                                  className="bg-green-600 hover:bg-green-700"
+                                  size="default"
+                                  className="bg-green-600 hover:bg-green-700 h-12 text-base font-medium w-full sm:w-auto sm:h-10 sm:text-sm"
                                   onClick={() => acceptJobMutation.mutate(job.id)}
                                   disabled={acceptJobMutation.isPending}
                                   data-testid={`button-accept-${job.id}`}
                                 >
-                                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                                  <CheckCircle2 className="w-5 h-5 mr-2 sm:w-4 sm:h-4" />
                                   Accept Job
                                 </Button>
                                 <Button
                                   variant="outline"
-                                  size="sm"
+                                  size="default"
+                                  className="h-12 text-base font-medium w-full sm:w-auto sm:h-10 sm:text-sm"
                                   onClick={() => declineJobMutation.mutate(job.id)}
                                   disabled={declineJobMutation.isPending}
                                   data-testid={`button-decline-${job.id}`}
                                 >
-                                  <XCircle className="w-4 h-4 mr-1" />
+                                  <XCircle className="w-5 h-5 mr-2 sm:w-4 sm:h-4" />
                                   Decline
                                 </Button>
                               </div>

@@ -2143,6 +2143,274 @@ Professional Truck Repair Services
       };
     }
   }
+
+  // Send job assignment email to contractor - MOBILE OPTIMIZED
+  public async sendJobAssignmentEmail(
+    to: string,
+    contractorName: string,
+    job: {
+      id: string;
+      customerName: string;
+      location: string;
+      serviceType: string;
+      urgency: string;
+      estimatedDuration: number;
+      description: string;
+    },
+    isReminder: boolean = false
+  ): Promise<boolean> {
+    const appUrl = process.env.APP_URL || 'https://truckfixgo.com';
+    const acceptUrl = `${appUrl}/contractor/job-acceptance?jobId=${job.id}&action=accept`;
+    const declineUrl = `${appUrl}/contractor/job-acceptance?jobId=${job.id}&action=decline`;
+    
+    // Calculate deadline for acceptance (3 minutes from now)
+    const acceptanceDeadline = new Date(Date.now() + 3 * 60 * 1000);
+    const deadlineTime = acceptanceDeadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    const urgencyColor = job.urgency === 'high' ? '#dc2626' : job.urgency === 'medium' ? '#f59e0b' : '#10b981';
+    const urgencyLabel = job.urgency === 'high' ? 'URGENT' : job.urgency === 'medium' ? 'PRIORITY' : 'STANDARD';
+    
+    const subject = isReminder 
+      ? `⚠️ REMINDER: Job Assignment - Action Required by ${deadlineTime}` 
+      : `🚛 New Job Assignment - ${job.serviceType}`;
+    
+    const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>TruckFixGo - Job Assignment</title>
+  <style type="text/css">
+    /* Reset styles */
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
+    
+    /* Mobile styles */
+    @media only screen and (max-width: 600px) {
+      .mobile-full-width { width: 100% !important; }
+      .mobile-padding { padding: 20px !important; }
+      .mobile-text-center { text-align: center !important; }
+      .mobile-button { 
+        width: 100% !important; 
+        display: block !important; 
+        margin-bottom: 15px !important; 
+        padding: 18px !important;
+        font-size: 18px !important;
+      }
+      .mobile-hide { display: none !important; }
+      .mobile-text-large { font-size: 18px !important; line-height: 24px !important; }
+      .mobile-stack { display: block !important; width: 100% !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f3f4f6;">
+    <tr>
+      <td align="center" style="padding: 20px;">
+        <table class="mobile-full-width" border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          
+          ${isReminder ? `
+          <!-- Urgency Banner for Reminder -->
+          <tr>
+            <td align="center" style="background-color: #dc2626; color: #ffffff; padding: 15px; border-radius: 8px 8px 0 0;">
+              <p style="margin: 0; font-size: 16px; font-weight: bold;">
+                ⏰ ACTION REQUIRED - RESPOND BY ${deadlineTime}
+              </p>
+            </td>
+          </tr>
+          ` : ''}
+          
+          <!-- Logo and Title -->
+          <tr>
+            <td align="center" class="mobile-padding" style="padding: 30px 30px 20px;">
+              <h1 style="margin: 0 0 10px; color: #111827; font-size: 28px; font-weight: bold;">
+                🚛 TruckFixGo
+              </h1>
+              <h2 style="margin: 0; color: #374151; font-size: 20px;">
+                ${isReminder ? 'Job Assignment Reminder' : 'New Job Assignment'}
+              </h2>
+            </td>
+          </tr>
+          
+          <!-- Greeting -->
+          <tr>
+            <td class="mobile-padding" style="padding: 0 30px;">
+              <p style="color: #374151; font-size: 16px; line-height: 24px; margin: 0 0 20px;">
+                Hi ${contractorName},
+              </p>
+              <p style="color: #374151; font-size: 16px; line-height: 24px; margin: 0 0 30px;">
+                ${isReminder 
+                  ? '<strong style="color: #dc2626;">This is a reminder that you have a job waiting for acceptance.</strong> Please respond within 3 minutes to secure this job.'
+                  : 'You have been assigned a new job. Please review the details below and accept or decline within 3 minutes.'
+                }
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Job Details Card -->
+          <tr>
+            <td class="mobile-padding" style="padding: 0 30px;">
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
+                <tr>
+                  <td style="padding: 20px;">
+                    <!-- Urgency Badge -->
+                    <table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 15px;">
+                      <tr>
+                        <td style="background-color: ${urgencyColor}; color: #ffffff; padding: 8px 16px; border-radius: 4px; font-size: 14px; font-weight: bold;">
+                          ${urgencyLabel}
+                        </td>
+                      </tr>
+                    </table>
+                    
+                    <!-- Job Info -->
+                    <h3 style="margin: 0 0 15px; color: #111827; font-size: 20px; font-weight: bold;">
+                      ${job.serviceType}
+                    </h3>
+                    
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 15px;">
+                      <tr>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                          <strong style="color: #6b7280; font-size: 14px;">Customer:</strong>
+                        </td>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                          <span style="color: #111827; font-size: 14px;">${job.customerName}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                          <strong style="color: #6b7280; font-size: 14px;">Location:</strong>
+                        </td>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                          <span style="color: #111827; font-size: 14px;">${job.location}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                          <strong style="color: #6b7280; font-size: 14px;">Est. Duration:</strong>
+                        </td>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">
+                          <span style="color: #111827; font-size: 14px;">${job.estimatedDuration} minutes</span>
+                        </td>
+                      </tr>
+                    </table>
+                    
+                    <p style="color: #374151; font-size: 14px; line-height: 20px; margin: 0;">
+                      <strong>Description:</strong><br>
+                      ${job.description}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Action Buttons - Mobile Optimized -->
+          <tr>
+            <td class="mobile-padding" style="padding: 30px;">
+              <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td align="center" style="padding-bottom: 15px;">
+                    <a href="${acceptUrl}" class="mobile-button" style="display: inline-block; min-width: 200px; background-color: #10b981; color: #ffffff; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold; text-align: center;">
+                      ✓ Accept Job
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center">
+                    <a href="${declineUrl}" class="mobile-button" style="display: inline-block; min-width: 200px; background-color: #ffffff; color: #dc2626; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold; text-align: center; border: 2px solid #dc2626;">
+                      ✗ Decline Job
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Timer Warning -->
+          <tr>
+            <td align="center" class="mobile-padding" style="padding: 0 30px 30px;">
+              <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 12px;">
+                    <p style="margin: 0; text-align: center;">
+                      <strong style="color: #92400e;">⏱️ Time Sensitive:</strong><br>
+                      <span style="color: #78350f;">Please respond by ${deadlineTime} or this job will be reassigned.</span>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f9fafb; padding: 20px 30px; border-radius: 0 0 8px 8px;">
+              <p style="color: #6b7280; font-size: 12px; line-height: 18px; margin: 0; text-align: center;">
+                Need help? Contact dispatch at <a href="tel:1-800-TRUCKFIX" style="color: #3b82f6; text-decoration: none;">1-800-TRUCKFIX</a><br>
+                or open the app to view more details
+              </p>
+              <p style="color: #9ca3af; font-size: 11px; line-height: 16px; margin: 10px 0 0; text-align: center;">
+                © 2025 TruckFixGo. All rights reserved.<br>
+                You're receiving this because you're an active contractor.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    const text = `
+TruckFixGo - ${isReminder ? 'JOB ASSIGNMENT REMINDER' : 'New Job Assignment'}
+
+Hi ${contractorName},
+
+${isReminder 
+  ? 'REMINDER: You have a job waiting for acceptance. Please respond within 3 minutes to secure this job.'
+  : 'You have been assigned a new job. Please review the details and respond within 3 minutes.'
+}
+
+JOB DETAILS:
+- Service Type: ${job.serviceType}
+- Customer: ${job.customerName}
+- Location: ${job.location}
+- Est. Duration: ${job.estimatedDuration} minutes
+- Urgency: ${urgencyLabel}
+
+Description:
+${job.description}
+
+RESPOND BY: ${deadlineTime}
+
+TO ACCEPT: ${acceptUrl}
+TO DECLINE: ${declineUrl}
+
+Please respond promptly or this job will be reassigned to another contractor.
+
+Need help? Call 1-800-TRUCKFIX
+
+© 2025 TruckFixGo
+`;
+
+    try {
+      const success = await this.sendEmail(to, subject, html, text);
+      
+      if (success) {
+        console.log(`[Email Service] Job assignment email sent to ${to} (isReminder: ${isReminder})`);
+      } else {
+        console.error(`[Email Service] Failed to send job assignment email to ${to}`);
+      }
+      
+      return success;
+    } catch (error) {
+      console.error('[Email Service] Error sending job assignment email:', error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance
