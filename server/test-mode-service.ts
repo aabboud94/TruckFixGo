@@ -28,6 +28,12 @@ import { randomUUID } from "crypto";
 
 // Test mode configuration
 export function isTestModeEnabled(): boolean {
+  // Never enable test mode in production deployments
+  if (process.env.REPLIT_DEPLOYMENT === '1') {
+    return false;
+  }
+  
+  // In development, enable if TEST_MODE is true or NODE_ENV is test
   return process.env.TEST_MODE === 'true' || process.env.NODE_ENV === 'test';
 }
 
