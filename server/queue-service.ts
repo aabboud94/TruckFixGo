@@ -771,7 +771,7 @@ export class QueueProcessingService {
         .from(jobs)
         .where(and(
           eq(jobs.status, 'assigned'),
-          eq(jobs.autoAssigned, true),
+          eq(jobs.assignmentMethod, 'auto'),
           lte(jobs.assignedAt, threeMinutesAgo)
         ));
 

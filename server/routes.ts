@@ -2701,6 +2701,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
           orderBy: 'scheduledFor',
           orderDir: 'asc'
         });
+        
+        // IMPORTANT: Get assigned jobs (jobs assigned to this contractor but not yet started)
+        // These are jobs with status='assigned' and contractor_id matching
+        const assignedJobs = await storage.findJobs({
+          contractorId,
+          status: 'assigned',
+          limit: 20,
+          offset: 0,
+          orderBy: 'createdAt',
+          orderDir: 'asc'
+        });
+        
+        // Format assigned jobs for the Job Queue
+        const formattedAssignedJobs = await Promise.all(
+          assignedJobs.map(async (job, index) => {
+            // Get customer info
+            let customer = null;
+            if (job.customerId) {
+              const customerUser = await storage.getUser(job.customerId);
+              if (customerUser) {
+                customer = {
+                  firstName: customerUser.firstName,
+                  lastName: customerUser.lastName,
+                  phone: customerUser.phone
+                };
+              }
+            }
+            
+            // Get service type name
+            const serviceType = await storage.getServiceType(job.serviceTypeId);
+            
+            return {
+              id: job.id,
+              jobNumber: job.jobNumber,
+              queuePosition: index + 1, // Position in assigned jobs list
+              customerName: customer ? `${customer.firstName} ${customer.lastName}` : job.customerName || 'Guest',
+              customerPhone: customer?.phone || job.customerPhone,
+              location: job.location,
+              locationAddress: job.locationAddress,
+              serviceType: serviceType?.name || 'Service',
+              jobType: job.jobType,
+              status: job.status,
+              urgencyLevel: job.urgencyLevel,
+              scheduledFor: job.scheduledFor,
+              estimatedDuration: job.estimatedDuration,
+              description: job.description,
+              isAssigned: true // Mark this as an assigned job for frontend
+            };
+          })
+        );
 
         // Get contractor metrics
         const todayStart = new Date();
@@ -2767,6 +2817,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           value: 4.8
         };
 
+        // Combine queued jobs from queue table and assigned jobs
+        // Assigned jobs should appear in the Job Queue section for contractors to accept/reject
+        const allQueuedJobs = [
+          ...formattedAssignedJobs, // Assigned jobs first (waiting for acceptance)
+          ...validQueuedJobs // Then queued jobs from the queue table
+        ].sort((a, b) => a.queuePosition - b.queuePosition);
+        
         // Prepare response
         res.json({
           contractor: {
@@ -2797,14 +2854,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             pendingPayout: 0 // TODO: Calculate from transactions
           },
           activeJob: formattedCurrentJob,
-          queuedJobs: validQueuedJobs,
+          queuedJobs: allQueuedJobs, // Now includes both assigned and queued jobs
           availableJobs,
           scheduledJobs,
+          assignedJobs: formattedAssignedJobs, // Also provide separately for clarity
           recentReviews: reviews.slice(0, 5),
           queueInfo: {
             currentPosition: currentQueueEntry?.position || null,
-            totalInQueue: allQueueEntries.length,
-            queuedCount: queuedEntries.length
+            totalInQueue: allQueueEntries.length + formattedAssignedJobs.length, // Include assigned jobs in count
+            queuedCount: queuedEntries.length + formattedAssignedJobs.length,
+            assignedCount: formattedAssignedJobs.length // New field for assigned job count
           }
         });
       } catch (error) {
@@ -6208,8 +6267,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           statusUpdated: enRouteJob ? 'en_route' : 'assigned'
         });
       } catch (error) {
-        console.error('Accept job error:', error);
-        res.status(500).json({ message: 'Failed to accept job' });
+        console.error('[Job Accept Error] Full error details:', error);
+        console.error('[Job Accept Error] Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
+        res.status(500).json({ 
+          message: 'Failed to accept job', 
+          error: error instanceof Error ? error.message : 'Unknown error',
+          details: process.env.NODE_ENV === 'development' ? error : undefined
+        });
       }
     }
   );

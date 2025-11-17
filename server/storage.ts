@@ -3075,7 +3075,7 @@ export class PostgreSQLStorage implements IStorage {
         jobId,
         fromStatus: 'new',
         toStatus: 'assigned',
-        changedBy: 'system',
+        changedBy: contractorId, // Use the contractor ID instead of 'system'
         reason: `Auto-assigned via ${method}`
       });
       
@@ -4154,32 +4154,50 @@ export class PostgreSQLStorage implements IStorage {
   }
 
   async updateJobStatus(id: string, status: typeof jobStatusEnum.enumValues[number], changedBy?: string, reason?: string): Promise<Job | undefined> {
-    const currentJob = await this.getJob(id);
-    if (!currentJob) return undefined;
+    try {
+      console.log(`[UpdateJobStatus] Updating job ${id} to status: ${status}, changedBy: ${changedBy}`);
+      
+      const currentJob = await this.getJob(id);
+      if (!currentJob) {
+        console.error(`[UpdateJobStatus] Job ${id} not found`);
+        return undefined;
+      }
 
-    // Update job status
-    const statusUpdate: any = { status, updatedAt: new Date() };
-    if (status === 'assigned') statusUpdate.assignedAt = new Date();
-    if (status === 'en_route') statusUpdate.enRouteAt = new Date();
-    if (status === 'on_site') statusUpdate.arrivedAt = new Date();
-    if (status === 'completed') statusUpdate.completedAt = new Date();
-    if (status === 'cancelled') statusUpdate.cancelledAt = new Date();
+      // Update job status
+      const statusUpdate: any = { status, updatedAt: new Date() };
+      if (status === 'assigned') statusUpdate.assignedAt = new Date();
+      if (status === 'en_route') statusUpdate.enRouteAt = new Date();
+      if (status === 'on_site') statusUpdate.arrivedAt = new Date();
+      if (status === 'completed') statusUpdate.completedAt = new Date();
+      if (status === 'cancelled') statusUpdate.cancelledAt = new Date();
 
-    const result = await db.update(jobs)
-      .set(statusUpdate)
-      .where(eq(jobs.id, id))
-      .returning();
+      console.log(`[UpdateJobStatus] Status update object:`, statusUpdate);
 
-    // Add to status history
-    await db.insert(jobStatusHistory).values({
-      jobId: id,
-      fromStatus: currentJob.status,
-      toStatus: status,
-      changedBy,
-      reason
-    });
+      const result = await db.update(jobs)
+        .set(statusUpdate)
+        .where(eq(jobs.id, id))
+        .returning();
 
-    return result[0];
+      if (result.length === 0) {
+        console.error(`[UpdateJobStatus] Failed to update job ${id} - no rows returned`);
+        return undefined;
+      }
+
+      // Add to status history
+      await db.insert(jobStatusHistory).values({
+        jobId: id,
+        fromStatus: currentJob.status,
+        toStatus: status,
+        changedBy,
+        reason
+      });
+
+      console.log(`[UpdateJobStatus] Successfully updated job ${id} from ${currentJob.status} to ${status}`);
+      return result[0];
+    } catch (error) {
+      console.error(`[UpdateJobStatus] Error updating job ${id} status:`, error);
+      throw error;
+    }
   }
 
   async findJobs(filters: JobFilterOptions): Promise<Job[]> {
