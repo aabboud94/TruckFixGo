@@ -3006,6 +3006,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // Toggle contractor online/offline status
+  // PATCH endpoint for contractor availability status (used by dashboard toggle)
+  app.patch('/api/contractor/status',
+    requireAuth,
+    requireRole('contractor'),
+    async (req: Request, res: Response) => {
+      try {
+        const contractorId = req.session.userId!;
+        const { isAvailable } = req.body;
+
+        // Update contractor profile with new availability status
+        await storage.updateContractorProfile(contractorId, {
+          isAvailable,
+          lastStatusChange: new Date()
+        });
+
+        // Broadcast status change via WebSocket
+        const { trackingWSServer } = await import('./websocket');
+        await trackingWSServer.broadcastContractorStatusChange(contractorId, {
+          isOnline: isAvailable,
+          message: isAvailable ? 'Contractor is now available' : 'Contractor is offline'
+        });
+
+        res.json({ 
+          message: `Status updated to ${isAvailable ? 'available' : 'offline'}`,
+          isAvailable
+        });
+      } catch (error) {
+        console.error('Update contractor status error:', error);
+        res.status(500).json({ message: 'Failed to update status' });
+      }
+    }
+  );
+
+  // PUT endpoint for contractor status toggle (legacy/alternative endpoint)
   app.put('/api/contractor/status/toggle',
     requireAuth,
     requireRole('contractor'),
@@ -3015,7 +3049,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const { isOnline, nextOnlineAt, message } = req.body;
 
         // Update contractor profile with new online status
+        // Map isOnline to isAvailable for consistency
         await storage.updateContractorProfile(contractorId, {
+          isAvailable: isOnline,
           isOnline,
           lastStatusChange: new Date(),
           nextOnlineAt: nextOnlineAt ? new Date(nextOnlineAt) : null
