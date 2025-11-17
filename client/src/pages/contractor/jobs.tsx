@@ -103,7 +103,10 @@ export default function ContractorJobs() {
         title: "Job Accepted",
         description: "The job has been added to your active jobs"
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/contractor/jobs"] });
+      // Invalidate both available and active jobs queries
+      queryClient.invalidateQueries({ queryKey: ["/api/contractor/jobs/available"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contractor/jobs/active"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contractor/jobs/scheduled"] });
     },
     onError: () => {
       toast({
@@ -126,7 +129,10 @@ export default function ContractorJobs() {
         title: "Job Cancelled",
         description: "The job has been cancelled"
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/contractor/jobs"] });
+      // Invalidate active and completed jobs queries (cancelled jobs might be visible in completed)
+      queryClient.invalidateQueries({ queryKey: ["/api/contractor/jobs/active"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contractor/jobs/scheduled"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contractor/jobs/completed"] });
     },
     onError: () => {
       toast({
