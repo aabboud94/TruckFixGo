@@ -841,94 +841,17 @@ export default function ContractorDashboard() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {/* Key Metrics - Mobile Optimized */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
-              <CardTitle className="text-base sm:text-sm font-medium">Today's Earnings</CardTitle>
-              <DollarSign className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="text-3xl sm:text-2xl font-bold" data-testid="text-today-earnings">
-                ${metrics?.todayEarnings?.toFixed(2) || '0.00'}
-              </div>
-              <p className="text-sm sm:text-xs text-muted-foreground mt-1">
-                Week: ${metrics?.weekEarnings?.toFixed(2) || '0.00'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
-              <CardTitle className="text-base sm:text-sm font-medium">Jobs Completed</CardTitle>
-              <TrendingUp className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="text-3xl sm:text-2xl font-bold" data-testid="text-jobs-today">
-                {metrics?.todayJobs || 0}
-              </div>
-              <p className="text-sm sm:text-xs text-muted-foreground mt-1">
-                This week: {metrics?.weekJobs || 0} | Total: {contractor?.totalJobsCompleted || 0}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
-              <CardTitle className="text-base sm:text-sm font-medium">Average Rating</CardTitle>
-              <Star className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="flex items-center gap-2">
-                <span className="text-3xl sm:text-2xl font-bold" data-testid="text-rating">
-                  {contractor?.averageRating?.toFixed(1) || '0.0'}
-                </span>
-                <div className="flex">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Star
-                      key={star}
-                      className={`w-5 h-5 sm:w-4 sm:h-4 ${
-                        star <= Math.round(contractor?.averageRating || 0)
-                          ? 'fill-yellow-500 text-yellow-500'
-                          : 'text-gray-300'
-                      }`}
-                    />
-                  ))}
-                </div>
-              </div>
-              <p className="text-sm sm:text-xs text-muted-foreground mt-1">
-                Based on {contractor?.totalJobsCompleted || 0} jobs
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
-              <CardTitle className="text-base sm:text-sm font-medium">Response Time</CardTitle>
-              <Clock className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="text-3xl sm:text-2xl font-bold" data-testid="text-response-time">
-                {contractor?.averageResponseTime || 0} min
-              </div>
-              <p className="text-sm sm:text-xs text-muted-foreground mt-1">
-                Average response time
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Active Job Section - Mobile Optimized */}
+        {/* Active Job Section - MOVED TO TOP FOR VISIBILITY */}
         {activeJob && (
-          <Card className="border-l-4 border-l-green-600">
+          <Card className="border-l-4 border-l-green-600 shadow-lg animate-in fade-in-50 slide-in-from-top-2 duration-500 bg-gradient-to-r from-green-50/50 to-transparent dark:from-green-950/20">
             <CardHeader className="p-4 sm:p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                  <CardTitle className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse" />
-                    Current Active Job
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <div className="w-3 h-3 bg-green-600 rounded-full animate-pulse" />
+                    🚛 Current Active Job
                   </CardTitle>
-                  <Badge variant="default" className="bg-green-600 w-fit">
+                  <Badge variant="default" className="bg-green-600 w-fit animate-pulse">
                     <Truck className="w-3 h-3 mr-1" />
                     Job #{activeJob.jobNumber}
                   </Badge>
@@ -1059,6 +982,83 @@ export default function ContractorDashboard() {
             </CardContent>
           </Card>
         )}
+        
+        {/* Key Metrics - Mobile Optimized */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
+              <CardTitle className="text-base sm:text-sm font-medium">Today's Earnings</CardTitle>
+              <DollarSign className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-3xl sm:text-2xl font-bold" data-testid="text-today-earnings">
+                ${metrics?.todayEarnings?.toFixed(2) || '0.00'}
+              </div>
+              <p className="text-sm sm:text-xs text-muted-foreground mt-1">
+                Week: ${metrics?.weekEarnings?.toFixed(2) || '0.00'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
+              <CardTitle className="text-base sm:text-sm font-medium">Jobs Completed</CardTitle>
+              <TrendingUp className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-3xl sm:text-2xl font-bold" data-testid="text-jobs-today">
+                {metrics?.todayJobs || 0}
+              </div>
+              <p className="text-sm sm:text-xs text-muted-foreground mt-1">
+                This week: {metrics?.weekJobs || 0} | Total: {contractor?.totalJobsCompleted || 0}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
+              <CardTitle className="text-base sm:text-sm font-medium">Average Rating</CardTitle>
+              <Star className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="flex items-center gap-2">
+                <span className="text-3xl sm:text-2xl font-bold" data-testid="text-rating">
+                  {contractor?.averageRating?.toFixed(1) || '0.0'}
+                </span>
+                <div className="flex">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={`w-5 h-5 sm:w-4 sm:h-4 ${
+                        star <= Math.round(contractor?.averageRating || 0)
+                          ? 'fill-yellow-500 text-yellow-500'
+                          : 'text-gray-300'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+              <p className="text-sm sm:text-xs text-muted-foreground mt-1">
+                Based on {contractor?.totalJobsCompleted || 0} jobs
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
+              <CardTitle className="text-base sm:text-sm font-medium">Response Time</CardTitle>
+              <Clock className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-3xl sm:text-2xl font-bold" data-testid="text-response-time">
+                {contractor?.averageResponseTime || 0} min
+              </div>
+              <p className="text-sm sm:text-xs text-muted-foreground mt-1">
+                Average response time
+              </p>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Queued Jobs Section */}
         <Card className="border-l-4 border-l-blue-600">

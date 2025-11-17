@@ -100,13 +100,19 @@ export default function ContractorJobs() {
     },
     onSuccess: () => {
       toast({
-        title: "Job Accepted",
-        description: "The job has been added to your active jobs"
+        title: "Job Accepted! ✅",
+        description: "Navigating to your active job..."
       });
       // Invalidate both available and active jobs queries
       queryClient.invalidateQueries({ queryKey: ["/api/contractor/jobs/available"] });
       queryClient.invalidateQueries({ queryKey: ["/api/contractor/jobs/active"] });
       queryClient.invalidateQueries({ queryKey: ["/api/contractor/jobs/scheduled"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contractor/dashboard"] });
+      
+      // Navigate to dashboard after a brief delay to show the toast
+      setTimeout(() => {
+        navigate("/contractor/dashboard");
+      }, 1000);
     },
     onError: () => {
       toast({
