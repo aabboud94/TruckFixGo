@@ -61,9 +61,26 @@ class EmailService {
   private async initializeTransporter() {
     const email = process.env.OFFICE365_EMAIL;
     const password = process.env.OFFICE365_PASSWORD;
+    const isProduction = process.env.REPLIT_DEPLOYMENT === '1' || process.env.NODE_ENV === 'production';
 
     if (!email || !password) {
-      console.error('[Email Service] Office365 credentials not configured');
+      if (isProduction) {
+        console.error('═══════════════════════════════════════════════════════════════');
+        console.error('⚠️  PRODUCTION EMAIL SERVICE DISABLED');
+        console.error('═══════════════════════════════════════════════════════════════');
+        console.error('Missing Office365 credentials in production deployment!');
+        console.error('');
+        console.error('To fix this issue:');
+        console.error('1. Go to your Replit deployment dashboard');
+        console.error('2. Navigate to the "App Secrets" tab');
+        console.error('3. Add these secrets:');
+        console.error('   • OFFICE365_EMAIL = Support@truckfixgo.com');
+        console.error('   • OFFICE365_PASSWORD = [your Office365 password]');
+        console.error('4. Restart the deployment');
+        console.error('═══════════════════════════════════════════════════════════════');
+      } else {
+        console.error('[Email Service] Office365 credentials not configured in development');
+      }
       this.lastVerificationError = 'Missing Office365 credentials';
       return;
     }
@@ -89,10 +106,27 @@ class EmailService {
       console.log('[Email Service] Verifying SMTP connection...');
       await this.verifyConnection();
       
+      if (this.isVerified && isProduction) {
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.log('✅  PRODUCTION EMAIL SERVICE ACTIVE');
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.log(`Email service successfully initialized with: ${email}`);
+        console.log('═══════════════════════════════════════════════════════════════');
+      }
+      
     } catch (error) {
       console.error('[Email Service] Failed to initialize transporter:', error);
       this.lastVerificationError = `Initialization failed: ${(error as Error).message}`;
       this.transporter = null;
+      
+      if (isProduction) {
+        console.error('═══════════════════════════════════════════════════════════════');
+        console.error('⚠️  PRODUCTION EMAIL INITIALIZATION FAILED');
+        console.error('═══════════════════════════════════════════════════════════════');
+        console.error('Error:', (error as Error).message);
+        console.error('Please check your Office365 credentials in deployment secrets');
+        console.error('═══════════════════════════════════════════════════════════════');
+      }
     }
   }
 

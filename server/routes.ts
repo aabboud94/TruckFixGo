@@ -20910,6 +20910,47 @@ The TruckFixGo Team
     }
   );
 
+  // Email health check endpoint
+  app.get('/api/health/email',
+    async (req: Request, res: Response) => {
+      try {
+        const emailService = getEmailService();
+        const isProduction = process.env.REPLIT_DEPLOYMENT === '1' || process.env.NODE_ENV === 'production';
+        const hasCredentials = !!(process.env.OFFICE365_EMAIL && process.env.OFFICE365_PASSWORD);
+        
+        const status = {
+          environment: isProduction ? 'production' : 'development',
+          configured: hasCredentials,
+          ready: emailService.isReady(),
+          stats: emailService.getStats(),
+          credentials: {
+            email: process.env.OFFICE365_EMAIL ? `${process.env.OFFICE365_EMAIL.substring(0, 3)}***` : 'NOT SET',
+            password: process.env.OFFICE365_PASSWORD ? '***SET***' : 'NOT SET'
+          }
+        };
+
+        if (!hasCredentials && isProduction) {
+          (status as any).fix_instructions = {
+            step1: 'Go to your Replit deployment dashboard',
+            step2: 'Navigate to "App Secrets" tab',
+            step3: 'Add OFFICE365_EMAIL = Support@truckfixgo.com',
+            step4: 'Add OFFICE365_PASSWORD = [your Office365 password]',
+            step5: 'Restart the deployment'
+          };
+        }
+
+        res.status(hasCredentials && emailService.isReady() ? 200 : 503).json(status);
+      } catch (error) {
+        console.error('Email health check error:', error);
+        res.status(503).json({
+          status: 'unhealthy',
+          error: 'Failed to check email service status',
+          message: (error as Error).message
+        });
+      }
+    }
+  );
+
   // ==================== EMERGENCY BOOKING ENDPOINTS ====================
 
   // Rate limiting map for guest bookings (phone -> booking info)
