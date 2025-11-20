@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import AdminLayout from "@/layouts/AdminLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +48,7 @@ import {
 export default function AdminContractors() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [tierFilter, setTierFilter] = useState("all");
@@ -660,51 +662,180 @@ export default function AdminContractors() {
             </div>
           )}
 
-          {/* Contractors Table */}
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={selectedContractors.length === contractorsData.length}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedContractors(contractorsData.map((c: any) => c.id));
-                        } else {
-                          setSelectedContractors([]);
-                        }
+          {/* Contractors Table/Cards */}
+          {isLoading ? (
+            <div className="text-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+            </div>
+          ) : contractorsData.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No contractors found
+            </div>
+          ) : isMobile ? (
+            // Mobile Card Layout
+            <div className="space-y-4">
+              {contractorsData.map((contractor: any) => (
+                <Card key={contractor.id}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <CardTitle className="text-lg">{contractor.name}</CardTitle>
+                        <CardDescription>{contractor.company}</CardDescription>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={getStatusColor(contractor.status) as any}>
+                          {contractor.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {/* Availability Status */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Availability</span>
+                      <div className="flex items-center gap-2">
+                        {contractor.isOnline ? (
+                          <>
+                            <Wifi className="h-4 w-4 text-green-500" />
+                            <span className="text-sm text-green-600">Online</span>
+                          </>
+                        ) : (
+                          <>
+                            <WifiOff className="h-4 w-4 text-gray-400" />
+                            <span className="text-sm text-gray-500">Offline</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Performance Tier */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Tier</span>
+                      <Badge className={getTierColor(contractor.tier)}>
+                        {contractor.tier}
+                      </Badge>
+                    </div>
+
+                    {/* Rating */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Rating</span>
+                      <div className="flex items-center gap-1">
+                        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                        <span className="font-medium">{contractor.rating}</span>
+                      </div>
+                    </div>
+
+                    {/* Jobs Completed */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm text-muted-foreground">Jobs Completed</span>
+                        <span className="text-sm font-medium">
+                          {contractor.completedJobs}/{contractor.totalJobs}
+                        </span>
+                      </div>
+                      <Progress 
+                        value={(contractor.completedJobs / contractor.totalJobs) * 100} 
+                        className="h-2"
+                      />
+                    </div>
+
+                    {/* Earnings */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Total Earnings</span>
+                      <span className="font-medium">${contractor.totalEarnings.toLocaleString()}</span>
+                    </div>
+
+                    {/* Balance */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Current Balance</span>
+                      <span className="font-medium">${contractor.currentBalance.toLocaleString()}</span>
+                    </div>
+
+                    {/* Joined Date */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Joined</span>
+                      <span className="text-sm">{format(contractor.joinedAt, 'MMM d, yyyy')}</span>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="flex gap-2 pt-3">
+                    <Button
+                      className="flex-1 h-11"
+                      variant="outline"
+                      onClick={() => {
+                        const contractorWithName = {
+                          ...contractor,
+                          name: `${contractor.firstName || ''} ${contractor.lastName || ''}`.trim() || contractor.name || '',
+                          company: contractor.company || contractor.companyName || '',
+                          email: contractor.email || '',
+                          phone: contractor.phone || '',
+                          status: contractor.status || 'pending'
+                        };
+                        setSelectedContractor(contractorWithName);
+                        setEditedContractor(contractorWithName);
+                        setShowContractorDetails(true);
                       }}
-                    />
-                  </TableHead>
-                  <TableHead>Contractor</TableHead>
-                  <TableHead>Availability</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden md:table-cell">Tier</TableHead>
-                  <TableHead className="hidden lg:table-cell">Rating</TableHead>
-                  <TableHead className="hidden md:table-cell">Jobs</TableHead>
-                  <TableHead className="hidden xl:table-cell">Avg Response</TableHead>
-                  <TableHead className="hidden lg:table-cell">Total Earnings</TableHead>
-                  <TableHead className="hidden xl:table-cell">Balance</TableHead>
-                  <TableHead className="hidden lg:table-cell">Joined</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
+                      data-testid={`button-view-mobile-${contractor.id}`}
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      View
+                    </Button>
+                    <Button
+                      className="flex-1 h-11"
+                      onClick={() => {
+                        const contractorWithName = {
+                          ...contractor,
+                          name: `${contractor.firstName || ''} ${contractor.lastName || ''}`.trim() || contractor.name || '',
+                          company: contractor.company || contractor.companyName || '',
+                          email: contractor.email || '',
+                          phone: contractor.phone || '',
+                          status: contractor.status || 'pending'
+                        };
+                        setSelectedContractor(contractorWithName);
+                        setEditedContractor(contractorWithName);
+                        setShowContractorDetails(true);
+                      }}
+                      data-testid={`button-edit-mobile-${contractor.id}`}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            // Desktop Table Layout
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8">
-                      <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-                    </TableCell>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedContractors.length === contractorsData.length}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedContractors(contractorsData.map((c: any) => c.id));
+                          } else {
+                            setSelectedContractors([]);
+                          }
+                        }}
+                      />
+                    </TableHead>
+                    <TableHead>Contractor</TableHead>
+                    <TableHead>Availability</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden md:table-cell">Tier</TableHead>
+                    <TableHead className="hidden lg:table-cell">Rating</TableHead>
+                    <TableHead className="hidden md:table-cell">Jobs</TableHead>
+                    <TableHead className="hidden xl:table-cell">Avg Response</TableHead>
+                    <TableHead className="hidden lg:table-cell">Total Earnings</TableHead>
+                    <TableHead className="hidden xl:table-cell">Balance</TableHead>
+                    <TableHead className="hidden lg:table-cell">Joined</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ) : contractorsData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                      No contractors found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  contractorsData.map((contractor: any) => (
+                </TableHeader>
+                <TableBody>
+                  {contractorsData.map((contractor: any) => (
                     <TableRow key={contractor.id}>
                       <TableCell>
                         <Checkbox
@@ -779,7 +910,6 @@ export default function AdminContractors() {
                             size="icon"
                             variant="ghost"
                             onClick={() => {
-                              // Transform contractor data to match the edit form expectations
                               const contractorWithName = {
                                 ...contractor,
                                 name: `${contractor.firstName || ''} ${contractor.lastName || ''}`.trim() || contractor.name || '',
@@ -801,7 +931,6 @@ export default function AdminContractors() {
                             size="icon"
                             variant="ghost"
                             onClick={() => {
-                              // Transform contractor data to match the edit form expectations
                               const contractorWithName = {
                                 ...contractor,
                                 name: `${contractor.firstName || ''} ${contractor.lastName || ''}`.trim() || contractor.name || '',
@@ -822,11 +951,11 @@ export default function AdminContractors() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -17,31 +17,6 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
-// Mock data for charts
-const revenueData = [
-  { date: "Mon", revenue: 12450 },
-  { date: "Tue", revenue: 15200 },
-  { date: "Wed", revenue: 13800 },
-  { date: "Thu", revenue: 16500 },
-  { date: "Fri", revenue: 18200 },
-  { date: "Sat", revenue: 14600 },
-  { date: "Sun", revenue: 11200 },
-];
-
-const serviceBreakdown = [
-  { name: "Emergency Repairs", value: 45, color: "#F97316" },
-  { name: "Fleet Services", value: 30, color: "#1E3A8A" },
-  { name: "Truck Wash", value: 15, color: "#059669" },
-  { name: "PM Services", value: 10, color: "#F59E0B" },
-];
-
-const jobStatusData = [
-  { status: "Completed", count: 145, color: "#059669" },
-  { status: "In Progress", count: 23, color: "#F59E0B" },
-  { status: "Assigned", count: 12, color: "#1E3A8A" },
-  { status: "New", count: 8, color: "#9CA3AF" },
-];
-
 // Helper functions for safe numeric operations
 const safeNumber = (value: any, defaultValue: number = 0): number => {
   const num = Number(value);
@@ -68,6 +43,24 @@ export default function AdminDashboard() {
     refetchInterval: 10000, // Refresh every 10 seconds
   });
 
+  // Query for revenue data
+  const { data: revenueData, isLoading: revenueLoading } = useQuery({
+    queryKey: ['/api/admin/revenue/weekly'],
+    refetchInterval: 30000,
+  });
+
+  // Query for service breakdown
+  const { data: serviceBreakdownData, isLoading: serviceLoading } = useQuery({
+    queryKey: ['/api/admin/jobs/breakdown'],
+    refetchInterval: 30000,
+  });
+
+  // Query for job status breakdown
+  const { data: jobStatusData, isLoading: jobStatusLoading } = useQuery({
+    queryKey: ['/api/admin/jobs/status-breakdown'],
+    refetchInterval: 30000,
+  });
+
   // Query for recent activity
   const { data: recentActivity } = useQuery({
     queryKey: ['/api/admin/activity'],
@@ -80,19 +73,46 @@ export default function AdminDashboard() {
     refetchInterval: 30000,
   });
 
-  // Ensure all numeric fields have safe default values
+  // Ensure all numeric fields have safe default values - use 0 to show real data
   const stats = {
-    activeJobs: safeNumber(metrics?.activeJobs, 35),
-    onlineContractors: safeNumber(metrics?.onlineContractors, 87),
-    avgResponseTime: safeNumber(metrics?.avgResponseTime, 12),
-    completionRate: safeNumber(metrics?.completionRate, 94.5),
-    revenueToday: safeNumber(metrics?.revenueToday, 24650),
-    revenueWeek: safeNumber(metrics?.revenueWeek, 142800),
-    revenueMonth: safeNumber(metrics?.revenueMonth, 587400),
-    totalFleets: safeNumber(metrics?.totalFleets, 126),
-    totalContractors: safeNumber(metrics?.totalContractors, 342),
-    totalUsers: safeNumber(metrics?.totalUsers, 5821),
+    activeJobs: safeNumber(metrics?.activeJobs, 0),
+    onlineContractors: safeNumber(metrics?.onlineContractors, 0),
+    avgResponseTime: safeNumber(metrics?.avgResponseTime, 0),
+    completionRate: safeNumber(metrics?.completionRate, 0),
+    revenueToday: safeNumber(metrics?.revenueToday, 0),
+    revenueWeek: safeNumber(metrics?.revenueWeek, 0),
+    revenueMonth: safeNumber(metrics?.revenueMonth, 0),
+    totalFleets: safeNumber(metrics?.totalFleets, 0),
+    totalContractors: safeNumber(metrics?.totalContractors, 0),
+    totalUsers: safeNumber(metrics?.totalUsers, 0),
   };
+
+  // Format revenue data for the chart
+  const chartRevenueData = revenueData || [
+    { date: "Mon", revenue: 0 },
+    { date: "Tue", revenue: 0 },
+    { date: "Wed", revenue: 0 },
+    { date: "Thu", revenue: 0 },
+    { date: "Fri", revenue: 0 },
+    { date: "Sat", revenue: 0 },
+    { date: "Sun", revenue: 0 },
+  ];
+
+  // Format service breakdown data for the chart
+  const chartServiceBreakdown = serviceBreakdownData || [
+    { name: "Emergency Repairs", value: 0, color: "#F97316" },
+    { name: "Fleet Services", value: 0, color: "#1E3A8A" },
+    { name: "Truck Wash", value: 0, color: "#059669" },
+    { name: "PM Services", value: 0, color: "#F59E0B" },
+  ];
+
+  // Format job status data for the chart
+  const chartJobStatusData = jobStatusData || [
+    { status: "Completed", count: 0, color: "#059669" },
+    { status: "In Progress", count: 0, color: "#F59E0B" },
+    { status: "Assigned", count: 0, color: "#1E3A8A" },
+    { status: "New", count: 0, color: "#9CA3AF" },
+  ];
 
   const activities = recentActivity || [
     {
@@ -256,7 +276,7 @@ export default function AdminDashboard() {
           <CardContent>
             <div className="overflow-x-auto">
               <ResponsiveContainer width="100%" height={288} className="h-56 md:h-72">
-                <AreaChart data={revenueData}>
+                <AreaChart data={chartRevenueData}>
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#1E3A8A" stopOpacity={0.8} />
@@ -321,7 +341,7 @@ export default function AdminDashboard() {
               <ResponsiveContainer width="100%" height={224} className="h-56">
                 <PieChart>
                 <Pie
-                  data={serviceBreakdown}
+                  data={chartServiceBreakdown}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -329,7 +349,7 @@ export default function AdminDashboard() {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {serviceBreakdown.map((entry, index) => (
+                  {chartServiceBreakdown.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -339,7 +359,7 @@ export default function AdminDashboard() {
               </ResponsiveContainer>
             </div>
             <div className="mt-4 space-y-2">
-              {serviceBreakdown.map((service) => (
+              {chartServiceBreakdown.map((service) => (
                 <div key={service.name} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div
@@ -364,7 +384,7 @@ export default function AdminDashboard() {
           <CardContent>
             <div className="overflow-x-auto">
               <ResponsiveContainer width="100%" height={224} className="h-56">
-                <BarChart data={jobStatusData}>
+                <BarChart data={chartJobStatusData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="status" />
                 <YAxis />

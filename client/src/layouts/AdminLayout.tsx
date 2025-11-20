@@ -134,12 +134,12 @@ export default function AdminLayout({ children, title, breadcrumbs = [] }: Admin
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex min-h-screen w-full">
+      <div className="flex h-screen w-full overflow-hidden">
         <AdminSidebar />
         
-        <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 flex-col overflow-hidden">
           {/* Header */}
-          <header className="sticky top-0 z-50 flex flex-col border-b bg-background">
+          <header className="sticky top-0 z-50 flex flex-col border-b bg-background flex-shrink-0">
             <div className="flex items-center justify-between px-4 py-3 md:px-6">
               <div className="flex items-center gap-2 md:gap-4 flex-1">
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
