@@ -15,7 +15,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import JobPhotoGallery from "@/components/job-photo-gallery";
@@ -24,11 +26,12 @@ import {
   Search, Filter, Download, RefreshCw, MapPin, Clock, DollarSign,
   User, Truck, AlertCircle, CheckCircle, XCircle, Edit, Eye,
   MessageSquare, Camera, Ban, CreditCard, Loader2, Save, ChevronDown,
-  FileText, Receipt, ChevronUp, Package, Cloud, Wrench
+  FileText, Receipt, ChevronUp, Package, Cloud, Wrench, MoreVertical, Phone
 } from "lucide-react";
 
 export default function AdminJobs() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -321,104 +324,254 @@ export default function AdminJobs() {
     >
       {/* Filters and Actions */}
       <Card className="mb-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
+        <CardHeader className={isMobile ? 'px-3 pb-3' : ''}>
+          <div className={`${isMobile ? 'space-y-3' : 'flex items-center justify-between'}`}>
             <div>
-              <CardTitle>All Jobs</CardTitle>
-              <CardDescription>Manage and monitor all platform jobs</CardDescription>
+              <CardTitle className={isMobile ? 'text-lg' : ''}>All Jobs</CardTitle>
+              <CardDescription className={isMobile ? 'text-sm' : ''}>
+                {isMobile ? 'Manage platform jobs' : 'Manage and monitor all platform jobs'}
+              </CardDescription>
             </div>
             <div className="flex gap-2">
               <Button
                 variant="outline"
                 onClick={() => refetch()}
                 data-testid="button-refresh-jobs"
+                size={isMobile ? 'sm' : 'default'}
               >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Refresh
+                <RefreshCw className={`${isMobile ? 'h-4 w-4' : 'mr-2 h-4 w-4'}`} />
+                {!isMobile && 'Refresh'}
               </Button>
               <Button
                 variant="outline"
                 onClick={handleExport}
                 data-testid="button-export-jobs"
+                size={isMobile ? 'sm' : 'default'}
               >
-                <Download className="mr-2 h-4 w-4" />
-                Export
+                <Download className={`${isMobile ? 'h-4 w-4' : 'mr-2 h-4 w-4'}`} />
+                {!isMobile && 'Export'}
               </Button>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="flex gap-4 mb-4">
+        <CardContent className={isMobile ? 'px-3' : ''}>
+          <div className={`${isMobile ? 'space-y-3' : 'flex gap-4'} mb-4`}>
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Search by ID, customer, contractor, or location..."
+                placeholder={isMobile ? "Search jobs..." : "Search by ID, customer, contractor, or location..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
                 data-testid="input-search-jobs"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="new">New</SelectItem>
-                <SelectItem value="assigned">Assigned</SelectItem>
-                <SelectItem value="en_route">En Route</SelectItem>
-                <SelectItem value="on_site">On Site</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-[180px]" data-testid="select-type-filter">
-                <SelectValue placeholder="Filter by type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="emergency">Emergency</SelectItem>
-                <SelectItem value="scheduled">Scheduled</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className={`${isMobile ? 'flex gap-2' : 'contents'}`}>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className={`${isMobile ? 'flex-1' : 'w-[180px]'}`} data-testid="select-status-filter">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="new">New</SelectItem>
+                  <SelectItem value="assigned">Assigned</SelectItem>
+                  <SelectItem value="en_route">En Route</SelectItem>
+                  <SelectItem value="on_site">On Site</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className={`${isMobile ? 'flex-1' : 'w-[180px]'}`} data-testid="select-type-filter">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="emergency">Emergency</SelectItem>
+                  <SelectItem value="scheduled">Scheduled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          {/* Jobs Table */}
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Job ID</TableHead>
-                  <TableHead className="hidden md:table-cell">Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden lg:table-cell">Service</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead className="hidden md:table-cell">Contractor</TableHead>
-                  <TableHead className="hidden lg:table-cell">Location</TableHead>
-                  <TableHead className="hidden xl:table-cell">Weather</TableHead>
-                  <TableHead className="hidden md:table-cell">Price</TableHead>
-                  <TableHead className="hidden lg:table-cell">Created</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
+          {/* Jobs Table/Cards */}
+          {isLoading ? (
+            <div className="text-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+            </div>
+          ) : jobsData.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No jobs found
+            </div>
+          ) : isMobile ? (
+            // Mobile Card Layout
+            <div className="space-y-3">
+              {jobsData.map((job: any) => {
+                const StatusIcon = getStatusIcon(job.status);
+                const statusStyle = getStatusColor(job.status);
+                return (
+                  <Card key={job.id} className="overflow-hidden">
+                    <CardContent className="px-3 py-3 space-y-3">
+                      {/* Header with Job ID and Status */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-mono text-sm font-medium truncate">
+                            {job.jobNumber || job.id}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge 
+                              variant={job.type === 'emergency' ? 'destructive' : 'default'}
+                              className="text-xs"
+                            >
+                              {job.type}
+                            </Badge>
+                            <Badge 
+                              variant={statusStyle.variant} 
+                              className={`flex items-center gap-1 text-xs ${statusStyle.className || ''}`}
+                            >
+                              <StatusIcon className="h-3 w-3" />
+                              {job.status.replace('_', ' ')}
+                            </Badge>
+                          </div>
+                        </div>
+                        {/* Actions Menu */}
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              className="h-9 w-9"
+                              data-testid={`button-menu-${job.id}`}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-48 p-1" align="end">
+                            <Button
+                              variant="ghost"
+                              className="w-full justify-start h-10"
+                              onClick={() => {
+                                setSelectedJob(job);
+                                setShowJobDetails(true);
+                              }}
+                              data-testid={`button-view-mobile-${job.id}`}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
+                            </Button>
+                            {job.status === 'completed' && (
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start h-10"
+                                onClick={() => {
+                                  setSelectedJob(job);
+                                  setShowInvoiceDetails(true);
+                                }}
+                                data-testid={`button-invoice-mobile-${job.id}`}
+                              >
+                                <Receipt className="h-4 w-4 mr-2" />
+                                View Invoice
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              className="w-full justify-start h-10"
+                              onClick={() => {
+                                setSelectedJob(job);
+                                setShowAssignDialog(true);
+                              }}
+                              data-testid={`button-assign-mobile-${job.id}`}
+                            >
+                              <User className="h-4 w-4 mr-2" />
+                              Assign/Reassign
+                            </Button>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      <Separator />
+
+                      {/* Customer Information */}
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Customer</p>
+                          <p className="font-medium text-sm">
+                            {job.customer?.name || job.customerName || 'Guest'}
+                          </p>
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <Phone className="h-3 w-3" />
+                            {job.customer?.phone || job.customerPhone || 'N/A'}
+                          </div>
+                        </div>
+
+                        {/* Service & Location */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Service</p>
+                          <p className="text-sm">{job.service || 'Not specified'}</p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Location</p>
+                          <div className="flex items-start gap-1">
+                            <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm break-words">
+                              {typeof job.location === 'object' && job.location 
+                                ? job.locationAddress || `${job.location.lat?.toFixed(4)}, ${job.location.lng?.toFixed(4)}`
+                                : job.location || 'Unknown'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Contractor */}
+                        {job.contractor && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Contractor</p>
+                            <p className="text-sm font-medium">{job.contractor.name}</p>
+                            <p className="text-xs text-muted-foreground">{job.contractor.phone}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <Separator />
+
+                      {/* Footer with Price and Time */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <DollarSign className="h-3 w-3" />
+                          <span className="font-semibold text-sm">${job.price}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          {format(job.createdAt, 'MMM d, h:mm a')}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            // Desktop Table Layout
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
-                      <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-                    </TableCell>
+                    <TableHead>Job ID</TableHead>
+                    <TableHead className="hidden md:table-cell">Type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden lg:table-cell">Service</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead className="hidden md:table-cell">Contractor</TableHead>
+                    <TableHead className="hidden lg:table-cell">Location</TableHead>
+                    <TableHead className="hidden xl:table-cell">Weather</TableHead>
+                    <TableHead className="hidden md:table-cell">Price</TableHead>
+                    <TableHead className="hidden lg:table-cell">Created</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ) : jobsData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
-                      No jobs found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  jobsData.map((job: any) => {
+                </TableHeader>
+                <TableBody>
+                  {jobsData.map((job: any) => {
                     const StatusIcon = getStatusIcon(job.status);
                     return (
                       <TableRow key={job.id}>
@@ -521,11 +674,11 @@ export default function AdminJobs() {
                         </TableCell>
                       </TableRow>
                     );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
