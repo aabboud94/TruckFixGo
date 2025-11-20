@@ -66,7 +66,7 @@ export default function Homepage() {
     <div className="min-h-screen bg-background">
       <SEOHead 
         title="America's #1 Mobile Truck Repair Network | 24/7 Emergency Service | TruckFixGo"
-        description="Keep America Moving! Serving Peterbilt, Kenworth, Freightliner, Mack & Western Star trucks across all major interstates. I-80, I-70, I-40 emergency repairs. Service First Policy - We fix now, paperwork later. Call 1-800-USA-TRUCK!"
+        description="Keep America Moving! Serving Peterbilt, Kenworth, Freightliner, Mack & Western Star trucks across all major interstates. Service First Policy - We fix now, paperwork later!"
         canonical="https://truckfixgo.com/"
       />
       
@@ -75,8 +75,7 @@ export default function Homepage() {
         <div className="bg-destructive text-destructive-foreground py-2 text-center">
           <div className="flex items-center justify-center gap-2">
             <Flag className="w-5 h-5" />
-            <span className="font-bold text-base md:text-sm uppercase tracking-wide">AMERICA'S EMERGENCY TRUCK REPAIR HOTLINE</span>
-            <a href="tel:1-800-USA-TRUCK" className="underline font-bold text-base md:text-sm animate-pulse">1-800-USA-TRUCK</a>
+            <span className="font-bold text-base md:text-sm uppercase tracking-wide">24/7 EMERGENCY TRUCK REPAIR SERVICE</span>
           </div>
         </div>
       </div>
@@ -111,10 +110,6 @@ export default function Homepage() {
             </nav>
 
             <div className="hidden md:flex items-center space-x-4">
-              <a href="tel:1-800-USA-TRUCK" className="flex items-center text-white font-bold hover:text-red-300">
-                <Phone className="w-5 h-5 mr-1 animate-pulse text-red-500" />
-                1-800-USA-TRUCK
-              </a>
               <Button 
                 size="lg"
                 className="bg-red-600 text-white font-bold uppercase tracking-wide hover-elevate animate-bounce" 
@@ -150,10 +145,6 @@ export default function Homepage() {
                 Join Our Team
               </a>
               <div className="flex flex-col space-y-2 pt-4">
-                <a href="tel:1-800-USA-TRUCK" className="flex items-center justify-center text-white font-bold hover:text-red-300 py-2">
-                  <Phone className="w-5 h-5 mr-1 animate-pulse text-red-400" />
-                  1-800-USA-TRUCK
-                </a>
                 <Button 
                   className="w-full bg-red-600 text-white font-bold uppercase hover-elevate animate-bounce" 
                   onClick={() => setLocation("/emergency")} 
@@ -204,8 +195,7 @@ export default function Homepage() {
           </h1>
           
           <p className="text-xl sm:text-2xl md:text-3xl text-white mb-8 font-bold leading-relaxed">
-            KEEP AMERICA MOVING • 24/7 EMERGENCY SERVICE<br/>
-            <span className="text-red-300">I-80 • I-70 • I-40 • I-10 • I-95 • I-5</span>
+            KEEP AMERICA MOVING • 24/7 EMERGENCY SERVICE
           </p>
 
           <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-8 border-2 border-white/20">
@@ -242,14 +232,6 @@ export default function Homepage() {
               <Calendar className="w-6 h-6 mr-2" />
               SCHEDULE SERVICE
             </Button>
-          </div>
-
-          <div className="text-white">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <Phone className="w-8 h-8" />
-              <span className="text-4xl font-black">1-800-USA-TRUCK</span>
-            </div>
-            <span className="text-xl font-semibold">24/7 AMERICAN EMERGENCY HOTLINE</span>
           </div>
           
           <div className="grid grid-cols-3 gap-4 max-w-3xl mx-auto mt-12">
@@ -579,7 +561,7 @@ export default function Homepage() {
             <div className="inline-flex items-center gap-4 bg-white text-blue-900 px-8 py-4 rounded-lg font-bold">
               <Award className="w-8 h-8 text-red-600" />
               <div>
-                <div className="text-2xl">SERVING AMERICAN TRUCKERS</div>
+                <div className="text-2xl">SERVING TRUCKERS</div>
                 <div className="text-sm">WITH PRIDE SINCE 2010</div>
               </div>
               <Award className="w-8 h-8 text-red-600" />
@@ -634,7 +616,7 @@ export default function Homepage() {
                 data-testid="button-cta-emergency"
               >
                 <Phone className="w-6 h-6 mr-2" />
-                CALL 1-800-USA-TRUCK
+                CALL FOR EMERGENCY SERVICE
               </Button>
               <Button 
                 size="lg"
@@ -704,7 +686,7 @@ export default function Homepage() {
               <h3 className="text-xl font-bold mb-4 text-red-400 uppercase">Contact</h3>
               <div className="flex items-center gap-2 mb-2">
                 <Phone className="w-5 h-5" />
-                <span className="font-bold text-xl">1-800-USA-TRUCK</span>
+                <span className="font-bold text-xl">24/7 EMERGENCY SERVICE</span>
               </div>
               <p className="mb-4">24/7 Emergency Hotline</p>
               <div className="flex gap-4">
