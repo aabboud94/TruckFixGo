@@ -6,6 +6,13 @@ TruckFixGo is a comprehensive mobile mechanics platform for semi-trucks and trai
 
 It supports three main user types: Drivers/Dispatchers for booking services, Mechanics/Contractors for job management and bidding, and Fleet Managers for vehicle tracking, maintenance scheduling, and cost analysis. Key capabilities include live mechanic tracking, multi-service support (e.g., tire repair, fuel delivery, diagnostics), photo uploads for documentation, service history tracking, and integrated payment processing for various methods including fleet accounts. The business vision is to streamline repair and maintenance services for the trucking industry, offering a robust, efficient, and user-friendly solution.
 
+## Recent Updates (November 20, 2025)
+
+### Critical Fixes Implemented:
+1. **Fixed Job Disappearing Issue**: Jobs no longer disappear from contractor dashboard after acceptance. Added queue synchronization to set contractor queue entry to 'current' status when jobs are accepted.
+2. **Dashboard Fallback Logic**: Added robust fallback mechanism in contractor dashboard to fetch active jobs directly when queue state is missing, ensuring jobs always display correctly.
+3. **DoorDash-Style Auto-Assignment**: Implemented automatic contractor assignment for emergency jobs with 3-minute acceptance timer. System automatically finds best available contractor and reassigns on timeout or decline.
+
 ## November 2025 Enhancement - 17 New API Features Implemented
 
 ### Completed Features:
