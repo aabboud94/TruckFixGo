@@ -25786,6 +25786,395 @@ The TruckFixGo Team
     }
   });
 
+  // ==================== EMAIL TESTING ROUTES ====================
+  
+  // Get email service status
+  app.get('/api/admin/email-test/status',
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const status = emailService.getStats();
+        const isReady = emailService.isReady();
+        const queuedFailures = emailService.getQueuedFailures();
+        
+        res.json({
+          connected: isReady,
+          verified: status.verified,
+          failures: status.failures,
+          successes: status.successes,
+          successRate: status.successRate,
+          queueSize: status.queueSize,
+          lastError: status.lastError,
+          queuedFailures: queuedFailures.slice(0, 10), // Last 10 failures
+          emailAccount: process.env.OFFICE365_EMAIL || 'Not configured'
+        });
+      } catch (error) {
+        console.error('[EmailTest] Status check error:', error);
+        res.status(500).json({ message: 'Failed to get email status' });
+      }
+    }
+  );
+
+  // Send basic test email
+  app.post('/api/admin/email-test/send-test',
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { to } = req.body;
+        
+        if (!to) {
+          return res.status(400).json({ message: 'Recipient email required' });
+        }
+        
+        const result = await emailService.testEmailDelivery();
+        
+        if (result.success) {
+          // Also send to the provided email
+          const customResult = await emailService.sendCustomEmail(
+            to,
+            '[TEST] TruckFixGo Email System Test',
+            `This is a test email from TruckFixGo Email Testing Dashboard.
+
+Test performed at: ${new Date().toLocaleString()}
+Test performed by: ${req.session.userId}
+
+This email confirms that the email service is working correctly.`,
+            {
+              performedBy: 'Admin Dashboard',
+              testType: 'Basic Connectivity Test'
+            }
+          );
+          
+          res.json({
+            success: true,
+            messageId: result.messageId,
+            customEmailSent: customResult,
+            message: `Test email sent successfully to ${to}`
+          });
+        } else {
+          res.status(500).json({
+            success: false,
+            error: result.error,
+            message: 'Failed to send test email'
+          });
+        }
+      } catch (error) {
+        console.error('[EmailTest] Send test error:', error);
+        res.status(500).json({ 
+          success: false,
+          error: (error as Error).message,
+          message: 'Failed to send test email' 
+        });
+      }
+    }
+  );
+
+  // Test specific email workflow
+  app.post('/api/admin/email-test/workflow/:workflowType',
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { workflowType } = req.params;
+        const { recipientEmail, ...data } = req.body;
+        
+        if (!recipientEmail) {
+          return res.status(400).json({ message: 'Recipient email required' });
+        }
+        
+        let success = false;
+        let emailData: any = {};
+        let subject = '';
+        
+        // Generate test data based on workflow type
+        switch (workflowType) {
+          case 'job-assignment-contractor':
+            emailData = {
+              contractorName: data.contractorName || 'John Doe',
+              jobNumber: data.jobNumber || 'TEST-' + Math.random().toString(36).substring(7),
+              customerName: data.customerName || 'Jane Smith',
+              address: data.address || '123 Test Street, Detroit, MI 48201',
+              issueDescription: data.issueDescription || 'Test issue - Tire replacement needed',
+              serviceType: data.serviceType || 'Tire Service',
+              estimatedPrice: data.estimatedPrice || 250.00
+            };
+            subject = '[TEST] Job Assignment - Contractor Notification';
+            success = await emailService.sendEmail(recipientEmail, 'JOB_ASSIGNED_CONTRACTOR', emailData);
+            break;
+            
+          case 'job-assignment-customer':
+            emailData = {
+              customerName: data.customerName || 'Jane Smith',
+              contractorName: data.contractorName || 'John Doe',
+              contractorRating: data.contractorRating || 4.8,
+              contractorTotalJobs: data.contractorTotalJobs || 150,
+              eta: data.eta || '30 minutes',
+              jobId: data.jobId || 'TEST-' + Math.random().toString(36).substring(7)
+            };
+            subject = '[TEST] Job Assignment - Customer Notification';
+            success = await emailService.sendEmail(recipientEmail, 'JOB_ASSIGNED_CUSTOMER', emailData);
+            break;
+            
+          case 'job-completion':
+            emailData = {
+              customerName: data.customerName || 'Jane Smith',
+              jobNumber: data.jobNumber || 'TEST-' + Math.random().toString(36).substring(7),
+              completedAt: data.completedAt || new Date().toISOString(),
+              serviceType: data.serviceType || 'Tire Service',
+              totalAmount: data.totalAmount || 250.00,
+              paymentMethod: data.paymentMethod || 'Credit Card',
+              technicianName: data.technicianName || 'John Doe',
+              issueDescription: data.issueDescription || 'Tire replacement completed',
+              resolutionNotes: data.resolutionNotes || 'Replaced front tires, balanced and aligned'
+            };
+            subject = '[TEST] Service Completed';
+            success = await emailService.sendEmail(recipientEmail, 'JOB_COMPLETED', emailData);
+            break;
+            
+          case 'invoice':
+            // For invoice, we need to generate a test PDF
+            const testInvoiceData = {
+              to: recipientEmail,
+              invoice: {
+                id: 'TEST-INV-' + Math.random().toString(36).substring(7),
+                invoiceNumber: 'INV-TEST-' + Date.now(),
+                status: 'sent',
+                dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
+              },
+              job: {
+                id: 'TEST-JOB-' + Math.random().toString(36).substring(7),
+                jobType: 'emergency',
+                completedAt: new Date(),
+                createdAt: new Date()
+              },
+              customer: {
+                firstName: data.customerFirstName || 'Jane',
+                lastName: data.customerLastName || 'Smith',
+                email: recipientEmail
+              },
+              personalMessage: '[TEST EMAIL] This is a test invoice email',
+              pdfBuffer: Buffer.from('TEST PDF CONTENT'), // Mock PDF
+              amountDue: data.amountDue || 250.00
+            };
+            
+            const invoiceResult = await emailService.sendInvoiceEmail(testInvoiceData);
+            success = invoiceResult.success;
+            subject = '[TEST] Invoice Email';
+            break;
+            
+          case 'password-reset':
+            emailData = {
+              userName: data.userName || 'Test User',
+              email: recipientEmail,
+              resetLink: data.resetLink || 'https://truckfixgo.com/reset-password/TEST-TOKEN',
+              expiresIn: data.expiresIn || '1 hour'
+            };
+            subject = '[TEST] Password Reset Request';
+            success = await emailService.sendEmail(recipientEmail, 'PASSWORD_RESET', emailData);
+            break;
+            
+          case 'welcome-contractor':
+            emailData = {
+              contractorName: data.contractorName || 'John Doe',
+              email: recipientEmail,
+              temporaryPassword: data.temporaryPassword || 'TEST-PASSWORD-123'
+            };
+            subject = '[TEST] Welcome to TruckFixGo';
+            success = await emailService.sendEmail(recipientEmail, 'WELCOME_CONTRACTOR', emailData);
+            break;
+            
+          case 'admin-unassigned':
+            emailData = {
+              jobNumber: data.jobNumber || 'TEST-' + Math.random().toString(36).substring(7),
+              createdAt: new Date().toISOString(),
+              minutesWaiting: data.minutesWaiting || 15,
+              customerName: data.customerName || 'Jane Smith',
+              address: data.address || '123 Test Street, Detroit, MI 48201',
+              issueDescription: data.issueDescription || 'Test issue - Urgent repair needed'
+            };
+            subject = '[TEST] Unassigned Job Alert';
+            success = await emailService.sendEmail(recipientEmail, 'JOB_UNASSIGNED_ADMIN', emailData);
+            break;
+            
+          case 'job-pending':
+            emailData = {
+              customerName: data.customerName || 'Jane Smith',
+              jobNumber: data.jobNumber || 'TEST-' + Math.random().toString(36).substring(7)
+            };
+            subject = '[TEST] Job Pending - Searching for Contractor';
+            success = await emailService.sendEmail(recipientEmail, 'JOB_PENDING_CUSTOMER', emailData);
+            break;
+            
+          case 'service-reminder':
+            // Service reminder using custom email
+            const reminderMessage = `[TEST EMAIL] Service Reminder
+
+Dear ${data.customerName || 'Customer'},
+
+This is a reminder that your scheduled service is coming up:
+
+Service Type: ${data.serviceType || 'Preventive Maintenance'}
+Scheduled Date: ${data.scheduledDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toLocaleDateString()}
+Time: ${data.scheduledTime || '10:00 AM'}
+Location: ${data.location || '123 Test Street, Detroit, MI 48201'}
+
+Please ensure your vehicle is available at the scheduled time.
+
+This is a test email from the TruckFixGo Email Testing Dashboard.`;
+            
+            success = await emailService.sendCustomEmail(
+              recipientEmail,
+              '[TEST] Service Reminder',
+              reminderMessage,
+              { testType: 'Service Reminder' }
+            );
+            break;
+            
+          case 'payment-due':
+            // Payment due reminder using custom email
+            const paymentMessage = `[TEST EMAIL] Payment Due Reminder
+
+Dear ${data.customerName || 'Customer'},
+
+This is a reminder that payment is due for your recent service:
+
+Invoice Number: ${data.invoiceNumber || 'INV-TEST-' + Date.now()}
+Amount Due: $${data.amountDue || '250.00'}
+Due Date: ${data.dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString()}
+
+Please make payment at your earliest convenience to avoid late fees.
+
+This is a test email from the TruckFixGo Email Testing Dashboard.`;
+            
+            success = await emailService.sendCustomEmail(
+              recipientEmail,
+              '[TEST] Payment Due Reminder',
+              paymentMessage,
+              { testType: 'Payment Reminder' }
+            );
+            break;
+            
+          case 'job-status':
+            // Job status update using custom email
+            const statusMessage = `[TEST EMAIL] Job Status Update
+
+Dear ${data.customerName || 'Customer'},
+
+Your job status has been updated:
+
+Job Number: ${data.jobNumber || 'TEST-' + Math.random().toString(36).substring(7)}
+Previous Status: ${data.previousStatus || 'assigned'}
+New Status: ${data.newStatus || 'in_progress'}
+Updated By: ${data.updatedBy || 'John Doe (Contractor)'}
+Notes: ${data.notes || 'Contractor has arrived and started working on your vehicle.'}
+
+This is a test email from the TruckFixGo Email Testing Dashboard.`;
+            
+            success = await emailService.sendCustomEmail(
+              recipientEmail,
+              '[TEST] Job Status Update',
+              statusMessage,
+              { testType: 'Status Update' }
+            );
+            break;
+            
+          case 'bidding':
+            // Bidding notification using custom email
+            const biddingMessage = `[TEST EMAIL] Bidding Notification
+
+Dear ${data.contractorName || 'Contractor'},
+
+${data.bidType === 'received' ? 'A new job is available for bidding:' : 
+  data.bidType === 'accepted' ? 'Your bid has been accepted!' :
+  'Your bid has been declined.'}
+
+Job Details:
+- Job Number: ${data.jobNumber || 'TEST-' + Math.random().toString(36).substring(7)}
+- Service Type: ${data.serviceType || 'Emergency Repair'}
+- Location: ${data.location || '123 Test Street, Detroit, MI 48201'}
+- Customer: ${data.customerName || 'Jane Smith'}
+${data.bidType === 'received' ? `- Bidding Deadline: ${data.deadline || new Date(Date.now() + 30 * 60 * 1000).toLocaleString()}` : ''}
+${data.bidAmount ? `- Bid Amount: $${data.bidAmount}` : ''}
+
+This is a test email from the TruckFixGo Email Testing Dashboard.`;
+            
+            success = await emailService.sendCustomEmail(
+              recipientEmail,
+              `[TEST] Bidding ${data.bidType === 'received' ? 'Opportunity' : data.bidType === 'accepted' ? 'Accepted' : 'Declined'}`,
+              biddingMessage,
+              { testType: 'Bidding Notification' }
+            );
+            break;
+            
+          case 'emergency-sos':
+            // Emergency SOS using custom email  
+            const sosMessage = `[TEST EMAIL] EMERGENCY SOS ALERT
+
+⚠️ URGENT - EMERGENCY ASSISTANCE NEEDED ⚠️
+
+Driver: ${data.driverName || 'John Smith'}
+Vehicle: ${data.vehicleInfo || '2020 Peterbilt 579'}
+Location: ${data.location || '42.3314, -83.0458 (I-75 Northbound, Mile Marker 45)'}
+Time: ${new Date().toLocaleString()}
+
+Emergency Type: ${data.emergencyType || 'Vehicle Breakdown'}
+Description: ${data.description || 'Engine failure, vehicle disabled on highway shoulder'}
+
+Contact Number: ${data.contactNumber || '(313) 555-0911'}
+
+IMMEDIATE ASSISTANCE REQUIRED
+
+This is a test email from the TruckFixGo Email Testing Dashboard.`;
+            
+            success = await emailService.sendCustomEmail(
+              recipientEmail,
+              '[TEST] 🚨 EMERGENCY SOS ALERT',
+              sosMessage,
+              { testType: 'Emergency SOS', urgency: 'HIGH' }
+            );
+            break;
+            
+          case 'custom':
+            // Direct custom email
+            success = await emailService.sendCustomEmail(
+              recipientEmail,
+              `[TEST] ${data.subject || 'Custom Email Test'}`,
+              data.message || 'This is a test custom email from TruckFixGo Email Testing Dashboard.',
+              {
+                testType: 'Custom Email',
+                performedBy: 'Admin Dashboard'
+              }
+            );
+            break;
+            
+          default:
+            return res.status(400).json({ message: 'Invalid workflow type' });
+        }
+        
+        if (success) {
+          res.json({
+            success: true,
+            message: `Test email for ${workflowType} sent successfully to ${recipientEmail}`,
+            workflowType,
+            emailData
+          });
+        } else {
+          res.status(500).json({
+            success: false,
+            message: `Failed to send test email for ${workflowType}`,
+            workflowType
+          });
+        }
+      } catch (error) {
+        console.error(`[EmailTest] Workflow ${req.params.workflowType} error:`, error);
+        res.status(500).json({
+          success: false,
+          error: (error as Error).message,
+          message: `Failed to send test email for workflow ${req.params.workflowType}`
+        });
+      }
+    }
+  );
+
   // Create and return the HTTP server
   const server = createServer(app);
   return server;

@@ -91,6 +91,7 @@ import AdminInvoiceDefaults from "@/pages/admin/invoice-defaults";
 import AdminStatus from "@/pages/admin/status";
 import AIDispatchDashboard from "@/pages/admin/ai-dispatch-dashboard";
 import AdminTestTools from "@/pages/admin/test-tools";
+import AdminEmailTest from "@/pages/admin/email-test";
 import EmergencyResponsePage from "@/pages/emergency-response";
 import PaymentReconciliation from "@/pages/payment-reconciliation";
 import PartsInventory from "@/pages/admin/parts-inventory";
@@ -221,6 +222,7 @@ function Router() {
       <Route path="/admin/parts" component={PartsInventory} />
       <Route path="/admin/test-tools" component={AdminTestTools} />
       <Route path="/admin/test-tools/emails" component={AdminTestTools} />
+      <Route path="/admin/email-test" component={AdminEmailTest} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />

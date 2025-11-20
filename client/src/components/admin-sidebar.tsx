@@ -80,12 +80,18 @@ const menuItems = [
     ]
   },
   {
+    group: "System",
+    items: [
+      { title: "Email Testing", url: "/admin/email-test", icon: Mail, badge: null },
+      { title: "System Health", url: "/admin/health", icon: ShieldCheck, badge: null },
+      { title: "System Status", url: "/admin/status", icon: Activity, badge: "live" },
+    ]
+  },
+  {
     group: "Support",
     items: [
       { title: "Support Tools", url: "/admin/support", icon: HeadphonesIcon, badge: "3" },
       { title: "Review Moderation", url: "/admin/review-moderation", icon: MessageSquare, badge: null },
-      { title: "System Health", url: "/admin/health", icon: ShieldCheck, badge: null },
-      { title: "System Status", url: "/admin/status", icon: Activity, badge: "live" },
     ]
   }
 ];
