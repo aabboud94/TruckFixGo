@@ -183,27 +183,29 @@ export default function AdminBookingSettings() {
   };
   
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8">
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-6 w-6" />
-            Booking Configuration
+        <CardHeader className="px-3 sm:px-6">
+          <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
+            <Calendar className="h-5 w-5 sm:h-6 sm:w-6" />
+            <span className="text-base sm:text-xl">Booking Configuration</span>
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-xs sm:text-sm">
             Manage scheduled booking availability, time slots, and blackout dates
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 sm:px-6">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-2 w-full">
-              <TabsTrigger value="settings" className="flex items-center gap-2">
-                <Settings className="h-4 w-4" />
-                Time Slot Settings
+            <TabsList className="grid grid-cols-2 w-full h-auto">
+              <TabsTrigger value="settings" className="flex items-center gap-1 sm:gap-2 min-h-[44px] text-xs sm:text-sm px-2 sm:px-4">
+                <Settings className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Time Slot Settings</span>
+                <span className="sm:hidden">Time Slots</span>
               </TabsTrigger>
-              <TabsTrigger value="blacklist" className="flex items-center gap-2">
-                <Ban className="h-4 w-4" />
-                Blackout Dates
+              <TabsTrigger value="blacklist" className="flex items-center gap-1 sm:gap-2 min-h-[44px] text-xs sm:text-sm px-2 sm:px-4">
+                <Ban className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Blackout Dates</span>
+                <span className="sm:hidden">Blackouts</span>
               </TabsTrigger>
             </TabsList>
             
@@ -217,21 +219,22 @@ export default function AdminBookingSettings() {
                       <CardHeader>
                         <CardTitle className="text-lg">{service.name}</CardTitle>
                       </CardHeader>
-                      <CardContent>
-                        <div className="overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Day</TableHead>
-                                <TableHead>Active</TableHead>
-                                <TableHead>Start Time</TableHead>
-                                <TableHead>End Time</TableHead>
-                                <TableHead>Slot Duration (min)</TableHead>
-                                <TableHead>Buffer (min)</TableHead>
-                                <TableHead>Max Bookings</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
+                      <CardContent className="px-2 sm:px-6">
+                        <div className="overflow-x-auto -mx-2 sm:-mx-6">
+                          <div className="min-w-[600px] px-2 sm:px-6">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="text-xs sm:text-sm">Day</TableHead>
+                                  <TableHead className="text-xs sm:text-sm">Active</TableHead>
+                                  <TableHead className="text-xs sm:text-sm">Start</TableHead>
+                                  <TableHead className="text-xs sm:text-sm">End</TableHead>
+                                  <TableHead className="text-xs sm:text-sm hidden sm:table-cell">Slot (min)</TableHead>
+                                  <TableHead className="text-xs sm:text-sm hidden sm:table-cell">Buffer</TableHead>
+                                  <TableHead className="text-xs sm:text-sm">Max</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
                               {DAYS_OF_WEEK.map((day) => {
                                 const key = `${service.id}-${day.value}`;
                                 const existing = bookingSettings?.find(
@@ -240,13 +243,14 @@ export default function AdminBookingSettings() {
                                 
                                 return (
                                   <TableRow key={day.value}>
-                                    <TableCell className="font-medium">{day.label}</TableCell>
+                                    <TableCell className="font-medium text-xs sm:text-sm">{day.label.slice(0, 3)}</TableCell>
                                     <TableCell>
                                       <Switch
                                         checked={editingSettings[`${key}-isActive`] ?? existing?.isActive ?? true}
                                         onCheckedChange={(checked) =>
                                           handleSettingChange(service.id, day.value, "isActive", checked)
                                         }
+                                        className="min-h-[20px] min-w-[36px]"
                                         data-testid={`switch-active-${key}`}
                                       />
                                     </TableCell>
@@ -257,7 +261,7 @@ export default function AdminBookingSettings() {
                                         onChange={(e) =>
                                           handleSettingChange(service.id, day.value, "startTime", e.target.value)
                                         }
-                                        className="w-24"
+                                        className="w-16 sm:w-20 text-xs sm:text-sm min-h-[36px]"
                                         data-testid={`input-start-${key}`}
                                       />
                                     </TableCell>
@@ -268,11 +272,11 @@ export default function AdminBookingSettings() {
                                         onChange={(e) =>
                                           handleSettingChange(service.id, day.value, "endTime", e.target.value)
                                         }
-                                        className="w-24"
+                                        className="w-16 sm:w-20 text-xs sm:text-sm min-h-[36px]"
                                         data-testid={`input-end-${key}`}
                                       />
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="hidden sm:table-cell">
                                       <Input
                                         type="number"
                                         min="15"
@@ -282,11 +286,11 @@ export default function AdminBookingSettings() {
                                         onChange={(e) =>
                                           handleSettingChange(service.id, day.value, "slotDuration", parseInt(e.target.value))
                                         }
-                                        className="w-20"
+                                        className="w-16 text-xs sm:text-sm min-h-[36px]"
                                         data-testid={`input-duration-${key}`}
                                       />
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="hidden sm:table-cell">
                                       <Input
                                         type="number"
                                         min="0"
@@ -296,7 +300,7 @@ export default function AdminBookingSettings() {
                                         onChange={(e) =>
                                           handleSettingChange(service.id, day.value, "bufferTime", parseInt(e.target.value))
                                         }
-                                        className="w-20"
+                                        className="w-16 text-xs sm:text-sm min-h-[36px]"
                                         data-testid={`input-buffer-${key}`}
                                       />
                                     </TableCell>
@@ -309,7 +313,7 @@ export default function AdminBookingSettings() {
                                         onChange={(e) =>
                                           handleSettingChange(service.id, day.value, "maxBookingsPerSlot", parseInt(e.target.value))
                                         }
-                                        className="w-20"
+                                        className="w-12 sm:w-16 text-xs sm:text-sm min-h-[36px]"
                                         data-testid={`input-max-bookings-${key}`}
                                       />
                                     </TableCell>
@@ -317,7 +321,8 @@ export default function AdminBookingSettings() {
                                 );
                               })}
                             </TableBody>
-                          </Table>
+                            </Table>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>

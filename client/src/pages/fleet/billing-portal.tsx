@@ -298,44 +298,44 @@ export default function FleetBillingPortal() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-8">
+    <div className="container mx-auto px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8 space-y-4 sm:space-y-6 md:space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold" data-testid="text-page-title">Billing & Subscription</h1>
-        <p className="text-muted-foreground mt-1">Manage your fleet subscription and billing</p>
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold" data-testid="text-page-title">Billing & Subscription</h1>
+        <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage your fleet subscription and billing</p>
       </div>
 
       {/* Current Plan Overview */}
       <Card>
-        <CardHeader>
-          <div className="flex justify-between items-start">
+        <CardHeader className="px-3 sm:px-6">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
             <div>
-              <CardTitle>Current Subscription</CardTitle>
-              <CardDescription>Your active billing plan and usage</CardDescription>
+              <CardTitle className="text-lg sm:text-xl">Current Subscription</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">Your active billing plan and usage</CardDescription>
             </div>
             {getStatusBadge(subscription.status)}
           </div>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <CardContent className="space-y-4 sm:space-y-6 px-3 sm:px-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
             <div>
-              <p className="text-sm text-muted-foreground">Plan</p>
-              <p className="text-2xl font-bold">{subscription.planName}</p>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-xs sm:text-sm text-muted-foreground">Plan</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-bold">{subscription.planName}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                 ${subscription.baseAmount}/{subscription.billingCycle}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Next Billing Date</p>
-              <p className="text-lg font-semibold">
+              <p className="text-xs sm:text-sm text-muted-foreground">Next Billing Date</p>
+              <p className="text-sm sm:text-base md:text-lg font-semibold">
                 {subscription.nextBillingDate
-                  ? format(new Date(subscription.nextBillingDate), 'MMMM d, yyyy')
+                  ? format(new Date(subscription.nextBillingDate), 'MMM d, yyyy')
                   : 'N/A'}
               </p>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Monthly Savings</p>
-              <p className="text-lg font-semibold text-green-600 dark:text-green-400">
+            <div className="sm:col-span-2 md:col-span-1">
+              <p className="text-xs sm:text-sm text-muted-foreground">Monthly Savings</p>
+              <p className="text-sm sm:text-base md:text-lg font-semibold text-green-600 dark:text-green-400">
                 ${calculateSavings().toFixed(2)}
               </p>
             </div>
@@ -447,10 +447,11 @@ export default function FleetBillingPortal() {
             </div>
           </div>
         </CardContent>
-        <CardFooter className="flex gap-2">
+        <CardFooter className="flex flex-col sm:flex-row gap-2 px-3 sm:px-6">
           <Button
             variant="outline"
             onClick={() => setShowUpgradeDialog(true)}
+            className="w-full sm:w-auto"
             data-testid="button-change-plan"
           >
             Change Plan
@@ -458,14 +459,15 @@ export default function FleetBillingPortal() {
           <Button
             variant="outline"
             onClick={() => setShowPaymentDialog(true)}
+            className="w-full sm:w-auto"
             data-testid="button-payment-method"
           >
-            <CreditCard className="w-4 h-4 mr-2" />
+            <CreditCard className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
             Payment Method
           </Button>
           <Button
             variant="outline"
-            className="text-destructive"
+            className="text-destructive w-full sm:w-auto"
             onClick={() => setShowCancelDialog(true)}
             data-testid="button-cancel-subscription"
           >
@@ -476,33 +478,35 @@ export default function FleetBillingPortal() {
 
       {/* Billing History */}
       <Card>
-        <CardHeader>
-          <CardTitle>Billing History</CardTitle>
-          <CardDescription>View your past invoices and payments</CardDescription>
+        <CardHeader className="px-3 sm:px-6">
+          <CardTitle className="text-lg sm:text-xl">Billing History</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">View your past invoices and payments</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 sm:px-6">
           {billingHistory?.history?.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Invoice</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <div className="overflow-x-auto -mx-3 sm:-mx-6">
+              <div className="min-w-[500px] px-3 sm:px-6">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs sm:text-sm">Date</TableHead>
+                      <TableHead className="hidden sm:table-cell text-xs sm:text-sm">Period</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Amount</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Status</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Invoice</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                 {billingHistory.history.map((item: BillingHistory) => (
                   <TableRow key={item.id}>
-                    <TableCell>
+                    <TableCell className="text-xs sm:text-sm">
                       {format(new Date(item.billingDate), 'MMM d, yyyy')}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell text-xs sm:text-sm">
                       {format(new Date(item.billingPeriodStart), 'MMM d')} - 
                       {format(new Date(item.billingPeriodEnd), 'MMM d')}
                     </TableCell>
-                    <TableCell className="font-semibold">
+                    <TableCell className="font-semibold text-xs sm:text-sm">
                       ${item.totalAmount}
                     </TableCell>
                     <TableCell>
@@ -532,7 +536,9 @@ export default function FleetBillingPortal() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+                </Table>
+              </div>
+            </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               No billing history available

@@ -283,20 +283,20 @@ export default function AdminSettings() {
       title="Platform Settings"
       breadcrumbs={[{ label: "Settings" }]}
     >
-      <Tabs defaultValue="general" className="space-y-6">
+      <Tabs defaultValue="general" className="space-y-4 sm:space-y-6">
         <ScrollArea className="w-full">
-          <TabsList className="grid w-full grid-cols-11">
-            <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="pricing">Pricing</TabsTrigger>
-            <TabsTrigger value="surge">Surge Rules</TabsTrigger>
-            <TabsTrigger value="integrations">Integrations</TabsTrigger>
-            <TabsTrigger value="contractors">Contractors</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
-            <TabsTrigger value="fleet">Fleet Policies</TabsTrigger>
-            <TabsTrigger value="features">Features</TabsTrigger>
-            <TabsTrigger value="areas">Service Areas</TabsTrigger>
-            <TabsTrigger value="auto-assignment">Assignment</TabsTrigger>
-            <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+          <TabsList className="inline-flex h-auto min-w-max p-1">
+            <TabsTrigger value="general" className="min-h-[36px] px-2 sm:px-3 text-xs sm:text-sm">General</TabsTrigger>
+            <TabsTrigger value="pricing" className="min-h-[36px] px-2 sm:px-3 text-xs sm:text-sm">Pricing</TabsTrigger>
+            <TabsTrigger value="surge" className="min-h-[36px] px-2 sm:px-3 text-xs sm:text-sm">Surge Rules</TabsTrigger>
+            <TabsTrigger value="integrations" className="min-h-[36px] px-2 sm:px-3 text-xs sm:text-sm">Integrations</TabsTrigger>
+            <TabsTrigger value="contractors" className="min-h-[36px] px-2 sm:px-3 text-xs sm:text-sm">Contractors</TabsTrigger>
+            <TabsTrigger value="notifications" className="min-h-[36px] px-2 sm:px-3 text-xs sm:text-sm">Notifications</TabsTrigger>
+            <TabsTrigger value="fleet" className="min-h-[36px] px-2 sm:px-3 text-xs sm:text-sm">Fleet Policies</TabsTrigger>
+            <TabsTrigger value="features" className="min-h-[36px] px-2 sm:px-3 text-xs sm:text-sm">Features</TabsTrigger>
+            <TabsTrigger value="areas" className="min-h-[36px] px-2 sm:px-3 text-xs sm:text-sm">Service Areas</TabsTrigger>
+            <TabsTrigger value="auto-assignment" className="min-h-[36px] px-2 sm:px-3 text-xs sm:text-sm">Assignment</TabsTrigger>
+            <TabsTrigger value="monitoring" className="min-h-[36px] px-2 sm:px-3 text-xs sm:text-sm">Monitoring</TabsTrigger>
           </TabsList>
         </ScrollArea>
 
@@ -307,21 +307,22 @@ export default function AdminSettings() {
               <CardTitle>General Settings</CardTitle>
               <CardDescription>Configure platform name, contact info, and business hours</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2">
+            <CardContent className="space-y-4 sm:space-y-6">
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="platformName">Platform Name</Label>
+                  <Label htmlFor="platformName" className="text-sm">Platform Name</Label>
                   <Input
                     id="platformName"
                     defaultValue={currentSettings.general.platformName}
                     placeholder="TruckFixGo"
+                    className="min-h-[44px]"
                     data-testid="input-platform-name"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="timezone">Time Zone</Label>
+                  <Label htmlFor="timezone" className="text-sm">Time Zone</Label>
                   <Select defaultValue={currentSettings.general.timezone}>
-                    <SelectTrigger data-testid="select-timezone">
+                    <SelectTrigger className="min-h-[44px]" data-testid="select-timezone">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -333,41 +334,45 @@ export default function AdminSettings() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="supportEmail">Support Email</Label>
+                  <Label htmlFor="supportEmail" className="text-sm">Support Email</Label>
                   <Input
                     id="supportEmail"
                     type="email"
                     defaultValue={currentSettings.general.supportEmail}
                     placeholder="support@truckfixgo.com"
+                    className="min-h-[44px]"
                     data-testid="input-support-email"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="supportPhone">Support Phone</Label>
+                  <Label htmlFor="supportPhone" className="text-sm">Support Phone</Label>
                   <Input
                     id="supportPhone"
                     type="tel"
                     defaultValue={currentSettings.general.supportPhone}
                     placeholder="1-800-FIX-TRUCK"
+                    className="min-h-[44px]"
                     data-testid="input-support-phone"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="businessHours">Business Hours</Label>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="businessHours" className="text-sm">Business Hours</Label>
                   <Input
                     id="businessHours"
                     defaultValue={currentSettings.general.businessHours}
                     placeholder="24/7 or Mon-Fri 9am-5pm"
+                    className="min-h-[44px]"
                     data-testid="input-business-hours"
                   />
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 sm:col-span-2">
                   <Switch
                     id="maintenanceMode"
                     defaultChecked={currentSettings.general.maintenanceMode}
+                    className="min-h-[24px] min-w-[44px]"
                     data-testid="switch-maintenance-mode"
                   />
-                  <Label htmlFor="maintenanceMode">Maintenance Mode</Label>
+                  <Label htmlFor="maintenanceMode" className="text-sm">Maintenance Mode</Label>
                 </div>
               </div>
               <div className="flex justify-end">
@@ -460,44 +465,45 @@ export default function AdminSettings() {
               </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Service Name</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Base Rate</TableHead>
-                    <TableHead>Per Unit</TableHead>
-                    <TableHead>Unit Type</TableHead>
-                    <TableHead>Availability</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-[120px]">Service Name</TableHead>
+                      <TableHead className="hidden sm:table-cell min-w-[150px]">Description</TableHead>
+                      <TableHead className="min-w-[80px]">Base Rate</TableHead>
+                      <TableHead className="hidden md:table-cell min-w-[80px]">Per Unit</TableHead>
+                      <TableHead className="hidden lg:table-cell min-w-[80px]">Unit Type</TableHead>
+                      <TableHead className="hidden sm:table-cell min-w-[100px]">Availability</TableHead>
+                      <TableHead className="min-w-[80px]">Status</TableHead>
+                      <TableHead className="min-w-[100px]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                   {currentSettings.pricing.baseRates.map((rate, index) => {
                     // Generate a stable ID based on service name if not present
                     const serviceId = rate.id || `service-${rate.service.toLowerCase().replace(/\s+/g, '-')}`;
                     return (
                       <TableRow key={serviceId}>
-                        <TableCell className="font-medium">{rate.service}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
+                        <TableCell className="font-medium text-xs sm:text-sm">{rate.service}</TableCell>
+                        <TableCell className="hidden sm:table-cell text-xs sm:text-sm text-muted-foreground">
                           {rate.description || 'No description'}
                         </TableCell>
-                        <TableCell>${rate.base}</TableCell>
-                        <TableCell>
+                        <TableCell className="text-xs sm:text-sm">${rate.base}</TableCell>
+                        <TableCell className="hidden md:table-cell text-xs sm:text-sm">
                           ${rate.perHour || rate.perTruck || rate.perTire || rate.perUnit || 0}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell text-xs sm:text-sm">
                           {rate.unitType || (rate.perHour ? 'hour' : rate.perTruck ? 'truck' : rate.perTire ? 'tire' : 'service')}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
+                        <TableCell className="hidden sm:table-cell">
+                          <div className="flex flex-wrap gap-1">
                             {rate.emergencyAvailable !== false && <Badge variant="outline" className="text-xs">Emergency</Badge>}
                             {rate.scheduledAvailable !== false && <Badge variant="outline" className="text-xs">Scheduled</Badge>}
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={rate.isActive !== false ? "default" : "secondary"}>
+                          <Badge variant={rate.isActive !== false ? "default" : "secondary"} className="text-xs">
                             {rate.isActive !== false ? 'Active' : 'Inactive'}
                           </Badge>
                         </TableCell>
@@ -535,7 +541,8 @@ export default function AdminSettings() {
                     );
                   })}
                 </TableBody>
-              </Table>
+                </Table>
+              </div>
             </CardContent>
           </Card>
 

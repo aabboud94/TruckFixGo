@@ -230,33 +230,35 @@ export default function ContractorSettings() {
   }
 
   return (
-    <div className="container max-w-6xl mx-auto p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Contractor Settings</h1>
-        <p className="text-muted-foreground mt-2">
+    <div className="container max-w-6xl mx-auto px-3 py-4 sm:px-4 sm:py-6 md:px-6">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold">Contractor Settings</h1>
+        <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">
           Manage your availability, working hours, and job preferences
         </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="working-hours">
-            <Clock className="w-4 h-4 mr-2" />
-            Working Hours
-          </TabsTrigger>
-          <TabsTrigger value="vacation">
-            <CalendarDays className="w-4 h-4 mr-2" />
-            Time Off
-          </TabsTrigger>
-          <TabsTrigger value="preferences">
-            <Settings className="w-4 h-4 mr-2" />
-            Preferences
-          </TabsTrigger>
-          <TabsTrigger value="coverage">
-            <MapPin className="w-4 h-4 mr-2" />
-            Service Areas
-          </TabsTrigger>
-        </TabsList>
+        <ScrollArea className="w-full">
+          <TabsList className="inline-flex h-auto min-w-full sm:grid sm:grid-cols-4">
+            <TabsTrigger value="working-hours" className="min-h-[44px] px-2 flex-1 sm:flex-initial">
+              <Clock className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="text-xs sm:text-sm">Working Hours</span>
+            </TabsTrigger>
+            <TabsTrigger value="vacation" className="min-h-[44px] px-2 flex-1 sm:flex-initial">
+              <CalendarDays className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="text-xs sm:text-sm">Time Off</span>
+            </TabsTrigger>
+            <TabsTrigger value="preferences" className="min-h-[44px] px-2 flex-1 sm:flex-initial">
+              <Settings className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="text-xs sm:text-sm">Preferences</span>
+            </TabsTrigger>
+            <TabsTrigger value="coverage" className="min-h-[44px] px-2 flex-1 sm:flex-initial">
+              <MapPin className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="text-xs sm:text-sm">Service Areas</span>
+            </TabsTrigger>
+          </TabsList>
+        </ScrollArea>
 
         <TabsContent value="working-hours">
           <Card>
@@ -270,9 +272,9 @@ export default function ContractorSettings() {
               <Form {...workingHoursForm}>
                 <form onSubmit={workingHoursForm.handleSubmit(handleWorkingHoursSubmit)} className="space-y-6">
                   {daysOfWeek.map((day) => (
-                    <div key={day} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <Label className="text-base capitalize">{day}</Label>
+                    <div key={day} className="border rounded-lg p-3 sm:p-4">
+                      <div className="flex items-center justify-between mb-3 sm:mb-4">
+                        <Label className="text-sm sm:text-base capitalize">{day}</Label>
                         <FormField
                           control={workingHoursForm.control}
                           name={`${day}.enabled` as any}
@@ -283,26 +285,28 @@ export default function ContractorSettings() {
                                   checked={field.value}
                                   onCheckedChange={field.onChange}
                                   data-testid={`switch-${day}-enabled`}
+                                  className="min-h-[24px] min-w-[44px]"
                                 />
                               </FormControl>
-                              <FormLabel className="!mt-0">Available</FormLabel>
+                              <FormLabel className="!mt-0 text-sm">Available</FormLabel>
                             </FormItem>
                           )}
                         />
                       </div>
                       
                       {workingHoursForm.watch(`${day}.enabled` as any) && (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
                           <FormField
                             control={workingHoursForm.control}
                             name={`${day}.start` as any}
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Start Time</FormLabel>
+                                <FormLabel className="text-xs sm:text-sm">Start Time</FormLabel>
                                 <FormControl>
                                   <Input
                                     type="time"
                                     {...field}
+                                    className="min-h-[44px] text-sm"
                                     data-testid={`input-${day}-start`}
                                   />
                                 </FormControl>
@@ -315,11 +319,12 @@ export default function ContractorSettings() {
                             name={`${day}.end` as any}
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>End Time</FormLabel>
+                                <FormLabel className="text-xs sm:text-sm">End Time</FormLabel>
                                 <FormControl>
                                   <Input
                                     type="time"
                                     {...field}
+                                    className="min-h-[44px] text-sm"
                                     data-testid={`input-${day}-end`}
                                   />
                                 </FormControl>
@@ -331,8 +336,8 @@ export default function ContractorSettings() {
                             control={workingHoursForm.control}
                             name={`${day}.lunchStart` as any}
                             render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>
+                              <FormItem className="col-span-2 sm:col-span-1">
+                                <FormLabel className="text-xs sm:text-sm">
                                   <Coffee className="w-3 h-3 inline mr-1" />
                                   Lunch Start
                                 </FormLabel>
@@ -341,6 +346,7 @@ export default function ContractorSettings() {
                                     type="time"
                                     {...field}
                                     placeholder="Optional"
+                                    className="min-h-[44px] text-sm"
                                     data-testid={`input-${day}-lunch-start`}
                                   />
                                 </FormControl>
@@ -352,8 +358,8 @@ export default function ContractorSettings() {
                             control={workingHoursForm.control}
                             name={`${day}.lunchEnd` as any}
                             render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>
+                              <FormItem className="col-span-2 sm:col-span-1">
+                                <FormLabel className="text-xs sm:text-sm">
                                   <Coffee className="w-3 h-3 inline mr-1" />
                                   Lunch End
                                 </FormLabel>
@@ -362,6 +368,7 @@ export default function ContractorSettings() {
                                     type="time"
                                     {...field}
                                     placeholder="Optional"
+                                    className="min-h-[44px] text-sm"
                                     data-testid={`input-${day}-lunch-end`}
                                   />
                                 </FormControl>
@@ -397,25 +404,27 @@ export default function ContractorSettings() {
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex flex-col gap-3 sm:gap-4 sm:flex-row">
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
                         className={cn(
-                          "justify-start text-left font-normal flex-1",
+                          "justify-start text-left font-normal w-full sm:flex-1 min-h-[44px]",
                           !vacationDates.from && "text-muted-foreground"
                         )}
                         data-testid="button-vacation-date-range"
                       >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {vacationDates.from && vacationDates.to ? (
-                          <>
-                            {format(vacationDates.from, "PPP")} - {format(vacationDates.to, "PPP")}
-                          </>
-                        ) : (
-                          <span>Pick date range</span>
-                        )}
+                        <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
+                        <span className="truncate">
+                          {vacationDates.from && vacationDates.to ? (
+                            <>
+                              {format(vacationDates.from, "PP")} - {format(vacationDates.to, "PP")}
+                            </>
+                          ) : (
+                            "Pick date range"
+                          )}
+                        </span>
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -428,7 +437,8 @@ export default function ContractorSettings() {
                           to: vacationDates.to
                         }}
                         onSelect={(range: any) => setVacationDates(range || { from: undefined, to: undefined })}
-                        numberOfMonths={2}
+                        numberOfMonths={window.innerWidth < 640 ? 1 : 2}
+                        className="rounded-md"
                       />
                     </PopoverContent>
                   </Popover>
@@ -436,6 +446,7 @@ export default function ContractorSettings() {
                   <Button
                     onClick={handleAddVacation}
                     disabled={!vacationDates.from || !vacationDates.to || addVacationMutation.isPending}
+                    className="w-full sm:w-auto min-h-[44px]"
                     data-testid="button-add-vacation"
                   >
                     Add Time Off
@@ -449,13 +460,13 @@ export default function ContractorSettings() {
                   {settings?.vacations && settings.vacations.length > 0 ? (
                     <div className="space-y-2">
                       {settings.vacations.map((vacation: any) => (
-                        <div key={vacation.id} className="flex items-center justify-between p-4 border rounded-lg">
-                          <div>
-                            <div className="font-medium">
-                              {format(new Date(vacation.startDate), "PPP")} - {format(new Date(vacation.endDate), "PPP")}
+                        <div key={vacation.id} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 sm:p-4 border rounded-lg">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm sm:text-base truncate">
+                              {format(new Date(vacation.startDate), "PP")} - {format(new Date(vacation.endDate), "PP")}
                             </div>
                             {vacation.reason && (
-                              <div className="text-sm text-muted-foreground">{vacation.reason}</div>
+                              <div className="text-xs sm:text-sm text-muted-foreground truncate">{vacation.reason}</div>
                             )}
                           </div>
                           <Button
@@ -463,6 +474,7 @@ export default function ContractorSettings() {
                             size="sm"
                             onClick={() => deleteVacationMutation.mutate(vacation.id)}
                             disabled={deleteVacationMutation.isPending}
+                            className="w-full sm:w-auto min-h-[36px]"
                             data-testid={`button-delete-vacation-${vacation.id}`}
                           >
                             Remove
@@ -471,7 +483,7 @@ export default function ContractorSettings() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-muted-foreground">No scheduled time off</p>
+                    <p className="text-sm text-muted-foreground">No scheduled time off</p>
                   )}
                 </div>
               </div>
@@ -538,10 +550,10 @@ export default function ContractorSettings() {
                     control={preferencesForm.control}
                     name="autoAcceptJobs"
                     render={({ field }) => (
-                      <FormItem className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <FormLabel>Auto-Accept Jobs</FormLabel>
-                          <FormDescription>
+                      <FormItem className="flex flex-row items-start justify-between space-x-3">
+                        <div className="flex-1 space-y-0.5">
+                          <FormLabel className="text-sm">Auto-Accept Jobs</FormLabel>
+                          <FormDescription className="text-xs sm:text-sm">
                             Automatically accept jobs that match your criteria
                           </FormDescription>
                         </div>
@@ -549,6 +561,7 @@ export default function ContractorSettings() {
                           <Switch
                             checked={field.value}
                             onCheckedChange={field.onChange}
+                            className="min-h-[24px] min-w-[44px]"
                             data-testid="switch-auto-accept"
                           />
                         </FormControl>
@@ -560,10 +573,10 @@ export default function ContractorSettings() {
                     control={preferencesForm.control}
                     name="notifyOnNewJobs"
                     render={({ field }) => (
-                      <FormItem className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <FormLabel>New Job Notifications</FormLabel>
-                          <FormDescription>
+                      <FormItem className="flex flex-row items-start justify-between space-x-3">
+                        <div className="flex-1 space-y-0.5">
+                          <FormLabel className="text-sm">New Job Notifications</FormLabel>
+                          <FormDescription className="text-xs sm:text-sm">
                             Receive notifications for new job opportunities
                           </FormDescription>
                         </div>
@@ -571,6 +584,7 @@ export default function ContractorSettings() {
                           <Switch
                             checked={field.value}
                             onCheckedChange={field.onChange}
+                            className="min-h-[24px] min-w-[44px]"
                             data-testid="switch-notify-new"
                           />
                         </FormControl>
@@ -582,10 +596,10 @@ export default function ContractorSettings() {
                     control={preferencesForm.control}
                     name="notifyOnEmergencyJobs"
                     render={({ field }) => (
-                      <FormItem className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <FormLabel>Emergency Job Alerts</FormLabel>
-                          <FormDescription>
+                      <FormItem className="flex flex-row items-start justify-between space-x-3">
+                        <div className="flex-1 space-y-0.5">
+                          <FormLabel className="text-sm">Emergency Job Alerts</FormLabel>
+                          <FormDescription className="text-xs sm:text-sm">
                             Get notified immediately for emergency jobs
                           </FormDescription>
                         </div>
@@ -593,6 +607,7 @@ export default function ContractorSettings() {
                           <Switch
                             checked={field.value}
                             onCheckedChange={field.onChange}
+                            className="min-h-[24px] min-w-[44px]"
                             data-testid="switch-notify-emergency"
                           />
                         </FormControl>
@@ -625,8 +640,8 @@ export default function ContractorSettings() {
             <CardContent>
               <div className="space-y-6">
                 <div>
-                  <Label className="text-base mb-4 block">Service Types</Label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <Label className="text-sm sm:text-base mb-3 sm:mb-4 block">Service Types</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                     {[
                       "Tire Service",
                       "Battery Service",
@@ -643,13 +658,14 @@ export default function ContractorSettings() {
                     ].map((service) => (
                       <label
                         key={service}
-                        className="flex items-center space-x-2 cursor-pointer"
+                        className="flex items-center space-x-2 cursor-pointer p-2 hover:bg-accent/5 rounded-md min-h-[44px]"
                       >
                         <Checkbox
                           value={service}
+                          className="h-5 w-5"
                           data-testid={`checkbox-service-${service.toLowerCase().replace(/\s+/g, '-')}`}
                         />
-                        <span className="text-sm">{service}</span>
+                        <span className="text-sm select-none">{service}</span>
                       </label>
                     ))}
                   </div>
@@ -658,8 +674,8 @@ export default function ContractorSettings() {
                 <Separator />
 
                 <div>
-                  <Label className="text-base mb-4 block">Coverage Areas</Label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <Label className="text-sm sm:text-base mb-3 sm:mb-4 block">Coverage Areas</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                     {[
                       "Downtown",
                       "North Side",
@@ -674,19 +690,20 @@ export default function ContractorSettings() {
                     ].map((area) => (
                       <label
                         key={area}
-                        className="flex items-center space-x-2 cursor-pointer"
+                        className="flex items-center space-x-2 cursor-pointer p-2 hover:bg-accent/5 rounded-md min-h-[44px]"
                       >
                         <Checkbox
                           value={area}
+                          className="h-5 w-5"
                           data-testid={`checkbox-area-${area.toLowerCase().replace(/\s+/g, '-')}`}
                         />
-                        <span className="text-sm">{area}</span>
+                        <span className="text-sm select-none">{area}</span>
                       </label>
                     ))}
                   </div>
                 </div>
 
-                <Button className="w-full" data-testid="button-save-coverage">
+                <Button className="w-full min-h-[44px]" data-testid="button-save-coverage">
                   Save Coverage Areas
                 </Button>
               </div>
