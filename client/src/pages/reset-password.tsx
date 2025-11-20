@@ -137,18 +137,19 @@ export default function ResetPassword() {
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 flex flex-col">
       {/* Header */}
       <header className="bg-background border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
+        <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-14 sm:h-16">
+            <div className="flex items-center gap-2 sm:gap-3">
               <Button
                 variant="ghost"
                 size="icon"
+                className="h-9 w-9"
                 onClick={() => setLocation("/")}
                 data-testid="button-back-home"
               >
                 <Home className="h-5 w-5" />
               </Button>
-              <span className="ml-4 text-2xl font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+              <span className="text-lg sm:text-xl md:text-2xl font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent truncate">
                 TruckFixGo
               </span>
             </div>
@@ -157,20 +158,20 @@ export default function ResetPassword() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex items-center justify-center px-4 py-12">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8">
         <Card className="w-full max-w-md">
-          <CardHeader className="space-y-1">
-            <div className="flex items-center justify-center mb-4">
+          <CardHeader className="space-y-1 p-4 sm:p-6">
+            <div className="flex items-center justify-center mb-3 sm:mb-4">
               <div className="relative">
-                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-                  <Truck className="w-8 h-8 text-primary" />
+                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                  <Truck className="w-7 h-7 sm:w-8 sm:h-8 text-primary" />
                 </div>
-                <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-orange-500/10 rounded-full flex items-center justify-center">
-                  <KeyRound className="w-3 h-3 text-orange-500" />
+                <div className="absolute -bottom-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 bg-orange-500/10 rounded-full flex items-center justify-center">
+                  <KeyRound className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-orange-500" />
                 </div>
               </div>
             </div>
-            <CardTitle className="text-2xl text-center">
+            <CardTitle className="text-xl sm:text-2xl text-center">
               {tokenStatus === "success" ? "Password Reset Complete" : "Reset Your Password"}
             </CardTitle>
             <CardDescription className="text-center">
