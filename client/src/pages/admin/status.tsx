@@ -889,26 +889,50 @@ export default function AdminStatusPage() {
                   {/* Table Statistics */}
                   <div>
                     <h4 className="mb-3 font-medium">Table Statistics</h4>
-                    <ScrollArea className="h-64">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Table</TableHead>
-                            <TableHead className="text-right">Row Count</TableHead>
-                            <TableHead className="text-right">Size</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {databaseHealth.tableStats.map((table) => (
-                            <TableRow key={table.tableName}>
-                              <TableCell className="font-mono text-sm">{table.tableName}</TableCell>
-                              <TableCell className="text-right">{table.rowCount.toLocaleString()}</TableCell>
-                              <TableCell className="text-right">{formatBytes(table.sizeBytes)}</TableCell>
+                    {isMobile ? (
+                      // Mobile card view
+                      <div className="space-y-3 max-h-64 overflow-y-auto">
+                        {databaseHealth.tableStats.map((table) => (
+                          <Card key={table.tableName}>
+                            <CardContent className="p-4">
+                              <div className="space-y-2">
+                                <h5 className="font-mono text-sm font-medium">{table.tableName}</h5>
+                                <div className="flex justify-between">
+                                  <span className="text-sm text-muted-foreground">Rows</span>
+                                  <span className="text-sm font-medium">{table.rowCount.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-sm text-muted-foreground">Size</span>
+                                  <span className="text-sm font-medium">{formatBytes(table.sizeBytes)}</span>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : (
+                      // Desktop table view
+                      <ScrollArea className="h-64">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Table</TableHead>
+                              <TableHead className="text-right">Row Count</TableHead>
+                              <TableHead className="text-right">Size</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </ScrollArea>
+                          </TableHeader>
+                          <TableBody>
+                            {databaseHealth.tableStats.map((table) => (
+                              <TableRow key={table.tableName}>
+                                <TableCell className="font-mono text-sm">{table.tableName}</TableCell>
+                                <TableCell className="text-right">{table.rowCount.toLocaleString()}</TableCell>
+                                <TableCell className="text-right">{formatBytes(table.sizeBytes)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    )}
                   </div>
 
                   {/* Slow Queries */}
@@ -1080,36 +1104,22 @@ export default function AdminStatusPage() {
                       </div>
                     </div>
 
-                    <ScrollArea className="h-96">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-32">Timestamp</TableHead>
-                            <TableHead className="w-24">Type</TableHead>
-                            <TableHead>Message</TableHead>
-                            <TableHead className="w-32">Endpoint</TableHead>
-                            <TableHead className="w-20">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredErrors.length > 0 ? (
-                            filteredErrors.map((error, idx) => (
-                              <TableRow key={idx}>
-                                <TableCell className="text-xs">
-                                  {format(new Date(error.timestamp), 'HH:mm:ss')}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="destructive" className="text-xs">
-                                    {error.type}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="max-w-xs truncate text-sm">
-                                  {error.message}
-                                </TableCell>
-                                <TableCell className="text-xs">
-                                  {error.endpoint || '-'}
-                                </TableCell>
-                                <TableCell>
+                    {isMobile ? (
+                      // Mobile card view
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {filteredErrors.length > 0 ? (
+                          filteredErrors.map((error, idx) => (
+                            <Card key={idx}>
+                              <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="destructive" className="text-xs">
+                                      {error.type}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      {format(new Date(error.timestamp), 'HH:mm:ss')}
+                                    </span>
+                                  </div>
                                   {error.stack && (
                                     <Button
                                       variant="ghost"
@@ -1123,19 +1133,87 @@ export default function AdminStatusPage() {
                                       <Code className="h-4 w-4" />
                                     </Button>
                                   )}
+                                </div>
+                              </CardHeader>
+                              <CardContent className="space-y-2">
+                                <div>
+                                  <span className="text-sm font-medium">Error Message</span>
+                                  <p className="text-sm text-muted-foreground mt-1">{error.message}</p>
+                                </div>
+                                {error.endpoint && (
+                                  <div>
+                                    <span className="text-sm font-medium">Endpoint</span>
+                                    <p className="text-sm text-muted-foreground">{error.endpoint}</p>
+                                  </div>
+                                )}
+                              </CardContent>
+                            </Card>
+                          ))
+                        ) : (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No errors found
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      // Desktop table view
+                      <ScrollArea className="h-96">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-32">Timestamp</TableHead>
+                              <TableHead className="w-24">Type</TableHead>
+                              <TableHead>Message</TableHead>
+                              <TableHead className="w-32">Endpoint</TableHead>
+                              <TableHead className="w-20">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredErrors.length > 0 ? (
+                              filteredErrors.map((error, idx) => (
+                                <TableRow key={idx}>
+                                  <TableCell className="text-xs">
+                                    {format(new Date(error.timestamp), 'HH:mm:ss')}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="destructive" className="text-xs">
+                                      {error.type}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="max-w-xs truncate text-sm">
+                                    {error.message}
+                                  </TableCell>
+                                  <TableCell className="text-xs">
+                                    {error.endpoint || '-'}
+                                  </TableCell>
+                                  <TableCell>
+                                    {error.stack && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          setSelectedError(error);
+                                          setShowStackTrace(true);
+                                        }}
+                                        data-testid={`button-view-stack-${idx}`}
+                                      >
+                                        <Code className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            ) : (
+                              <TableRow>
+                                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                                  No errors found
                                 </TableCell>
                               </TableRow>
-                            ))
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={5} className="text-center text-muted-foreground">
-                                No errors found
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </ScrollArea>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    )}
                   </div>
                 </>
               ) : (

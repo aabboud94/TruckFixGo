@@ -222,110 +222,214 @@ export default function AdminBookingSettings() {
                         <CardTitle className="text-lg">{service.name}</CardTitle>
                       </CardHeader>
                       <CardContent className="px-2 sm:px-6">
-                        <div className="overflow-x-auto -mx-2 sm:-mx-6">
-                          <div className="min-w-[600px] px-2 sm:px-6">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="text-xs sm:text-sm">Day</TableHead>
-                                  <TableHead className="text-xs sm:text-sm">Active</TableHead>
-                                  <TableHead className="text-xs sm:text-sm">Start</TableHead>
-                                  <TableHead className="text-xs sm:text-sm">End</TableHead>
-                                  <TableHead className="text-xs sm:text-sm hidden sm:table-cell">Slot (min)</TableHead>
-                                  <TableHead className="text-xs sm:text-sm hidden sm:table-cell">Buffer</TableHead>
-                                  <TableHead className="text-xs sm:text-sm">Max</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                              {DAYS_OF_WEEK.map((day) => {
-                                const key = `${service.id}-${day.value}`;
-                                const existing = bookingSettings?.find(
-                                  (s) => s.serviceTypeId === service.id && s.dayOfWeek === day.value
-                                );
-                                
-                                return (
-                                  <TableRow key={day.value}>
-                                    <TableCell className="font-medium text-xs sm:text-sm">{day.label.slice(0, 3)}</TableCell>
-                                    <TableCell>
+                        {isMobile ? (
+                          // Mobile card view for schedule settings
+                          <div className="space-y-3">
+                            {DAYS_OF_WEEK.map((day) => {
+                              const key = `${service.id}-${day.value}`;
+                              const existing = bookingSettings?.find(
+                                (s) => s.serviceTypeId === service.id && s.dayOfWeek === day.value
+                              );
+                              
+                              return (
+                                <Card key={day.value}>
+                                  <CardHeader className="pb-3">
+                                    <div className="flex items-center justify-between">
+                                      <h4 className="font-medium">{day.label}</h4>
                                       <Switch
                                         checked={editingSettings[`${key}-isActive`] ?? existing?.isActive ?? true}
                                         onCheckedChange={(checked) =>
                                           handleSettingChange(service.id, day.value, "isActive", checked)
                                         }
-                                        className="min-h-[20px] min-w-[36px]"
                                         data-testid={`switch-active-${key}`}
                                       />
-                                    </TableCell>
-                                    <TableCell>
-                                      <Input
-                                        type="time"
-                                        value={editingSettings[`${key}-startTime`] ?? existing?.startTime ?? "09:00"}
-                                        onChange={(e) =>
-                                          handleSettingChange(service.id, day.value, "startTime", e.target.value)
-                                        }
-                                        className="w-16 sm:w-20 text-xs sm:text-sm min-h-[36px]"
-                                        data-testid={`input-start-${key}`}
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      <Input
-                                        type="time"
-                                        value={editingSettings[`${key}-endTime`] ?? existing?.endTime ?? "17:00"}
-                                        onChange={(e) =>
-                                          handleSettingChange(service.id, day.value, "endTime", e.target.value)
-                                        }
-                                        className="w-16 sm:w-20 text-xs sm:text-sm min-h-[36px]"
-                                        data-testid={`input-end-${key}`}
-                                      />
-                                    </TableCell>
-                                    <TableCell className="hidden sm:table-cell">
-                                      <Input
-                                        type="number"
-                                        min="15"
-                                        max="240"
-                                        step="15"
-                                        value={editingSettings[`${key}-slotDuration`] ?? existing?.slotDuration ?? 60}
-                                        onChange={(e) =>
-                                          handleSettingChange(service.id, day.value, "slotDuration", parseInt(e.target.value))
-                                        }
-                                        className="w-16 text-xs sm:text-sm min-h-[36px]"
-                                        data-testid={`input-duration-${key}`}
-                                      />
-                                    </TableCell>
-                                    <TableCell className="hidden sm:table-cell">
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        max="60"
-                                        step="5"
-                                        value={editingSettings[`${key}-bufferTime`] ?? existing?.bufferTime ?? 15}
-                                        onChange={(e) =>
-                                          handleSettingChange(service.id, day.value, "bufferTime", parseInt(e.target.value))
-                                        }
-                                        className="w-16 text-xs sm:text-sm min-h-[36px]"
-                                        data-testid={`input-buffer-${key}`}
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      <Input
-                                        type="number"
-                                        min="1"
-                                        max="10"
-                                        value={editingSettings[`${key}-maxBookingsPerSlot`] ?? existing?.maxBookingsPerSlot ?? 1}
-                                        onChange={(e) =>
-                                          handleSettingChange(service.id, day.value, "maxBookingsPerSlot", parseInt(e.target.value))
-                                        }
-                                        className="w-12 sm:w-16 text-xs sm:text-sm min-h-[36px]"
-                                        data-testid={`input-max-bookings-${key}`}
-                                      />
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                            </TableBody>
-                            </Table>
+                                    </div>
+                                  </CardHeader>
+                                  <CardContent className="space-y-3">
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div>
+                                        <Label className="text-xs">Start Time</Label>
+                                        <Input
+                                          type="time"
+                                          value={editingSettings[`${key}-startTime`] ?? existing?.startTime ?? "09:00"}
+                                          onChange={(e) =>
+                                            handleSettingChange(service.id, day.value, "startTime", e.target.value)
+                                          }
+                                          className="h-11"
+                                          data-testid={`input-start-${key}`}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-xs">End Time</Label>
+                                        <Input
+                                          type="time"
+                                          value={editingSettings[`${key}-endTime`] ?? existing?.endTime ?? "17:00"}
+                                          onChange={(e) =>
+                                            handleSettingChange(service.id, day.value, "endTime", e.target.value)
+                                          }
+                                          className="h-11"
+                                          data-testid={`input-end-${key}`}
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-3">
+                                      <div>
+                                        <Label className="text-xs">Slot (min)</Label>
+                                        <Input
+                                          type="number"
+                                          min="15"
+                                          max="240"
+                                          step="15"
+                                          value={editingSettings[`${key}-slotDuration`] ?? existing?.slotDuration ?? 60}
+                                          onChange={(e) =>
+                                            handleSettingChange(service.id, day.value, "slotDuration", parseInt(e.target.value))
+                                          }
+                                          className="h-11"
+                                          data-testid={`input-duration-${key}`}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-xs">Buffer</Label>
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          max="60"
+                                          step="5"
+                                          value={editingSettings[`${key}-bufferTime`] ?? existing?.bufferTime ?? 15}
+                                          onChange={(e) =>
+                                            handleSettingChange(service.id, day.value, "bufferTime", parseInt(e.target.value))
+                                          }
+                                          className="h-11"
+                                          data-testid={`input-buffer-${key}`}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-xs">Max/Slot</Label>
+                                        <Input
+                                          type="number"
+                                          min="1"
+                                          max="10"
+                                          value={editingSettings[`${key}-maxBookingsPerSlot`] ?? existing?.maxBookingsPerSlot ?? 1}
+                                          onChange={(e) =>
+                                            handleSettingChange(service.id, day.value, "maxBookingsPerSlot", parseInt(e.target.value))
+                                          }
+                                          className="h-11"
+                                          data-testid={`input-max-bookings-${key}`}
+                                        />
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              );
+                            })}
                           </div>
-                        </div>
+                        ) : (
+                          // Desktop table view
+                          <div className="overflow-x-auto -mx-2 sm:-mx-6">
+                            <div className="min-w-[600px] px-2 sm:px-6">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="text-xs sm:text-sm">Day</TableHead>
+                                    <TableHead className="text-xs sm:text-sm">Active</TableHead>
+                                    <TableHead className="text-xs sm:text-sm">Start</TableHead>
+                                    <TableHead className="text-xs sm:text-sm">End</TableHead>
+                                    <TableHead className="text-xs sm:text-sm hidden sm:table-cell">Slot (min)</TableHead>
+                                    <TableHead className="text-xs sm:text-sm hidden sm:table-cell">Buffer</TableHead>
+                                    <TableHead className="text-xs sm:text-sm">Max</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                {DAYS_OF_WEEK.map((day) => {
+                                  const key = `${service.id}-${day.value}`;
+                                  const existing = bookingSettings?.find(
+                                    (s) => s.serviceTypeId === service.id && s.dayOfWeek === day.value
+                                  );
+                                  
+                                  return (
+                                    <TableRow key={day.value}>
+                                      <TableCell className="font-medium text-xs sm:text-sm">{day.label.slice(0, 3)}</TableCell>
+                                      <TableCell>
+                                        <Switch
+                                          checked={editingSettings[`${key}-isActive`] ?? existing?.isActive ?? true}
+                                          onCheckedChange={(checked) =>
+                                            handleSettingChange(service.id, day.value, "isActive", checked)
+                                          }
+                                          className="min-h-[20px] min-w-[36px]"
+                                          data-testid={`switch-active-${key}`}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <Input
+                                          type="time"
+                                          value={editingSettings[`${key}-startTime`] ?? existing?.startTime ?? "09:00"}
+                                          onChange={(e) =>
+                                            handleSettingChange(service.id, day.value, "startTime", e.target.value)
+                                          }
+                                          className="w-16 sm:w-20 text-xs sm:text-sm min-h-[36px]"
+                                          data-testid={`input-start-${key}`}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <Input
+                                          type="time"
+                                          value={editingSettings[`${key}-endTime`] ?? existing?.endTime ?? "17:00"}
+                                          onChange={(e) =>
+                                            handleSettingChange(service.id, day.value, "endTime", e.target.value)
+                                          }
+                                          className="w-16 sm:w-20 text-xs sm:text-sm min-h-[36px]"
+                                          data-testid={`input-end-${key}`}
+                                        />
+                                      </TableCell>
+                                      <TableCell className="hidden sm:table-cell">
+                                        <Input
+                                          type="number"
+                                          min="15"
+                                          max="240"
+                                          step="15"
+                                          value={editingSettings[`${key}-slotDuration`] ?? existing?.slotDuration ?? 60}
+                                          onChange={(e) =>
+                                            handleSettingChange(service.id, day.value, "slotDuration", parseInt(e.target.value))
+                                          }
+                                          className="w-16 text-xs sm:text-sm min-h-[36px]"
+                                          data-testid={`input-duration-${key}`}
+                                        />
+                                      </TableCell>
+                                      <TableCell className="hidden sm:table-cell">
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          max="60"
+                                          step="5"
+                                          value={editingSettings[`${key}-bufferTime`] ?? existing?.bufferTime ?? 15}
+                                          onChange={(e) =>
+                                            handleSettingChange(service.id, day.value, "bufferTime", parseInt(e.target.value))
+                                          }
+                                          className="w-16 text-xs sm:text-sm min-h-[36px]"
+                                          data-testid={`input-buffer-${key}`}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <Input
+                                          type="number"
+                                          min="1"
+                                          max="10"
+                                          value={editingSettings[`${key}-maxBookingsPerSlot`] ?? existing?.maxBookingsPerSlot ?? 1}
+                                          onChange={(e) =>
+                                            handleSettingChange(service.id, day.value, "maxBookingsPerSlot", parseInt(e.target.value))
+                                          }
+                                          className="w-12 sm:w-16 text-xs sm:text-sm min-h-[36px]"
+                                          data-testid={`input-max-bookings-${key}`}
+                                        />
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                              </Table>
+                            </div>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
@@ -433,49 +537,97 @@ export default function AdminBookingSettings() {
                   {blacklistLoading ? (
                     <p>Loading blacklist...</p>
                   ) : blacklist && blacklist.length > 0 ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Service</TableHead>
-                          <TableHead>Time Range</TableHead>
-                          <TableHead>Reason</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
+                    isMobile ? (
+                      // Mobile card view
+                      <div className="space-y-3">
                         {blacklist.map((entry) => {
                           const service = serviceTypes?.find((s) => s.id === entry.serviceTypeId);
                           return (
-                            <TableRow key={entry.id}>
-                              <TableCell>{entry.date}</TableCell>
-                              <TableCell>{service?.name || entry.serviceTypeId}</TableCell>
-                              <TableCell>
-                                {entry.startTime && entry.endTime ? (
-                                  <Badge variant="outline">
-                                    {entry.startTime} - {entry.endTime}
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="secondary">All Day</Badge>
-                                )}
-                              </TableCell>
-                              <TableCell>{entry.reason || "-"}</TableCell>
-                              <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => deleteBlacklist.mutate(entry.id)}
-                                  disabled={deleteBlacklist.isPending}
-                                  data-testid={`button-delete-blacklist-${entry.id}`}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
+                            <Card key={entry.id}>
+                              <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="font-medium">{entry.date}</div>
+                                    <div className="text-sm text-muted-foreground mt-1">
+                                      {service?.name || entry.serviceTypeId}
+                                    </div>
+                                  </div>
+                                  {entry.startTime && entry.endTime ? (
+                                    <Badge variant="outline">
+                                      {entry.startTime} - {entry.endTime}
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="secondary">All Day</Badge>
+                                  )}
+                                </div>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-muted-foreground">
+                                    {entry.reason || "No reason specified"}
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => deleteBlacklist.mutate(entry.id)}
+                                    disabled={deleteBlacklist.isPending}
+                                    className="h-11"
+                                    data-testid={`button-delete-blacklist-${entry.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </CardContent>
+                            </Card>
                           );
                         })}
-                      </TableBody>
-                    </Table>
+                      </div>
+                    ) : (
+                      // Desktop table view
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Service</TableHead>
+                            <TableHead>Time Range</TableHead>
+                            <TableHead>Reason</TableHead>
+                            <TableHead></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {blacklist.map((entry) => {
+                            const service = serviceTypes?.find((s) => s.id === entry.serviceTypeId);
+                            return (
+                              <TableRow key={entry.id}>
+                                <TableCell>{entry.date}</TableCell>
+                                <TableCell>{service?.name || entry.serviceTypeId}</TableCell>
+                                <TableCell>
+                                  {entry.startTime && entry.endTime ? (
+                                    <Badge variant="outline">
+                                      {entry.startTime} - {entry.endTime}
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="secondary">All Day</Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell>{entry.reason || "-"}</TableCell>
+                                <TableCell>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => deleteBlacklist.mutate(entry.id)}
+                                    disabled={deleteBlacklist.isPending}
+                                    data-testid={`button-delete-blacklist-${entry.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    )
                   ) : (
                     <p className="text-muted-foreground">No blackout dates configured</p>
                   )}
