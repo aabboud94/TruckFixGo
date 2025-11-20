@@ -496,12 +496,12 @@ export default function AdminContractors() {
       {/* Main Contractors Card */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>All Contractors</CardTitle>
               <CardDescription>Manage contractor accounts and performance</CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row w-full sm:w-auto">
               <Button
                 variant="outline"
                 onClick={() => refetch()}
