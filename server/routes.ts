@@ -80,6 +80,7 @@ import {
   transactions,
   contractorProfiles,
   jobs,
+  contractorJobQueue,
   passwordResetTokens,
   fleetContacts,
   users,
@@ -2591,7 +2592,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Get current job and queue entry using the new queue methods
-        const { job: currentJob, queueEntry: currentQueueEntry } = await storage.getContractorCurrentJob(contractorId);
+        let { job: currentJob, queueEntry: currentQueueEntry } = await storage.getContractorCurrentJob(contractorId);
+        
+        // FALLBACK: If no current queue entry, check for active jobs directly
+        if (!currentJob) {
+          console.log('[Dashboard] No current job from queue, checking for active jobs directly');
+          
+          // Look for jobs that are assigned to this contractor and in active states
+          const activeJobs = await db.select()
+            .from(jobs)
+            .where(and(
+              eq(jobs.contractorId, contractorId),
+              inArray(jobs.status, ['assigned', 'en_route', 'on_site'])
+            ))
+            .orderBy(desc(jobs.updatedAt))
+            .limit(1);
+            
+          if (activeJobs.length > 0) {
+            currentJob = activeJobs[0];
+            console.log(`[Dashboard] Found active job ${currentJob.id} with status ${currentJob.status} via fallback`);
+            
+            // Try to create a queue entry for consistency
+            try {
+              const newQueueEntry = await db.insert(contractorJobQueue)
+                .values({
+                  contractorId: contractorId,
+                  jobId: currentJob.id,
+                  status: 'current',
+                  queuePosition: 0,
+                  priority: 1,
+                  queuedAt: new Date(),
+                  startedAt: new Date(),
+                  estimatedStartTime: new Date(),
+                  metadata: {
+                    restoredFromFallback: true,
+                    restoredAt: new Date().toISOString()
+                  }
+                })
+                .returning();
+                
+              if (newQueueEntry.length > 0) {
+                currentQueueEntry = newQueueEntry[0];
+                console.log(`[Dashboard] Created queue entry for active job ${currentJob.id}`);
+              }
+            } catch (queueError) {
+              console.error('[Dashboard] Error creating queue entry during fallback:', queueError);
+            }
+          }
+        }
         
         // Get all queue entries (includes current + queued)
         const allQueueEntries = await storage.getContractorQueue(contractorId);
@@ -6302,6 +6350,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!enRouteJob) {
           console.error(`[Job Acceptance] Failed to update job ${jobId} to 'en_route' status`);
           // Don't fail the whole request, job was still accepted
+        }
+        
+        // CRITICAL FIX: Update or create contractor queue entry to 'current' status
+        console.log(`[Job Acceptance] Syncing contractor queue entry for job ${jobId}`);
+        try {
+          // Check if a queue entry exists for this job and contractor
+          const queueEntries = await db.select()
+            .from(contractorJobQueue)
+            .where(and(
+              eq(contractorJobQueue.jobId, jobId),
+              eq(contractorJobQueue.contractorId, contractorId)
+            ))
+            .limit(1);
+          
+          if (queueEntries.length > 0) {
+            // Update existing queue entry to 'current'
+            console.log(`[Job Acceptance] Updating existing queue entry ${queueEntries[0].id} to 'current' status`);
+            await storage.updateQueueStatus(queueEntries[0].id, 'current');
+          } else {
+            // Create new queue entry with 'current' status
+            console.log(`[Job Acceptance] Creating new queue entry with 'current' status for contractor ${contractorId}`);
+            await db.insert(contractorJobQueue)
+              .values({
+                contractorId: contractorId,
+                jobId: jobId,
+                status: 'current',
+                queuePosition: 0,
+                priority: 1,
+                queuedAt: new Date(),
+                startedAt: new Date(),
+                estimatedStartTime: new Date(),
+                metadata: {
+                  acceptedDirectly: true,
+                  acceptedAt: new Date().toISOString()
+                }
+              });
+            console.log(`[Job Acceptance] Successfully created queue entry with 'current' status`);
+          }
+        } catch (queueError) {
+          console.error(`[Job Acceptance] Error syncing queue entry:`, queueError);
+          // Don't fail the request, queue sync is not critical for acceptance
         }
         
         // Send WebSocket notification about status change
@@ -21059,6 +21148,67 @@ The TruckFixGo Team
 
         if (!job) {
           throw new Error('Failed to create emergency booking');
+        }
+
+        // AUTO-ASSIGNMENT: Find and assign best contractor for emergency job
+        console.log(`[Emergency Booking] Auto-assigning emergency job ${job.id}`);
+        try {
+          // Find the best available contractor
+          const bestContractor = await storage.findBestContractorForJob(job.id);
+          
+          if (bestContractor) {
+            console.log(`[Emergency Booking] Found best contractor ${bestContractor.userId} for job ${job.id}`);
+            
+            // Assign the job to the contractor
+            const assignedJob = await storage.assignJobToContractor(job.id, bestContractor.userId, 'ai_dispatch');
+            
+            if (assignedJob) {
+              console.log(`[Emergency Booking] Successfully assigned job ${job.id} to contractor ${bestContractor.userId}`);
+              
+              // Start the 3-minute acceptance timer using queue service
+              const queueService = (global as any).queueService;
+              if (queueService && queueService.autoAssignJob) {
+                console.log(`[Emergency Booking] Starting 3-minute acceptance timer for job ${job.id}`);
+                await queueService.autoAssignJob(job.id, true);
+              } else {
+                console.warn('[Emergency Booking] QueueService not available for auto-assignment timer');
+              }
+              
+              // Send notification to contractor
+              try {
+                const contractor = await storage.getUser(bestContractor.userId);
+                const customer = await storage.getUser(guestUser.id);
+                
+                if (contractor && customer) {
+                  console.log(`[Emergency Booking] Sending assignment notifications for job ${job.id}`);
+                  await emailService.sendJobAssignmentNotifications(assignedJob, contractor, customer);
+                  
+                  // Send WebSocket notification
+                  trackingWSServer.broadcastJobAssignment(bestContractor.userId, bestContractor.userId, {
+                    type: 'job:new-assignment',
+                    data: {
+                      job: assignedJob,
+                      customer: {
+                        firstName: customer.firstName,
+                        lastName: customer.lastName,
+                        phone: customer.phone
+                      },
+                      message: 'New emergency job assigned to you',
+                      acceptanceDeadline: new Date(Date.now() + 3 * 60 * 1000).toISOString() // 3 minutes from now
+                    }
+                  });
+                }
+              } catch (notifError) {
+                console.error('[Emergency Booking] Error sending assignment notifications:', notifError);
+              }
+            }
+          } else {
+            console.log(`[Emergency Booking] No available contractors found for job ${job.id}`);
+            // Job remains in 'new' status and will be picked up by the job monitor for reassignment
+          }
+        } catch (autoAssignError) {
+          console.error('[Emergency Booking] Error during auto-assignment:', autoAssignError);
+          // Don't fail the booking if auto-assignment fails
         }
 
         // Build tracking link
