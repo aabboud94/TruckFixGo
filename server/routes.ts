@@ -3315,37 +3315,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAuth,
     requireRole('contractor'),
     async (req: Request, res: Response) => {
+      const startTime = Date.now();
+      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('[Invoice Email] Starting invoice email send process');
+      console.log('═══════════════════════════════════════════════════════════════');
+      
       try {
         const contractorId = req.session.userId!;
         const { invoiceId } = req.params;
         const { email, message } = req.body;
 
+        // Debug: Log input parameters
+        console.log('[Invoice Email] Input parameters:', {
+          contractorId,
+          invoiceId,
+          email,
+          hasMessage: !!message,
+          messageLength: message?.length || 0,
+          timestamp: new Date().toISOString()
+        });
+
         // Validate email
+        console.log('[Invoice Email] Step 1: Validating email address...');
         if (!email || !z.string().email().safeParse(email).success) {
+          console.error('[Invoice Email] ❌ Email validation failed:', { email });
           return res.status(400).json({ message: 'Valid email address is required' });
         }
+        console.log('[Invoice Email] ✅ Email validated successfully:', email);
 
         // Get and verify invoice ownership
+        console.log('[Invoice Email] Step 2: Fetching invoice...');
         const invoice = await storage.getInvoice(invoiceId);
         if (!invoice) {
+          console.error('[Invoice Email] ❌ Invoice not found:', { invoiceId });
           return res.status(404).json({ message: 'Invoice not found' });
         }
+        console.log('[Invoice Email] ✅ Invoice found:', {
+          invoiceNumber: invoice.invoiceNumber,
+          status: invoice.status,
+          customerId: invoice.customerId,
+          jobId: invoice.jobId,
+          amountDue: invoice.amountDue
+        });
 
         // Get the job and verify contractor owns it
+        console.log('[Invoice Email] Step 3: Verifying job association...');
         if (!invoice.jobId) {
+          console.error('[Invoice Email] ❌ Invoice has no associated job');
           return res.status(400).json({ message: 'Invoice not associated with a job' });
         }
 
         const job = await storage.getJob(invoice.jobId);
         if (!job) {
+          console.error('[Invoice Email] ❌ Job not found:', { jobId: invoice.jobId });
           return res.status(404).json({ message: 'Job not found' });
         }
+        console.log('[Invoice Email] ✅ Job found:', {
+          jobId: job.id,
+          status: job.status,
+          contractorId: job.contractorId
+        });
 
+        console.log('[Invoice Email] Step 4: Verifying ownership...');
         if (job.contractorId !== contractorId) {
+          console.error('[Invoice Email] ❌ Contractor does not own this job:', {
+            jobContractorId: job.contractorId,
+            requestingContractorId: contractorId
+          });
           return res.status(403).json({ message: 'Unauthorized to send this invoice' });
         }
+        console.log('[Invoice Email] ✅ Ownership verified');
 
         // Get related data for the invoice
+        console.log('[Invoice Email] Step 5: Fetching related data...');
         const [customer, contractor, fleetAccount, transactions, lineItems] = await Promise.all([
           storage.getUser(invoice.customerId),
           storage.getContractorProfile(contractorId),
@@ -3355,10 +3397,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ]);
 
         if (!customer) {
+          console.error('[Invoice Email] ❌ Customer not found:', { customerId: invoice.customerId });
           return res.status(404).json({ message: 'Customer not found' });
         }
 
+        console.log('[Invoice Email] ✅ Related data fetched:', {
+          hasCustomer: !!customer,
+          customerEmail: customer.email,
+          hasContractor: !!contractor,
+          hasFleetAccount: !!fleetAccount,
+          transactionCount: transactions?.length || 0,
+          lineItemCount: lineItems?.length || 0
+        });
+
         // Generate PDF
+        console.log('[Invoice Email] Step 6: Generating PDF...');
         const pdfData = {
           invoice,
           job,
@@ -3373,9 +3426,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
                          fleetAccount?.pricingTier === 'platinum' ? 0.15 : 0
         };
 
-        const pdfBuffer = await pdfService.generateInvoice(pdfData);
+        console.log('[Invoice Email] PDF generation parameters:', {
+          laborHours: pdfData.laborHours,
+          taxRate: pdfData.taxRate,
+          fleetDiscount: pdfData.fleetDiscount
+        });
+
+        let pdfBuffer;
+        try {
+          pdfBuffer = await pdfService.generateInvoice(pdfData);
+          console.log('[Invoice Email] ✅ PDF generated successfully, size:', pdfBuffer.length, 'bytes');
+        } catch (pdfError) {
+          console.error('[Invoice Email] ❌ PDF generation failed:', pdfError);
+          throw new Error(`PDF generation failed: ${pdfError instanceof Error ? pdfError.message : 'Unknown error'}`);
+        }
 
         // Send email with invoice
+        console.log('[Invoice Email] Step 7: Sending email...');
+        console.log('[Invoice Email] Email parameters:', {
+          to: email,
+          hasInvoice: !!invoice,
+          hasJob: !!job,
+          hasCustomer: !!customer,
+          hasContractor: !!contractor,
+          hasFleetAccount: !!fleetAccount,
+          hasPersonalMessage: !!message,
+          pdfBufferSize: pdfBuffer.length,
+          amountDue: parseFloat(invoice.amountDue.toString())
+        });
+
         const emailSent = await emailService.sendInvoiceEmail({
           to: email,
           invoice,
@@ -3389,18 +3468,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         if (!emailSent.success) {
-          console.error('Failed to send invoice email:', emailSent.error);
+          console.error('[Invoice Email] ❌ Email send failed:', {
+            error: emailSent.error,
+            to: email
+          });
           return res.status(500).json({ 
             message: 'Failed to send invoice email', 
             error: emailSent.error 
           });
         }
 
+        console.log('[Invoice Email] ✅ Email sent successfully:', {
+          messageId: emailSent.messageId,
+          to: email
+        });
+
         // Update invoice sentAt timestamp
+        console.log('[Invoice Email] Step 8: Updating invoice status...');
         await storage.updateInvoice(invoiceId, {
           sentAt: new Date(),
           status: invoice.status === 'draft' ? 'pending' : invoice.status
         });
+        console.log('[Invoice Email] ✅ Invoice status updated');
+
+        const totalTime = Date.now() - startTime;
+        console.log('[Invoice Email] ✅ SUCCESS - Invoice email process completed in', totalTime, 'ms');
+        console.log('═══════════════════════════════════════════════════════════════');
 
         res.json({
           message: 'Invoice sent successfully',
@@ -3408,7 +3501,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           messageId: emailSent.messageId
         });
       } catch (error) {
-        console.error('Send invoice error:', error);
+        const totalTime = Date.now() - startTime;
+        console.error('[Invoice Email] ❌ FAILED - Invoice email process failed after', totalTime, 'ms');
+        console.error('[Invoice Email] Error details:', {
+          name: error instanceof Error ? error.name : 'Unknown',
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        });
+        console.log('═══════════════════════════════════════════════════════════════');
+        
         res.status(500).json({ 
           message: 'Failed to send invoice',
           error: error instanceof Error ? error.message : 'Unknown error'
