@@ -85,6 +85,7 @@ import AdminReferrals from "@/pages/admin/referrals";
 import AdminSurge from "@/pages/admin/surge";
 import AdminSupport from "@/pages/admin/support";
 import AdminHealth from "@/pages/admin/health";
+import HealthCheck from "@/pages/admin/health-check";
 import AdminLiveMap from "@/pages/admin/live-map";
 import AdminInvoiceDefaults from "@/pages/admin/invoice-defaults";
 import AdminStatus from "@/pages/admin/status";
@@ -212,6 +213,7 @@ function Router() {
       <Route path="/admin/surge" component={AdminSurge} />
       <Route path="/admin/support" component={AdminSupport} />
       <Route path="/admin/health" component={AdminHealth} />
+      <Route path="/admin/health-check" component={HealthCheck} />
       <Route path="/admin/live-map" component={AdminLiveMap} />
       <Route path="/admin/status" component={AdminStatus} />
       <Route path="/admin/payment-reconciliation" component={PaymentReconciliation} />
