@@ -670,39 +670,43 @@ export default function ContractorDashboard() {
       {/* Header */}
       <div className="bg-card border-b">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Avatar className="w-12 h-12">
-                <AvatarFallback>
-                  {contractor?.firstName?.[0]}{contractor?.lastName?.[0]}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <h1 className="text-2xl font-bold">
-                  Welcome back, {contractor?.firstName}!
-                </h1>
-                <p className="text-muted-foreground">
-                  {contractor?.companyName}
-                </p>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            {/* Left Section - Mobile Optimized */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <Avatar className="w-12 h-12 flex-shrink-0">
+                  <AvatarFallback>
+                    {contractor?.firstName?.[0]}{contractor?.lastName?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-xl sm:text-2xl font-bold truncate">
+                    Welcome back, {contractor?.firstName}!
+                  </h1>
+                  <p className="text-muted-foreground text-sm sm:text-base truncate">
+                    {contractor?.companyName}
+                  </p>
+                </div>
               </div>
-              <Badge className={`${tierColors[contractor?.performanceTier || 'bronze']} text-white`}>
+              <Badge className={`${tierColors[contractor?.performanceTier || 'bronze']} text-white self-start sm:self-center flex-shrink-0`}>
                 <Award className="w-3 h-3 mr-1" />
                 {contractor?.performanceTier?.toUpperCase()} TIER
               </Badge>
             </div>
 
-            <div className="flex items-center gap-4">
-              {/* Enhanced Online/Offline Toggle */}
-              <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border ${
+            {/* Right Section - Mobile Optimized */}
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4">
+              {/* Enhanced Online/Offline Toggle - Mobile Optimized */}
+              <div className={`flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 rounded-lg border ${
                 isOnline !== false ? 'bg-green-50 border-green-300 dark:bg-green-900/20' : 'bg-gray-100 border-gray-300 dark:bg-gray-800'
               }`}>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 sm:gap-2">
                   {isOnline !== false ? (
-                    <CircleCheck className="w-6 h-6 text-green-600" />
+                    <CircleCheck className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
                   ) : (
-                    <CircleX className="w-6 h-6 text-gray-500" />
+                    <CircleX className="w-5 h-5 sm:w-6 sm:h-6 text-gray-500" />
                   )}
-                  <div>
+                  <div className="hidden sm:block">
                     <Label className="text-sm font-semibold">
                       {isOnline !== false ? 'ONLINE' : 'OFFLINE'}
                     </Label>
@@ -719,11 +723,12 @@ export default function ContractorDashboard() {
                       <Button
                         variant="default"
                         size="sm"
-                        className="bg-green-600 hover:bg-green-700"
+                        className="bg-green-600 hover:bg-green-700 text-xs sm:text-sm"
                         data-testid="button-toggle-status"
                       >
-                        <Power className="w-4 h-4 mr-1" />
-                        Go Offline
+                        <Power className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+                        <span className="hidden sm:inline">Go Offline</span>
+                        <span className="sm:hidden">Off</span>
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-80">
@@ -778,6 +783,7 @@ export default function ContractorDashboard() {
                   <Button
                     variant="secondary"
                     size="sm"
+                    className="text-xs sm:text-sm"
                     onClick={() => {
                       setIsOnline(true);
                       toggleOnlineMutation.mutate(true);
@@ -789,50 +795,53 @@ export default function ContractorDashboard() {
                     }}
                     data-testid="button-go-online"
                   >
-                    <Power className="w-4 h-4 mr-1" />
-                    Go Online
+                    <Power className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Go Online</span>
+                    <span className="sm:hidden">On</span>
                   </Button>
                 )}
               </div>
 
-              {/* Location Sharing Status */}
-              <div className="flex items-center gap-2">
+              {/* Location Sharing Status - Mobile Optimized */}
+              <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-2 rounded-md border">
                 {isSharingLocation ? (
-                  <Wifi className="w-4 h-4 text-green-600 animate-pulse" />
+                  <Wifi className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 animate-pulse" />
                 ) : (
-                  <WifiOff className="w-4 h-4 text-muted-foreground" />
+                  <WifiOff className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground" />
                 )}
-                <Label htmlFor="location-sharing" className="text-sm">
+                <Label htmlFor="location-sharing" className="text-xs sm:text-sm">
                   GPS
                 </Label>
                 <Switch
                   id="location-sharing"
                   checked={isSharingLocation}
                   onCheckedChange={setIsSharingLocation}
+                  className="scale-75 sm:scale-100"
                   data-testid="switch-location"
                 />
               </div>
 
-              {/* Settings Link */}
+              {/* Settings Link - Mobile Optimized */}
               <Button
                 variant="outline"
                 size="sm"
+                className="text-xs sm:text-sm px-2 sm:px-3"
                 onClick={() => navigate("/contractor/settings")}
                 data-testid="button-settings"
               >
-                <Settings className="w-4 h-4 mr-1" />
-                Settings
+                <Settings className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+                <span className="hidden sm:inline">Settings</span>
               </Button>
 
-              {/* WebSocket Connection Status */}
-              <Badge variant={isConnected ? "default" : "secondary"}>
+              {/* WebSocket Connection Status - Hidden on Mobile */}
+              <Badge variant={isConnected ? "default" : "secondary"} className="hidden sm:inline-flex">
                 {isConnected ? "Connected" : "Disconnected"}
               </Badge>
               
               {/* Emergency SOS Button */}
               <SOSButton 
                 jobId={activeJob?.id}
-                className="ml-2"
+                className="ml-0"
               />
             </div>
           </div>
