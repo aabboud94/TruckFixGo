@@ -1889,14 +1889,58 @@ class EmailService {
     pdfBuffer: Buffer;
     amountDue: number;
   }): Promise<{ success: boolean; error?: string; messageId?: string }> {
+    const startTime = Date.now();
+    console.log('───────────────────────────────────────────────────────────────');
+    console.log('[Email Service] sendInvoiceEmail START');
+    console.log('───────────────────────────────────────────────────────────────');
+    
     try {
+      // Debug: Log input data
+      console.log('[Email Service] Invoice email input data:', {
+        to: data.to,
+        invoiceNumber: data.invoice?.invoiceNumber,
+        invoiceId: data.invoice?.id,
+        invoiceStatus: data.invoice?.status,
+        jobId: data.job?.id,
+        jobStatus: data.job?.status,
+        customerName: `${data.customer?.firstName} ${data.customer?.lastName}`,
+        customerEmail: data.customer?.email,
+        contractorName: data.contractor?.businessName || 'N/A',
+        hasFleetAccount: !!data.fleetAccount,
+        hasPersonalMessage: !!data.personalMessage,
+        pdfBufferSize: data.pdfBuffer?.length || 0,
+        amountDue: data.amountDue
+      });
+
+      // Check email service readiness
+      console.log('[Email Service] Step 1: Checking email service readiness...');
       if (!this.isReady()) {
-        console.error('[Email Service] Not ready to send emails');
-        return { success: false, error: 'Email service not configured' };
+        console.error('[Email Service] ❌ Email service not ready:', {
+          transporter: !!this.transporter,
+          isVerified: this.isVerified,
+          lastError: this.lastVerificationError,
+          hasCredentials: !!(process.env.OFFICE365_EMAIL && process.env.OFFICE365_PASSWORD)
+        });
+        
+        // Try to re-initialize if not ready
+        console.log('[Email Service] Attempting to re-initialize transporter...');
+        await this.initializeTransporter();
+        
+        if (!this.isReady()) {
+          console.error('[Email Service] ❌ Failed to initialize email service');
+          return { success: false, error: 'Email service not configured' };
+        }
       }
+      console.log('[Email Service] ✅ Email service is ready');
 
       const appUrl = process.env.APP_URL || 'https://truckfixgo.com';
       const fromEmail = process.env.OFFICE365_EMAIL || 'noreply@truckfixgo.com';
+      
+      console.log('[Email Service] Step 2: Email configuration:', {
+        appUrl,
+        fromEmail,
+        toEmail: data.to
+      });
       
       // Generate invoice email content
       const invoiceContent = `
@@ -2129,7 +2173,14 @@ Professional Truck Repair Services
 `;
 
       // Send the email with PDF attachment
-      const info = await this.transporter!.sendMail({
+      console.log('[Email Service] Step 3: Preparing to send email...');
+      console.log('[Email Service] Attachment details:', {
+        filename: `Invoice_${data.invoice.invoiceNumber}.pdf`,
+        contentType: 'application/pdf',
+        size: data.pdfBuffer.length
+      });
+      
+      const emailOptions = {
         from: `"TruckFixGo Billing" <${fromEmail}>`,
         to: data.to,
         subject: `Invoice #${data.invoice.invoiceNumber} - TruckFixGo`,
@@ -2142,23 +2193,56 @@ Professional Truck Repair Services
             contentType: 'application/pdf'
           }
         ]
+      };
+      
+      console.log('[Email Service] Email options prepared:', {
+        from: emailOptions.from,
+        to: emailOptions.to,
+        subject: emailOptions.subject,
+        hasTextContent: !!emailOptions.text,
+        hasHtmlContent: !!emailOptions.html,
+        attachmentCount: emailOptions.attachments.length
       });
+      
+      console.log('[Email Service] Step 4: Sending email via SMTP...');
+      const info = await this.transporter!.sendMail(emailOptions);
 
-      console.log('[Email Service] Invoice email sent successfully:', info.messageId);
+      console.log('[Email Service] ✅ Invoice email sent successfully:', {
+        messageId: info.messageId,
+        response: info.response,
+        accepted: info.accepted,
+        rejected: info.rejected,
+        pending: info.pending
+      });
       
       this.successCount++;
+      const totalTime = Date.now() - startTime;
+      console.log('[Email Service] SUCCESS - Email sent in', totalTime, 'ms');
+      console.log('───────────────────────────────────────────────────────────────');
+      
       return {
         success: true,
         messageId: info.messageId
       };
 
     } catch (error) {
-      console.error('[Email Service] Failed to send invoice email:', error);
+      const totalTime = Date.now() - startTime;
+      console.error('[Email Service] ❌ FAILED to send invoice email after', totalTime, 'ms');
+      console.error('[Email Service] Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        code: (error as any)?.code,
+        command: (error as any)?.command,
+        response: (error as any)?.response,
+        responseCode: (error as any)?.responseCode,
+        stack: error instanceof Error ? error.stack : undefined
+      });
       
       this.failureCount++;
       this.lastVerificationError = `Invoice email failed: ${(error as Error).message}`;
       
       // Add to failed queue for retry
+      console.log('[Email Service] Adding to failed queue for potential retry...');
       this.queuedEmails.push({
         to: data.to,
         subject: `Invoice #${data.invoice.invoiceNumber}`,
@@ -2170,6 +2254,9 @@ Professional Truck Repair Services
       if (this.queuedEmails.length > this.maxQueueSize) {
         this.queuedEmails = this.queuedEmails.slice(-this.maxQueueSize);
       }
+      
+      console.log('[Email Service] Current service stats:', this.getStats());
+      console.log('───────────────────────────────────────────────────────────────');
       
       return {
         success: false,
