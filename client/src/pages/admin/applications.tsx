@@ -1319,7 +1319,6 @@ export default function AdminApplications() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
         </TabsContent>
         
         {/* Driver Applications Tab */}
