@@ -546,7 +546,75 @@ export default function PartsInventory() {
             <CardContent>
               {catalogLoading ? (
                 <div className="text-center py-8">Loading parts catalog...</div>
+              ) : isMobile ? (
+                // Mobile card view
+                <div className="space-y-4">
+                  {catalogData?.parts?.length === 0 ? (
+                    <div className="text-center py-8">No parts found</div>
+                  ) : (
+                    catalogData?.parts?.map((part: any) => (
+                      <Card key={part.id}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-mono text-sm">{part.partNumber}</div>
+                              <div className="font-medium">{part.name}</div>
+                            </div>
+                            <Badge variant={part.isActive ? "default" : "secondary"}>
+                              {part.isActive ? "Active" : "Inactive"}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Category</span>
+                            <span className="text-sm font-medium">{part.category}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Manufacturer</span>
+                            <span className="text-sm font-medium">{part.manufacturer}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Unit Cost</span>
+                            <span className="text-sm font-medium">${part.unitCost?.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Selling Price</span>
+                            <span className="text-sm font-medium">${part.sellingPrice?.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Markup</span>
+                            <span className="text-sm font-medium">{calculateMarkup(part.unitCost, part.sellingPrice)}%</span>
+                          </div>
+                        </CardContent>
+                        <CardFooter className="pt-3 gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-11 flex-1"
+                            onClick={() => handleEditPart(part)}
+                            data-testid={`button-edit-${part.id}`}
+                          >
+                            <Edit className="w-4 h-4 mr-2" />
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-11 flex-1"
+                            onClick={() => handleAdjustInventory(part)}
+                            data-testid={`button-adjust-${part.id}`}
+                          >
+                            <Archive className="w-4 h-4 mr-2" />
+                            Inventory
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    ))
+                  )}
+                </div>
               ) : (
+                // Desktop table view
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -615,7 +683,67 @@ export default function PartsInventory() {
             <CardContent>
               {inventoryLoading ? (
                 <div className="text-center py-8">Loading inventory levels...</div>
+              ) : isMobile ? (
+                // Mobile card view
+                <div className="space-y-4">
+                  {inventoryData?.inventory?.length === 0 ? (
+                    <div className="text-center py-8">No inventory data available</div>
+                  ) : (
+                    inventoryData?.inventory?.map((item: any) => (
+                      <Card key={item.inventory.id}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-medium">{item.part.name}</div>
+                              <div className="text-sm text-muted-foreground">{item.part.partNumber}</div>
+                            </div>
+                            {getStockStatusBadge(item.stockStatus)}
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Warehouse</span>
+                            <span className="text-sm font-medium">{item.inventory.warehouseId}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Quantity</span>
+                            <span className="text-sm font-medium">{item.inventory.quantity}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Reorder Level</span>
+                            <span className="text-sm font-medium">{item.inventory.reorderLevel}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Location</span>
+                            <span className="text-sm font-medium">{item.inventory.location || '-'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Last Restocked</span>
+                            <span className="text-sm font-medium">
+                              {item.inventory.lastRestocked 
+                                ? new Date(item.inventory.lastRestocked).toLocaleDateString()
+                                : '-'}
+                            </span>
+                          </div>
+                        </CardContent>
+                        <CardFooter className="pt-3">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-11 w-full"
+                            onClick={() => handleAdjustInventory(item.part)}
+                            data-testid={`button-adjust-inventory-${item.inventory.id}`}
+                          >
+                            <Archive className="w-4 h-4 mr-2" />
+                            Adjust Inventory
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    ))
+                  )}
+                </div>
               ) : (
+                // Desktop table view
                 <Table>
                   <TableHeader>
                     <TableRow>

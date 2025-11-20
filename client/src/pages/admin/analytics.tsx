@@ -721,37 +721,75 @@ export default function AdminAnalytics() {
               <CardDescription>Compliance rates and average response times</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Service Type</TableHead>
-                    <TableHead>Compliance Rate</TableHead>
-                    <TableHead>Avg Response Time</TableHead>
-                    <TableHead>Target Time</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              {isMobile ? (
+                // Mobile card view
+                <div className="space-y-4">
                   {analyticsData.slaMetrics.byServiceType.map((service) => (
-                    <TableRow key={service.service}>
-                      <TableCell className="font-medium">{service.service}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Progress value={service.compliance} className="w-20" />
-                          <span>{service.compliance}%</span>
+                    <Card key={service.service}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium">{service.service}</h4>
+                          <Badge variant={service.compliance >= 90 ? "default" : "destructive"}>
+                            {service.compliance >= 90 ? "Meeting SLA" : "Below SLA"}
+                          </Badge>
                         </div>
-                      </TableCell>
-                      <TableCell>{service.avgTime} min</TableCell>
-                      <TableCell>15 min</TableCell>
-                      <TableCell>
-                        <Badge variant={service.compliance >= 90 ? "default" : "destructive"}>
-                          {service.compliance >= 90 ? "Meeting SLA" : "Below SLA"}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Compliance Rate</span>
+                            <div className="flex items-center gap-2">
+                              <Progress value={service.compliance} className="w-20" />
+                              <span className="text-sm font-medium">{service.compliance}%</span>
+                            </div>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Avg Response</span>
+                            <span className="text-sm font-medium">{service.avgTime} min</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Target Time</span>
+                            <span className="text-sm font-medium">15 min</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+              ) : (
+                // Desktop table view
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Service Type</TableHead>
+                      <TableHead>Compliance Rate</TableHead>
+                      <TableHead>Avg Response Time</TableHead>
+                      <TableHead>Target Time</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {analyticsData.slaMetrics.byServiceType.map((service) => (
+                      <TableRow key={service.service}>
+                        <TableCell className="font-medium">{service.service}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Progress value={service.compliance} className="w-20" />
+                            <span>{service.compliance}%</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{service.avgTime} min</TableCell>
+                        <TableCell>15 min</TableCell>
+                        <TableCell>
+                          <Badge variant={service.compliance >= 90 ? "default" : "destructive"}>
+                            {service.compliance >= 90 ? "Meeting SLA" : "Below SLA"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -847,54 +885,111 @@ export default function AdminAnalytics() {
               <CardDescription>Contractors ranked by performance metrics</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[50px]">Rank</TableHead>
-                    <TableHead>Contractor</TableHead>
-                    <TableHead>Tier</TableHead>
-                    <TableHead className="text-right">Jobs</TableHead>
-                    <TableHead className="text-right">Earnings</TableHead>
-                    <TableHead className="text-right">Rating</TableHead>
-                    <TableHead className="text-right">Acceptance</TableHead>
-                    <TableHead className="text-right">On-Time</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              {isMobile ? (
+                // Mobile card view
+                <div className="space-y-4">
                   {analyticsData.contractorMetrics.topPerformers.map((contractor, index) => (
-                    <TableRow key={contractor.name}>
-                      <TableCell>
-                        <div className="flex items-center justify-center">
-                          {index === 0 && <Award className="h-4 w-4 text-yellow-500" />}
-                          {index === 1 && <Award className="h-4 w-4 text-gray-400" />}
-                          {index === 2 && <Award className="h-4 w-4 text-orange-600" />}
-                          {index > 2 && <span className="text-sm text-muted-foreground">{index + 1}</span>}
+                    <Card key={contractor.name}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-center">
+                              {index === 0 && <Award className="h-5 w-5 text-yellow-500" />}
+                              {index === 1 && <Award className="h-5 w-5 text-gray-400" />}
+                              {index === 2 && <Award className="h-5 w-5 text-orange-600" />}
+                              {index > 2 && <span className="text-lg font-bold text-muted-foreground">#{index + 1}</span>}
+                            </div>
+                            <div>
+                              <div className="font-medium">{contractor.name}</div>
+                              <Badge variant={contractor.tier === "Gold" ? "default" : contractor.tier === "Silver" ? "secondary" : "outline"} className="mt-1">
+                                {contractor.tier}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                            <span className="font-medium">{contractor.rating}</span>
+                          </div>
                         </div>
-                      </TableCell>
-                      <TableCell className="font-medium">{contractor.name}</TableCell>
-                      <TableCell>
-                        <Badge variant={contractor.tier === "Gold" ? "default" : contractor.tier === "Silver" ? "secondary" : "outline"}>
-                          {contractor.tier}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">{contractor.jobs}</TableCell>
-                      <TableCell className="text-right">${contractor.earnings.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                          <span>{contractor.rating}</span>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <span className="text-sm text-muted-foreground block">Jobs</span>
+                            <span className="text-sm font-medium">{contractor.jobs}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm text-muted-foreground block">Earnings</span>
+                            <span className="text-sm font-medium">${contractor.earnings.toLocaleString()}</span>
+                          </div>
                         </div>
-                      </TableCell>
-                      <TableCell className="text-right">{contractor.acceptance}%</TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant={contractor.onTime >= 95 ? "default" : "outline"}>
-                          {contractor.onTime}%
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <span className="text-sm text-muted-foreground block">Acceptance</span>
+                            <span className="text-sm font-medium">{contractor.acceptance}%</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm text-muted-foreground block">On-Time</span>
+                            <Badge variant={contractor.onTime >= 95 ? "default" : "outline"}>
+                              {contractor.onTime}%
+                            </Badge>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+              ) : (
+                // Desktop table view
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[50px]">Rank</TableHead>
+                      <TableHead>Contractor</TableHead>
+                      <TableHead>Tier</TableHead>
+                      <TableHead className="text-right">Jobs</TableHead>
+                      <TableHead className="text-right">Earnings</TableHead>
+                      <TableHead className="text-right">Rating</TableHead>
+                      <TableHead className="text-right">Acceptance</TableHead>
+                      <TableHead className="text-right">On-Time</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {analyticsData.contractorMetrics.topPerformers.map((contractor, index) => (
+                      <TableRow key={contractor.name}>
+                        <TableCell>
+                          <div className="flex items-center justify-center">
+                            {index === 0 && <Award className="h-4 w-4 text-yellow-500" />}
+                            {index === 1 && <Award className="h-4 w-4 text-gray-400" />}
+                            {index === 2 && <Award className="h-4 w-4 text-orange-600" />}
+                            {index > 2 && <span className="text-sm text-muted-foreground">{index + 1}</span>}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-medium">{contractor.name}</TableCell>
+                        <TableCell>
+                          <Badge variant={contractor.tier === "Gold" ? "default" : contractor.tier === "Silver" ? "secondary" : "outline"}>
+                            {contractor.tier}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">{contractor.jobs}</TableCell>
+                        <TableCell className="text-right">${contractor.earnings.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                            <span>{contractor.rating}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">{contractor.acceptance}%</TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={contractor.onTime >= 95 ? "default" : "outline"}>
+                            {contractor.onTime}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1113,39 +1208,81 @@ export default function AdminAnalytics() {
               <CardDescription>Fleet performance and usage statistics</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fleet Name</TableHead>
-                    <TableHead>Tier</TableHead>
-                    <TableHead className="text-right">Vehicles</TableHead>
-                    <TableHead className="text-right">Jobs</TableHead>
-                    <TableHead className="text-right">Spent</TableHead>
-                    <TableHead className="text-right">PM Compliance</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              {isMobile ? (
+                // Mobile card view
+                <div className="space-y-4">
                   {analyticsData.fleetMetrics.topFleets.map((fleet) => (
-                    <TableRow key={fleet.name}>
-                      <TableCell className="font-medium">{fleet.name}</TableCell>
-                      <TableCell>
-                        <Badge variant={fleet.tier === "Platinum" ? "default" : fleet.tier === "Gold" ? "secondary" : "outline"}>
-                          {fleet.tier}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">{fleet.vehicles}</TableCell>
-                      <TableCell className="text-right">{fleet.jobs}</TableCell>
-                      <TableCell className="text-right">${fleet.spent.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Progress value={fleet.pmCompliance} className="w-20" />
-                          <span>{fleet.pmCompliance}%</span>
+                    <Card key={fleet.name}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium">{fleet.name}</h4>
+                          <Badge variant={fleet.tier === "Platinum" ? "default" : fleet.tier === "Gold" ? "secondary" : "outline"}>
+                            {fleet.tier}
+                          </Badge>
                         </div>
-                      </TableCell>
-                    </TableRow>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <span className="text-sm text-muted-foreground block">Vehicles</span>
+                            <span className="text-sm font-medium">{fleet.vehicles}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm text-muted-foreground block">Jobs</span>
+                            <span className="text-sm font-medium">{fleet.jobs}</span>
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Total Spent</span>
+                          <span className="text-sm font-medium">${fleet.spent.toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-sm text-muted-foreground">PM Compliance</span>
+                            <span className="text-sm font-medium">{fleet.pmCompliance}%</span>
+                          </div>
+                          <Progress value={fleet.pmCompliance} className="h-2" />
+                        </div>
+                      </CardContent>
+                    </Card>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+              ) : (
+                // Desktop table view
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fleet Name</TableHead>
+                      <TableHead>Tier</TableHead>
+                      <TableHead className="text-right">Vehicles</TableHead>
+                      <TableHead className="text-right">Jobs</TableHead>
+                      <TableHead className="text-right">Spent</TableHead>
+                      <TableHead className="text-right">PM Compliance</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {analyticsData.fleetMetrics.topFleets.map((fleet) => (
+                      <TableRow key={fleet.name}>
+                        <TableCell className="font-medium">{fleet.name}</TableCell>
+                        <TableCell>
+                          <Badge variant={fleet.tier === "Platinum" ? "default" : fleet.tier === "Gold" ? "secondary" : "outline"}>
+                            {fleet.tier}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">{fleet.vehicles}</TableCell>
+                        <TableCell className="text-right">{fleet.jobs}</TableCell>
+                        <TableCell className="text-right">${fleet.spent.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Progress value={fleet.pmCompliance} className="w-20" />
+                            <span>{fleet.pmCompliance}%</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
 

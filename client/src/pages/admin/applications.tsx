@@ -450,7 +450,7 @@ export default function AdminApplications() {
                 Review and manage contractor applications
               </CardDescription>
             </div>
-            {selectedDocuments.length > 0 && (
+            {!isMobile && selectedDocuments.length > 0 && (
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -475,44 +475,13 @@ export default function AdminApplications() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">
-                  <Checkbox
-                    checked={selectedDocuments.length === applications.length && applications.length > 0}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setSelectedDocuments(applications.map(a => a.id));
-                      } else {
-                        setSelectedDocuments([]);
-                      }
-                    }}
-                    data-testid="checkbox-select-all"
-                  />
-                </TableHead>
-                <TableHead>Applicant</TableHead>
-                <TableHead>Company</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Submitted</TableHead>
-                <TableHead>Completion</TableHead>
-                <TableHead>Verification</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          {isMobile ? (
+            // Mobile card view
+            <div className="space-y-4">
               {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
-                    Loading applications...
-                  </TableCell>
-                </TableRow>
+                <div className="text-center py-8">Loading applications...</div>
               ) : applications.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
-                    No applications found
-                  </TableCell>
-                </TableRow>
+                <div className="text-center py-8">No applications found</div>
               ) : (
                 applications.map((app) => {
                   const StatusIcon = STATUS_CONFIG[app.status as keyof typeof STATUS_CONFIG].icon;
@@ -520,183 +489,337 @@ export default function AdminApplications() {
                   const completionPercentage = getCompletionPercentage(app);
                   
                   return (
-                    <TableRow key={app.id}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedDocuments.includes(app.id)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedDocuments([...selectedDocuments, app.id]);
-                            } else {
-                              setSelectedDocuments(selectedDocuments.filter(id => id !== app.id));
-                            }
-                          }}
-                          data-testid={`checkbox-select-${app.id}`}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarFallback>
-                              {app.firstName?.charAt(0)}{app.lastName?.charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <div className="font-medium">
-                              {app.firstName} {app.lastName}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {app.email}
+                    <Card key={app.id}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarFallback>
+                                {app.firstName?.charAt(0)}{app.lastName?.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="font-medium">
+                                {app.firstName} {app.lastName}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {app.email}
+                              </div>
                             </div>
                           </div>
+                          <Badge variant={STATUS_CONFIG[app.status as keyof typeof STATUS_CONFIG].color as any}>
+                            <StatusIcon className="h-3 w-3 mr-1" />
+                            {STATUS_CONFIG[app.status as keyof typeof STATUS_CONFIG].label}
+                          </Badge>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{app.companyName || "Individual"}</div>
-                          {app.dotNumber && (
-                            <div className="text-sm text-muted-foreground">
-                              DOT: {app.dotNumber}
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Company</span>
+                          <span className="text-sm font-medium">{app.companyName || "Individual"}</span>
+                        </div>
+                        {app.dotNumber && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">DOT Number</span>
+                            <span className="text-sm font-medium">{app.dotNumber}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Submitted</span>
+                          <span className="text-sm font-medium">
+                            {app.submittedAt ? format(new Date(app.submittedAt), 'MMM d, yyyy') : 'Not submitted'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Completion</span>
+                          {app.status === 'approved' || app.status === 'rejected' || app.status === 'withdrawn' ? (
+                            <Badge variant={
+                              app.status === 'approved' ? 'success' : 
+                              app.status === 'rejected' ? 'destructive' : 
+                              'secondary'
+                            } className="gap-1">
+                              {app.status === 'approved' && <CheckCircle className="h-3 w-3" />}
+                              {app.status === 'rejected' && <XCircle className="h-3 w-3" />}
+                              {app.status === 'withdrawn' && <Ban className="h-3 w-3" />}
+                              {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
+                            </Badge>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 bg-secondary rounded-full h-2">
+                                <div 
+                                  className="bg-primary h-2 rounded-full"
+                                  style={{ width: `${completionPercentage}%` }}
+                                />
+                              </div>
+                              <span className="text-sm">{completionPercentage}%</span>
                             </div>
                           )}
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={STATUS_CONFIG[app.status as keyof typeof STATUS_CONFIG].color as any}>
-                          <StatusIcon className="h-3 w-3 mr-1" />
-                          {STATUS_CONFIG[app.status as keyof typeof STATUS_CONFIG].label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {app.submittedAt ? (
-                          <div>
-                            <div className="font-medium">
-                              {format(new Date(app.submittedAt), 'MMM d, yyyy')}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {format(new Date(app.submittedAt), 'h:mm a')}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">Not submitted</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {app.status === 'approved' ? (
-                          <Badge variant="success" className="gap-1">
-                            <CheckCircle className="h-3 w-3" />
-                            Approved
-                          </Badge>
-                        ) : app.status === 'rejected' ? (
-                          <Badge variant="destructive" className="gap-1">
-                            <XCircle className="h-3 w-3" />
-                            Rejected  
-                          </Badge>
-                        ) : app.status === 'withdrawn' ? (
-                          <Badge variant="secondary" className="gap-1">
-                            <Ban className="h-3 w-3" />
-                            Withdrawn
-                          </Badge>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 bg-secondary rounded-full h-2">
-                              <div 
-                                className="bg-primary h-2 rounded-full"
-                                style={{ width: `${completionPercentage}%` }}
-                              />
-                            </div>
-                            <span className="text-sm text-muted-foreground">
-                              {completionPercentage}%
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Verification</span>
+                          <div className="flex items-center gap-1">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <span className="text-sm font-medium">
+                              {verificationStatus.verified}/{verificationStatus.total}
                             </span>
                           </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span className="text-sm">
-                            {verificationStatus.verified}/{verificationStatus.total}
-                          </span>
                         </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0" data-testid={`button-actions-${app.id}`}>
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem
-                              onClick={() => setSelectedApplication(app)}
-                              data-testid={`menu-view-${app.id}`}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedApplication(app);
-                                setIsReviewDialogOpen(true);
-                              }}
-                              data-testid={`menu-review-${app.id}`}
-                            >
-                              <FileCheck className="h-4 w-4 mr-2" />
-                              Review Application
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => {
-                                sendCommunicationMutation.mutate({
-                                  applicationId: app.id,
-                                  type: 'email',
-                                  subject: 'Application Status Update',
-                                  message: 'Your application is being reviewed.'
-                                });
-                              }}
-                              data-testid={`menu-email-${app.id}`}
-                            >
-                              <Mail className="h-4 w-4 mr-2" />
-                              Send Email
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                runBackgroundCheckMutation.mutate({
-                                  applicationId: app.id,
-                                  checkType: 'criminal'
-                                });
-                              }}
-                              data-testid={`menu-background-${app.id}`}
-                            >
-                              <Shield className="h-4 w-4 mr-2" />
-                              Run Background Check
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-red-600"
-                              onClick={() => {
-                                setSelectedApplication(app);
-                                updateStatusMutation.mutate({
-                                  id: app.id,
-                                  status: 'rejected',
-                                  rejectionReason: 'Does not meet requirements'
-                                });
-                              }}
-                              data-testid={`menu-reject-${app.id}`}
-                            >
-                              <XCircle className="h-4 w-4 mr-2" />
-                              Reject Application
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                      </CardContent>
+                      <CardFooter className="pt-3 gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-11 flex-1"
+                          onClick={() => setSelectedApplication(app)}
+                          data-testid={`button-view-${app.id}`}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-11 flex-1"
+                          onClick={() => {
+                            setSelectedApplication(app);
+                            setIsReviewDialogOpen(true);
+                          }}
+                          data-testid={`button-review-${app.id}`}
+                        >
+                          <FileCheck className="h-4 w-4 mr-2" />
+                          Review
+                        </Button>
+                      </CardFooter>
+                    </Card>
                   );
                 })
               )}
-            </TableBody>
-          </Table>
+            </div>
+          ) : (
+            // Desktop table view
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedDocuments.length === applications.length && applications.length > 0}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedDocuments(applications.map(a => a.id));
+                        } else {
+                          setSelectedDocuments([]);
+                        }
+                      }}
+                      data-testid="checkbox-select-all"
+                    />
+                  </TableHead>
+                  <TableHead>Applicant</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Submitted</TableHead>
+                  <TableHead>Completion</TableHead>
+                  <TableHead>Verification</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">
+                      Loading applications...
+                    </TableCell>
+                  </TableRow>
+                ) : applications.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">
+                      No applications found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  applications.map((app) => {
+                    const StatusIcon = STATUS_CONFIG[app.status as keyof typeof STATUS_CONFIG].icon;
+                    const verificationStatus = getVerificationStatus(app);
+                    const completionPercentage = getCompletionPercentage(app);
+                    
+                    return (
+                      <TableRow key={app.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedDocuments.includes(app.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedDocuments([...selectedDocuments, app.id]);
+                              } else {
+                                setSelectedDocuments(selectedDocuments.filter(id => id !== app.id));
+                              }
+                            }}
+                            data-testid={`checkbox-select-${app.id}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarFallback>
+                                {app.firstName?.charAt(0)}{app.lastName?.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="font-medium">
+                                {app.firstName} {app.lastName}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {app.email}
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{app.companyName || "Individual"}</div>
+                            {app.dotNumber && (
+                              <div className="text-sm text-muted-foreground">
+                                DOT: {app.dotNumber}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={STATUS_CONFIG[app.status as keyof typeof STATUS_CONFIG].color as any}>
+                            <StatusIcon className="h-3 w-3 mr-1" />
+                            {STATUS_CONFIG[app.status as keyof typeof STATUS_CONFIG].label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {app.submittedAt ? (
+                            <div>
+                              <div className="font-medium">
+                                {format(new Date(app.submittedAt), 'MMM d, yyyy')}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {format(new Date(app.submittedAt), 'h:mm a')}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">Not submitted</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {app.status === 'approved' ? (
+                            <Badge variant="success" className="gap-1">
+                              <CheckCircle className="h-3 w-3" />
+                              Approved
+                            </Badge>
+                          ) : app.status === 'rejected' ? (
+                            <Badge variant="destructive" className="gap-1">
+                              <XCircle className="h-3 w-3" />
+                              Rejected  
+                            </Badge>
+                          ) : app.status === 'withdrawn' ? (
+                            <Badge variant="secondary" className="gap-1">
+                              <Ban className="h-3 w-3" />
+                              Withdrawn
+                            </Badge>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 bg-secondary rounded-full h-2">
+                                <div 
+                                  className="bg-primary h-2 rounded-full"
+                                  style={{ width: `${completionPercentage}%` }}
+                                />
+                              </div>
+                              <span className="text-sm text-muted-foreground">
+                                {completionPercentage}%
+                              </span>
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <span className="text-sm">
+                              {verificationStatus.verified}/{verificationStatus.total}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0" data-testid={`button-actions-${app.id}`}>
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              <DropdownMenuItem
+                                onClick={() => setSelectedApplication(app)}
+                                data-testid={`menu-view-${app.id}`}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSelectedApplication(app);
+                                  setIsReviewDialogOpen(true);
+                                }}
+                                data-testid={`menu-review-${app.id}`}
+                              >
+                                <FileCheck className="h-4 w-4 mr-2" />
+                                Review Application
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  sendCommunicationMutation.mutate({
+                                    applicationId: app.id,
+                                    type: 'email',
+                                    subject: 'Application Status Update',
+                                    message: 'Your application is being reviewed.'
+                                  });
+                                }}
+                                data-testid={`menu-email-${app.id}`}
+                              >
+                                <Mail className="h-4 w-4 mr-2" />
+                                Send Email
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  runBackgroundCheckMutation.mutate({
+                                    applicationId: app.id,
+                                    checkType: 'criminal'
+                                  });
+                                }}
+                                data-testid={`menu-background-${app.id}`}
+                              >
+                                <Shield className="h-4 w-4 mr-2" />
+                                Run Background Check
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => {
+                                  setSelectedApplication(app);
+                                  updateStatusMutation.mutate({
+                                    id: app.id,
+                                    status: 'rejected',
+                                    rejectionReason: 'Does not meet requirements'
+                                  });
+                                }}
+                                data-testid={`menu-reject-${app.id}`}
+                              >
+                                <XCircle className="h-4 w-4 mr-2" />
+                                Reject Application
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -1223,84 +1346,162 @@ export default function AdminApplications() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Driver Name</TableHead>
-                    <TableHead>CDL Number</TableHead>
-                    <TableHead>Managing Contractor</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Date Applied</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              {isMobile ? (
+                // Mobile card view
+                <div className="space-y-4">
                   {isLoadingDrivers ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
-                        Loading driver applications...
-                      </TableCell>
-                    </TableRow>
+                    <div className="text-center py-8">Loading driver applications...</div>
                   ) : driverApplications.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
-                        No pending driver applications
-                      </TableCell>
-                    </TableRow>
+                    <div className="text-center py-8">No pending driver applications</div>
                   ) : (
                     driverApplications.map((driver: any) => (
-                      <TableRow key={driver.id} data-testid={`row-driver-${driver.id}`}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar>
-                              <AvatarFallback>
-                                {driver.firstName?.[0]}{driver.lastName?.[0]}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="font-medium">{driver.firstName} {driver.lastName}</p>
+                      <Card key={driver.id}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Avatar>
+                                <AvatarFallback>
+                                  {driver.firstName?.[0]}{driver.lastName?.[0]}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="font-medium">{driver.firstName} {driver.lastName}</p>
+                                <p className="text-sm text-muted-foreground">{driver.email}</p>
+                              </div>
                             </div>
+                            <Badge variant="warning">
+                              <Clock className="h-3 w-3 mr-1" />
+                              Pending
+                            </Badge>
                           </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">CDL Number</span>
+                            <span className="text-sm font-medium">{driver.cdlNumber || 'Not provided'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Managing Contractor</span>
+                            <span className="text-sm font-medium">{driver.contractorName || 'N/A'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Phone</span>
+                            <span className="text-sm font-medium">{driver.phone}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Date Applied</span>
+                            <span className="text-sm font-medium">{format(new Date(driver.createdAt), 'MMM d, yyyy')}</span>
+                          </div>
+                        </CardContent>
+                        <CardFooter className="pt-3 gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-11 flex-1"
+                            onClick={() => {
+                              setSelectedDriverApplication(driver);
+                              setIsDriverReviewDialogOpen(true);
+                            }}
+                            data-testid={`button-review-driver-${driver.id}`}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            Review
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-11 flex-1"
+                            onClick={() => approveDriverMutation.mutate(driver.id)}
+                            data-testid={`button-approve-driver-${driver.id}`}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Approve
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              ) : (
+                // Desktop table view
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Driver Name</TableHead>
+                      <TableHead>CDL Number</TableHead>
+                      <TableHead>Managing Contractor</TableHead>
+                      <TableHead>Phone</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Date Applied</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingDrivers ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          Loading driver applications...
                         </TableCell>
-                        <TableCell>{driver.cdlNumber || 'Not provided'}</TableCell>
-                        <TableCell>{driver.contractorName || 'N/A'}</TableCell>
-                        <TableCell>{driver.phone}</TableCell>
-                        <TableCell>{driver.email}</TableCell>
-                        <TableCell>{format(new Date(driver.createdAt), 'MMM d, yyyy')}</TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" className="h-8 w-8 p-0">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setSelectedDriverApplication(driver);
-                                  setIsDriverReviewDialogOpen(true);
-                                }}
-                                data-testid={`menu-review-driver-${driver.id}`}
-                              >
-                                <Eye className="mr-2 h-4 w-4" />
-                                Review
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => approveDriverMutation.mutate(driver.id)}
-                                data-testid={`menu-approve-driver-${driver.id}`}
-                              >
-                                <CheckCircle className="mr-2 h-4 w-4" />
-                                Quick Approve
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => rejectDriverMutation.mutate(driver.id)}
-                                className="text-red-600"
-                                data-testid={`menu-reject-driver-${driver.id}`}
-                              >
-                                <XCircle className="mr-2 h-4 w-4" />
-                                Quick Reject
-                              </DropdownMenuItem>
+                      </TableRow>
+                    ) : driverApplications.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          No pending driver applications
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      driverApplications.map((driver: any) => (
+                        <TableRow key={driver.id} data-testid={`row-driver-${driver.id}`}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <Avatar>
+                                <AvatarFallback>
+                                  {driver.firstName?.[0]}{driver.lastName?.[0]}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="font-medium">{driver.firstName} {driver.lastName}</p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>{driver.cdlNumber || 'Not provided'}</TableCell>
+                          <TableCell>{driver.contractorName || 'N/A'}</TableCell>
+                          <TableCell>{driver.phone}</TableCell>
+                          <TableCell>{driver.email}</TableCell>
+                          <TableCell>{format(new Date(driver.createdAt), 'MMM d, yyyy')}</TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSelectedDriverApplication(driver);
+                                    setIsDriverReviewDialogOpen(true);
+                                  }}
+                                  data-testid={`menu-review-driver-${driver.id}`}
+                                >
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  Review
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => approveDriverMutation.mutate(driver.id)}
+                                  data-testid={`menu-approve-driver-${driver.id}`}
+                                >
+                                  <CheckCircle className="mr-2 h-4 w-4" />
+                                  Quick Approve
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => rejectDriverMutation.mutate(driver.id)}
+                                  className="text-red-600"
+                                  data-testid={`menu-reject-driver-${driver.id}`}
+                                >
+                                  <XCircle className="mr-2 h-4 w-4" />
+                                  Quick Reject
+                                </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
