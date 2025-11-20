@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
@@ -52,15 +52,6 @@ export default function Homepage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [, setLocation] = useLocation();
 
-  // Memoize star positions to prevent jitter on re-renders
-  const starPositions = useMemo(() => {
-    return [...Array(50)].map((_, i) => ({
-      id: i,
-      top: Math.random() * 100,
-      left: Math.random() * 100,
-      rotation: Math.random() * 360
-    }));
-  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -70,12 +61,19 @@ export default function Homepage() {
         canonical="https://truckfixgo.com/"
       />
       
-      {/* Patriotic Alert Bar */}
-      <div className="bg-gradient-to-r from-red-600 via-white to-blue-600 py-1">
-        <div className="bg-destructive text-destructive-foreground py-2 text-center">
-          <div className="flex items-center justify-center gap-2">
-            <Flag className="w-5 h-5" />
-            <span className="font-bold text-base md:text-sm uppercase tracking-wide">24/7 EMERGENCY TRUCK REPAIR SERVICE</span>
+      {/* Emergency Button Bar */}
+      <div className="bg-gradient-to-r from-red-600 via-red-700 to-red-600 py-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-center gap-4">
+            <Button 
+              size="lg"
+              className="bg-white text-red-700 font-black hover-elevate animate-pulse px-8 py-6 text-lg uppercase tracking-wide shadow-lg"
+              onClick={() => setLocation("/emergency")}
+              data-testid="button-top-emergency"
+            >
+              <AlertCircle className="w-6 h-6 mr-2" />
+              GET EMERGENCY HELP NOW - 24/7 SERVICE
+            </Button>
           </div>
         </div>
       </div>
@@ -167,17 +165,6 @@ export default function Homepage() {
             backgroundImage: `repeating-linear-gradient(90deg, transparent, transparent 35px, rgba(255,255,255,0.1) 35px, rgba(255,255,255,0.1) 70px)`,
             backgroundSize: '100px 100%'
           }} />
-        </div>
-        
-        {/* Stars Pattern */}
-        <div className="absolute top-0 left-0 w-64 h-64 opacity-20">
-          {starPositions.map((star) => (
-            <span key={star.id} className="absolute text-white text-2xl" style={{
-              top: `${star.top}%`,
-              left: `${star.left}%`,
-              transform: `rotate(${star.rotation}deg)`
-            }}>★</span>
-          ))}
         </div>
         
         <div className="relative z-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-center">
