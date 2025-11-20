@@ -1501,14 +1501,15 @@ export default function AdminApplications() {
                                   <XCircle className="mr-2 h-4 w-4" />
                                   Quick Reject
                                 </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                         </TableCell>
                       </TableRow>
                     ))
                   )}
                 </TableBody>
               </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
