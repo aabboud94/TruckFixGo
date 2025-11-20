@@ -78,6 +78,7 @@ const REVIEW_CHECKLIST = [
 ];
 
 export default function AdminApplications() {
+  const isMobile = useIsMobile();
   const [selectedApplication, setSelectedApplication] = useState<ContractorApplication | null>(null);
   const [selectedDriverApplication, setSelectedDriverApplication] = useState<any>(null);
   const [filterStatus, setFilterStatus] = useState<string>("all");

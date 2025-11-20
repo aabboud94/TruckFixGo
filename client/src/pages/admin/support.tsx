@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 
 export default function AdminSupport() {
+  const isMobile = useIsMobile();
   const tickets = [
     { id: "T-1234", user: "john@trucking.com", subject: "Payment issue", status: "open", priority: "high", created: "10 min ago" },
     { id: "T-1233", user: "sarah@fleet.com", subject: "Can't find contractor", status: "in_progress", priority: "medium", created: "1 hour ago" },
@@ -105,58 +106,112 @@ export default function AdminSupport() {
                 <CardDescription>Manage customer support requests</CardDescription>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Ticket ID</TableHead>
-                      <TableHead>User</TableHead>
-                      <TableHead>Subject</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Priority</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                {isMobile ? (
+                  // Mobile card layout
+                  <div className="space-y-4">
                     {tickets.map((ticket) => (
-                      <TableRow key={ticket.id}>
-                        <TableCell className="font-mono">{ticket.id}</TableCell>
-                        <TableCell>{ticket.user}</TableCell>
-                        <TableCell>{ticket.subject}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={ticket.status === "open" ? "destructive" : "secondary"}
-                          >
-                            {ticket.status.replace('_', ' ')}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              ticket.priority === "high"
-                                ? "destructive"
-                                : ticket.priority === "medium"
-                                ? "default"
-                                : "secondary"
-                            }
-                          >
-                            {ticket.priority}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{ticket.created}</TableCell>
-                        <TableCell>
+                      <Card key={ticket.id}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <CardTitle className="text-base font-mono">{ticket.id}</CardTitle>
+                              <CardDescription className="mt-1">
+                                {ticket.user}
+                                <span className="block">{ticket.subject}</span>
+                              </CardDescription>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              <Badge
+                                variant={ticket.status === "open" ? "destructive" : "secondary"}
+                              >
+                                {ticket.status.replace('_', ' ')}
+                              </Badge>
+                              <Badge
+                                variant={
+                                  ticket.priority === "high"
+                                    ? "destructive"
+                                    : ticket.priority === "medium"
+                                    ? "default"
+                                    : "secondary"
+                                }
+                              >
+                                {ticket.priority}
+                              </Badge>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-sm text-muted-foreground">
+                            Created: {ticket.created}
+                          </div>
+                        </CardContent>
+                        <CardFooter className="pt-3">
                           <Button
                             size="sm"
-                            variant="outline"
+                            className="h-11 w-full"
                             data-testid={`button-view-ticket-${ticket.id}`}
                           >
-                            View
+                            View Ticket
                           </Button>
-                        </TableCell>
-                      </TableRow>
+                        </CardFooter>
+                      </Card>
                     ))}
-                  </TableBody>
-                </Table>
+                  </div>
+                ) : (
+                  // Desktop table layout
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Ticket ID</TableHead>
+                        <TableHead>User</TableHead>
+                        <TableHead>Subject</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tickets.map((ticket) => (
+                        <TableRow key={ticket.id}>
+                          <TableCell className="font-mono">{ticket.id}</TableCell>
+                          <TableCell>{ticket.user}</TableCell>
+                          <TableCell>{ticket.subject}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={ticket.status === "open" ? "destructive" : "secondary"}
+                            >
+                              {ticket.status.replace('_', ' ')}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                ticket.priority === "high"
+                                  ? "destructive"
+                                  : ticket.priority === "medium"
+                                  ? "default"
+                                  : "secondary"
+                              }
+                            >
+                              {ticket.priority}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{ticket.created}</TableCell>
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              data-testid={`button-view-ticket-${ticket.id}`}
+                            >
+                              View
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 
 export default function AdminReferrals() {
+  const isMobile = useIsMobile();
   const referralStats = {
     totalReferrals: 342,
     activeReferrers: 89,
@@ -172,50 +173,105 @@ export default function AdminReferrals() {
             <CardDescription>Highest performing referral partners</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Code</TableHead>
-                  <TableHead className="text-center">Referrals</TableHead>
-                  <TableHead className="text-right">Earned</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            {isMobile ? (
+              // Mobile card layout
+              <div className="space-y-4">
                 {topReferrers.map((referrer) => (
-                  <TableRow key={referrer.id}>
-                    <TableCell className="font-medium">{referrer.name}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <code className="rounded bg-muted px-2 py-1 text-sm">
-                          {referrer.code}
-                        </code>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0"
-                          data-testid={`button-copy-${referrer.id}`}
-                        >
-                          <Copy className="h-3 w-3" />
-                        </Button>
+                  <Card key={referrer.id}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle className="text-base">{referrer.name}</CardTitle>
+                          <CardDescription className="mt-1">
+                            <div className="flex items-center gap-2 mt-1">
+                              <code className="rounded bg-muted px-2 py-1 text-sm">
+                                {referrer.code}
+                              </code>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0"
+                                data-testid={`button-copy-${referrer.id}`}
+                              >
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </CardDescription>
+                        </div>
+                        <Badge variant="default">Active</Badge>
                       </div>
-                    </TableCell>
-                    <TableCell className="text-center">{referrer.referrals}</TableCell>
-                    <TableCell className="text-right">${referrer.earned}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="default">Active</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button size="sm" variant="outline" data-testid={`button-view-${referrer.id}`}>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="text-sm space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Referrals:</span>
+                          <span className="font-medium">{referrer.referrals}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Earned:</span>
+                          <span className="font-medium">${referrer.earned}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                    <CardFooter className="pt-3">
+                      <Button 
+                        size="sm" 
+                        className="h-11 w-full" 
+                        data-testid={`button-view-${referrer.id}`}
+                      >
                         View Details
                       </Button>
-                    </TableCell>
-                  </TableRow>
+                    </CardFooter>
+                  </Card>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            ) : (
+              // Desktop table layout
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead className="text-center">Referrals</TableHead>
+                    <TableHead className="text-right">Earned</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {topReferrers.map((referrer) => (
+                    <TableRow key={referrer.id}>
+                      <TableCell className="font-medium">{referrer.name}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <code className="rounded bg-muted px-2 py-1 text-sm">
+                            {referrer.code}
+                          </code>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            data-testid={`button-copy-${referrer.id}`}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">{referrer.referrals}</TableCell>
+                      <TableCell className="text-right">${referrer.earned}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="default">Active</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button size="sm" variant="outline" data-testid={`button-view-${referrer.id}`}>
+                          View Details
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>

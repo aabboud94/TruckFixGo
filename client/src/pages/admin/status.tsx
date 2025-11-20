@@ -136,6 +136,7 @@ interface ErrorTracking {
 
 export default function AdminStatusPage() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(5000);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({

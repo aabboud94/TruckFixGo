@@ -66,6 +66,7 @@ function GaugeChart({ value, title, subtitle, target = 100 }: { value: number; t
 
 export default function AdminAnalytics() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [dateRange, setDateRange] = useState("month");
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedMetric, setSelectedMetric] = useState("revenue");

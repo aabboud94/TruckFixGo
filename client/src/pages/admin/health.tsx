@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 
 export default function AdminSystemHealth() {
+  const isMobile = useIsMobile();
   const services = [
     { name: "API Server", status: "operational", uptime: "99.99%", responseTime: "45ms" },
     { name: "Database", status: "operational", uptime: "99.95%", responseTime: "12ms" },
@@ -124,37 +125,77 @@ export default function AdminSystemHealth() {
               <CardDescription>Real-time service health monitoring</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Service</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Uptime</TableHead>
-                    <TableHead>Response</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              {isMobile ? (
+                // Mobile card layout
+                <div className="space-y-4">
                   {services.map((service) => (
-                    <TableRow key={service.name}>
-                      <TableCell className="font-medium">{service.name}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {service.status === "operational" ? (
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                          ) : service.status === "degraded" ? (
-                            <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                          ) : (
-                            <XCircle className="h-4 w-4 text-red-500" />
-                          )}
-                          <span className="text-sm capitalize">{service.status}</span>
+                    <Card key={service.name}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <CardTitle className="text-base">{service.name}</CardTitle>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {service.status === "operational" ? (
+                              <CheckCircle className="h-4 w-4 text-green-500" />
+                            ) : service.status === "degraded" ? (
+                              <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-red-500" />
+                            )}
+                            <span className="text-sm capitalize">{service.status}</span>
+                          </div>
                         </div>
-                      </TableCell>
-                      <TableCell>{service.uptime}</TableCell>
-                      <TableCell>{service.responseTime}</TableCell>
-                    </TableRow>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="text-sm space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Uptime:</span>
+                            <span className="font-medium">{service.uptime}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Response Time:</span>
+                            <span className="font-medium">{service.responseTime}</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+              ) : (
+                // Desktop table layout
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Service</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Uptime</TableHead>
+                      <TableHead>Response</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {services.map((service) => (
+                      <TableRow key={service.name}>
+                        <TableCell className="font-medium">{service.name}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {service.status === "operational" ? (
+                              <CheckCircle className="h-4 w-4 text-green-500" />
+                            ) : service.status === "degraded" ? (
+                              <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-red-500" />
+                            )}
+                            <span className="text-sm capitalize">{service.status}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{service.uptime}</TableCell>
+                        <TableCell>{service.responseTime}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
 

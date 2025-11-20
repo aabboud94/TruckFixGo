@@ -44,6 +44,7 @@ import {
 
 export default function AdminUsers() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -537,139 +538,251 @@ export default function AdminUsers() {
             </div>
           )}
 
-          {/* Users Table */}
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={selectedUsers.length === usersData.length}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedUsers(usersData.map((u: any) => u.id));
-                        } else {
-                          setSelectedUsers([]);
-                        }
-                      }}
-                    />
-                  </TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden md:table-cell">Verified</TableHead>
-                  <TableHead className="hidden lg:table-cell">2FA</TableHead>
-                  <TableHead className="hidden md:table-cell">Jobs</TableHead>
-                  <TableHead className="hidden lg:table-cell">Joined</TableHead>
-                  <TableHead className="hidden xl:table-cell">Last Login</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
-                      <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-                    </TableCell>
-                  </TableRow>
-                ) : usersData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
-                      No users found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  usersData.map((user: any) => (
-                    <TableRow key={user.id}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedUsers.includes(user.id)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedUsers([...selectedUsers, user.id]);
-                            } else {
-                              setSelectedUsers(selectedUsers.filter(id => id !== user.id));
-                            }
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{user.name}</p>
-                          <p className="text-sm text-muted-foreground">{user.email}</p>
+          {/* Users Table or Mobile Cards */}
+          {isMobile ? (
+            // Mobile card layout
+            <div className="space-y-4">
+              {isLoading ? (
+                <div className="text-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                </div>
+              ) : usersData.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No users found
+                </div>
+              ) : (
+                usersData.map((user: any) => (
+                  <Card key={user.id}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="text-base flex items-center gap-2">
+                            {user.name}
+                            {user.emailVerified && (
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            )}
+                          </CardTitle>
+                          <CardDescription className="mt-1">
+                            {user.email}
+                            {user.phone && (
+                              <span className="block text-xs">{user.phone}</span>
+                            )}
+                          </CardDescription>
                         </div>
-                      </TableCell>
-                      <TableCell>{getRoleBadge(user.role)}</TableCell>
-                      <TableCell>{getStatusBadge(user.status)}</TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        {user.emailVerified ? (
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <XCircle className="h-4 w-4 text-red-600" />
-                        )}
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell">
-                        {user.twoFactorEnabled ? (
-                          <Shield className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">{user.totalJobs}</TableCell>
-                      <TableCell className="hidden lg:table-cell">
-                        {user.createdAt ? format(new Date(user.createdAt), 'MMM d, yyyy') : 'Never'}
-                      </TableCell>
-                      <TableCell className="hidden xl:table-cell">
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-sm">
+                        <div className="flex flex-col items-end gap-1">
+                          {getRoleBadge(user.role)}
+                          {getStatusBadge(user.status)}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="text-sm space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Total Jobs:</span>
+                          <span className="font-medium">{user.totalJobs || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Joined:</span>
+                          <span className="font-medium">
+                            {user.createdAt ? format(new Date(user.createdAt), 'MMM d, yyyy') : 'Never'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Last Login:</span>
+                          <span className="font-medium">
                             {user.lastLogin ? format(new Date(user.lastLogin), 'h:mm a') : 'Never'}
                           </span>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setShowUserDetails(true);
-                            }}
-                            data-testid={`button-view-${user.id}`}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setShowPasswordReset(true);
-                            }}
-                            data-testid={`button-reset-password-${user.id}`}
-                          >
-                            <Key className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setShowActivityLog(true);
-                            }}
-                            data-testid={`button-activity-${user.id}`}
-                          >
-                            <History className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        {user.twoFactorEnabled && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Security:</span>
+                            <div className="flex items-center gap-1">
+                              <Shield className="h-4 w-4 text-green-600" />
+                              <span className="font-medium text-xs">2FA Enabled</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                    <CardFooter className="pt-3 gap-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="h-11 flex-1"
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setShowUserDetails(true);
+                        }}
+                        data-testid={`button-view-${user.id}`}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        View
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className="h-11 flex-1"
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setShowPasswordReset(true);
+                        }}
+                        data-testid={`button-reset-${user.id}`}
+                      >
+                        <Key className="h-4 w-4 mr-2" />
+                        Reset
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="h-11 flex-1"
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setShowActivityLog(true);
+                        }}
+                        data-testid={`button-activity-${user.id}`}
+                      >
+                        <History className="h-4 w-4 mr-2" />
+                        Log
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))
+              )}
+            </div>
+          ) : (
+            // Desktop table layout
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedUsers.length === usersData.length}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedUsers(usersData.map((u: any) => u.id));
+                          } else {
+                            setSelectedUsers([]);
+                          }
+                        }}
+                      />
+                    </TableHead>
+                    <TableHead>User</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden md:table-cell">Verified</TableHead>
+                    <TableHead className="hidden lg:table-cell">2FA</TableHead>
+                    <TableHead className="hidden md:table-cell">Jobs</TableHead>
+                    <TableHead className="hidden lg:table-cell">Joined</TableHead>
+                    <TableHead className="hidden xl:table-cell">Last Login</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin mx-auto" />
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ) : usersData.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                        No users found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    usersData.map((user: any) => (
+                      <TableRow key={user.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedUsers.includes(user.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedUsers([...selectedUsers, user.id]);
+                              } else {
+                                setSelectedUsers(selectedUsers.filter(id => id !== user.id));
+                              }
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{user.name}</p>
+                            <p className="text-sm text-muted-foreground">{user.email}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{getRoleBadge(user.role)}</TableCell>
+                        <TableCell>{getStatusBadge(user.status)}</TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {user.emailVerified ? (
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <XCircle className="h-4 w-4 text-red-600" />
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          {user.twoFactorEnabled ? (
+                            <Shield className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">{user.totalJobs}</TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          {user.createdAt ? format(new Date(user.createdAt), 'MMM d, yyyy') : 'Never'}
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell">
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-sm">
+                              {user.lastLogin ? format(new Date(user.lastLogin), 'h:mm a') : 'Never'}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedUser(user);
+                                setShowUserDetails(true);
+                              }}
+                              data-testid={`button-view-${user.id}`}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedUser(user);
+                                setShowPasswordReset(true);
+                              }}
+                              data-testid={`button-reset-password-${user.id}`}
+                            >
+                              <Key className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedUser(user);
+                                setShowActivityLog(true);
+                              }}
+                              data-testid={`button-activity-${user.id}`}
+                            >
+                              <History className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
