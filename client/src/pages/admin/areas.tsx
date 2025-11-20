@@ -264,14 +264,14 @@ export default function AdminServiceAreas() {
   return (
     <AdminLayout>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Service Cities</h2>
             <p className="text-muted-foreground">
               Manage which cities TruckFixGo operates in
             </p>
           </div>
-          <Button onClick={handleAdd} data-testid="button-add-city">
+          <Button onClick={handleAdd} data-testid="button-add-city" className="w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" />
             Add City
           </Button>

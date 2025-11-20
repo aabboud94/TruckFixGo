@@ -278,13 +278,14 @@ export default function AdminInvoices() {
       {/* Filters and Actions */}
       <Card className="mb-6">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>Invoice Filters</CardTitle>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row w-full sm:w-auto">
               <Button
                 variant="outline"
                 onClick={() => setInvoiceSettingsDialog(true)}
                 data-testid="button-invoice-settings"
+                className="w-full sm:w-auto"
               >
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
@@ -294,6 +295,7 @@ export default function AdminInvoices() {
                 onClick={() => setBulkExportDialog(true)}
                 disabled={selectedInvoices.size === 0}
                 data-testid="button-bulk-export"
+                className="w-full sm:w-auto"
               >
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
                 Bulk Export ({selectedInvoices.size})

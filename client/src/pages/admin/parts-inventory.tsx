@@ -400,16 +400,17 @@ export default function PartsInventory() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold" data-testid="text-page-title">Parts Inventory Management</h1>
           <p className="text-muted-foreground">Manage parts catalog, inventory levels, and purchase orders</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row w-full sm:w-auto">
           <Button 
             onClick={() => refetchCatalog()} 
             variant="outline"
             data-testid="button-refresh"
+            className="w-full sm:w-auto"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
@@ -421,6 +422,7 @@ export default function PartsInventory() {
               setIsPartDialogOpen(true);
             }}
             data-testid="button-add-part"
+            className="w-full sm:w-auto"
           >
             <Plus className="w-4 h-4 mr-2" />
             Add Part

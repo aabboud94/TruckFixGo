@@ -209,16 +209,17 @@ export default function AdminFleets() {
         <TabsContent value="fleets">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <CardTitle>Fleet Accounts</CardTitle>
                   <CardDescription>Manage fleet accounts, tiers, and credit limits</CardDescription>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row w-full sm:w-auto">
               <Button
                 variant="outline"
                 onClick={() => refetch()}
                 data-testid="button-refresh-fleets"
+                className="w-full sm:w-auto"
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Refresh
@@ -227,6 +228,7 @@ export default function AdminFleets() {
                 variant="outline"
                 onClick={handleExport}
                 data-testid="button-export-fleets"
+                className="w-full sm:w-auto"
               >
                 <Download className="mr-2 h-4 w-4" />
                 Export
@@ -235,6 +237,7 @@ export default function AdminFleets() {
                 <Button
                   onClick={() => setShowInvoiceDialog(true)}
                   data-testid="button-generate-invoices"
+                  className="w-full sm:w-auto"
                 >
                   <Receipt className="mr-2 h-4 w-4" />
                   Generate Invoices ({selectedFleets.length})

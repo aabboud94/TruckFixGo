@@ -332,12 +332,13 @@ export default function AdminJobs() {
                 {isMobile ? 'Manage platform jobs' : 'Manage and monitor all platform jobs'}
               </CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className={isMobile ? 'flex flex-col gap-2 w-full' : 'flex gap-2'}>
               <Button
                 variant="outline"
                 onClick={() => refetch()}
                 data-testid="button-refresh-jobs"
                 size={isMobile ? 'sm' : 'default'}
+                className="w-full sm:w-auto"
               >
                 <RefreshCw className={`${isMobile ? 'h-4 w-4' : 'mr-2 h-4 w-4'}`} />
                 {!isMobile && 'Refresh'}
@@ -347,6 +348,7 @@ export default function AdminJobs() {
                 onClick={handleExport}
                 data-testid="button-export-jobs"
                 size={isMobile ? 'sm' : 'default'}
+                className="w-full sm:w-auto"
               >
                 <Download className={`${isMobile ? 'h-4 w-4' : 'mr-2 h-4 w-4'}`} />
                 {!isMobile && 'Export'}

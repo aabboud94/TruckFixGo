@@ -368,7 +368,7 @@ export default function AdminApplications() {
           </SelectContent>
         </Select>
 
-        <Button onClick={() => refetch()} variant="outline" data-testid="button-refresh">
+        <Button onClick={() => refetch()} variant="outline" data-testid="button-refresh" className="w-full sm:w-auto">
           <RefreshCcw className="h-4 w-4 mr-2" />
           Refresh
         </Button>
@@ -443,7 +443,7 @@ export default function AdminApplications() {
       {/* Applications Table */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>Applications</CardTitle>
               <CardDescription>
