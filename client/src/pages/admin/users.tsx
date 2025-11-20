@@ -408,16 +408,17 @@ export default function AdminUsers() {
       {/* Main Users Card */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>All Users</CardTitle>
               <CardDescription>Manage user accounts, roles, and permissions</CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row w-full sm:w-auto">
               <Button
                 variant="outline"
                 onClick={() => refetch()}
                 data-testid="button-refresh-users"
+                className="w-full sm:w-auto"
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Refresh
@@ -426,6 +427,7 @@ export default function AdminUsers() {
                 variant="outline"
                 onClick={handleExport}
                 data-testid="button-export-users"
+                className="w-full sm:w-auto"
               >
                 <Download className="mr-2 h-4 w-4" />
                 Export
@@ -433,6 +435,7 @@ export default function AdminUsers() {
               <Button
                 onClick={() => setShowAddUser(true)}
                 data-testid="button-add-user"
+                className="w-full sm:w-auto"
               >
                 <UserPlus className="mr-2 h-4 w-4" />
                 Add User

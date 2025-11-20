@@ -506,6 +506,7 @@ export default function AdminContractors() {
                 variant="outline"
                 onClick={() => refetch()}
                 data-testid="button-refresh-contractors"
+                className="w-full sm:w-auto"
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Refresh
@@ -514,6 +515,7 @@ export default function AdminContractors() {
                 variant="outline"
                 onClick={handleExport}
                 data-testid="button-export-contractors"
+                className="w-full sm:w-auto"
               >
                 <Download className="mr-2 h-4 w-4" />
                 Export
@@ -524,6 +526,7 @@ export default function AdminContractors() {
                   onClick={() => generateTestContractorsMutation.mutate()}
                   disabled={generateTestContractorsMutation.isPending}
                   data-testid="button-generate-test-contractors"
+                  className="w-full sm:w-auto"
                 >
                   {generateTestContractorsMutation.isPending ? (
                     <>
@@ -541,6 +544,7 @@ export default function AdminContractors() {
               <Button
                 onClick={() => navigate('/admin/applications')}
                 data-testid="button-view-applications"
+                className="w-full sm:w-auto"
               >
                 <UserPlus className="mr-2 h-4 w-4" />
                 View Applications

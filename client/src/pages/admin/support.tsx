@@ -27,9 +27,9 @@ export default function AdminSupport() {
   return (
     <AdminLayout>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-3xl font-bold tracking-tight">Support Tools</h2>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row w-full sm:w-auto">
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -38,7 +38,7 @@ export default function AdminSupport() {
                 data-testid="input-search-tickets"
               />
             </div>
-            <Button data-testid="button-new-ticket">
+            <Button data-testid="button-new-ticket" className="w-full sm:w-auto">
               <HeadphonesIcon className="mr-2 h-4 w-4" />
               New Ticket
             </Button>
