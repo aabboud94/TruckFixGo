@@ -49,6 +49,7 @@ type DefaultChargeFormData = z.infer<typeof defaultChargeSchema>;
 
 export default function AdminInvoiceDefaults() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingCharge, setEditingCharge] = useState<DefaultCharge | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -239,33 +240,101 @@ export default function AdminInvoiceDefaults() {
       {/* Charges Table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Auto-Apply</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
+          {isLoading ? (
+            <div className="text-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+            </div>
+          ) : chargesArray.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No default charges configured
+            </div>
+          ) : isMobile ? (
+            // Mobile card layout
+            <div className="p-4 space-y-4">
+              {chargesArray.map((charge: DefaultCharge) => (
+                <Card key={charge.id} data-testid={`card-charge-${charge.id}`}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-base">{charge.name}</CardTitle>
+                        <CardDescription className="mt-1">
+                          ${charge.amount.toFixed(2)} • {charge.description || "No description"}
+                        </CardDescription>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <Badge variant={getTypeColor(charge.type) as any}>
+                          {charge.type}
+                        </Badge>
+                        {charge.applyByDefault ? (
+                          <Badge variant="outline" className="bg-green-50">
+                            <Check className="h-3 w-3 mr-1" />
+                            Auto
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-gray-50">
+                            <X className="h-3 w-3 mr-1" />
+                            Manual
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Active Status</span>
+                      <Switch
+                        checked={charge.active}
+                        onCheckedChange={(checked) => {
+                          toggleActiveMutation.mutate({
+                            id: charge.id,
+                            active: checked,
+                          });
+                        }}
+                        data-testid={`switch-active-${charge.id}`}
+                      />
+                    </div>
+                  </CardContent>
+                  <CardFooter className="pt-3 gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-11 flex-1"
+                      onClick={() => handleEdit(charge)}
+                      data-testid={`button-edit-${charge.id}`}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-11 flex-1"
+                      onClick={() => setDeleteConfirmId(charge.id)}
+                      data-testid={`button-delete-${charge.id}`}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            // Desktop table layout
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-                  </TableCell>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Auto-Apply</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-[100px]">Actions</TableHead>
                 </TableRow>
-              ) : chargesArray.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    No default charges configured
-                  </TableCell>
-                </TableRow>
-              ) : (
-                chargesArray.map((charge: DefaultCharge) => (
+              </TableHeader>
+              <TableBody>
+                {chargesArray.map((charge: DefaultCharge) => (
                   <TableRow key={charge.id} data-testid={`row-charge-${charge.id}`}>
                     <TableCell className="font-medium">{charge.name}</TableCell>
                     <TableCell>
@@ -325,10 +394,10 @@ export default function AdminInvoiceDefaults() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 

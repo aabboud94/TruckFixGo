@@ -122,6 +122,7 @@ const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Sat
 
 export default function PricingRulesPage() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [selectedRule, setSelectedRule] = useState<any>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showTestDialog, setShowTestDialog] = useState(false);

@@ -94,6 +94,7 @@ interface SubscriptionWithFleet extends BillingSubscription {
 
 export default function AdminBilling() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [selectedSubscription, setSelectedSubscription] = useState<SubscriptionWithFleet | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -467,7 +468,7 @@ export default function AdminBilling() {
             </Select>
           </div>
 
-          {/* Subscriptions Table */}
+          {/* Subscriptions Table or Mobile Cards */}
           <Card>
             <CardHeader>
               <CardTitle>Active Subscriptions</CardTitle>
@@ -478,7 +479,129 @@ export default function AdminBilling() {
             <CardContent>
               {isLoading ? (
                 <div>Loading subscriptions...</div>
+              ) : isMobile ? (
+                // Mobile card layout
+                <div className="space-y-4">
+                  {filteredSubscriptions.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No subscriptions found
+                    </div>
+                  ) : (
+                    filteredSubscriptions.map((subscription: SubscriptionWithFleet) => (
+                      <Card key={subscription.id}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <CardTitle className="text-base">
+                                {subscription.fleetAccount?.name || 'Unknown Fleet'}
+                              </CardTitle>
+                              <CardDescription className="mt-1">
+                                ID: {subscription.fleetAccountId?.slice(0, 8)}...
+                              </CardDescription>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              {getStatusBadge(subscription.status)}
+                              {getPlanBadge(subscription.planType)}
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="text-sm space-y-2">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Amount:</span>
+                              <span className="font-semibold">${parseFloat(subscription.baseAmount).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Billing Cycle:</span>
+                              <span className="font-medium">{subscription.billingCycle}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Next Billing:</span>
+                              <span className="font-medium">
+                                {subscription.nextBillingDate
+                                  ? format(new Date(subscription.nextBillingDate), 'MMM d, yyyy')
+                                  : 'N/A'}
+                              </span>
+                            </div>
+                            {subscription.usage && (
+                              <>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Vehicles:</span>
+                                  <span className="font-medium">
+                                    {subscription.usage.vehiclesUsed}/{subscription.maxVehicles}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Repairs:</span>
+                                  <span className="font-medium">
+                                    {subscription.usage.emergencyRepairsUsed}/{subscription.includedEmergencyRepairs}
+                                  </span>
+                                </div>
+                              </>
+                            )}
+                            {subscription.addOns?.length > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Add-ons:</span>
+                                <span className="font-medium">+{subscription.addOns.length} add-ons</span>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                        <CardFooter className="pt-3 gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-11 flex-1"
+                            onClick={() => {
+                              setSelectedSubscription(subscription);
+                              setShowEditDialog(true);
+                            }}
+                            data-testid={`button-edit-${subscription.id}`}
+                          >
+                            <Edit className="w-4 h-4 mr-2" />
+                            Edit
+                          </Button>
+                          {subscription.status === 'active' ? (
+                            <Button
+                              size="sm"
+                              className="h-11 flex-1"
+                              onClick={() => pauseSubscriptionMutation.mutate(subscription.id)}
+                              data-testid={`button-pause-${subscription.id}`}
+                            >
+                              <Pause className="w-4 h-4 mr-2" />
+                              Pause
+                            </Button>
+                          ) : subscription.status === 'paused' ? (
+                            <Button
+                              size="sm"
+                              className="h-11 flex-1"
+                              onClick={() => resumeSubscriptionMutation.mutate(subscription.id)}
+                              data-testid={`button-resume-${subscription.id}`}
+                            >
+                              <Play className="w-4 h-4 mr-2" />
+                              Resume
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="h-11 flex-1"
+                              onClick={() => {
+                                setSelectedSubscription(subscription);
+                                setShowChargeDialog(true);
+                              }}
+                              data-testid={`button-charge-${subscription.id}`}
+                            >
+                              <RefreshCw className="w-4 h-4 mr-2" />
+                              Charge
+                            </Button>
+                          )}
+                        </CardFooter>
+                      </Card>
+                    ))
+                  )}
+                </div>
               ) : (
+                // Desktop table layout
                 <Table>
                   <TableHeader>
                     <TableRow>

@@ -126,6 +126,7 @@ type PurchaseOrderData = z.infer<typeof purchaseOrderSchema>;
 
 export default function PartsInventory() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
   const [selectedManufacturer, setSelectedManufacturer] = useState<string | undefined>();

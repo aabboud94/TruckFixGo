@@ -54,6 +54,7 @@ interface InvoiceFilters {
 
 export default function AdminInvoices() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [filters, setFilters] = useState<InvoiceFilters>({
     fromDate: startOfMonth(new Date()),
     toDate: endOfMonth(new Date()),
@@ -415,153 +416,282 @@ export default function AdminInvoices() {
         </CardContent>
       </Card>
 
-      {/* Invoices Table */}
+      {/* Invoices Table or Mobile Cards */}
       <Card>
         <CardHeader>
           <CardTitle>Invoices</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
-                    <input
-                      type="checkbox"
-                      checked={selectedInvoices.size === invoices.length && invoices.length > 0}
-                      onChange={handleSelectAll}
-                      className="rounded border-gray-300"
-                    />
-                  </TableHead>
-                  <TableHead>Invoice #</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Issue Date</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoicesLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                      <p className="text-gray-600 mt-2">Loading invoices...</p>
-                    </TableCell>
-                  </TableRow>
-                ) : invoices.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                      No invoices found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  invoices.map((invoice: any) => {
-                    const StatusIcon = getStatusIcon(invoice.status);
-                    return (
-                      <TableRow key={invoice.id}>
-                        <TableCell>
-                          <input
-                            type="checkbox"
-                            checked={selectedInvoices.has(invoice.id)}
-                            onChange={() => handleSelectInvoice(invoice.id)}
-                            className="rounded border-gray-300"
-                          />
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {invoice.invoiceNumber}
-                        </TableCell>
-                        <TableCell>
+          {isMobile ? (
+            // Mobile card layout
+            <div className="space-y-4">
+              {invoicesLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-gray-600 mt-2">Loading invoices...</p>
+                </div>
+              ) : invoices.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No invoices found
+                </div>
+              ) : (
+                invoices.map((invoice: any) => {
+                  const StatusIcon = getStatusIcon(invoice.status);
+                  return (
+                    <Card key={invoice.id}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between">
                           <div>
-                            <p className="font-semibold">{invoice.customerName || "Guest"}</p>
-                            {invoice.fleetAccountName && (
-                              <p className="text-sm text-gray-600">
-                                <Building2 className="h-3 w-3 inline mr-1" />
-                                {invoice.fleetAccountName}
-                              </p>
-                            )}
+                            <CardTitle className="text-base font-mono">
+                              {invoice.invoiceNumber}
+                            </CardTitle>
+                            <CardDescription className="mt-1">
+                              {invoice.customerName || "Guest"}
+                              {invoice.fleetAccountName && (
+                                <span className="block text-xs">
+                                  <Building2 className="h-3 w-3 inline mr-1" />
+                                  {invoice.fleetAccountName}
+                                </span>
+                              )}
+                            </CardDescription>
                           </div>
-                        </TableCell>
-                        <TableCell>{format(new Date(invoice.issueDate), "MMM dd, yyyy")}</TableCell>
-                        <TableCell>
-                          {invoice.dueDate ? format(new Date(invoice.dueDate), "MMM dd, yyyy") : "N/A"}
-                        </TableCell>
-                        <TableCell className="font-semibold">${invoice.totalAmount}</TableCell>
-                        <TableCell>
                           <Badge className={`${getStatusColor(invoice.status)} text-white`}>
                             <StatusIcon className="h-3 w-3 mr-1" />
                             {invoice.status.toUpperCase()}
                           </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => window.open(`/api/invoices/${invoice.id}/download`)}
-                              data-testid={`button-download-${invoice.id}`}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => regenerateInvoiceMutation.mutate(invoice.jobId)}
-                              data-testid={`button-regenerate-${invoice.id}`}
-                            >
-                              <RefreshCw className="h-4 w-4" />
-                            </Button>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button size="sm" variant="ghost">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-48" align="end">
-                                <div className="space-y-1">
-                                  <Button
-                                    variant="ghost"
-                                    className="w-full justify-start"
-                                    onClick={() => updateStatusMutation.mutate({
-                                      invoiceId: invoice.id,
-                                      status: "paid"
-                                    })}
-                                  >
-                                    Mark as Paid
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    className="w-full justify-start"
-                                    onClick={() => updateStatusMutation.mutate({
-                                      invoiceId: invoice.id,
-                                      status: "overdue"
-                                    })}
-                                  >
-                                    Mark as Overdue
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    className="w-full justify-start text-red-600"
-                                    onClick={() => updateStatusMutation.mutate({
-                                      invoiceId: invoice.id,
-                                      status: "cancelled"
-                                    })}
-                                  >
-                                    Cancel Invoice
-                                  </Button>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="text-sm space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Amount:</span>
+                            <span className="font-semibold">${invoice.totalAmount}</span>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Issue Date:</span>
+                            <span className="font-medium">
+                              {format(new Date(invoice.issueDate), "MMM dd, yyyy")}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Due Date:</span>
+                            <span className="font-medium">
+                              {invoice.dueDate ? format(new Date(invoice.dueDate), "MMM dd, yyyy") : "N/A"}
+                            </span>
+                          </div>
+                        </div>
+                      </CardContent>
+                      <CardFooter className="pt-3 gap-2">
+                        <Button 
+                          size="sm"
+                          variant="outline"
+                          className="h-11 flex-1"
+                          onClick={() => window.open(`/api/invoices/${invoice.id}/download`)}
+                          data-testid={`button-download-${invoice.id}`}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Download
+                        </Button>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button size="sm" className="h-11 flex-1" data-testid={`button-actions-${invoice.id}`}>
+                              Actions
+                              <MoreVertical className="h-4 w-4 ml-2" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-48" align="end">
+                            <div className="space-y-1">
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start"
+                                onClick={() => regenerateInvoiceMutation.mutate(invoice.jobId)}
+                              >
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                Regenerate
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start"
+                                onClick={() => updateStatusMutation.mutate({
+                                  invoiceId: invoice.id,
+                                  status: "paid"
+                                })}
+                              >
+                                Mark as Paid
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start"
+                                onClick={() => updateStatusMutation.mutate({
+                                  invoiceId: invoice.id,
+                                  status: "overdue"
+                                })}
+                              >
+                                Mark as Overdue
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start text-red-600"
+                                onClick={() => updateStatusMutation.mutate({
+                                  invoiceId: invoice.id,
+                                  status: "cancelled"
+                                })}
+                              >
+                                Cancel Invoice
+                              </Button>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </CardFooter>
+                    </Card>
+                  );
+                })
+              )}
+            </div>
+          ) : (
+            // Desktop table layout
+            <div className="rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">
+                      <input
+                        type="checkbox"
+                        checked={selectedInvoices.size === invoices.length && invoices.length > 0}
+                        onChange={handleSelectAll}
+                        className="rounded border-gray-300"
+                      />
+                    </TableHead>
+                    <TableHead>Invoice #</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Issue Date</TableHead>
+                    <TableHead>Due Date</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {invoicesLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                        <p className="text-gray-600 mt-2">Loading invoices...</p>
+                      </TableCell>
+                    </TableRow>
+                  ) : invoices.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                        No invoices found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    invoices.map((invoice: any) => {
+                      const StatusIcon = getStatusIcon(invoice.status);
+                      return (
+                        <TableRow key={invoice.id}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              checked={selectedInvoices.has(invoice.id)}
+                              onChange={() => handleSelectInvoice(invoice.id)}
+                              className="rounded border-gray-300"
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {invoice.invoiceNumber}
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-semibold">{invoice.customerName || "Guest"}</p>
+                              {invoice.fleetAccountName && (
+                                <p className="text-sm text-gray-600">
+                                  <Building2 className="h-3 w-3 inline mr-1" />
+                                  {invoice.fleetAccountName}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{format(new Date(invoice.issueDate), "MMM dd, yyyy")}</TableCell>
+                          <TableCell>
+                            {invoice.dueDate ? format(new Date(invoice.dueDate), "MMM dd, yyyy") : "N/A"}
+                          </TableCell>
+                          <TableCell className="font-semibold">${invoice.totalAmount}</TableCell>
+                          <TableCell>
+                            <Badge className={`${getStatusColor(invoice.status)} text-white`}>
+                              <StatusIcon className="h-3 w-3 mr-1" />
+                              {invoice.status.toUpperCase()}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => window.open(`/api/invoices/${invoice.id}/download`)}
+                                data-testid={`button-download-${invoice.id}`}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => regenerateInvoiceMutation.mutate(invoice.jobId)}
+                                data-testid={`button-regenerate-${invoice.id}`}
+                              >
+                                <RefreshCw className="h-4 w-4" />
+                              </Button>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button size="sm" variant="ghost">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-48" align="end">
+                                  <div className="space-y-1">
+                                    <Button
+                                      variant="ghost"
+                                      className="w-full justify-start"
+                                      onClick={() => updateStatusMutation.mutate({
+                                        invoiceId: invoice.id,
+                                        status: "paid"
+                                      })}
+                                    >
+                                      Mark as Paid
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      className="w-full justify-start"
+                                      onClick={() => updateStatusMutation.mutate({
+                                        invoiceId: invoice.id,
+                                        status: "overdue"
+                                      })}
+                                    >
+                                      Mark as Overdue
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      className="w-full justify-start text-red-600"
+                                      onClick={() => updateStatusMutation.mutate({
+                                        invoiceId: invoice.id,
+                                        status: "cancelled"
+                                      })}
+                                    >
+                                      Cancel Invoice
+                                    </Button>
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 

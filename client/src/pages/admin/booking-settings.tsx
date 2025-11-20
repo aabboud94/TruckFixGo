@@ -26,6 +26,7 @@ const DAYS_OF_WEEK = [
 ];
 
 export default function AdminBookingSettings() {
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("settings");
   const [editingSettings, setEditingSettings] = useState<Record<string, any>>({});
   

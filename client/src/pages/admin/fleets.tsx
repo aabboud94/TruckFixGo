@@ -26,6 +26,7 @@ import {
 
 export default function AdminFleets() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
   const [tierFilter, setTierFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -280,8 +281,124 @@ export default function AdminFleets() {
             </Select>
           </div>
 
-          {/* Fleets Table */}
-          <div className="rounded-md border">
+          {/* Fleets Table or Mobile Cards */}
+          {isMobile ? (
+            // Mobile card layout
+            <div className="space-y-4">
+              {isLoading ? (
+                <div className="text-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                </div>
+              ) : fleetsData.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No fleet accounts found
+                </div>
+              ) : (
+                fleetsData.map((fleet: any) => (
+                  <Card key={fleet.id}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle className="text-base">{fleet.name}</CardTitle>
+                          <CardDescription className="mt-1">
+                            {fleet.contactName}
+                          </CardDescription>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          {getTierBadge(fleet.tier)}
+                          {fleet.status === 'active' ? (
+                            <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                              <CheckCircle className="mr-1 h-3 w-3" />
+                              ACTIVE
+                            </Badge>
+                          ) : fleet.status === 'suspended' ? (
+                            <Badge variant="destructive">
+                              <XCircle className="mr-1 h-3 w-3" />
+                              SUSPENDED
+                            </Badge>
+                          ) : fleet.status === 'overdue' ? (
+                            <Badge variant="secondary" className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                              <AlertCircle className="mr-1 h-3 w-3" />
+                              OVERDUE
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              {fleet.status?.toUpperCase()}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="text-sm space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Vehicles:</span>
+                          <span className="font-medium flex items-center gap-1">
+                            <Truck className="h-4 w-4 text-muted-foreground" />
+                            {fleet.vehicles ?? 0}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Total Jobs:</span>
+                          <span className="font-medium">{fleet.totalJobs ?? 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Total Spent:</span>
+                          <span className="font-medium">${(fleet.totalSpent ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Credit:</span>
+                          <span className="font-medium">
+                            ${(fleet.currentBalance ?? 0).toLocaleString()} / ${(fleet.creditLimit ?? 0).toLocaleString()}
+                          </span>
+                        </div>
+                        {fleet.creditLimit && (
+                          <Progress 
+                            value={fleet.creditLimit ? ((fleet.currentBalance ?? 0) / fleet.creditLimit) * 100 : 0}
+                            className="h-1.5"
+                          />
+                        )}
+                        {fleet.lastJobDate && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Last Active:</span>
+                            <span className="font-medium">{format(fleet.lastJobDate, 'MMM d, yyyy')}</span>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                    <CardFooter className="pt-3 gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-11 flex-1"
+                        onClick={() => {
+                          setSelectedFleet(fleet);
+                          setShowFleetDetails(true);
+                        }}
+                        data-testid={`button-view-${fleet.id}`}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        View
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-11 flex-1"
+                        onClick={() => {
+                          setSelectedFleet(fleet);
+                        }}
+                        data-testid={`button-edit-${fleet.id}`}
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))
+              )}
+            </div>
+          ) : (
+            // Desktop table layout
+            <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -423,7 +540,8 @@ export default function AdminFleets() {
                 )}
               </TableBody>
             </Table>
-          </div>
+            </div>
+          )}
         </CardContent>
           </Card>
         </TabsContent>
