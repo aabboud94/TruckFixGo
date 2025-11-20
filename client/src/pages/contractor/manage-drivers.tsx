@@ -156,8 +156,8 @@ export default function ManageDrivers() {
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Manage Drivers</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl sm:text-3xl font-bold mb-2">Manage Drivers</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">
           Add and manage drivers who work under your contractor account
         </p>
       </div>
@@ -175,22 +175,85 @@ export default function ManageDrivers() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>CDL Info</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingDrivers.map((driver) => (
-                  <TableRow key={driver.id} data-testid={`row-pending-driver-${driver.id}`}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">
+            {/* Desktop Table */}
+            <div className="hidden sm:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>CDL Info</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pendingDrivers.map((driver) => (
+                    <TableRow key={driver.id} data-testid={`row-pending-driver-${driver.id}`}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">
+                            {driver.firstName} {driver.lastName}
+                          </div>
+                          {driver.carrierName && (
+                            <div className="text-sm text-muted-foreground">
+                              {driver.carrierName}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="flex items-center text-sm">
+                            <Mail className="mr-2 h-3 w-3 text-muted-foreground" />
+                            {driver.email}
+                          </div>
+                          <div className="flex items-center text-sm">
+                            <Phone className="mr-2 h-3 w-3 text-muted-foreground" />
+                            {driver.phone}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {driver.cdlNumber ? (
+                          <div className="text-sm">
+                            <div>CDL: {driver.cdlNumber}</div>
+                            {driver.cdlState && <div>State: {driver.cdlState}</div>}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">Not provided</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800">Pending Admin Approval</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setSelectedDriver(driver);
+                            setShowDeleteDialog(true);
+                          }}
+                          data-testid={`button-remove-pending-driver-${driver.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile Cards */}
+            <div className="sm:hidden space-y-3">
+              {pendingDrivers.map((driver) => (
+                <Card key={driver.id} data-testid={`card-pending-driver-${driver.id}`}>
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="font-medium text-base">
                           {driver.firstName} {driver.lastName}
                         </div>
                         {driver.carrierName && (
@@ -199,63 +262,65 @@ export default function ManageDrivers() {
                           </div>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <div className="flex items-center text-sm">
-                          <Mail className="mr-2 h-3 w-3 text-muted-foreground" />
-                          {driver.email}
-                        </div>
-                        <div className="flex items-center text-sm">
-                          <Phone className="mr-2 h-3 w-3 text-muted-foreground" />
-                          {driver.phone}
-                        </div>
+                      <Badge variant="secondary" className="bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800 text-xs">
+                        Pending
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center text-sm">
+                        <Mail className="mr-2 h-3 w-3 text-muted-foreground" />
+                        <span className="truncate">{driver.email}</span>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {driver.cdlNumber ? (
-                        <div className="text-sm">
-                          <div>CDL: {driver.cdlNumber}</div>
-                          {driver.cdlState && <div>State: {driver.cdlState}</div>}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">Not provided</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800">Pending Admin Approval</Badge>
-                    </TableCell>
-                    <TableCell>
+                      <div className="flex items-center text-sm">
+                        <Phone className="mr-2 h-3 w-3 text-muted-foreground" />
+                        {driver.phone}
+                      </div>
+                    </div>
+
+                    {driver.cdlNumber && (
+                      <div className="text-sm text-muted-foreground">
+                        CDL: {driver.cdlNumber} {driver.cdlState && `(${driver.cdlState})`}
+                      </div>
+                    )}
+
+                    <div className="flex justify-end">
                       <Button
-                        variant="ghost"
-                        size="icon"
+                        variant="destructive"
+                        size="sm"
+                        className="min-h-[36px]"
                         onClick={() => {
                           setSelectedDriver(driver);
                           setShowDeleteDialog(true);
                         }}
-                        data-testid={`button-remove-pending-driver-${driver.id}`}
+                        data-testid={`button-remove-pending-driver-mobile-${driver.id}`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Remove
                       </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
 
       {/* Approved Drivers Card */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <CardTitle>Your Drivers</CardTitle>
-            <CardDescription>
+            <CardDescription className="text-sm">
               Drivers you manage can be assigned to your jobs
             </CardDescription>
           </div>
-          <Button onClick={() => setShowAddDialog(true)} data-testid="button-add-driver">
+          <Button 
+            onClick={() => setShowAddDialog(true)} 
+            data-testid="button-add-driver"
+            className="w-full sm:w-auto min-h-[44px]"
+          >
             <UserPlus className="mr-2 h-4 w-4" />
             Add Driver
           </Button>
@@ -267,86 +332,160 @@ export default function ManageDrivers() {
               <p className="mt-4 text-muted-foreground">Loading drivers...</p>
             </div>
           ) : approvedDrivers.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>CDL Info</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Active Jobs</TableHead>
-                  <TableHead>Completed</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {approvedDrivers.map((driver) => (
-                  <TableRow key={driver.id} data-testid={`row-driver-${driver.id}`}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">
-                          {driver.firstName} {driver.lastName}
-                        </div>
-                        {driver.carrierName && (
-                          <div className="text-sm text-muted-foreground">
-                            {driver.carrierName}
+            <>
+              {/* Desktop Table */}
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Contact</TableHead>
+                      <TableHead>CDL Info</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Active Jobs</TableHead>
+                      <TableHead>Completed</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {approvedDrivers.map((driver) => (
+                      <TableRow key={driver.id} data-testid={`row-driver-${driver.id}`}>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">
+                              {driver.firstName} {driver.lastName}
+                            </div>
+                            {driver.carrierName && (
+                              <div className="text-sm text-muted-foreground">
+                                {driver.carrierName}
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="flex items-center text-sm">
+                              <Mail className="mr-2 h-3 w-3 text-muted-foreground" />
+                              {driver.email}
+                            </div>
+                            <div className="flex items-center text-sm">
+                              <Phone className="mr-2 h-3 w-3 text-muted-foreground" />
+                              {driver.phone}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {driver.cdlNumber ? (
+                            <div className="text-sm">
+                              <div>CDL: {driver.cdlNumber}</div>
+                              {driver.cdlState && <div>State: {driver.cdlState}</div>}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">Not provided</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={driver.isActive ? "default" : "secondary"}
+                            className={driver.isActive ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800" : ""}
+                          >
+                            {driver.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{driver.activeJobs || 0}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{driver.completedJobs || 0}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setSelectedDriver(driver);
+                              setShowDeleteDialog(true);
+                            }}
+                            data-testid={`button-remove-driver-${driver.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Cards */}
+              <div className="sm:hidden space-y-3">
+                {approvedDrivers.map((driver) => (
+                  <Card key={driver.id} data-testid={`card-driver-${driver.id}`}>
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="font-medium text-base">
+                            {driver.firstName} {driver.lastName}
+                          </div>
+                          {driver.carrierName && (
+                            <div className="text-sm text-muted-foreground">
+                              {driver.carrierName}
+                            </div>
+                          )}
+                        </div>
+                        <Badge 
+                          variant={driver.isActive ? "default" : "secondary"}
+                          className={driver.isActive ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800 text-xs" : "text-xs"}
+                        >
+                          {driver.isActive ? "Active" : "Inactive"}
+                        </Badge>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
+
+                      <div className="space-y-2">
                         <div className="flex items-center text-sm">
                           <Mail className="mr-2 h-3 w-3 text-muted-foreground" />
-                          {driver.email}
+                          <span className="truncate">{driver.email}</span>
                         </div>
                         <div className="flex items-center text-sm">
                           <Phone className="mr-2 h-3 w-3 text-muted-foreground" />
                           {driver.phone}
                         </div>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {driver.cdlNumber ? (
-                        <div className="text-sm">
-                          <div>CDL: {driver.cdlNumber}</div>
-                          {driver.cdlState && <div>State: {driver.cdlState}</div>}
+
+                      {driver.cdlNumber && (
+                        <div className="text-sm text-muted-foreground">
+                          CDL: {driver.cdlNumber} {driver.cdlState && `(${driver.cdlState})`}
                         </div>
-                      ) : (
-                        <span className="text-muted-foreground">Not provided</span>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge 
-                        variant={driver.isActive ? "default" : "secondary"}
-                        className={driver.isActive ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800" : ""}
-                      >
-                        {driver.isActive ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{driver.activeJobs || 0}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{driver.completedJobs || 0}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setSelectedDriver(driver);
-                          setShowDeleteDialog(true);
-                        }}
-                        data-testid={`button-remove-driver-${driver.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex gap-3">
+                          <div className="text-sm">
+                            <span className="text-muted-foreground">Active:</span> {driver.activeJobs || 0}
+                          </div>
+                          <div className="text-sm">
+                            <span className="text-muted-foreground">Done:</span> {driver.completedJobs || 0}
+                          </div>
+                        </div>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="min-h-[36px]"
+                          onClick={() => {
+                            setSelectedDriver(driver);
+                            setShowDeleteDialog(true);
+                          }}
+                          data-testid={`button-remove-driver-mobile-${driver.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Remove
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            </>
           ) : (
             <div className="text-center py-12">
               <Users className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
@@ -365,16 +504,16 @@ export default function ManageDrivers() {
 
       {/* Add Driver Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Driver</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm">
               Add a driver to your team. They will be able to receive job assignments from you.
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="firstName"
@@ -402,7 +541,7 @@ export default function ManageDrivers() {
                   )}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="email"
@@ -430,7 +569,7 @@ export default function ManageDrivers() {
                   )}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="cdlNumber"
@@ -464,7 +603,7 @@ export default function ManageDrivers() {
                   )}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="carrierName"
@@ -492,11 +631,21 @@ export default function ManageDrivers() {
                   )}
                 />
               </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setShowAddDialog(false)}>
+              <DialogFooter className="flex-col sm:flex-row gap-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setShowAddDialog(false)}
+                  className="w-full sm:w-auto min-h-[44px]"
+                >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={addDriverMutation.isPending} data-testid="button-submit-add-driver">
+                <Button 
+                  type="submit" 
+                  disabled={addDriverMutation.isPending} 
+                  data-testid="button-submit-add-driver"
+                  className="w-full sm:w-auto min-h-[44px]"
+                >
                   {addDriverMutation.isPending ? "Adding..." : "Add Driver"}
                 </Button>
               </DialogFooter>
@@ -515,14 +664,19 @@ export default function ManageDrivers() {
               They will no longer be able to receive job assignments from you.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDeleteDialog(false)}
+              className="w-full sm:w-auto min-h-[44px]"
+            >
               Cancel
             </Button>
             <Button 
               variant="destructive" 
               onClick={handleDeleteDriver}
               disabled={removeDriverMutation.isPending}
+              className="w-full sm:w-auto min-h-[44px]"
               data-testid="button-confirm-remove-driver"
             >
               {removeDriverMutation.isPending ? "Removing..." : "Remove Driver"}
