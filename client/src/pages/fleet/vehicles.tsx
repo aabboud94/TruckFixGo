@@ -1399,19 +1399,22 @@ export default function VehicleManagement() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-4 sm:h-16 sm:py-0 gap-3">
             <div className="flex items-center">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setLocation("/fleet/dashboard")}
                 data-testid="button-back-to-dashboard"
+                className="shrink-0"
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
-              <span className="ml-4 text-2xl font-bold text-primary">Vehicle Management</span>
+              <span className="ml-4 text-lg sm:text-2xl font-bold text-primary truncate">Vehicle Management</span>
             </div>
-            <div className="flex items-center space-x-2">
+            
+            {/* Desktop Actions */}
+            <div className="hidden sm:flex items-center space-x-2">
               <Button 
                 variant="outline" 
                 onClick={() => {
@@ -1464,16 +1467,111 @@ export default function VehicleManagement() {
                     Add Vehicle
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Add New Vehicle</DialogTitle>
-                    <DialogDescription>
-                      Enter the details of the vehicle to add to your fleet
-                    </DialogDescription>
-                  </DialogHeader>
-                  <Form {...addForm}>
-                    <form onSubmit={addForm.handleSubmit(onAddSubmit)} className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
+              </Dialog>
+            </div>
+            
+            {/* Mobile Actions - Grid Layout */}
+            <div className="sm:hidden grid grid-cols-2 gap-2">
+              <Button 
+                variant="outline"
+                size="sm"
+                className="min-h-[44px] text-xs"
+                onClick={() => {
+                  if (selectedVehicleIds.length === 0) {
+                    toast({
+                      title: "No Vehicles Selected",
+                      description: "Please select vehicles from the table first",
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+                  batchScheduleForm.setValue('vehicleIds', selectedVehicleIds);
+                  setIsBatchScheduleDialogOpen(true);
+                }}
+                disabled={selectedVehicleIds.length === 0}
+                data-testid="button-batch-schedule-mobile"
+              >
+                <Calendar className="h-4 w-4 mr-1" />
+                Batch ({selectedVehicleIds.length})
+              </Button>
+              <Button 
+                variant="outline"
+                size="sm"
+                className="min-h-[44px] text-xs"
+                onClick={() => setIsPmScheduleDialogOpen(true)}
+                data-testid="button-pm-schedule-mobile"
+              >
+                <Clock className="h-4 w-4 mr-1" />
+                PM Schedule
+              </Button>
+              <Button 
+                variant="outline"
+                size="sm"
+                className="min-h-[44px] text-xs"
+                onClick={handleImportCSV} 
+                data-testid="button-import-mobile"
+              >
+                <Upload className="h-4 w-4 mr-1" />
+                Import
+              </Button>
+              <Button 
+                variant="outline"
+                size="sm"
+                className="min-h-[44px] text-xs"
+                onClick={handleExportCSV} 
+                data-testid="button-export-mobile"
+              >
+                <Download className="h-4 w-4 mr-1" />
+                Export
+              </Button>
+              <Dialog 
+                open={isAddDialogOpen} 
+                onOpenChange={(open) => {
+                  if (open) {
+                    // Reset the add form when opening the dialog
+                    addForm.reset();
+                  }
+                  setIsAddDialogOpen(open);
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button 
+                    size="sm"
+                    className="col-span-2 min-h-[44px]"
+                    data-testid="button-add-vehicle-mobile" 
+                    disabled={!fleetId}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Vehicle
+                  </Button>
+                </DialogTrigger>
+              </Dialog>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Add Vehicle Dialog */}
+      <Dialog 
+        open={isAddDialogOpen} 
+        onOpenChange={(open) => {
+          if (open) {
+            // Reset the add form when opening the dialog
+            addForm.reset();
+          }
+          setIsAddDialogOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add New Vehicle</DialogTitle>
+            <DialogDescription>
+              Enter the details of the vehicle to add to your fleet
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...addForm}>
+            <form onSubmit={addForm.handleSubmit(onAddSubmit)} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <FormField
                           control={addForm.control}
                           name="unitNumber"
@@ -1632,12 +1730,8 @@ export default function VehicleManagement() {
                       </DialogFooter>
                     </form>
                   </Form>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </div>
-        </div>
-      </header>
+        </DialogContent>
+      </Dialog>
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -1720,113 +1814,235 @@ export default function VehicleManagement() {
                 <Skeleton className="h-12 w-full" />
               </div>
             ) : vehicles.length > 0 ? (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">
-                        <Checkbox
-                          checked={selectedVehicleIds.length === vehicles.length}
-                          onCheckedChange={selectAllVehicles}
-                          data-testid="checkbox-select-all"
-                        />
-                      </TableHead>
-                      <TableHead>Unit #</TableHead>
-                      <TableHead>Vehicle</TableHead>
-                      <TableHead>License Plate</TableHead>
-                      <TableHead>Odometer</TableHead>
-                      <TableHead>Maintenance</TableHead>
-                      <TableHead>Next Service</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {vehicles.map((vehicle: Vehicle) => (
-                      <TableRow key={vehicle.id} className="cursor-pointer hover:bg-muted/50">
-                        <TableCell onClick={(e) => e.stopPropagation()}>
+              <>
+                {/* Desktop Table View - Hidden on mobile */}
+                <div className="hidden md:block overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">
                           <Checkbox
-                            checked={selectedVehicleIds.includes(vehicle.id)}
-                            onCheckedChange={() => toggleVehicleSelection(vehicle.id)}
-                            data-testid={`checkbox-vehicle-${vehicle.id}`}
+                            checked={selectedVehicleIds.length === vehicles.length}
+                            onCheckedChange={selectAllVehicles}
+                            data-testid="checkbox-select-all"
                           />
-                        </TableCell>
-                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
-                          <span className="font-medium">{vehicle.unitNumber}</span>
-                        </TableCell>
-                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
-                          {vehicle.year} {vehicle.make} {vehicle.model}
-                        </TableCell>
-                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
-                          {vehicle.licensePlate}
-                        </TableCell>
-                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
-                          {vehicle.currentOdometer?.toLocaleString()} mi
-                        </TableCell>
-                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
-                          <div className="flex items-center gap-2">
-                            {getMaintenanceStatusIcon(vehicle.maintenanceStatus)}
-                            <span className="text-sm">
-                              {vehicle.maintenanceStatus === 'critical' ? 'Critical' :
-                               vehicle.maintenanceStatus === 'attention' ? 'Attention' : 'Good'}
-                            </span>
-                            {vehicle.activeAlertCount && vehicle.activeAlertCount > 0 && (
-                              <Badge variant="outline" data-testid={`badge-alerts-${vehicle.id}`}>
-                                {vehicle.activeAlertCount} alert{vehicle.activeAlertCount > 1 ? 's' : ''}
-                              </Badge>
+                        </TableHead>
+                        <TableHead>Unit #</TableHead>
+                        <TableHead>Vehicle</TableHead>
+                        <TableHead>License Plate</TableHead>
+                        <TableHead>Odometer</TableHead>
+                        <TableHead>Maintenance</TableHead>
+                        <TableHead>Next Service</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {vehicles.map((vehicle: Vehicle) => (
+                        <TableRow key={vehicle.id} className="cursor-pointer hover:bg-muted/50">
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selectedVehicleIds.includes(vehicle.id)}
+                              onCheckedChange={() => toggleVehicleSelection(vehicle.id)}
+                              data-testid={`checkbox-vehicle-${vehicle.id}`}
+                            />
+                          </TableCell>
+                          <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                            <span className="font-medium">{vehicle.unitNumber}</span>
+                          </TableCell>
+                          <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                            {vehicle.year} {vehicle.make} {vehicle.model}
+                          </TableCell>
+                          <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                            {vehicle.licensePlate}
+                          </TableCell>
+                          <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                            {vehicle.currentOdometer?.toLocaleString()} mi
+                          </TableCell>
+                          <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                            <div className="flex items-center gap-2">
+                              {getMaintenanceStatusIcon(vehicle.maintenanceStatus)}
+                              <span className="text-sm">
+                                {vehicle.maintenanceStatus === 'critical' ? 'Critical' :
+                                 vehicle.maintenanceStatus === 'attention' ? 'Attention' : 'Good'}
+                              </span>
+                              {vehicle.activeAlertCount && vehicle.activeAlertCount > 0 && (
+                                <Badge variant="outline" data-testid={`badge-alerts-${vehicle.id}`}>
+                                  {vehicle.activeAlertCount} alert{vehicle.activeAlertCount > 1 ? 's' : ''}
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                            {vehicle.nextServiceDue ? (
+                              <div className="flex items-center gap-1">
+                                <CalendarClock className="h-4 w-4" />
+                                {new Date(vehicle.nextServiceDue).toLocaleDateString()}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
+                            {vehicle.isActive ? (
+                              <Badge variant="outline" className="text-green-600">Active</Badge>
+                            ) : (
+                              <Badge variant="secondary">Inactive</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setSelectedVehicleForDetail(vehicle)}
+                                data-testid={`button-view-${vehicle.id}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEdit(vehicle)}
+                                data-testid={`button-edit-${vehicle.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDelete(vehicle)}
+                                data-testid={`button-delete-${vehicle.id}`}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile Card View - Visible only on mobile */}
+                <div className="md:hidden space-y-3">
+                  {/* Select All on Mobile */}
+                  <div className="flex items-center gap-2 py-2">
+                    <Checkbox
+                      checked={selectedVehicleIds.length === vehicles.length}
+                      onCheckedChange={selectAllVehicles}
+                      data-testid="checkbox-select-all-mobile"
+                    />
+                    <span className="text-sm font-medium">Select All</span>
+                  </div>
+
+                  {/* Vehicle Cards */}
+                  {vehicles.map((vehicle: Vehicle) => (
+                    <Card key={vehicle.id} className="overflow-hidden">
+                      <CardContent className="p-4">
+                        <div className="space-y-3">
+                          {/* Header with checkbox and status */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-3">
+                              <Checkbox
+                                checked={selectedVehicleIds.includes(vehicle.id)}
+                                onCheckedChange={() => toggleVehicleSelection(vehicle.id)}
+                                data-testid={`checkbox-vehicle-mobile-${vehicle.id}`}
+                                className="mt-1"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-base truncate">
+                                  Unit #{vehicle.unitNumber}
+                                </div>
+                                <div className="text-sm text-muted-foreground truncate">
+                                  {vehicle.year} {vehicle.make} {vehicle.model}
+                                </div>
+                              </div>
+                            </div>
+                            {vehicle.isActive ? (
+                              <Badge variant="outline" className="text-green-600 shrink-0">Active</Badge>
+                            ) : (
+                              <Badge variant="secondary" className="shrink-0">Inactive</Badge>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
-                          {vehicle.nextServiceDue ? (
-                            <div className="flex items-center gap-1">
-                              <CalendarClock className="h-4 w-4" />
-                              {new Date(vehicle.nextServiceDue).toLocaleDateString()}
+
+                          {/* Vehicle Details */}
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">License:</span>
+                              <div className="font-medium truncate">{vehicle.licensePlate}</div>
                             </div>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
+                            <div>
+                              <span className="text-muted-foreground">Odometer:</span>
+                              <div className="font-medium">{vehicle.currentOdometer?.toLocaleString()} mi</div>
+                            </div>
+                          </div>
+
+                          {/* Maintenance Status */}
+                          <div className="flex items-center justify-between py-2 border-t border-b">
+                            <div className="flex items-center gap-2">
+                              {getMaintenanceStatusIcon(vehicle.maintenanceStatus)}
+                              <span className="text-sm font-medium">
+                                {vehicle.maintenanceStatus === 'critical' ? 'Critical' :
+                                 vehicle.maintenanceStatus === 'attention' ? 'Attention' : 'Good'}
+                              </span>
+                              {vehicle.activeAlertCount && vehicle.activeAlertCount > 0 && (
+                                <Badge variant="outline" className="text-xs">
+                                  {vehicle.activeAlertCount} alert{vehicle.activeAlertCount > 1 ? 's' : ''}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Next Service */}
+                          {vehicle.nextServiceDue && (
+                            <div className="flex items-center gap-2 text-sm">
+                              <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-muted-foreground">Next service:</span>
+                              <span className="font-medium">
+                                {new Date(vehicle.nextServiceDue).toLocaleDateString()}
+                              </span>
+                            </div>
                           )}
-                        </TableCell>
-                        <TableCell onClick={() => setSelectedVehicleForDetail(vehicle)}>
-                          {vehicle.isActive ? (
-                            <Badge variant="outline" className="text-green-600">Active</Badge>
-                          ) : (
-                            <Badge variant="secondary">Inactive</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+
+                          {/* Action Buttons */}
+                          <div className="flex gap-2 pt-2">
                             <Button
-                              variant="ghost"
-                              size="icon"
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 min-h-[44px]"
                               onClick={() => setSelectedVehicleForDetail(vehicle)}
-                              data-testid={`button-view-${vehicle.id}`}
+                              data-testid={`button-view-mobile-${vehicle.id}`}
                             >
-                              <Eye className="h-4 w-4" />
+                              <Eye className="h-4 w-4 mr-2" />
+                              View
                             </Button>
                             <Button
-                              variant="ghost"
-                              size="icon"
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 min-h-[44px]"
                               onClick={() => handleEdit(vehicle)}
-                              data-testid={`button-edit-${vehicle.id}`}
+                              data-testid={`button-edit-mobile-${vehicle.id}`}
                             >
-                              <Edit className="h-4 w-4" />
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit
                             </Button>
                             <Button
-                              variant="ghost"
-                              size="icon"
+                              variant="outline"
+                              size="sm"
+                              className="min-h-[44px]"
                               onClick={() => handleDelete(vehicle)}
-                              data-testid={`button-delete-${vehicle.id}`}
+                              data-testid={`button-delete-mobile-${vehicle.id}`}
                             >
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </>
             ) : (
               <div className="text-center py-8">
                 <Truck className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
