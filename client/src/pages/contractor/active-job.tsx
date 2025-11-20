@@ -174,34 +174,65 @@ export default function ContractorActiveJob() {
       // Calculate total cost including parts
       const totalCost = laborCost + totalPartsCost + additionalCost;
       
-      console.log('Completing job:', { 
+      // Prepare line items for invoice
+      const lineItems = [];
+      
+      // Add labor cost as line item if present
+      if (laborCost > 0) {
+        lineItems.push({
+          type: 'labor',
+          description: 'Labor',
+          quantity: 1,
+          unitPrice: laborCost
+        });
+      }
+      
+      // Add parts cost as line item if present
+      if (totalPartsCost > 0) {
+        lineItems.push({
+          type: 'parts',
+          description: 'Parts',
+          quantity: 1,
+          unitPrice: totalPartsCost
+        });
+      }
+      
+      // Add additional cost as line item if present
+      if (additionalCost > 0) {
+        lineItems.push({
+          type: 'additional',
+          description: 'Additional Costs',
+          quantity: 1,
+          unitPrice: additionalCost
+        });
+      }
+      
+      console.log('Completing job with invoice:', { 
         jobId: job.id,
         completionNotes,
-        photosCount: selectedPhotos.length,
-        laborCost,
-        partsCost: totalPartsCost,
-        additionalCost,
-        totalCost
+        lineItems,
+        totalCost,
+        customerEmail: customer?.email
       });
       
-      // Note: The server expects 'completionNotes', 'finalPhotos', and cost breakdown
-      return await apiRequest("POST", `/api/jobs/${job.id}/complete`, {
-        completionNotes: completionNotes || '',
+      // Use the complete-with-invoice endpoint
+      return await apiRequest("POST", `/api/contractor/jobs/${job.id}/complete-with-invoice`, {
+        notes: completionNotes || '',
+        lineItems: lineItems,
+        sendMethod: 'none', // Create as draft, contractor will review before sending
+        recipientEmail: customer?.email || '',
         finalPhotos: selectedPhotos.map(f => f.name), // In real app, would upload first
-        laborCost,
-        partsCost: totalPartsCost,
-        additionalCost,
-        totalCost,
         partsUsed: jobPartsData?.parts || []
       });
     },
     onSuccess: (data) => {
-      console.log('Job completed successfully:', { data });
+      console.log('Job completed with invoice:', { data });
       toast({
         title: "Job Completed",
-        description: "Great work! The job has been marked as complete."
+        description: "Invoice created successfully! You can now review and send it to the customer."
       });
-      navigate("/contractor/dashboard");
+      // Navigate to invoice preview page
+      navigate(`/contractor/invoice-preview/${job.id}`);
     },
     onError: (error: any) => {
       // Log detailed error for debugging
