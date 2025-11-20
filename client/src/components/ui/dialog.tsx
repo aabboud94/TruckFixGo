@@ -40,32 +40,90 @@ const DialogContent = React.forwardRef<
   // Default max-width only if no custom max-width is provided
   const defaultMaxWidth = hasCustomMaxWidth ? "" : "sm:max-w-lg";
   
+  // Prevent body scrolling when dialog is open on mobile
+  React.useEffect(() => {
+    const isMobile = window.innerWidth < 640; // sm breakpoint
+    if (isMobile) {
+      const originalOverflow = document.body.style.overflow;
+      const originalPosition = document.body.style.position;
+      const originalTop = document.body.style.top;
+      const originalWidth = document.body.style.width;
+      const scrollY = window.scrollY;
+      
+      // Lock body scroll on mobile
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      
+      return () => {
+        // Restore body scroll
+        document.body.style.overflow = originalOverflow;
+        document.body.style.position = originalPosition;
+        document.body.style.top = originalTop;
+        document.body.style.width = originalWidth;
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, []);
+  
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          "fixed left-[50%] top-[50%] z-50 grid translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background shadow-lg duration-200",
+          // Mobile-first positioning: Full screen on mobile, centered modal on desktop
+          "fixed z-50 bg-background shadow-lg duration-200",
           "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-          "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-          "data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]",
-          "data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
-          // Mobile-optimized sizing and padding
-          "w-[calc(100%-2rem)] sm:w-full",
-          defaultMaxWidth, // Apply default max-width only if no custom one is provided
-          "max-h-[90vh] overflow-y-auto",
+          
+          // Mobile: Full viewport approach (no scrolling needed)
+          "inset-0",
+          "flex flex-col",
+          "rounded-none",
+          
+          // Desktop: Centered modal with scrolling
+          "sm:inset-auto",
+          "sm:left-[50%] sm:top-[50%]",
+          "sm:translate-x-[-50%] sm:translate-y-[-50%]",
+          "sm:grid sm:gap-4",
+          "sm:border",
+          "sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95",
+          "sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%]",
+          "sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%]",
+          
+          // Width handling
+          "w-full sm:w-full",
+          defaultMaxWidth,
+          
+          // Height handling - full height on mobile, max-height on desktop
+          "h-full sm:h-auto",
+          "sm:max-h-[90vh]",
+          
+          // Overflow handling - only on desktop
+          "overflow-hidden sm:overflow-visible",
+          "[&>*:not(.absolute)]:overflow-y-auto [&>*:not(.absolute)]:sm:overflow-y-auto",
+          
+          // Padding
           "p-4 sm:p-6",
-          "rounded-lg",
-          // Safe area padding for notched devices
-          "pb-[env(safe-area-inset-bottom,1rem)]",
+          
+          // Border radius - none on mobile, rounded on desktop
+          "sm:rounded-lg",
+          
+          // Safe area padding for mobile devices with notch
+          "pb-[max(1rem,env(safe-area-inset-bottom))]",
+          "pt-[max(1rem,env(safe-area-inset-top))]",
+          
           className
         )}
         {...props}
       >
-        {children}
-        <DialogPrimitive.Close className="absolute right-2 top-2 sm:right-4 sm:top-4 z-10 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-          <X className="h-5 w-5 sm:h-4 sm:w-4" />
+        {/* Scrollable content wrapper for mobile */}
+        <div className="flex-1 overflow-y-auto sm:overflow-visible overscroll-contain">
+          {children}
+        </div>
+        <DialogPrimitive.Close className="absolute right-3 top-3 sm:right-4 sm:top-4 z-10 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+          <X className="h-6 w-6 sm:h-4 sm:w-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
