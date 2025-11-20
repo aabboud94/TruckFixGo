@@ -3423,26 +3423,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole('contractor'),
     async (req: Request, res: Response) => {
       try {
-        // Find active job for contractor
-        const jobs = await storage.findJobs({
-          contractorId: req.session.userId!,
-          status: ['assigned', 'en_route', 'on_site'],
-          limit: 1,
-          offset: 0,
-          orderBy: 'createdAt',
-          orderDir: 'desc'
-        });
-
-        if (jobs.length === 0) {
-          return res.json({ job: null });
+        const contractorId = req.session.userId!;
+        
+        // First try to get current job through queue system
+        let { job: currentJob, queueEntry: currentQueueEntry } = await storage.getContractorCurrentJob(contractorId);
+        
+        // FALLBACK: If no current queue entry, check for active jobs directly (same as dashboard)
+        if (!currentJob) {
+          console.log('[Active Job] No current job from queue, checking for active jobs directly');
+          
+          // Look for jobs that are assigned to this contractor and in active states
+          const activeJobs = await db.select()
+            .from(jobs)
+            .where(and(
+              eq(jobs.contractorId, contractorId),
+              inArray(jobs.status, ['assigned', 'en_route', 'on_site'])
+            ))
+            .orderBy(desc(jobs.updatedAt))
+            .limit(1);
+            
+          if (activeJobs.length > 0) {
+            currentJob = activeJobs[0];
+            console.log(`[Active Job] Found active job ${currentJob.id} with status ${currentJob.status} via fallback`);
+            
+            // Try to create a queue entry for consistency
+            try {
+              const newQueueEntry = await db.insert(contractorJobQueue)
+                .values({
+                  contractorId: contractorId,
+                  jobId: currentJob.id,
+                  status: 'current',
+                  queuePosition: 0,
+                  priority: 1,
+                  queuedAt: new Date(),
+                  startedAt: new Date(),
+                  assignedBySystem: true
+                })
+                .onConflictDoNothing()
+                .returning();
+                
+              if (newQueueEntry.length > 0) {
+                currentQueueEntry = newQueueEntry[0];
+                console.log('[Active Job] Created queue entry for consistency');
+              }
+            } catch (queueError) {
+              console.log('[Active Job] Could not create queue entry (may already exist):', queueError);
+            }
+          }
         }
 
-        const job = jobs[0];
+        // If still no job found, return null
+        if (!currentJob) {
+          console.log('[Active Job] No active job found for contractor');
+          return res.json({ job: null, customer: null, messages: [] });
+        }
 
         // Get customer info
         let customer = null;
-        if (job.customerId) {
-          const customerUser = await storage.getUser(job.customerId);
+        if (currentJob.customerId) {
+          const customerUser = await storage.getUser(currentJob.customerId);
           if (customerUser) {
             customer = {
               id: customerUser.id,
@@ -3455,10 +3494,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Get messages
-        const messages = await storage.getJobMessages(job.id);
+        const messages = await storage.getJobMessages(currentJob.id);
 
         res.json({
-          job,
+          job: currentJob,
           customer,
           messages
         });
