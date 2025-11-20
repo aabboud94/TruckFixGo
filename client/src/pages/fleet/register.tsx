@@ -143,25 +143,26 @@ export default function FleetRegister() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
+        <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-14 sm:h-16">
+            <div className="flex items-center gap-2 sm:gap-3">
               <Button
                 variant="ghost"
                 size="icon"
+                className="h-9 w-9"
                 onClick={() => setLocation("/fleet")}
                 data-testid="button-back-to-fleet"
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
-              <span className="ml-4 text-2xl font-bold text-primary">TruckFixGo Fleet</span>
+              <span className="text-lg sm:text-xl md:text-2xl font-bold text-primary truncate">TruckFixGo Fleet</span>
             </div>
           </div>
         </div>
       </header>
 
       {/* Registration Form */}
-      <div className="max-w-3xl mx-auto px-4 py-12">
+      <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 md:py-12">
         <Card>
           <CardHeader>
             <CardTitle>Create Fleet Account</CardTitle>
@@ -194,18 +195,18 @@ export default function FleetRegister() {
                       )}
                     />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
                         name="dotNumber"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>DOT Number</FormLabel>
+                            <FormLabel className="text-sm">DOT Number</FormLabel>
                             <FormControl>
-                              <Input {...field} placeholder="1234567" data-testid="input-dot-number" />
+                              <Input {...field} placeholder="1234567" className="h-11" data-testid="input-dot-number" />
                             </FormControl>
-                            <FormDescription>Optional but recommended</FormDescription>
-                            <FormMessage />
+                            <FormDescription className="text-xs">Optional but recommended</FormDescription>
+                            <FormMessage className="text-xs" />
                           </FormItem>
                         )}
                       />
@@ -215,12 +216,12 @@ export default function FleetRegister() {
                         name="mcNumber"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>MC Number</FormLabel>
+                            <FormLabel className="text-sm">MC Number</FormLabel>
                             <FormControl>
-                              <Input {...field} placeholder="MC-123456" data-testid="input-mc-number" />
+                              <Input {...field} placeholder="MC-123456" className="h-11" data-testid="input-mc-number" />
                             </FormControl>
-                            <FormDescription>Optional</FormDescription>
-                            <FormMessage />
+                            <FormDescription className="text-xs">Optional</FormDescription>
+                            <FormMessage className="text-xs" />
                           </FormItem>
                         )}
                       />
@@ -268,17 +269,17 @@ export default function FleetRegister() {
                         )}
                       />
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                         <FormField
                           control={form.control}
                           name="primaryContactPhone"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Phone Number *</FormLabel>
+                              <FormLabel className="text-sm">Phone Number *</FormLabel>
                               <FormControl>
-                                <Input {...field} type="tel" placeholder="(555) 123-4567" data-testid="input-contact-phone" />
+                                <Input {...field} type="tel" placeholder="(555) 123-4567" className="h-11" data-testid="input-contact-phone" />
                               </FormControl>
-                              <FormMessage />
+                              <FormMessage className="text-xs" />
                             </FormItem>
                           )}
                         />
@@ -288,11 +289,11 @@ export default function FleetRegister() {
                           name="primaryContactEmail"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Email Address *</FormLabel>
+                              <FormLabel className="text-sm">Email Address *</FormLabel>
                               <FormControl>
-                                <Input {...field} type="email" placeholder="john@company.com" data-testid="input-contact-email" />
+                                <Input {...field} type="email" placeholder="john@company.com" className="h-11" data-testid="input-contact-email" />
                               </FormControl>
-                              <FormMessage />
+                              <FormMessage className="text-xs" />
                             </FormItem>
                           )}
                         />
@@ -323,17 +324,17 @@ export default function FleetRegister() {
                       )}
                     />
 
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
                       <FormField
                         control={form.control}
                         name="city"
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>City *</FormLabel>
+                          <FormItem className="col-span-2 sm:col-span-1">
+                            <FormLabel className="text-sm">City *</FormLabel>
                             <FormControl>
-                              <Input {...field} placeholder="Los Angeles" data-testid="input-city" />
+                              <Input {...field} placeholder="Los Angeles" className="h-11" data-testid="input-city" />
                             </FormControl>
-                            <FormMessage />
+                            <FormMessage className="text-xs" />
                           </FormItem>
                         )}
                       />
@@ -342,12 +343,12 @@ export default function FleetRegister() {
                         control={form.control}
                         name="state"
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>State *</FormLabel>
+                          <FormItem className="col-span-1">
+                            <FormLabel className="text-sm">State *</FormLabel>
                             <FormControl>
-                              <Input {...field} placeholder="CA" maxLength={2} data-testid="input-state" />
+                              <Input {...field} placeholder="CA" maxLength={2} className="h-11" data-testid="input-state" />
                             </FormControl>
-                            <FormMessage />
+                            <FormMessage className="text-xs" />
                           </FormItem>
                         )}
                       />
@@ -356,12 +357,12 @@ export default function FleetRegister() {
                         control={form.control}
                         name="zip"
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>ZIP Code *</FormLabel>
+                          <FormItem className="col-span-1">
+                            <FormLabel className="text-sm">ZIP Code *</FormLabel>
                             <FormControl>
-                              <Input {...field} placeholder="90001" data-testid="input-zip" />
+                              <Input {...field} placeholder="90001" className="h-11" data-testid="input-zip" />
                             </FormControl>
-                            <FormMessage />
+                            <FormMessage className="text-xs" />
                           </FormItem>
                         )}
                       />
@@ -556,11 +557,12 @@ export default function FleetRegister() {
                 )}
 
                 {/* Navigation Buttons */}
-                <div className="flex justify-between pt-6">
+                <div className="flex flex-col sm:flex-row gap-3 sm:justify-between pt-4 sm:pt-6">
                   <Button
                     type="button"
                     variant="outline"
                     onClick={step === 1 ? () => setLocation("/fleet") : prevStep}
+                    className="w-full sm:w-auto min-h-[44px]"
                     data-testid="button-prev"
                   >
                     <ArrowLeft className="w-4 h-4 mr-2" />
@@ -568,12 +570,12 @@ export default function FleetRegister() {
                   </Button>
 
                   {step < 3 ? (
-                    <Button type="button" onClick={nextStep} data-testid="button-next">
+                    <Button type="button" onClick={nextStep} className="w-full sm:w-auto min-h-[44px]" data-testid="button-next">
                       Next
                       <ArrowRight className="w-4 h-4 ml-2" />
                     </Button>
                   ) : (
-                    <Button type="submit" data-testid="button-submit">
+                    <Button type="submit" className="w-full sm:w-auto min-h-[44px]" data-testid="button-submit">
                       Submit Application
                       <ArrowRight className="w-4 h-4 ml-2" />
                     </Button>

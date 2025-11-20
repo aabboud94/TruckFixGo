@@ -214,18 +214,18 @@ export default function ContractorSignup() {
   const progressPercentage = ((currentStep - 1) / (steps.length - 1)) * 100;
 
   return (
-    <div className="min-h-screen bg-background py-12">
-      <div className="container mx-auto px-4 max-w-4xl">
+    <div className="min-h-screen bg-background py-4 sm:py-8 md:py-12">
+      <div className="w-full max-w-4xl mx-auto px-4 sm:px-6">
         <Card>
-          <CardHeader>
-            <CardTitle>Become a TruckFixGo Contractor</CardTitle>
-            <CardDescription>
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-lg sm:text-xl md:text-2xl">Become a TruckFixGo Contractor</CardTitle>
+            <CardDescription className="text-sm sm:text-base">
               Join our network of professional truck repair contractors
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6">
             {/* Progress Bar */}
-            <div className="mb-8">
+            <div className="mb-6 sm:mb-8">
               <div className="flex justify-between mb-4">
                 {steps.map((step) => {
                   const Icon = step.icon;
@@ -252,18 +252,18 @@ export default function ContractorSignup() {
             {/* Step 1: Personal Information */}
             {currentStep === 1 && (
               <Form {...personalForm}>
-                <form className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <form className="space-y-4 sm:space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField
                       control={personalForm.control}
                       name="firstName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>First Name</FormLabel>
+                          <FormLabel className="text-sm">First Name</FormLabel>
                           <FormControl>
-                            <Input placeholder="John" {...field} data-testid="input-first-name" />
+                            <Input placeholder="John" {...field} className="h-11" data-testid="input-first-name" />
                           </FormControl>
-                          <FormMessage />
+                          <FormMessage className="text-xs" />
                         </FormItem>
                       )}
                     />
@@ -272,11 +272,11 @@ export default function ContractorSignup() {
                       name="lastName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Last Name</FormLabel>
+                          <FormLabel className="text-sm">Last Name</FormLabel>
                           <FormControl>
-                            <Input placeholder="Doe" {...field} data-testid="input-last-name" />
+                            <Input placeholder="Doe" {...field} className="h-11" data-testid="input-last-name" />
                           </FormControl>
-                          <FormMessage />
+                          <FormMessage className="text-xs" />
                         </FormItem>
                       )}
                     />
@@ -310,17 +310,17 @@ export default function ContractorSignup() {
                     )}
                   />
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField
                       control={personalForm.control}
                       name="cdlNumber"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>CDL Number</FormLabel>
+                          <FormLabel className="text-sm">CDL Number</FormLabel>
                           <FormControl>
-                            <Input placeholder="CDL123456789" {...field} data-testid="input-cdl" />
+                            <Input placeholder="CDL123456789" {...field} className="h-11" data-testid="input-cdl" />
                           </FormControl>
-                          <FormMessage />
+                          <FormMessage className="text-xs" />
                         </FormItem>
                       )}
                     />
@@ -329,10 +329,10 @@ export default function ContractorSignup() {
                       name="cdlClass"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>CDL Class</FormLabel>
+                          <FormLabel className="text-sm">CDL Class</FormLabel>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
-                              <SelectTrigger data-testid="select-cdl-class">
+                              <SelectTrigger className="h-11" data-testid="select-cdl-class">
                                 <SelectValue placeholder="Select CDL class" />
                               </SelectTrigger>
                             </FormControl>
@@ -342,7 +342,7 @@ export default function ContractorSignup() {
                               <SelectItem value="C">Class C</SelectItem>
                             </SelectContent>
                           </Select>
-                          <FormMessage />
+                          <FormMessage className="text-xs" />
                         </FormItem>
                       )}
                     />
@@ -950,11 +950,12 @@ export default function ContractorSignup() {
             )}
 
             {/* Navigation Buttons */}
-            <div className="flex justify-between mt-8">
+            <div className="flex flex-col sm:flex-row gap-3 sm:justify-between mt-6 sm:mt-8">
               <Button
                 variant="outline"
                 onClick={handlePreviousStep}
                 disabled={currentStep === 1}
+                className="w-full sm:w-auto min-h-[44px]"
                 data-testid="button-previous"
               >
                 <ChevronLeft className="mr-2 h-4 w-4" />
@@ -964,6 +965,7 @@ export default function ContractorSignup() {
               <Button
                 onClick={handleNextStep}
                 disabled={submitMutation.isPending}
+                className="w-full sm:w-auto min-h-[44px]"
                 data-testid="button-next"
               >
                 {submitMutation.isPending ? (
