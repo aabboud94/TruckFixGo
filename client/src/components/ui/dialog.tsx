@@ -101,7 +101,7 @@ const DialogContent = React.forwardRef<
           "sm:max-h-[90vh]",
           
           // Overflow handling - only on desktop
-          "overflow-hidden sm:overflow-visible",
+          "overflow-hidden",
           "[&>*:not(.absolute)]:overflow-y-auto [&>*:not(.absolute)]:sm:overflow-y-auto",
           
           // Padding
@@ -119,7 +119,7 @@ const DialogContent = React.forwardRef<
         {...props}
       >
         {/* Scrollable content wrapper for mobile */}
-        <div className="flex-1 overflow-y-auto sm:overflow-visible overscroll-contain">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden sm:overflow-visible overscroll-contain">
           {children}
         </div>
         <DialogPrimitive.Close className="absolute right-3 top-3 sm:right-4 sm:top-4 z-10 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
