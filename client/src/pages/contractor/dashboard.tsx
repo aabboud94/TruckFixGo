@@ -420,8 +420,18 @@ export default function ContractorDashboard() {
       refetch();
     },
     onError: (error: any) => {
+      const responseData = error?.response?.data;
+      const messageFromResponse = typeof responseData === 'string'
+        ? responseData
+        : responseData?.message || responseData?.error || responseData?.detail;
+
+      const errorMessage = messageFromResponse || error?.message || "Failed to complete job with invoice";
+      const debugDetails = responseData && typeof responseData === 'object'
+        ? JSON.stringify(responseData)
+        : undefined;
+
       // Check if it's a Twilio error
-      if (error?.message?.includes('SMS') || error?.message?.includes('Twilio')) {
+      if (errorMessage?.includes('SMS') || errorMessage?.includes('Twilio')) {
         toast({
           title: "SMS Service Not Available",
           description: "SMS service is not configured. Using email instead.",
@@ -440,7 +450,7 @@ export default function ContractorDashboard() {
       } else {
         toast({
           title: "Error",
-          description: error?.message || "Failed to complete job with invoice",
+          description: debugDetails ? `${errorMessage} — Details: ${debugDetails}` : errorMessage,
           variant: "destructive"
         });
       }

@@ -7008,8 +7008,20 @@ export class PostgreSQLStorage implements IStorage {
   }
 
   async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
-    const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    const result = await db.insert(invoices).values({ ...invoice, invoiceNumber }).returning();
+    // Prefer a provided invoice number (e.g., from pdfService) to avoid violating
+    // the database length constraint (varchar(20)). Fall back to a generated
+    // value that fits within the limit.
+    const fallbackNumber = `INV-${Date.now().toString().slice(-6)}-${Math.random()
+      .toString(36)
+      .toUpperCase()
+      .slice(2, 6)}`;
+
+    const sanitizedInvoiceNumber = (invoice.invoiceNumber || fallbackNumber).slice(0, 20);
+
+    const result = await db
+      .insert(invoices)
+      .values({ ...invoice, invoiceNumber: sanitizedInvoiceNumber })
+      .returning();
     return result[0];
   }
 
