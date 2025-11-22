@@ -7012,7 +7012,14 @@ export class PostgreSQLStorage implements IStorage {
     const invoiceNumber = sanitizedNumber ?? this.generateShortInvoiceNumber();
 
     const { invoiceNumber: _ignored, ...invoiceData } = invoice;
-    const result = await db.insert(invoices).values({ ...invoiceData, invoiceNumber }).returning();
+    const result = await db.insert(invoices)
+      .values({
+        ...invoiceData,
+        invoiceNumber,
+        // Ensure legacy consumers always receive a non-null array even if the DB default is missing
+        lineItems: (invoice as any).lineItems ?? []
+      })
+      .returning();
     return result[0];
   }
 
