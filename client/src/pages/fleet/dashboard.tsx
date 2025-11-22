@@ -37,27 +37,30 @@ export default function FleetDashboard() {
   const [, setLocation] = useLocation();
   const [date, setDate] = useState<Date | undefined>(new Date());
 
-  // Check authentication and fetch user session
+  // Gate access to fleet managers
   const { data: session, isLoading: sessionLoading } = useQuery({
-    queryKey: ['/api/auth/me'],
+    queryKey: ["/api/auth/me"],
+    retry: false,
     queryFn: async () => {
       try {
-        const response = await apiRequest('GET', '/api/auth/me');
-        // The API returns { user: {...} }, extract the user object
+        const response = await apiRequest("GET", "/api/auth/me");
         return response?.user || null;
-      } catch (error) {
-        return null;
+      } catch (error: any) {
+        if (typeof error?.message === "string" && error.message.startsWith("401")) {
+          return null;
+        }
+        throw error;
       }
     }
   });
 
   // Fetch fleet account data
   const { data: fleetData, isLoading: fleetLoading } = useQuery({
-    queryKey: ['/api/fleet/accounts'],
-    enabled: !!session?.id && session?.role === 'fleet_manager',
+    queryKey: ["/api/fleet/accounts"],
+    enabled: !!session?.id && session?.role === "fleet_manager",
     queryFn: async () => {
       // Get all fleet accounts for this user
-      const response = await apiRequest('GET', '/api/fleet/accounts');
+      const response = await apiRequest("GET", "/api/fleet/accounts");
       // API returns { fleets: [...] }
       const fleets = response?.fleets || [];
       // Return the first account (most fleet managers have one account)
@@ -72,9 +75,9 @@ export default function FleetDashboard() {
     queryFn: async () => {
       if (!fleetData?.id) return { vehicles: [] };
       try {
-        return await apiRequest('GET', `/api/fleet/accounts/${fleetData.id}/vehicles`);
+        return await apiRequest("GET", `/api/fleet/accounts/${fleetData.id}/vehicles`);
       } catch (error) {
-        console.error('Failed to fetch vehicles:', error);
+        console.error("Failed to fetch vehicles:", error);
         return { vehicles: [] };
       }
     }
@@ -82,16 +85,16 @@ export default function FleetDashboard() {
 
   // Fetch scheduled services (using jobs endpoint as services)
   const { data: scheduledServices, isLoading: servicesLoading } = useQuery({
-    queryKey: ['/api/jobs'],
+    queryKey: ["/api/jobs"],
     enabled: !!fleetData?.id,
     queryFn: async () => {
       if (!fleetData?.id) return { services: [] };
       try {
         // Get jobs for this fleet account
-        const jobs = await apiRequest('GET', `/api/jobs?fleetAccountId=${fleetData.id}`);
+        const jobs = await apiRequest("GET", `/api/jobs?fleetAccountId=${fleetData.id}`);
         return { services: jobs || [] };
       } catch (error) {
-        console.error('Failed to fetch services:', error);
+        console.error("Failed to fetch services:", error);
         return { services: [] };
       }
     }
@@ -107,7 +110,7 @@ export default function FleetDashboard() {
       // Wrap in try-catch to absolutely prevent any errors
       try {
         const response = await fetch(`/api/fleet/accounts/${fleetData.id}/analytics`, {
-          credentials: 'include'
+          credentials: "include"
         });
         
         if (!response.ok) {
@@ -292,6 +295,21 @@ export default function FleetDashboard() {
     </Card>
   );
 
+  const upcomingServices = servicesList
+    .filter((service: any) => service.status !== 'completed')
+    .slice(0, 3);
+
+  const vehiclesDueSoon = vehiclesList
+    .filter((vehicle: any) => {
+      if (!vehicle.nextPMDue) return false;
+      const dueDate = new Date(vehicle.nextPMDue);
+      const today = new Date();
+      const fourteenDaysFromNow = new Date();
+      fourteenDaysFromNow.setDate(today.getDate() + 14);
+      return dueDate <= fourteenDaysFromNow;
+    })
+    .slice(0, 3);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header - Mobile Optimized */}
@@ -422,9 +440,10 @@ export default function FleetDashboard() {
                 <span className="text-xs">Batch Service</span>
               </Button>
 
-              <Button 
+              <Button
                 className="flex-shrink-0 h-auto px-4 py-3 flex flex-col items-center gap-1 min-w-[100px]"
                 variant="outline"
+                onClick={() => setLocation('/fleet/invoices')}
                 data-testid="button-view-invoices"
               >
                 <FileText className="h-5 w-5" />
@@ -650,6 +669,80 @@ export default function FleetDashboard() {
                     onSelect={setDate}
                     className="rounded-md border w-full"
                   />
+                </CardContent>
+              </Card>
+
+              {/* Maintenance Alerts */}
+              <Card>
+                <CardHeader className="p-4 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                  <div className="space-y-1">
+                    <CardTitle className="text-base sm:text-lg">Maintenance Alerts</CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">
+                      Vehicles and services that need attention soon
+                    </CardDescription>
+                  </div>
+                  <Badge variant="secondary" className="w-fit sm:w-auto">Auto-prioritized</Badge>
+                </CardHeader>
+                <CardContent className="p-4 pt-0 space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-amber-500" />
+                      <p className="text-sm font-medium">Due in the next 14 days</p>
+                    </div>
+                    {vehiclesDueSoon.length > 0 ? (
+                      <div className="space-y-2">
+                        {vehiclesDueSoon.map((vehicle: any) => (
+                          <div
+                            key={vehicle.id}
+                            className="flex items-start justify-between rounded-lg border p-3"
+                          >
+                            <div className="space-y-1 min-w-0 pr-3">
+                              <p className="text-sm font-medium truncate">Unit #{vehicle.unitNumber}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                Next PM: {vehicle.nextPMDue}
+                              </p>
+                              {vehicle.location && (
+                                <p className="text-xs text-muted-foreground truncate">{vehicle.location}</p>
+                              )}
+                            </div>
+                            <Badge variant="destructive" className="text-xs">Schedule</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No vehicles are due soon.</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-blue-500" />
+                      <p className="text-sm font-medium">Upcoming services</p>
+                    </div>
+                    {upcomingServices.length > 0 ? (
+                      <div className="space-y-2">
+                        {upcomingServices.map((service: any) => (
+                          <div
+                            key={service.id}
+                            className="flex items-start justify-between rounded-lg border p-3"
+                          >
+                            <div className="space-y-1 min-w-0 pr-3">
+                              <p className="text-sm font-medium truncate">{service.serviceType || 'Service'}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                Vehicle #{service.vehicleId || 'N/A'} • {service.status || 'Pending'}
+                              </p>
+                              {service.scheduledDate && (
+                                <p className="text-xs text-muted-foreground truncate">{service.scheduledDate}</p>
+                              )}
+                            </div>
+                            {getStatusBadge(service.status || 'pending')}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No upcoming services scheduled.</p>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </div>

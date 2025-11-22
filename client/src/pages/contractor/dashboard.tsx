@@ -209,6 +209,24 @@ export default function ContractorDashboard() {
   const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
   const [showOfflineDialog, setShowOfflineDialog] = useState(false);
   const [returnTime, setReturnTime] = useState<string>("");
+
+  // Verify session before loading dashboard data
+  const { data: session, isLoading: sessionLoading } = useQuery({
+    queryKey: ["/api/auth/me"],
+    queryFn: async () => {
+      try {
+        const response = await apiRequest("GET", "/api/auth/me");
+        return response?.user || null;
+      } catch (error: any) {
+        // Gracefully handle unauthorized users by returning null
+        if (error?.message?.startsWith("401")) {
+          return null;
+        }
+        throw error;
+      }
+    },
+    retry: false,
+  });
   
   // Invoice editing states
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
@@ -218,10 +236,13 @@ export default function ContractorDashboard() {
   const [invoiceNotes, setInvoiceNotes] = useState("");
   const [sendMethod, setSendMethod] = useState<"email" | "sms" | null>(null);
 
+  const dashboardQueryEnabled = !!session?.id && session?.role === "contractor";
+
   // Fetch dashboard data
-  const { data: dashboardData, isLoading, refetch } = useQuery<DashboardData>({
+  const { data: dashboardData, isLoading: dashboardLoading, refetch } = useQuery<DashboardData>({
     queryKey: ["/api/contractor/dashboard"],
     refetchInterval: 10000, // Refresh every 10 seconds for faster updates
+    enabled: dashboardQueryEnabled,
   });
 
   // Handle dashboard data updates and sync availability status
@@ -420,8 +441,18 @@ export default function ContractorDashboard() {
       refetch();
     },
     onError: (error: any) => {
+      const responseData = error?.response?.data;
+      const messageFromResponse = typeof responseData === 'string'
+        ? responseData
+        : responseData?.message || responseData?.error || responseData?.detail;
+
+      const errorMessage = messageFromResponse || error?.message || "Failed to complete job with invoice";
+      const debugDetails = responseData && typeof responseData === 'object'
+        ? JSON.stringify(responseData)
+        : undefined;
+
       // Check if it's a Twilio error
-      if (error?.message?.includes('SMS') || error?.message?.includes('Twilio')) {
+      if (errorMessage?.includes('SMS') || errorMessage?.includes('Twilio')) {
         toast({
           title: "SMS Service Not Available",
           description: "SMS service is not configured. Using email instead.",
@@ -440,7 +471,7 @@ export default function ContractorDashboard() {
       } else {
         toast({
           title: "Error",
-          description: error?.message || "Failed to complete job with invoice",
+          description: debugDetails ? `${errorMessage} — Details: ${debugDetails}` : errorMessage,
           variant: "destructive"
         });
       }
@@ -615,7 +646,7 @@ export default function ContractorDashboard() {
     return Math.round(R * c * 10) / 10;
   };
 
-  if (isLoading) {
+  if (sessionLoading || dashboardLoading) {
     return (
       <div className="min-h-screen bg-background p-4">
         <div className="max-w-7xl mx-auto">
@@ -628,6 +659,46 @@ export default function ContractorDashboard() {
             </div>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Sign in to continue</CardTitle>
+            <CardDescription>
+              You need to be signed in as a contractor to view your dashboard.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" onClick={() => navigate("/contractor/auth")} data-testid="button-go-to-login">
+              Go to Contractor Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (session.role !== "contractor") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Access Denied</CardTitle>
+            <CardDescription>
+              This dashboard is only available to contractor accounts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" onClick={() => navigate("/")}>
+              Back to Home
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }

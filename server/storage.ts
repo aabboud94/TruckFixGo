@@ -3491,9 +3491,30 @@ export class PostgreSQLStorage implements IStorage {
         return null;
       }
 
-      // The first contractor in the sorted list is the best match
-      const bestContractor = availableContractors[0];
-      console.log(`[FindBestContractor] Best contractor for job ${jobId}: ${bestContractor.name} (distance: ${bestContractor.distance}mi)`);
+      // Prioritize online contractors and round-robin assignments across them
+      const onlineContractors = availableContractors.filter(c => c.isOnline);
+      const candidatePool = onlineContractors.length > 0 ? onlineContractors : availableContractors;
+
+      const sortedCandidates = [...candidatePool].sort((a, b) => {
+        // Round-robin: least recently assigned first
+        if (!a.lastAssignedAt && b.lastAssignedAt) return -1;
+        if (a.lastAssignedAt && !b.lastAssignedAt) return 1;
+        if (a.lastAssignedAt && b.lastAssignedAt) {
+          const diff = new Date(a.lastAssignedAt).getTime() - new Date(b.lastAssignedAt).getTime();
+          if (diff !== 0) return diff;
+        }
+
+        // Balance workload
+        if (a.activeJobCount !== b.activeJobCount) {
+          return a.activeJobCount - b.activeJobCount;
+        }
+
+        // Finally, prefer closer contractors
+        return (a.distance || 0) - (b.distance || 0);
+      });
+
+      const bestContractor = sortedCandidates[0];
+      console.log(`[FindBestContractor] Best contractor for job ${jobId}: ${bestContractor.name} (online priority: ${onlineContractors.length > 0}, distance: ${bestContractor.distance}mi)`);
 
       // Return the contractor profile
       const profile = await db.select()
@@ -7007,30 +7028,45 @@ export class PostgreSQLStorage implements IStorage {
     return await query;
   }
 
+  private generateInvoiceNumber(prefix: string = "INV"): string {
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const random = Math.floor(Math.random() * 10000).toString().padStart(4, "0");
+    return `${prefix}-${year}${month}${day}-${random}`;
+  }
+
   async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
-    const sanitizedNumber = this.sanitizeInvoiceNumber(invoice.invoiceNumber);
-    const invoiceNumber = sanitizedNumber ?? this.generateShortInvoiceNumber();
+    // Prefer a provided invoice number (e.g., from pdfService) to avoid violating
+    // the database length constraint (varchar(20)). Fall back to a generated
+    // value that fits within the limit.
+    const fallbackNumber = `INV-${Date.now().toString().slice(-6)}-${Math.random()
+      .toString(36)
+      .toUpperCase()
+      .slice(2, 6)}`;
 
-    const lineItems = Array.isArray((invoice as any).lineItems)
-      ? (invoice as any).lineItems
-      : [];
+    const providedInvoiceNumber = invoice.invoiceNumber?.trim();
+    if (providedInvoiceNumber && providedInvoiceNumber.length > 20) {
+      throw new Error(
+        `Invoice number exceeds 20 characters (received ${providedInvoiceNumber.length}). ` +
+          'Please use a shorter value.'
+      );
+    }
 
-    const paidAmount = (invoice as any).paidAmount ?? (invoice as any).amountPaid ?? '0';
-    const subtotal = (invoice as any).subtotal ?? (invoice as any).totalAmount ?? '0';
-    const amountDue = (invoice as any).amountDue ?? (invoice as any).totalAmount ?? subtotal ?? '0';
+    const sanitizedInvoiceNumber = providedInvoiceNumber || fallbackNumber;
 
-    const { invoiceNumber: _ignored, ...invoiceData } = invoice;
-    const result = await db.insert(invoices)
-      .values({
-        ...invoiceData,
-        invoiceNumber,
-        paidAmount,
-        subtotal,
-        amountDue,
-        // Ensure legacy consumers always receive a non-null array even if the DB default is missing
-        lineItems
-      })
+    const result = await db
+      .insert(invoices)
+      .values({ ...invoice, invoiceNumber: sanitizedInvoiceNumber })
       .returning();
+    const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const result = await db.insert(invoices).values({
+      ...invoice,
+      // Ensure legacy JSON line items column never receives null values
+      lineItems: (invoice as any).lineItems ?? [],
+      invoiceNumber
+    }).returning();
     return result[0];
   }
 
@@ -7048,7 +7084,12 @@ export class PostgreSQLStorage implements IStorage {
 
   async updateInvoice(id: string, updates: Partial<InsertInvoice>): Promise<Invoice | undefined> {
     const result = await db.update(invoices)
-      .set({ ...updates, updatedAt: new Date() })
+      .set({
+        ...updates,
+        // Keep legacy JSON column non-null during updates
+        lineItems: (updates as any)?.lineItems ?? undefined,
+        updatedAt: new Date()
+      })
       .where(eq(invoices.id, id))
       .returning();
     return result[0];
