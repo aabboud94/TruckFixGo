@@ -7038,6 +7038,13 @@ export class PostgreSQLStorage implements IStorage {
   }
 
   async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
+    const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const result = await db.insert(invoices).values({
+      ...invoice,
+      // Ensure legacy JSON line items column never receives null values
+      lineItems: (invoice as any).lineItems ?? [],
+      invoiceNumber
+    }).returning();
     const trimmedInvoiceNumber = invoice.invoiceNumber?.trim?.() ?? "";
     const invoiceNumber = trimmedInvoiceNumber.length > 0 && trimmedInvoiceNumber.length <= 20
       ? trimmedInvoiceNumber
