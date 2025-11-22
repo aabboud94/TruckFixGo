@@ -4826,6 +4826,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Generate invoice number
         const invoiceNumber = pdfService.generateInvoiceNumber('JOB');
         
+        // Normalize legacy line items payload to satisfy NOT NULL constraint
+        const legacyLineItems = Array.isArray(lineItems)
+          ? lineItems.map((item: any) => ({
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              total: parseFloat(item.quantity) * parseFloat(item.unitPrice)
+            }))
+          : [];
+
         // Create invoice in database
         const invoice = await storage.createInvoice({
           jobId,
@@ -4838,7 +4848,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tax: tax.toFixed(2),
           totalAmount: total.toFixed(2),
           amountPaid: '0',
-          status: 'pending'
+          status: 'pending',
+          lineItems: legacyLineItems
         });
         
         // Create invoice line items
