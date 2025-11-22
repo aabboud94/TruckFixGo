@@ -1290,9 +1290,15 @@ export default function AdminJobs() {
             {selectedContractorId && managedDrivers && managedDrivers.length > 0 && (
               <div className="space-y-2">
                 <Label>Or Assign to Managed Driver</Label>
-                <Select 
-                  value={assigneeType === 'driver' ? selectedAssigneeId : ''} 
+                <Select
+                  value={assigneeType === 'driver' ? selectedAssigneeId || 'contractor' : 'contractor'}
                   onValueChange={(value) => {
+                    if (value === 'contractor') {
+                      setAssigneeType('contractor');
+                      setSelectedAssigneeId('');
+                      return;
+                    }
+
                     setSelectedAssigneeId(value);
                     setAssigneeType('driver');
                   }}
@@ -1301,7 +1307,7 @@ export default function AdminJobs() {
                     <SelectValue placeholder="Choose a driver managed by this contractor..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">
+                    <SelectItem value="contractor">
                       <span className="text-muted-foreground">Assign to contractor directly</span>
                     </SelectItem>
                     {managedDrivers.map((driver: any) => (

@@ -1626,6 +1626,7 @@ export const transactions = pgTable("transactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobId: varchar("job_id").references(() => jobs.id),
   userId: varchar("user_id").notNull().references(() => users.id),
+  invoiceId: varchar("invoice_id").references(() => invoices.id),
   paymentMethodId: varchar("payment_method_id").references(() => paymentMethods.id),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   currency: varchar("currency", { length: 3 }).notNull().default('USD'),
@@ -1640,6 +1641,7 @@ export const transactions = pgTable("transactions", {
 }, (table) => ({
   jobIdx: index("idx_transactions_job").on(table.jobId),
   userIdx: index("idx_transactions_user").on(table.userId),
+  invoiceIdx: index("idx_transactions_invoice").on(table.invoiceId),
   statusIdx: index("idx_transactions_status").on(table.status)
 }));
 
@@ -1648,14 +1650,20 @@ export const invoices = pgTable("invoices", {
   invoiceNumber: varchar("invoice_number", { length: 20 }).notNull().unique(),
   jobId: varchar("job_id").references(() => jobs.id),
   customerId: varchar("customer_id").notNull().references(() => users.id),
+  contractorId: varchar("contractor_id").references(() => users.id),
   fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id),
-  
+
   // Financial details
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
   taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }).notNull().default('0'),
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
   paidAmount: decimal("paid_amount", { precision: 10, scale: 2 }).notNull().default('0'),
   amountDue: decimal("amount_due", { precision: 10, scale: 2 }).notNull(),
+  paymentError: text("payment_error"),
+  stripePaymentIntentId: varchar("stripe_payment_intent_id"),
+  stripePaymentMethodId: varchar("stripe_payment_method_id"),
+  stripeTransferId: varchar("stripe_transfer_id"),
+  stripeChargeId: varchar("stripe_charge_id"),
   
   // Status and dates
   status: invoiceStatusEnum("status").notNull().default('draft'),
@@ -1681,6 +1689,7 @@ export const invoices = pgTable("invoices", {
   invoiceNumberIdx: uniqueIndex("idx_invoices_number").on(table.invoiceNumber),
   jobIdx: index("idx_invoices_job").on(table.jobId),
   customerIdx: index("idx_invoices_customer").on(table.customerId),
+  contractorIdx: index("idx_invoices_contractor").on(table.contractorId),
   fleetIdx: index("idx_invoices_fleet").on(table.fleetAccountId),
   statusIdx: index("idx_invoices_status").on(table.status)
 }));

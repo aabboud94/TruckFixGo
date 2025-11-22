@@ -5,11 +5,15 @@ import { type Job } from '@shared/schema';
 import { executeWithRetry } from './db';
 import { trackingWSServer } from './websocket';
 
+const schedulerDisabled = process.env.DISABLE_REMINDER_SCHEDULER === 'true';
+
 class ReminderScheduler {
   private cronJobs: Map<string, cron.ScheduledTask> = new Map();
-  
+
   constructor() {
-    this.initializeScheduler();
+    if (!schedulerDisabled) {
+      this.initializeScheduler();
+    }
   }
 
   // Initialize the reminder scheduler

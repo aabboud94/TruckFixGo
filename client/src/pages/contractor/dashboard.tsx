@@ -101,7 +101,8 @@ import {
   Mail,
   MessageCircle,
   Send,
-  Edit
+  Edit,
+  Wallet
 } from "lucide-react";
 import { format, formatDistanceToNow, addHours } from "date-fns";
 import PerformanceWidget from "@/components/performance-widget";
@@ -139,6 +140,15 @@ interface ActiveJob extends QueuedJob {
   customerEmail?: string;
   totalAmount: number;
   estimatedArrival?: string;
+}
+
+interface PayoutBatchSummary {
+  id: string;
+  batchNumber?: string | null;
+  netPayoutAmount?: number | string | null;
+  status?: string;
+  periodStart?: string | null;
+  periodEnd?: string | null;
 }
 
 interface DashboardData {
@@ -237,6 +247,18 @@ export default function ContractorDashboard() {
   const [sendMethod, setSendMethod] = useState<"email" | "sms" | null>(null);
 
   const dashboardQueryEnabled = !!session?.id && session?.role === "contractor";
+
+  const { data: payoutData } = useQuery<{ pendingTotal: number; payouts: PayoutBatchSummary[] }>({
+    queryKey: ["/api/contractor/payouts", session?.id],
+    enabled: dashboardQueryEnabled,
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/contractors/${session?.id}/payouts?limit=20`);
+      return {
+        pendingTotal: response?.summary?.pendingPayouts || 0,
+        payouts: response?.payouts || [],
+      };
+    },
+  });
 
   // Fetch dashboard data
   const { data: dashboardData, isLoading: dashboardLoading, refetch } = useQuery<DashboardData>({
@@ -710,6 +732,8 @@ export default function ContractorDashboard() {
   const availableJobs = dashboardData?.availableJobs || [];
   const scheduledJobs = dashboardData?.scheduledJobs || [];
   const queueInfo = dashboardData?.queueInfo;
+  const pendingPayoutAmount = Number(payoutData?.pendingTotal ?? metrics?.pendingPayout ?? 0);
+  const pendingPayouts = payoutData?.payouts || [];
   
   // Helper function to check if job needs acceptance (assigned status)
   const needsAcceptance = (job: any) => {
@@ -1127,6 +1151,23 @@ export default function ContractorDashboard() {
 
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-4 pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium truncate">Pending Payouts</CardTitle>
+              <Wallet className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground flex-shrink-0" />
+            </CardHeader>
+            <CardContent className="p-3 sm:p-4 pt-0">
+              <div className="text-lg sm:text-xl md:text-2xl font-bold truncate" data-testid="text-pending-payouts">
+                ${pendingPayoutAmount.toFixed(2)}
+              </div>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1 truncate">
+                {pendingPayouts.length > 0
+                  ? `${pendingPayouts.length} payout${pendingPayouts.length === 1 ? '' : 's'} awaiting transfer`
+                  : 'No pending payouts'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-4 pb-2">
               <CardTitle className="text-xs sm:text-sm font-medium truncate">Response</CardTitle>
               <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground flex-shrink-0" />
             </CardHeader>
@@ -1140,6 +1181,39 @@ export default function ContractorDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>Upcoming Payouts</CardTitle>
+            <CardDescription>Your pending transfers from recent jobs</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {pendingPayouts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No payouts are currently pending.</p>
+            ) : (
+              <div className="space-y-2">
+                {pendingPayouts.slice(0, 3).map((payout) => (
+                  <div
+                    key={payout.id}
+                    className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2"
+                  >
+                    <div>
+                      <div className="font-medium">
+                        {payout.batchNumber || 'Batch'} · ${Number(payout.netPayoutAmount || 0).toFixed(2)}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {payout.periodStart
+                          ? `${new Date(payout.periodStart).toLocaleDateString()} - ${payout.periodEnd ? new Date(payout.periodEnd).toLocaleDateString() : ''}`
+                          : 'Awaiting schedule'}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="capitalize">{payout.status || 'pending'}</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Queued Jobs Section */}
         <Card className="border-l-4 border-l-blue-600">
