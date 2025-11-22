@@ -7008,9 +7008,31 @@ export class PostgreSQLStorage implements IStorage {
   }
 
   async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
-    const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    const result = await db.insert(invoices).values({ ...invoice, invoiceNumber }).returning();
+    const sanitizedNumber = this.sanitizeInvoiceNumber(invoice.invoiceNumber);
+    const invoiceNumber = sanitizedNumber ?? this.generateShortInvoiceNumber();
+
+    const { invoiceNumber: _ignored, ...invoiceData } = invoice;
+    const result = await db.insert(invoices)
+      .values({
+        ...invoiceData,
+        invoiceNumber,
+        // Ensure legacy consumers always receive a non-null array even if the DB default is missing
+        lineItems: (invoice as any).lineItems ?? []
+      })
+      .returning();
     return result[0];
+  }
+
+  private sanitizeInvoiceNumber(invoiceNumber?: string): string | undefined {
+    if (!invoiceNumber) return undefined;
+    const trimmed = invoiceNumber.trim();
+    return trimmed.length <= 20 ? trimmed : trimmed.slice(0, 20);
+  }
+
+  private generateShortInvoiceNumber(prefix = 'INV'): string {
+    const timestamp = Date.now().toString().slice(-8);
+    const random = Math.random().toString(36).slice(2, 6).toUpperCase();
+    return `${prefix}-${timestamp}-${random}`.slice(0, 20);
   }
 
   async updateInvoice(id: string, updates: Partial<InsertInvoice>): Promise<Invoice | undefined> {
