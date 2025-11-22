@@ -4837,7 +4837,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tax: tax.toFixed(2),
           totalAmount: total.toFixed(2),
           amountPaid: '0',
-          status: 'pending'
+          amountDue: total.toFixed(2),
+          status: 'pending',
+          lineItems
         });
         
         // Create invoice line items
