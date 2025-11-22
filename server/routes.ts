@@ -1798,6 +1798,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }, 'Phone number must contain at least 7 digits (10 recommended for production). Valid formats: "555-1234", "(555) 123-4567", "+1 555 123 4567"')
       .optional(), // Alternative field name
     guestEmail: z.string().email().optional().or(z.string().length(0)),
+    customerEmail: z.string().email().optional().or(z.string().length(0)),
     email: z.string().email().optional().or(z.string().length(0)),
     
     // Location (required)
@@ -1855,7 +1856,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Normalize customer data (handle different field names)
         const customerPhone = req.body.customerPhone || req.body.guestPhone;
-        const customerEmail = req.body.email || req.body.guestEmail;
+        const customerEmail = req.body.email || req.body.guestEmail || req.body.customerEmail;
 
         // Create emergency job data with proper field mapping
         const jobData = {
@@ -21300,7 +21301,7 @@ The TruckFixGo Team
             console.log(`[Emergency Booking] Found best contractor ${bestContractor.userId} for job ${job.id}`);
             
             // Assign the job to the contractor
-            const assignedJob = await storage.assignJobToContractor(job.id, bestContractor.userId, 'ai_dispatch');
+            const assignedJob = await storage.assignJobToContractor(job.id, bestContractor.userId, 'round_robin');
             
             if (assignedJob) {
               console.log(`[Emergency Booking] Successfully assigned job ${job.id} to contractor ${bestContractor.userId}`);

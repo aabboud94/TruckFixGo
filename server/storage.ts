@@ -3491,9 +3491,30 @@ export class PostgreSQLStorage implements IStorage {
         return null;
       }
 
-      // The first contractor in the sorted list is the best match
-      const bestContractor = availableContractors[0];
-      console.log(`[FindBestContractor] Best contractor for job ${jobId}: ${bestContractor.name} (distance: ${bestContractor.distance}mi)`);
+      // Prioritize online contractors and round-robin assignments across them
+      const onlineContractors = availableContractors.filter(c => c.isOnline);
+      const candidatePool = onlineContractors.length > 0 ? onlineContractors : availableContractors;
+
+      const sortedCandidates = [...candidatePool].sort((a, b) => {
+        // Round-robin: least recently assigned first
+        if (!a.lastAssignedAt && b.lastAssignedAt) return -1;
+        if (a.lastAssignedAt && !b.lastAssignedAt) return 1;
+        if (a.lastAssignedAt && b.lastAssignedAt) {
+          const diff = new Date(a.lastAssignedAt).getTime() - new Date(b.lastAssignedAt).getTime();
+          if (diff !== 0) return diff;
+        }
+
+        // Balance workload
+        if (a.activeJobCount !== b.activeJobCount) {
+          return a.activeJobCount - b.activeJobCount;
+        }
+
+        // Finally, prefer closer contractors
+        return (a.distance || 0) - (b.distance || 0);
+      });
+
+      const bestContractor = sortedCandidates[0];
+      console.log(`[FindBestContractor] Best contractor for job ${jobId}: ${bestContractor.name} (online priority: ${onlineContractors.length > 0}, distance: ${bestContractor.distance}mi)`);
 
       // Return the contractor profile
       const profile = await db.select()
