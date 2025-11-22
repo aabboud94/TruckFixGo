@@ -7011,8 +7011,11 @@ export class PostgreSQLStorage implements IStorage {
     const sanitizedNumber = this.sanitizeInvoiceNumber(invoice.invoiceNumber);
     const invoiceNumber = sanitizedNumber ?? this.generateShortInvoiceNumber();
 
+    // Handle both lineItems (camelCase) and line_items (snake_case) from routes
     const lineItems = Array.isArray((invoice as any).lineItems)
       ? (invoice as any).lineItems
+      : Array.isArray((invoice as any).line_items)
+      ? (invoice as any).line_items
       : [];
 
     const paidAmount = (invoice as any).paidAmount ?? (invoice as any).amountPaid ?? '0';
@@ -7027,8 +7030,8 @@ export class PostgreSQLStorage implements IStorage {
         paidAmount,
         subtotal,
         amountDue,
-        // Ensure legacy consumers always receive a non-null array even if the DB default is missing
-        lineItems
+        // Map to the correct database column name (line_items)
+        line_items: lineItems
       })
       .returning();
     return result[0];
