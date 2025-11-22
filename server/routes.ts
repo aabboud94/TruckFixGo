@@ -20,6 +20,8 @@ import weatherService from "./services/weather-service";
 import { trackingWSServer } from "./websocket";
 import { healthMonitor } from "./health-monitor";
 import { pushNotificationService } from "./services/push-notification-service";
+import { assignmentTimeoutManager, ASSIGNMENT_TIMEOUT_MS } from "./assignment-timeout-instance";
+import { handleCompleteJob } from "./handlers/complete-job";
 import { 
   isTestModeEnabled, 
   createTestUsers,
@@ -2130,18 +2132,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
               job.serviceTypeId,
               undefined // cityId if available
             );
-            
+
             if (nextContractor) {
               const updatedJob = await storage.assignJobToContractor(
                 job.id,
                 nextContractor.userId,
                 'round_robin'
               );
-              
+
               if (updatedJob) {
-                Object.assign(job, updatedJob);
+                const expiresAt = new Date(Date.now() + ASSIGNMENT_TIMEOUT_MS);
+                const jobWithExpiry = await storage.updateJob(job.id, {
+                  assignmentExpiresAt: expiresAt,
+                  assignmentAttempts: (updatedJob.assignmentAttempts || 0) + 1,
+                  lastAssignmentAttemptAt: new Date()
+                });
+
+                const finalJob = jobWithExpiry || updatedJob;
+                Object.assign(job, finalJob);
                 assignedContractor = nextContractor;
                 assignmentMessage = `Job automatically assigned to ${nextContractor.companyName} using round-robin algorithm`;
+                assignmentTimeoutManager.schedule(finalJob, nextContractor.userId);
                 console.log(`[JobCreate] Assigned job to contractor ${nextContractor.userId}`);
               }
             } else {
@@ -4796,6 +4807,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const contractorId = req.session.userId!;
         const { lineItems, notes, sendMethod, recipientEmail, recipientPhone } = req.body;
 
+        const parsedLineItems = Array.isArray(lineItems)
+          ? lineItems
+          : typeof lineItems === 'string'
+            ? (() => {
+                try {
+                  const parsed = JSON.parse(lineItems);
+                  return Array.isArray(parsed) ? parsed : [];
+                } catch {
+                  return [];
+                }
+              })()
+            : [];
+
         // Verify this is the contractor's current job
         const currentJobs = await storage.findJobs({
           id: jobId,
@@ -4820,7 +4844,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Calculate invoice totals
         let subtotal = 0;
-        lineItems.forEach((item: any) => {
+        parsedLineItems.forEach((item: any) => {
           subtotal += parseFloat(item.quantity) * parseFloat(item.unitPrice);
         });
         
@@ -4831,14 +4855,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const invoiceNumber = pdfService.generateInvoiceNumber('JOB');
         
         // Normalize legacy line items payload to satisfy NOT NULL constraint
-        const legacyLineItems = Array.isArray(lineItems)
-          ? lineItems.map((item: any) => ({
-              description: item.description,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              total: parseFloat(item.quantity) * parseFloat(item.unitPrice)
-            }))
-          : [];
+        const legacyLineItems = parsedLineItems.map((item: any) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: parseFloat(item.quantity) * parseFloat(item.unitPrice)
+        }));
 
         // Create invoice in database
         const invoice = await storage.createInvoice({
@@ -4857,8 +4879,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         
         // Create invoice line items
-        for (let i = 0; i < lineItems.length; i++) {
-          const item = lineItems[i];
+        for (let i = 0; i < parsedLineItems.length; i++) {
+          const item = parsedLineItems[i];
           const totalPrice = parseFloat(item.quantity) * parseFloat(item.unitPrice);
           await storage.createInvoiceLineItem({
             invoiceId: invoice.id,
@@ -4913,7 +4935,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 email: contractor?.email,
                 phone: contractor?.phone
               },
-              lineItems: lineItems.map((item: any) => ({
+              lineItems: parsedLineItems.map((item: any) => ({
                 description: item.description,
                 quantity: item.quantity,
                 unitPrice: parseFloat(item.unitPrice),
@@ -5799,46 +5821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Complete job
   app.post('/api/jobs/:id/complete',
     requireAuth,
-    requireRole('contractor'),
-    async (req: Request, res: Response) => {
-      try {
-        const job = await storage.getJob(req.params.id);
-
-        if (!job) {
-          return res.status(404).json({ message: 'Job not found' });
-        }
-
-        if (job.contractorId !== req.session.userId) {
-          return res.status(403).json({ message: 'Access denied' });
-        }
-
-        if (job.status !== 'on_site') {
-          return res.status(400).json({ message: 'Job must be on site to complete' });
-        }
-
-        // Update job
-        await storage.updateJob(req.params.id, {
-          status: 'completed',
-          completedAt: new Date(),
-          completionNotes: req.body.completionNotes,
-          finalPrice: req.body.finalPrice || job.estimatedPrice
-        });
-
-        // Record status change
-        await storage.recordJobStatusChange({
-          jobId: req.params.id,
-          fromStatus: job.status,
-          toStatus: 'completed',
-          changedBy: req.session.userId,
-          reason: 'Job completed by contractor'
-        });
-
-        res.json({ message: 'Job completed successfully' });
-      } catch (error) {
-        console.error('Complete job error:', error);
-        res.status(500).json({ message: 'Failed to complete job' });
-      }
-    }
+    handleCompleteJob
   );
 
   // Update job details
@@ -6502,6 +6485,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // AUTOMATIC STATUS UPDATE: Set status to 'en_route' immediately after acceptance
         console.log(`[Job Acceptance] Automatically updating job ${jobId} status to 'en_route' after contractor acceptance`);
         const enRouteJob = await storage.updateJobStatus(jobId, 'en_route', contractorId, 'Contractor approved job and is en route');
+
+        // Clear any pending reassignment timers and expiration when accepted
+        assignmentTimeoutManager.cancel(jobId);
+        await storage.updateJob(jobId, { assignmentExpiresAt: null });
         
         if (!enRouteJob) {
           console.error(`[Job Acceptance] Failed to update job ${jobId} to 'en_route' status`);
@@ -13037,16 +13024,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const taxRate = 0.08; // 8% tax rate - could be configurable
         const taxAmount = subtotal * taxRate;
         const totalAmount = subtotal + taxAmount;
+        const contractorProfile = job.contractorId
+          ? await storage.getContractorProfile(job.contractorId)
+          : null;
+        const stripeKey = (process.env.STRIPE_SECRET_KEY || process.env.TESTING_STRIPE_SECRET_KEY)?.trim();
+        const platformRate = 0.15;
+        const paymentBreakdown = calculatePaymentBreakdown(totalAmount, platformRate);
 
         // Create invoice
         const invoice = await storage.createInvoice({
           jobId,
           customerId: job.customerId,
+          contractorId: job.contractorId,
           fleetAccountId: job.fleetAccountId,
           subtotal,
           taxAmount,
           totalAmount,
           amountDue: totalAmount,
+          status: 'pending',
           dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
         });
 
@@ -13095,8 +13090,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
+        let paymentError: string | undefined;
+
+        if (stripeKey && contractorProfile?.stripeAccountId) {
+          try {
+            const stripe = require('stripe')(stripeKey);
+            const paymentIntent = await stripe.paymentIntents.create({
+              amount: paymentBreakdown.amountInCents,
+              currency: 'usd',
+              application_fee_amount: paymentBreakdown.applicationFeeAmount,
+              transfer_data: {
+                destination: contractorProfile.stripeAccountId,
+              },
+              automatic_payment_methods: { enabled: true },
+              metadata: {
+                invoiceId: invoice.id,
+                jobId: job.id,
+                contractorId: job.contractorId || '',
+              },
+            });
+
+            const confirmedIntent = await stripe.paymentIntents.confirm(paymentIntent.id);
+
+            await storage.createTransaction({
+              jobId,
+              invoiceId: invoice.id,
+              userId: job.customerId,
+              amount: totalAmount,
+              status: 'completed',
+              stripePaymentIntentId: confirmedIntent.id,
+              stripeChargeId: confirmedIntent.latest_charge || undefined,
+              processedAt: new Date(),
+              metadata: {
+                invoiceId: invoice.id,
+                jobId: job.id,
+                contractorId: job.contractorId,
+              },
+            });
+
+            if (job.contractorId) {
+              await storage.addContractorEarning({
+                contractorId: job.contractorId,
+                jobId: job.id,
+                earningType: 'job_payment',
+                amount: (paymentBreakdown.contractorTakeHome / 100).toFixed(2),
+                description: `Invoice ${invoice.invoiceNumber} payment`,
+                isPaid: false,
+              });
+            }
+
+            await storage.updateInvoice(invoice.id, buildInvoicePaymentStatus({
+              success: true,
+              totalAmount,
+              paymentIntentId: confirmedIntent.id,
+              chargeId: confirmedIntent.latest_charge,
+              transferId: confirmedIntent.transfer_data?.transfer,
+              paymentMethodId: (confirmedIntent.payment_method as string) || undefined,
+            }));
+          } catch (error: any) {
+            paymentError = error?.message || 'Payment processing failed';
+            await storage.updateInvoice(invoice.id, buildInvoicePaymentStatus({
+              success: false,
+              totalAmount,
+              error: paymentError,
+            }));
+          }
+        } else {
+          paymentError = 'Stripe not configured or contractor missing connected account';
+          await storage.updateInvoice(invoice.id, { status: 'pending', paymentError });
+        }
+
         const invoiceWithLineItems = await storage.getInvoiceWithLineItems(invoice.id);
-        res.json(invoiceWithLineItems);
+        res.json({
+          ...invoiceWithLineItems,
+          paymentError,
+        });
       } catch (error) {
         console.error('Error creating invoice:', error);
         res.status(500).json({ message: 'Failed to create invoice' });
