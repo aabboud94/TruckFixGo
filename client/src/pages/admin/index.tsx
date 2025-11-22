@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import AdminLayout from "@/layouts/AdminLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,41 +38,124 @@ const formatCurrency = (value: any, defaultValue: string = '$0'): string => {
 };
 
 export default function AdminDashboard() {
+  const [, navigate] = useLocation();
+
+  const { data: session, isLoading: sessionLoading } = useQuery({
+    queryKey: ["/api/auth/me"],
+    retry: false,
+    queryFn: async () => {
+      try {
+        const response = await fetch("/api/auth/me", { credentials: "include" });
+        if (response.status === 401) return null;
+        if (!response.ok) throw new Error(`Failed to load session (${response.status})`);
+        const data = await response.json();
+        return data?.user || null;
+      } catch (error: any) {
+        if (typeof error?.message === "string" && error.message.startsWith("401")) {
+          return null;
+        }
+        throw error;
+      }
+    }
+  });
+
+  const allowAdminQueries = !!session?.id && session.role === "admin";
+
   // Query for real-time metrics
   const { data: metrics, isLoading: metricsLoading } = useQuery({
     queryKey: ['/api/admin/metrics'],
+    enabled: allowAdminQueries,
     refetchInterval: 10000, // Refresh every 10 seconds
   });
 
   // Query for revenue data
   const { data: revenueData, isLoading: revenueLoading } = useQuery({
     queryKey: ['/api/admin/revenue/weekly'],
+    enabled: allowAdminQueries,
     refetchInterval: 30000,
   });
 
   // Query for service breakdown
   const { data: serviceBreakdownData, isLoading: serviceLoading } = useQuery({
     queryKey: ['/api/admin/jobs/breakdown'],
+    enabled: allowAdminQueries,
     refetchInterval: 30000,
   });
 
   // Query for job status breakdown
   const { data: jobStatusData, isLoading: jobStatusLoading } = useQuery({
     queryKey: ['/api/admin/jobs/status-breakdown'],
+    enabled: allowAdminQueries,
     refetchInterval: 30000,
   });
 
   // Query for recent activity
   const { data: recentActivity } = useQuery({
     queryKey: ['/api/admin/activity'],
+    enabled: allowAdminQueries,
     refetchInterval: 30000,
   });
 
   // Query for alerts
   const { data: alerts } = useQuery({
     queryKey: ['/api/admin/alerts'],
+    enabled: allowAdminQueries,
     refetchInterval: 30000,
   });
+
+  if (sessionLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Checking permissions…</CardTitle>
+            <CardDescription>Loading your admin session.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Progress value={66} aria-label="Loading admin session" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Sign in required</CardTitle>
+            <CardDescription>You need to be signed in as an admin to view this dashboard.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button className="w-full" onClick={() => navigate('/admin/login')} data-testid="button-go-to-login">
+              Go to Admin Login
+            </Button>
+            <Button variant="ghost" className="w-full" onClick={() => navigate('/')}>Return home</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (session.role !== "admin") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Access denied</CardTitle>
+            <CardDescription>This dashboard is only available to administrator accounts.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button className="w-full" onClick={() => navigate('/')}>Back to Home</Button>
+            <Button variant="ghost" className="w-full" onClick={() => navigate('/admin/login')}>
+              Switch account
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // Ensure all numeric fields have safe default values - use 0 to show real data
   const stats = {
