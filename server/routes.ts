@@ -4839,7 +4839,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           amountPaid: '0',
           amountDue: total.toFixed(2),
           status: 'pending',
-          lineItems
+          line_items: lineItems  // Map camelCase to snake_case for database column
         });
         
         // Create invoice line items
