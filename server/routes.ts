@@ -4791,6 +4791,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const contractorId = req.session.userId!;
         const { lineItems, notes, sendMethod, recipientEmail, recipientPhone } = req.body;
 
+        const parsedLineItems = Array.isArray(lineItems)
+          ? lineItems
+          : typeof lineItems === 'string'
+            ? (() => {
+                try {
+                  const parsed = JSON.parse(lineItems);
+                  return Array.isArray(parsed) ? parsed : [];
+                } catch {
+                  return [];
+                }
+              })()
+            : [];
+
         // Verify this is the contractor's current job
         const currentJobs = await storage.findJobs({
           id: jobId,
@@ -4815,7 +4828,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Calculate invoice totals
         let subtotal = 0;
-        lineItems.forEach((item: any) => {
+        parsedLineItems.forEach((item: any) => {
           subtotal += parseFloat(item.quantity) * parseFloat(item.unitPrice);
         });
         
@@ -4825,6 +4838,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Generate invoice number
         const invoiceNumber = pdfService.generateInvoiceNumber('JOB');
         
+        // Normalize legacy line items payload to satisfy NOT NULL constraint
+        const legacyLineItems = parsedLineItems.map((item: any) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: parseFloat(item.quantity) * parseFloat(item.unitPrice)
+        }));
+
         // Create invoice in database
         const invoice = await storage.createInvoice({
           jobId,
@@ -4837,12 +4858,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tax: tax.toFixed(2),
           totalAmount: total.toFixed(2),
           amountPaid: '0',
-          status: 'pending'
+          status: 'pending',
+          lineItems: legacyLineItems
         });
         
         // Create invoice line items
-        for (let i = 0; i < lineItems.length; i++) {
-          const item = lineItems[i];
+        for (let i = 0; i < parsedLineItems.length; i++) {
+          const item = parsedLineItems[i];
           const totalPrice = parseFloat(item.quantity) * parseFloat(item.unitPrice);
           await storage.createInvoiceLineItem({
             invoiceId: invoice.id,
@@ -4897,7 +4919,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 email: contractor?.email,
                 phone: contractor?.phone
               },
-              lineItems: lineItems.map((item: any) => ({
+              lineItems: parsedLineItems.map((item: any) => ({
                 description: item.description,
                 quantity: item.quantity,
                 unitPrice: parseFloat(item.unitPrice),
@@ -9824,12 +9846,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         let fleets = await storage.findFleetAccounts(filters);
-        
+
         // If user is a fleet_manager, filter to only show their fleet accounts
-        if (req.session?.user?.role === 'fleet_manager' && req.session?.user?.email) {
-          fleets = fleets.filter(fleet => 
-            fleet.primaryContactEmail === req.session.user.email
-          );
+        if (req.session.role === 'fleet_manager' && req.session.userId) {
+          const user = await storage.getUser(req.session.userId);
+
+          if (user?.email) {
+            fleets = fleets.filter((fleet) =>
+              fleet.primaryContactEmail === user.email
+            );
+          }
         }
         
         res.json({ fleets });
