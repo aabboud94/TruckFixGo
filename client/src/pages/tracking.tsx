@@ -178,10 +178,30 @@ function ETACountdown({ eta }: { eta: string | null }) {
 }
 
 export default function TrackingPage() {
-  const { jobId } = useParams();
+  const params = useParams();
+  const [jobId, setJobId] = useState<string | null>(() => {
+    if (params?.jobId) return params.jobId;
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("jobId");
+    }
+    return null;
+  });
   const { toast } = useToast();
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
+
+  useEffect(() => {
+    const routeJobId = params?.jobId;
+    const queryJobId = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("jobId")
+      : null;
+
+    if (routeJobId && routeJobId !== jobId) {
+      setJobId(routeJobId);
+    } else if (!routeJobId && queryJobId && queryJobId !== jobId) {
+      setJobId(queryJobId);
+    }
+  }, [params, jobId]);
   
   // Fetch job details
   const { data: jobData, isLoading: isLoadingJob } = useQuery({
@@ -205,7 +225,7 @@ export default function TrackingPage() {
     contractorOnline,
     sendLocationUpdate
   } = useTrackingWebSocket({
-    jobId: jobId!,
+    jobId: jobId || undefined,
     role: "guest",
     onLocationUpdate: (location) => {
       console.log("Location updated:", location);

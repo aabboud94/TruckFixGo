@@ -136,10 +136,11 @@ function Router() {
       {/* Test Pages */}
       <Route path="/test-location" component={TestLocationInput} />
       <Route path="/test-dialogs" component={TestDialogs} />
-      
+
       {/* Tracking Pages */}
+      <Route path="/tracking" component={TrackingPage} />
       <Route path="/track/:jobId" component={TrackingPage} />
-      
+
       {/* Payment Pages */}
       <Route path="/payment-methods" component={PaymentMethodsPage} />
       <Route path="/payment/split/:token" component={SplitPaymentPage} />
@@ -237,10 +238,11 @@ function AppWithSidebar() {
   
   // Check if we're on admin pages (which have their own layout) or other special pages
   const isAdminPage = location.startsWith('/admin');
-  const isAuthPage = location === '/login' || location === '/contractor/auth' || 
+  const isAuthPage = location === '/login' || location === '/contractor/auth' ||
                      location === '/fleet/login' || location === '/fleet/auth' ||
                      location === '/forgot-password' || location.startsWith('/reset-password');
-  const isFullWidthPage = location === '/track' || location.startsWith('/track/');
+  const isFullWidthPage = location === '/track' || location.startsWith('/track/') ||
+                          location === '/tracking' || location.startsWith('/tracking');
   
   // Don't show sidebar on admin, auth, or tracking pages
   const shouldShowSidebar = !isAdminPage && !isAuthPage && !isFullWidthPage;
