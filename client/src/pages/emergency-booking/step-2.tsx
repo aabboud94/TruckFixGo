@@ -279,6 +279,7 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
       customerName: bookingData.name || 'Guest',
       customerPhone: bookingData.phone,
       customerEmail: bookingData.email,
+      email: bookingData.email,
 
       // Service details
       serviceType: mapIssueToServiceType(values.issue),
