@@ -21352,7 +21352,7 @@ The TruckFixGo Team
         }
 
         // Build tracking link
-        const trackingLink = `${process.env.APP_URL || 'https://truck-fix-go-aabboud94.replit.app'}/tracking?jobId=${job.id}`;
+        const trackingLink = `${process.env.APP_URL || 'https://truck-fix-go-aabboud94.replit.app'}/track/${job.id}`;
 
         // Send notifications asynchronously
         (async () => {
