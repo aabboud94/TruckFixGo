@@ -21300,7 +21300,7 @@ The TruckFixGo Team
             console.log(`[Emergency Booking] Found best contractor ${bestContractor.userId} for job ${job.id}`);
             
             // Assign the job to the contractor
-            const assignedJob = await storage.assignJobToContractor(job.id, bestContractor.userId, 'ai_dispatch');
+            const assignedJob = await storage.assignJobToContractor(job.id, bestContractor.userId, 'round_robin');
             
             if (assignedJob) {
               console.log(`[Emergency Booking] Successfully assigned job ${job.id} to contractor ${bestContractor.userId}`);

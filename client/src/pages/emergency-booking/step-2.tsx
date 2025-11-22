@@ -272,14 +272,14 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
       // Mark as emergency for the backend
       type: 'emergency',
       jobType: "emergency",
-      
+
       // Customer info
       guestPhone: bookingData.phone,
       guestEmail: bookingData.email,
       customerName: bookingData.name || 'Guest',
       customerPhone: bookingData.phone,
-      email: bookingData.email,
-      
+      customerEmail: bookingData.email,
+
       // Service details
       serviceType: mapIssueToServiceType(values.issue),
       serviceTypeId: mapIssueToServiceType(values.issue),
