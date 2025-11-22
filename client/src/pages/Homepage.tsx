@@ -238,6 +238,117 @@ export default function Homepage() {
         </div>
       </section>
 
+      {/* FAST SIGNUP CTA */}
+      <section className="py-16 bg-gradient-to-r from-slate-900 via-blue-900 to-slate-900 text-white relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.4),_transparent_45%)]" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+          <div className="grid lg:grid-cols-2 gap-10 items-center">
+            <div className="space-y-6">
+              <div className="inline-flex items-center gap-2 bg-red-600/20 border border-red-500 px-3 py-1 rounded-full text-sm font-semibold uppercase tracking-wider">
+                <Sparkles className="w-4 h-4 text-yellow-400" />
+                Start in 3 minutes
+              </div>
+              <h2 className="text-4xl md:text-5xl font-black leading-tight">Create your TruckFixGo account &amp; get priority dispatch</h2>
+              <p className="text-lg text-gray-100/90">
+                Lock in faster response times, save your fleet details once, and keep every repair, invoice, and driver update in one place.
+                Whether you're an owner-operator or managing a nationwide fleet, signing up secures VIP treatment on every call.
+              </p>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                {["Instant priority dispatch", "Secure stored payment & locations", "Live job tracking & driver updates", "Fleet-level reporting & maintenance reminders"].map((item) => (
+                  <div key={item} className="flex items-start gap-3 bg-white/5 border border-white/10 rounded-lg p-3">
+                    <BadgeCheck className="w-5 h-5 text-green-400 mt-1" />
+                    <span className="font-semibold text-sm md:text-base text-white/90">{item}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Button
+                  size="lg"
+                  className="bg-red-600 hover:bg-red-500 text-white font-black text-lg px-8 py-6 w-full sm:w-auto"
+                  onClick={() => setLocation("/login")}
+                  data-testid="cta-create-account"
+                >
+                  Create customer account
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </Button>
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  className="bg-white text-blue-900 font-black text-lg px-8 py-6 w-full sm:w-auto hover-elevate"
+                  onClick={() => setLocation("/fleet/register")}
+                  data-testid="cta-fleet-register"
+                >
+                  Fleet signup
+                  <Shield className="w-5 h-5 ml-2" />
+                </Button>
+              </div>
+
+              <div className="flex items-center gap-4 text-sm text-white/70">
+                <div className="flex items-center gap-2">
+                  <PhoneCall className="w-4 h-4" />
+                  Talk to dispatch: <span className="font-semibold text-white">(800) 555-TRUCK</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Timer className="w-4 h-4" />
+                  Avg. signup-to-dispatch: <span className="font-semibold text-white">7 minutes</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white text-blue-900 rounded-2xl shadow-2xl border-4 border-red-600 p-6 sm:p-8 space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-red-700">Trusted nationwide</p>
+                  <h3 className="text-3xl font-black">Your signup, step by step</h3>
+                </div>
+                <Award className="w-12 h-12 text-red-600" />
+              </div>
+
+              <div className="space-y-4">
+                {[{ title: "Share your rig & route", detail: "Drop your truck details, preferred corridors, and yard locations." }, { title: "Save payment once", detail: "Securely store card or fleet billing to skip phone holds." }, { title: "Set alert preferences", detail: "Choose SMS/email updates so drivers never miss a status." }].map((step, index) => (
+                  <div key={step.title} className="flex gap-4 items-start">
+                    <div className="w-10 h-10 rounded-full bg-blue-900 text-white flex items-center justify-center text-lg font-black border-2 border-red-600">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <p className="text-lg font-black flex items-center gap-2">{step.title}</p>
+                      <p className="text-gray-700 text-sm font-semibold">{step.detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-3">
+                  <Star className="w-5 h-5 text-yellow-500" />
+                  <div>
+                    <p className="text-xs text-blue-700 font-semibold">Customer rating</p>
+                    <p className="text-xl font-black">4.9/5</p>
+                  </div>
+                </div>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-3">
+                  <TrendingUp className="w-5 h-5 text-green-700" />
+                  <div>
+                    <p className="text-xs text-green-700 font-semibold">Faster response</p>
+                    <p className="text-xl font-black">30% quicker</p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator className="my-4" />
+
+              <div className="flex flex-wrap gap-3">
+                {['Owner-operators', 'Private fleets', 'Logistics brokers', 'Dealership partners'].map((tag) => (
+                  <span key={tag} className="px-3 py-1 rounded-full bg-red-100 text-red-800 text-sm font-semibold">{tag}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* AMERICAN VALUES SECTION */}
       <section className="py-16 bg-gradient-to-r from-red-50 via-white to-blue-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
