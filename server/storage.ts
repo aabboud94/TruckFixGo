@@ -7056,16 +7056,11 @@ export class PostgreSQLStorage implements IStorage {
 
     const sanitizedInvoiceNumber = providedInvoiceNumber || fallbackNumber;
 
-    const result = await db
-      .insert(invoices)
-      .values({ ...invoice, invoiceNumber: sanitizedInvoiceNumber })
-      .returning();
-    const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     const result = await db.insert(invoices).values({
       ...invoice,
       // Ensure legacy JSON line items column never receives null values
       lineItems: (invoice as any).lineItems ?? [],
-      invoiceNumber
+      invoiceNumber: sanitizedInvoiceNumber
     }).returning();
     return result[0];
   }

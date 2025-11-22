@@ -20,6 +20,7 @@ import weatherService from "./services/weather-service";
 import { trackingWSServer } from "./websocket";
 import { healthMonitor } from "./health-monitor";
 import { pushNotificationService } from "./services/push-notification-service";
+import { handleCompleteJob } from "./handlers/complete-job";
 import { 
   isTestModeEnabled, 
   createTestUsers,
@@ -5806,46 +5807,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Complete job
   app.post('/api/jobs/:id/complete',
     requireAuth,
-    requireRole('contractor'),
-    async (req: Request, res: Response) => {
-      try {
-        const job = await storage.getJob(req.params.id);
-
-        if (!job) {
-          return res.status(404).json({ message: 'Job not found' });
-        }
-
-        if (job.contractorId !== req.session.userId) {
-          return res.status(403).json({ message: 'Access denied' });
-        }
-
-        if (job.status !== 'on_site') {
-          return res.status(400).json({ message: 'Job must be on site to complete' });
-        }
-
-        // Update job
-        await storage.updateJob(req.params.id, {
-          status: 'completed',
-          completedAt: new Date(),
-          completionNotes: req.body.completionNotes,
-          finalPrice: req.body.finalPrice || job.estimatedPrice
-        });
-
-        // Record status change
-        await storage.recordJobStatusChange({
-          jobId: req.params.id,
-          fromStatus: job.status,
-          toStatus: 'completed',
-          changedBy: req.session.userId,
-          reason: 'Job completed by contractor'
-        });
-
-        res.json({ message: 'Job completed successfully' });
-      } catch (error) {
-        console.error('Complete job error:', error);
-        res.status(500).json({ message: 'Failed to complete job' });
-      }
-    }
+    handleCompleteJob
   );
 
   // Update job details
