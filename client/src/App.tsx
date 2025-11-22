@@ -31,6 +31,7 @@ import ContractorPerformance from "@/pages/contractor/performance";
 import ContractorProfile from "@/pages/contractor/profile";
 import ContractorDocuments from "@/pages/contractor/documents";
 import ContractorActiveJob from "@/pages/contractor/active-job";
+import ContractorPartsLookup from "@/pages/contractor/parts-lookup";
 import ContractorBidding from "@/pages/contractor/bidding";
 import ContractorJobAcceptance from "@/pages/contractor/job-acceptance";
 import ManageDrivers from "@/pages/contractor/manage-drivers";
@@ -157,6 +158,7 @@ function Router() {
       <Route path="/contractor/profile" component={ContractorProfile} />
       <Route path="/contractor/documents" component={ContractorDocuments} />
       <Route path="/contractor/active-job" component={ContractorActiveJob} />
+      <Route path="/contractor/parts-lookup" component={ContractorPartsLookup} />
       <Route path="/contractor/job/:jobId" component={ContractorJobAcceptance} />
       <Route path="/contractor/manage-drivers" component={ManageDrivers} />
       <Route path="/contractor/jobs/:id/complete" component={ContractorJobCompletion} />
