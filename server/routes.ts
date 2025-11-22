@@ -9824,12 +9824,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         let fleets = await storage.findFleetAccounts(filters);
-        
+
         // If user is a fleet_manager, filter to only show their fleet accounts
-        if (req.session?.user?.role === 'fleet_manager' && req.session?.user?.email) {
-          fleets = fleets.filter(fleet => 
-            fleet.primaryContactEmail === req.session.user.email
-          );
+        if (req.session.role === 'fleet_manager' && req.session.userId) {
+          const user = await storage.getUser(req.session.userId);
+
+          if (user?.email) {
+            fleets = fleets.filter((fleet) =>
+              fleet.primaryContactEmail === user.email
+            );
+          }
         }
         
         res.json({ fleets });
