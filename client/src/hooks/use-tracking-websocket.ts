@@ -296,16 +296,22 @@ export const useTrackingWebSocket = ({
 
   const disconnect = useCallback(() => {
     if (ws.current) {
-      if (routeId) {
-        ws.current.send(JSON.stringify({
-          type: 'LEAVE_ROUTE_TRACKING',
-          payload: {}
-        }));
-      } else {
-        ws.current.send(JSON.stringify({
-          type: 'LEAVE_TRACKING',
-          payload: {}
-        }));
+      if (ws.current.readyState === WebSocket.OPEN) {
+        if (routeId) {
+          ws.current.send(
+            JSON.stringify({
+              type: 'LEAVE_ROUTE_TRACKING',
+              payload: {}
+            })
+          );
+        } else {
+          ws.current.send(
+            JSON.stringify({
+              type: 'LEAVE_TRACKING',
+              payload: {}
+            })
+          );
+        }
       }
       ws.current.close();
       ws.current = null;

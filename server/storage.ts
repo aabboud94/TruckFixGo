@@ -7008,9 +7008,38 @@ export class PostgreSQLStorage implements IStorage {
   }
 
   async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
-    const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    const result = await db.insert(invoices).values({ ...invoice, invoiceNumber }).returning();
+    const sanitizedNumber = this.sanitizeInvoiceNumber(invoice.invoiceNumber);
+    const invoiceNumber = sanitizedNumber ?? this.generateShortInvoiceNumber();
+
+    const { invoiceNumber: _ignored, ...invoiceData } = invoice;
+    const result = await db.insert(invoices)
+      .values({
+        ...invoiceData,
+        invoiceNumber,
+        // Ensure legacy consumers always receive a non-null array even if the DB default is missing
+        lineItems: (invoice as any).lineItems ?? []
+      })
+      .returning();
     return result[0];
+  }
+
+  private sanitizeInvoiceNumber(invoiceNumber?: string): string | undefined {
+    if (!invoiceNumber) return undefined;
+    const trimmed = invoiceNumber.trim();
+    return trimmed.length <= 20 ? trimmed : trimmed.slice(0, 20);
+  }
+
+  private generateShortInvoiceNumber(prefix = 'INV'): string {
+    const date = new Date();
+    // Use last 2 digits of year to save space
+    const year = String(date.getFullYear()).slice(-2);
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, "0");
+    // Format: PRE-YYMMDD-RRR (max 14 chars with 3-letter prefix)
+    const invoiceNum = `${prefix.slice(0, 3)}-${year}${month}${day}-${random}`;
+    // Ensure it never exceeds 20 chars
+    return invoiceNum.slice(0, 20);
   }
 
   async updateInvoice(id: string, updates: Partial<InsertInvoice>): Promise<Invoice | undefined> {

@@ -545,13 +545,18 @@ class PDFInvoiceService {
       : [0, 0, 0];
   }
 
-  // Generate unique invoice number
+  // Generate unique invoice number (max 20 chars for database)
   generateInvoiceNumber(prefix: string = "INV"): string {
     const date = new Date();
-    const year = date.getFullYear();
+    // Use last 2 digits of year to save space
+    const year = String(date.getFullYear()).slice(-2);
     const month = String(date.getMonth() + 1).padStart(2, "0");
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, "0");
-    return `${prefix}-${year}${month}-${random}`;
+    const day = String(date.getDate()).padStart(2, "0");
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, "0");
+    // Format: PRE-YYMMDD-RRR (max 14 chars with 3-letter prefix)
+    const invoiceNum = `${prefix.slice(0, 3)}-${year}${month}${day}-${random}`;
+    // Ensure it never exceeds 20 chars
+    return invoiceNum.slice(0, 20);
   }
 
   // Create earnings statement for contractors
