@@ -558,6 +558,7 @@ export const jobs = pgTable("jobs", {
   assignmentAttempts: integer("assignment_attempts").notNull().default(0),
   lastAssignmentAttemptAt: timestamp("last_assignment_attempt_at"),
   assignmentMethod: jobAssignmentMethodEnum("assignment_method").default('manual'),
+  assignmentExpiresAt: timestamp("assignment_expires_at"),
   
   // Assignment tracking - commented out until migration is run
   // assignmentAttemptedAt: timestamp("assignment_attempted_at"),

@@ -20,6 +20,7 @@ import weatherService from "./services/weather-service";
 import { trackingWSServer } from "./websocket";
 import { healthMonitor } from "./health-monitor";
 import { pushNotificationService } from "./services/push-notification-service";
+import { assignmentTimeoutManager, ASSIGNMENT_TIMEOUT_MS } from "./assignment-timeout-instance";
 import { handleCompleteJob } from "./handlers/complete-job";
 import { 
   isTestModeEnabled, 
@@ -2127,18 +2128,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
               job.serviceTypeId,
               undefined // cityId if available
             );
-            
+
             if (nextContractor) {
               const updatedJob = await storage.assignJobToContractor(
                 job.id,
                 nextContractor.userId,
                 'round_robin'
               );
-              
+
               if (updatedJob) {
-                Object.assign(job, updatedJob);
+                const expiresAt = new Date(Date.now() + ASSIGNMENT_TIMEOUT_MS);
+                const jobWithExpiry = await storage.updateJob(job.id, {
+                  assignmentExpiresAt: expiresAt,
+                  assignmentAttempts: (updatedJob.assignmentAttempts || 0) + 1,
+                  lastAssignmentAttemptAt: new Date()
+                });
+
+                const finalJob = jobWithExpiry || updatedJob;
+                Object.assign(job, finalJob);
                 assignedContractor = nextContractor;
                 assignmentMessage = `Job automatically assigned to ${nextContractor.companyName} using round-robin algorithm`;
+                assignmentTimeoutManager.schedule(finalJob, nextContractor.userId);
                 console.log(`[JobCreate] Assigned job to contractor ${nextContractor.userId}`);
               }
             } else {
@@ -6471,6 +6481,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // AUTOMATIC STATUS UPDATE: Set status to 'en_route' immediately after acceptance
         console.log(`[Job Acceptance] Automatically updating job ${jobId} status to 'en_route' after contractor acceptance`);
         const enRouteJob = await storage.updateJobStatus(jobId, 'en_route', contractorId, 'Contractor approved job and is en route');
+
+        // Clear any pending reassignment timers and expiration when accepted
+        assignmentTimeoutManager.cancel(jobId);
+        await storage.updateJob(jobId, { assignmentExpiresAt: null });
         
         if (!enRouteJob) {
           console.error(`[Job Acceptance] Failed to update job ${jobId} to 'en_route' status`);
