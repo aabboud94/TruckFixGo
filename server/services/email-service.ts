@@ -629,7 +629,7 @@ class EmailService {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                 <tr>
                   <td align="center">
-                    ${this.getButtonHtml('Track Your Mechanic', `${appUrl}/tracking?jobId=${data.jobId}`, 'success')}
+                    ${this.getButtonHtml('Track Your Mechanic', `${appUrl}/track/${data.jobId}`, 'success')}
                     <p style="margin: 20px 0 0; color: #718096; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px; text-align: center;">
                       You'll receive a notification when your mechanic is nearby
                     </p>
@@ -679,7 +679,7 @@ class EmailService {
         return {
           subject: '🚛 Help is on the way! Your mechanic has been assigned',
           html: this.getBaseEmailTemplate(customerContent, `Your mechanic ${data.contractorName} is on the way!`),
-          text: `Help is on the way!\n\nHello ${data.customerName},\n\nGood news! We've assigned a qualified mechanic to help you.\n\nYour Mechanic:\n- Name: ${data.contractorName}\n- Rating: ${data.contractorRating} stars\n- Experience: ${data.contractorTotalJobs} completed jobs\n- ETA: ${data.eta || 'Within 45 minutes'}\n\nTrack your mechanic: ${appUrl}/tracking?jobId=${data.jobId}\n\nNeed help? Call 1-800-TRUCK-FIX\n\nThank you for choosing TruckFixGo!`
+          text: `Help is on the way!\n\nHello ${data.customerName},\n\nGood news! We've assigned a qualified mechanic to help you.\n\nYour Mechanic:\n- Name: ${data.contractorName}\n- Rating: ${data.contractorRating} stars\n- Experience: ${data.contractorTotalJobs} completed jobs\n- ETA: ${data.eta || 'Within 45 minutes'}\n\nTrack your mechanic: ${appUrl}/track/${data.jobId}\n\nNeed help? Call 1-800-TRUCK-FIX\n\nThank you for choosing TruckFixGo!`
         };
 
       case 'JOB_UNASSIGNED_ADMIN':

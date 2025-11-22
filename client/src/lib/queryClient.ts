@@ -27,13 +27,62 @@ export async function apiRequest<T = any>(
   method: string,
   url: string,
   data?: unknown | undefined,
+): Promise<T>;
+
+export async function apiRequest<T = any>(
+  url: string,
+  options?: RequestInit,
+): Promise<T>;
+
+export async function apiRequest<T = any>(
+  arg1: string,
+  arg2?: string | RequestInit,
+  arg3?: unknown,
 ): Promise<T> {
-  const res = await fetch(url, {
+  // Normalize arguments to support historical call patterns:
+  // 1) apiRequest('POST', '/url', data)
+  // 2) apiRequest('/url', 'POST', data)
+  // 3) apiRequest('/url', { method: 'POST', body: ... })
+  let method: string;
+  let url: string;
+  let data: unknown;
+  let options: RequestInit | undefined;
+
+  if (typeof arg2 === 'string') {
+    // apiRequest('/url', 'POST', data) or apiRequest('POST', '/url', data)
+    if (arg1.startsWith('/')) {
+      url = arg1;
+      method = arg2;
+      data = arg3;
+    } else {
+      method = arg1;
+      url = arg2;
+      data = arg3;
+    }
+  } else if (typeof arg2 === 'object') {
+    // apiRequest('/url', { ...fetchOptions })
+    url = arg1;
+    options = arg2;
+    method = options.method || 'GET';
+  } else {
+    throw new Error('Invalid apiRequest arguments');
+  }
+
+  const fetchOptions: RequestInit = {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
+    credentials: 'include',
+    ...options,
+  };
+
+  if (data !== undefined) {
+    fetchOptions.headers = {
+      'Content-Type': 'application/json',
+      ...(options?.headers || {}),
+    };
+    fetchOptions.body = JSON.stringify(data);
+  }
+
+  const res = await fetch(url, fetchOptions);
 
   await throwIfResNotOk(res);
   

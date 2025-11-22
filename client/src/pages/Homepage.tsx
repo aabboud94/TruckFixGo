@@ -6,150 +6,142 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import SEOHead from "@/components/SEOHead";
 import {
-  Truck,
-  Wrench,
-  Calendar,
-  ClipboardList,
-  MapPin,
-  UserCheck,
-  CheckCircle,
-  Menu,
-  X,
-  Phone,
-  Clock,
-  Shield,
-  CircleCheckBig,
   AlertCircle,
-  Users,
-  Facebook,
-  Twitter,
-  Linkedin,
-  Instagram,
-  Star,
-  TrendingUp,
-  DollarSign,
-  Timer,
-  Navigation,
-  Fuel,
-  Sparkles,
-  PhoneCall,
   ArrowRight,
-  Award,
-  Flag,
-  Map,
+  BadgeCheck,
+  Calendar,
+  CheckCircle,
+  Clock,
   Gauge,
-  Route,
-  BadgeCheck
+  MapPin,
+  Menu,
+  Phone,
+  Shield,
+  Star,
+  Target,
+  Truck,
+  Users,
+  Wrench,
+  X,
+  Globe2,
+  ClipboardList,
+  Timer
 } from "lucide-react";
 
-// Import generated images
-import heroEmergencyImage from '@assets/generated_images/Hero_emergency_truck_repair_5d0a67fb.png';
-import beforeAfterImage from '@assets/generated_images/Before_after_truck_repair_3bf1fc17.png';
-import fleetMaintenanceImage from '@assets/generated_images/Fleet_maintenance_service_e4d45b61.png';
-import tireServiceImage from '@assets/generated_images/Professional_tire_service_ba62f28d.png';
+import heroEmergencyImage from "@assets/generated_images/Hero_emergency_truck_repair_5d0a67fb.png";
+import beforeAfterImage from "@assets/generated_images/Before_after_truck_repair_3bf1fc17.png";
+import fleetMaintenanceImage from "@assets/generated_images/Fleet_maintenance_service_e4d45b61.png";
+import tireServiceImage from "@assets/generated_images/Professional_tire_service_ba62f28d.png";
 
 export default function Homepage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [, setLocation] = useLocation();
 
+  const handleNavigate = (path: string) => {
+    setLocation(path);
+  };
 
   return (
-    <div className="min-h-screen bg-background">
-      <SEOHead 
-        title="America's #1 Mobile Truck Repair Network | 24/7 Emergency Service | TruckFixGo"
-        description="Keep America Moving! Serving Peterbilt, Kenworth, Freightliner, Mack & Western Star trucks across all major interstates. Service First Policy - We fix now, paperwork later!"
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <SEOHead
+        title="Mobile Truck Repair & Fleet Support | 24/7 Roadside Service | TruckFixGo"
+        description="24/7 mobile truck repair, preventative maintenance, and emergency roadside support for fleets and owner-operators. Professional technicians, transparent pricing, and rapid dispatch wherever you are."
         canonical="https://truckfixgo.com/"
       />
-      
-      {/* Emergency Button Bar */}
-      <div className="bg-gradient-to-r from-red-600 via-red-700 to-red-600 py-3">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-center gap-4">
-            <Button 
-              size="lg"
-              className="bg-white text-red-700 font-black hover-elevate animate-pulse px-8 py-6 text-lg uppercase tracking-wide shadow-lg"
-              onClick={() => setLocation("/emergency")}
-              data-testid="button-top-emergency"
-            >
-              <AlertCircle className="w-6 h-6 mr-2" />
-              GET EMERGENCY HELP NOW - 24/7 SERVICE
-            </Button>
+
+      {/* Top contact bar */}
+      <div className="bg-slate-900 text-white">
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-2 text-sm">
+          <div className="flex items-center gap-3">
+            <Badge className="bg-emerald-600 text-white font-semibold">Live 24/7</Badge>
+            <div className="flex items-center gap-2 text-white/80">
+              <Phone className="h-4 w-4" />
+              <span>Emergency desk: (800) 555-TRUCK</span>
+            </div>
+            <div className="hidden sm:flex items-center gap-2 text-white/80">
+              <Clock className="h-4 w-4" />
+              <span>Average dispatch confirmation in under 10 minutes</span>
+            </div>
+          </div>
+          <div className="hidden sm:flex items-center gap-4 text-white/80">
+            <Shield className="h-4 w-4" />
+            <span>Certified technicians | Fully insured</span>
           </div>
         </div>
       </div>
 
-      {/* Navigation Header */}
-      <header className="sticky top-0 z-50 bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900 text-white border-b-4 border-red-600">
+      {/* Navigation */}
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-sm border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <div className="flex-shrink-0 flex items-center gap-2">
-                <Truck className="w-8 h-8 text-red-500" />
-                <div>
-                  <span className="text-2xl font-bold">TRUCKFIXGO</span>
-                  <span className="text-xs block -mt-1 text-red-300">AMERICA'S HIGHWAY HEROES</span>
-                </div>
+            <div className="flex items-center gap-3">
+              <Truck className="w-8 h-8 text-emerald-600" />
+              <div>
+                <span className="text-xl font-bold tracking-tight">TruckFixGo</span>
+                <p className="text-xs text-slate-500">Mobile truck repair & fleet support</p>
               </div>
             </div>
 
-            <nav className="hidden md:flex items-center space-x-8">
-              <a href="/services" className="text-sm text-white hover:text-red-300 transition-colors font-semibold uppercase tracking-wide" data-testid="link-services">
-                Services
-              </a>
-              <a href="/pricing" className="text-sm text-white hover:text-red-300 transition-colors font-semibold uppercase tracking-wide" data-testid="link-pricing">
-                Pricing
-              </a>
-              <a href="/fleet" className="text-sm text-white hover:text-red-300 transition-colors font-semibold uppercase tracking-wide" data-testid="link-fleet">
-                Fleet Solutions
-              </a>
-              <a href="/contractor/apply" className="text-sm text-white hover:text-red-300 transition-colors font-semibold uppercase tracking-wide" data-testid="link-become-contractor">
-                Join Our Team
-              </a>
+            <nav className="hidden md:flex items-center space-x-8 text-sm font-semibold text-slate-700">
+              <a href="/services" className="hover:text-emerald-700" data-testid="link-services">Services</a>
+              <a href="/pricing" className="hover:text-emerald-700" data-testid="link-pricing">Pricing</a>
+              <a href="/fleet" className="hover:text-emerald-700" data-testid="link-fleet">Fleet programmes</a>
+              <a href="/contractor/apply" className="hover:text-emerald-700" data-testid="link-become-contractor">Join our network</a>
             </nav>
 
-            <div className="hidden md:flex items-center space-x-4">
-              <Button 
-                size="lg"
-                className="bg-red-600 text-white font-bold uppercase tracking-wide hover-elevate animate-bounce" 
-                onClick={() => setLocation("/emergency")} 
-                data-testid="button-emergency-repair-header"
+            <div className="hidden md:flex items-center gap-3">
+              <Button
+                variant="secondary"
+                className="border-slate-300 text-slate-800"
+                onClick={() => handleNavigate("/scheduled-booking")}
+                data-testid="button-schedule-header"
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                Book service
+              </Button>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-500"
+                onClick={() => handleNavigate("/emergency")}
+                data-testid="button-emergency-header"
               >
                 <AlertCircle className="w-4 h-4 mr-2" />
-                Emergency Repair
+                Emergency support
               </Button>
             </div>
 
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-md"
+              className="md:hidden p-2 rounded-md border border-slate-200"
+              aria-label="Toggle navigation"
               data-testid="button-mobile-menu"
             >
-              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
           </div>
 
           {mobileMenuOpen && (
-            <div className="md:hidden py-4 space-y-4">
-              <a href="/services" className="block px-3 py-2 text-base text-white hover:text-red-300 transition-colors font-semibold uppercase" data-testid="mobile-link-services">
-                Services
-              </a>
-              <a href="/pricing" className="block px-3 py-2 text-base text-white hover:text-red-300 transition-colors font-semibold uppercase" data-testid="mobile-link-pricing">
-                Pricing
-              </a>
-              <a href="/fleet" className="block px-3 py-2 text-base text-white hover:text-red-300 transition-colors font-semibold uppercase" data-testid="mobile-link-fleet">
-                Fleet Solutions
-              </a>
-              <a href="/contractor/apply" className="block px-3 py-2 text-base text-white hover:text-red-300 transition-colors font-semibold uppercase" data-testid="mobile-link-become-contractor">
-                Join Our Team
-              </a>
-              <div className="flex flex-col space-y-2 pt-4">
-                <Button 
-                  className="w-full bg-red-600 text-white font-bold uppercase hover-elevate animate-bounce" 
-                  onClick={() => setLocation("/emergency")} 
-                  data-testid="mobile-button-emergency-repair"
+            <div className="md:hidden py-4 space-y-3 text-sm font-semibold text-slate-800">
+              <a href="/services" className="block px-2" data-testid="mobile-link-services">Services</a>
+              <a href="/pricing" className="block px-2" data-testid="mobile-link-pricing">Pricing</a>
+              <a href="/fleet" className="block px-2" data-testid="mobile-link-fleet">Fleet programmes</a>
+              <a href="/contractor/apply" className="block px-2" data-testid="mobile-link-become-contractor">Join our network</a>
+              <div className="flex flex-col gap-2 pt-2">
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-500"
+                  onClick={() => handleNavigate("/emergency")}
+                  data-testid="mobile-button-emergency"
                 >
                   <AlertCircle className="w-4 h-4 mr-2" />
-                  Emergency Repair
+                  Emergency support
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="border-slate-300 text-slate-800"
+                  onClick={() => handleNavigate("/scheduled-booking")}
+                  data-testid="mobile-button-schedule"
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Book service
                 </Button>
               </div>
             </div>
@@ -157,548 +149,453 @@ export default function Homepage() {
         </div>
       </header>
 
-      {/* BOLD AMERICAN HERO SECTION */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-blue-900 via-red-800 to-blue-900">
-        {/* Interstate Highway Background Pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute inset-0 bg-repeat" style={{
-            backgroundImage: `repeating-linear-gradient(90deg, transparent, transparent 35px, rgba(255,255,255,0.1) 35px, rgba(255,255,255,0.1) 70px)`,
-            backgroundSize: '100px 100%'
-          }} />
-        </div>
-        
-        <div className="relative z-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-center">
-          <div className="mb-6">
-            <Badge className="bg-white text-blue-900 text-lg px-6 py-2 font-bold">
-              <Flag className="w-5 h-5 mr-2 text-red-600" />
-              SERVING AMERICA'S TRUCKERS SINCE 2010
-            </Badge>
-          </div>
-          
-          <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black text-white mb-6 leading-tight uppercase tracking-tight">
-            AMERICA'S #1<br/>
-            <span className="text-red-500 text-shadow-lg">MOBILE TRUCK REPAIR</span><br/>
-            <span className="text-3xl sm:text-4xl md:text-5xl">NETWORK</span>
-          </h1>
-          
-          <p className="text-xl sm:text-2xl md:text-3xl text-white mb-8 font-bold leading-relaxed">
-            KEEP AMERICA MOVING • 24/7 EMERGENCY SERVICE
-          </p>
-
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-8 border-2 border-white/20">
-            <p className="text-lg sm:text-xl text-white font-semibold mb-4">
-              WE SERVICE ALL AMERICAN TRUCK BRANDS:
+      {/* Hero */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white">
+        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_10%_20%,_#10b981,_transparent_25%),radial-gradient(circle_at_80%_0%,_#22c55e,_transparent_20%)]" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-24 grid lg:grid-cols-2 gap-12 items-center relative">
+          <div className="space-y-6">
+            <Badge className="bg-white/10 text-white border border-white/20 px-3 py-1">Professional mobile repair</Badge>
+            <h1 className="text-4xl sm:text-5xl font-black leading-tight">
+              Reliable roadside assistance for every journey
+            </h1>
+            <p className="text-lg text-white/80 max-w-2xl">
+              Keep your fleet and drivers moving with rapid-response technicians, transparent updates, and preventative maintenance built around your routes.
             </p>
-            <div className="flex flex-wrap justify-center gap-4 text-white font-bold">
-              <span className="bg-red-600 px-4 py-2 rounded">PETERBILT</span>
-              <span className="bg-blue-600 px-4 py-2 rounded">KENWORTH</span>
-              <span className="bg-red-600 px-4 py-2 rounded">FREIGHTLINER</span>
-              <span className="bg-blue-600 px-4 py-2 rounded">MACK</span>
-              <span className="bg-red-600 px-4 py-2 rounded">WESTERN STAR</span>
-            </div>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
-            <Button 
-              size="lg" 
-              className="bg-red-600 text-white px-12 py-8 text-xl font-black hover-elevate animate-pulse w-full sm:w-auto uppercase tracking-wide"
-              onClick={() => setLocation("/emergency")}
-              data-testid="button-hero-emergency"
-            >
-              <AlertCircle className="w-6 h-6 mr-2" />
-              GET EMERGENCY HELP NOW
-            </Button>
-            
-            <Button 
-              size="lg" 
-              variant="secondary"
-              className="bg-white text-blue-900 px-12 py-8 text-xl font-black hover-elevate w-full sm:w-auto uppercase tracking-wide"
-              onClick={() => setLocation("/scheduled-booking")}
-              data-testid="button-hero-scheduled"
-            >
-              <Calendar className="w-6 h-6 mr-2" />
-              SCHEDULE SERVICE
-            </Button>
-          </div>
-          
-          <div className="grid grid-cols-3 gap-4 max-w-3xl mx-auto mt-12">
-            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-4 text-center border-2 border-white/30">
-              <div className="text-3xl md:text-4xl font-black text-white">50,000+</div>
-              <div className="text-sm md:text-base text-white font-semibold">AMERICAN TRUCKS SERVICED</div>
-            </div>
-            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-4 text-center border-2 border-white/30">
-              <div className="text-3xl md:text-4xl font-black text-white">48</div>
-              <div className="text-sm md:text-base text-white font-semibold">STATES COVERED</div>
-            </div>
-            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-4 text-center border-2 border-white/30">
-              <div className="text-3xl md:text-4xl font-black text-white">24/7</div>
-              <div className="text-sm md:text-base text-white font-semibold">ALWAYS ON DUTY</div>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* AMERICAN VALUES SECTION */}
-      <section className="py-16 bg-gradient-to-r from-red-50 via-white to-blue-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-8">
-            <div className="flex items-center gap-4">
-              <Shield className="w-16 h-16 text-blue-800" />
-              <div>
-                <h3 className="text-3xl font-black text-blue-900 uppercase">Service First Policy</h3>
-                <p className="text-lg font-semibold text-gray-700">We Fix Your Rig First • Paperwork Can Wait • America Doesn't Stop</p>
-              </div>
-            </div>
-            <Button 
-              size="lg"
-              className="bg-blue-800 text-white font-bold uppercase hover-elevate"
-              onClick={() => setLocation("/emergency")}
-              data-testid="button-service-first-cta"
-            >
-              KEEP AMERICA ROLLING
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* INTERSTATE HIGHWAY COVERAGE */}
-      <section className="py-20 bg-gray-900 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <Badge className="bg-red-600 text-white text-lg px-6 py-2 mb-4">
-              <Map className="w-5 h-5 mr-2" />
-              COAST TO COAST COVERAGE
-            </Badge>
-            <h2 className="text-5xl md:text-6xl font-black mb-4 uppercase">
-              Serving America's<br/>
-              <span className="text-red-500">Major Interstate Highways</span>
-            </h2>
-            <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-              From sea to shining sea, we've got America's supply chain covered
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-12">
-            {['I-80', 'I-70', 'I-40', 'I-10', 'I-95', 'I-5', 'I-90', 'I-75', 'I-35', 'I-20', 'I-15', 'I-25'].map((highway) => (
-              <div key={highway} className="bg-green-700 text-white rounded-lg p-4 text-center font-black text-xl border-4 border-white">
-                {highway}
-              </div>
-            ))}
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            <Card className="bg-blue-800 text-white border-2 border-white">
-              <CardContent className="p-6">
-                <MapPin className="w-12 h-12 text-red-400 mb-4" />
-                <CardTitle className="text-2xl font-black mb-2 uppercase">Major Truck Stops</CardTitle>
-                <p className="opacity-90">
-                  Service at Flying J, Pilot, Love's, TA, Petro & more. We come to YOU wherever you're parked.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-red-700 text-white border-2 border-white">
-              <CardContent className="p-6">
-                <Gauge className="w-12 h-12 text-white mb-4" />
-                <CardTitle className="text-2xl font-black mb-2 uppercase">Weigh Stations</CardTitle>
-                <p className="opacity-90">
-                  Pre-pass repairs, scale house service, DOT compliance fixes. Keep your CSA scores high.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-blue-800 text-white border-2 border-white">
-              <CardContent className="p-6">
-                <BadgeCheck className="w-12 h-12 text-red-400 mb-4" />
-                <CardTitle className="text-2xl font-black mb-2 uppercase">DOT Certified</CardTitle>
-                <p className="opacity-90">
-                  100% DOT compliant repairs. Annual inspections. Keep America's roads safe.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* AMERICAN TRUCK BRANDS SHOWCASE */}
-      <section className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-5xl md:text-6xl font-black mb-4 text-blue-900 uppercase">
-              We Service<br/>
-              <span className="text-red-600">America's Finest Trucks</span>
-            </h2>
-            <p className="text-xl text-gray-700 max-w-3xl mx-auto font-semibold">
-              Expert mechanics certified on all major American truck brands
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* Peterbilt Card */}
-            <Card className="hover-elevate border-4 border-red-600">
-              <CardContent className="p-6">
-                <div className="bg-red-600 text-white font-black text-2xl p-4 rounded-t-lg text-center mb-4">
-                  PETERBILT
-                </div>
-                <ul className="space-y-2">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">579, 389, 567 Models</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">PACCAR MX Engines</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">Aftertreatment Systems</span>
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            {/* Kenworth Card */}
-            <Card className="hover-elevate border-4 border-blue-600">
-              <CardContent className="p-6">
-                <div className="bg-blue-600 text-white font-black text-2xl p-4 rounded-t-lg text-center mb-4">
-                  KENWORTH
-                </div>
-                <ul className="space-y-2">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">T680, W990, T880 Models</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">PACCAR Powertrains</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">TruckTech+ Diagnostics</span>
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            {/* Freightliner Card */}
-            <Card className="hover-elevate border-4 border-red-600">
-              <CardContent className="p-6">
-                <div className="bg-red-600 text-white font-black text-2xl p-4 rounded-t-lg text-center mb-4">
-                  FREIGHTLINER
-                </div>
-                <ul className="space-y-2">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">Cascadia, Coronado Models</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">Detroit Engines</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">DT12 Transmissions</span>
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            {/* Mack Card */}
-            <Card className="hover-elevate border-4 border-blue-600">
-              <CardContent className="p-6">
-                <div className="bg-blue-600 text-white font-black text-2xl p-4 rounded-t-lg text-center mb-4">
-                  MACK
-                </div>
-                <ul className="space-y-2">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">Anthem, Pinnacle Models</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">MP8, MP7 Engines</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">mDRIVE Transmissions</span>
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            {/* Western Star Card */}
-            <Card className="hover-elevate border-4 border-red-600">
-              <CardContent className="p-6">
-                <div className="bg-red-600 text-white font-black text-2xl p-4 rounded-t-lg text-center mb-4">
-                  WESTERN STAR
-                </div>
-                <ul className="space-y-2">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">4900, 5700XE Models</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">Detroit/Cummins Options</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">Vocational Specialists</span>
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            {/* Volvo Card */}
-            <Card className="hover-elevate border-4 border-blue-600">
-              <CardContent className="p-6">
-                <div className="bg-blue-600 text-white font-black text-2xl p-4 rounded-t-lg text-center mb-4">
-                  VOLVO
-                </div>
-                <ul className="space-y-2">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">VNL, VNR Models</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">D13 Turbo Compound</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold">I-Shift Transmissions</span>
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* TRUCKER TESTIMONIALS - AMERICAN STYLE */}
-      <section className="py-20 bg-gradient-to-r from-blue-900 via-red-800 to-blue-900 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-5xl md:text-6xl font-black mb-4 uppercase">
-              American Truckers Trust Us
-            </h2>
-            <p className="text-xl opacity-90 max-w-3xl mx-auto">
-              Real stories from the backbone of America - our hardworking truckers
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Testimonial 1 */}
-            <Card className="bg-white text-gray-900">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-1 mb-3">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-5 h-5 fill-yellow-500 text-yellow-500" />
-                  ))}
-                </div>
-                <p className="mb-4 font-semibold">
-                  "Broke down hauling steel on I-80 through Wyoming. TruckFixGo had me rolling in 45 minutes. 
-                  Real American service when you need it most. These guys understand trucking."
-                </p>
-                <div className="font-bold">- Jake "Big Rig" Williams</div>
-                <div className="text-sm text-gray-600">Peterbilt 579 Owner-Operator</div>
-                <div className="text-sm text-blue-600 font-semibold">Chicago to Denver Route</div>
-              </CardContent>
-            </Card>
-
-            {/* Testimonial 2 */}
-            <Card className="bg-white text-gray-900">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-1 mb-3">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-5 h-5 fill-yellow-500 text-yellow-500" />
-                  ))}
-                </div>
-                <p className="mb-4 font-semibold">
-                  "My Kenworth W990 threw a code at a weigh station on I-40. One call and they were there. 
-                  Fixed my DEF system and kept me DOT compliant. True professionals."
-                </p>
-                <div className="font-bold">- Maria Gonzalez</div>
-                <div className="text-sm text-gray-600">Fleet Owner - 15 Trucks</div>
-                <div className="text-sm text-blue-600 font-semibold">Southwest Regional Carrier</div>
-              </CardContent>
-            </Card>
-
-            {/* Testimonial 3 */}
-            <Card className="bg-white text-gray-900">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-1 mb-3">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-5 h-5 fill-yellow-500 text-yellow-500" />
-                  ))}
-                </div>
-                <p className="mb-4 font-semibold">
-                  "30 years driving across America. These folks know their stuff. Fixed my Freightliner 
-                  at the Flying J off I-70 in Kansas. Back hauling grain same day."
-                </p>
-                <div className="font-bold">- Robert "Red" Thompson</div>
-                <div className="text-sm text-gray-600">Freightliner Cascadia Driver</div>
-                <div className="text-sm text-blue-600 font-semibold">Million Mile Driver</div>
-              </CardContent>
-            </Card>
-          </div>
-          
-          <div className="text-center mt-12">
-            <div className="inline-flex items-center gap-4 bg-white text-blue-900 px-8 py-4 rounded-lg font-bold">
-              <Award className="w-8 h-8 text-red-600" />
-              <div>
-                <div className="text-2xl">SERVING TRUCKERS</div>
-                <div className="text-sm">WITH PRIDE SINCE 2010</div>
-              </div>
-              <Award className="w-8 h-8 text-red-600" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* AMERICAN CITIES & ROUTES */}
-      <section className="py-20 bg-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-5xl md:text-6xl font-black mb-4 text-blue-900 uppercase">
-              Coast to Coast Coverage
-            </h2>
-            <p className="text-xl text-gray-700 max-w-3xl mx-auto font-semibold">
-              From the Atlantic to the Pacific, we keep America's trucks moving
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center font-bold">
-            {[
-              'Los Angeles, CA', 'Chicago, IL', 'Houston, TX', 'Phoenix, AZ',
-              'Philadelphia, PA', 'San Antonio, TX', 'Dallas, TX', 'San Diego, CA',
-              'Detroit, MI', 'Nashville, TN', 'Memphis, TN', 'Atlanta, GA',
-              'Denver, CO', 'Kansas City, MO', 'St. Louis, MO', 'Miami, FL'
-            ].map(city => (
-              <div key={city} className="bg-white p-4 rounded-lg shadow-md hover-elevate">
-                <MapPin className="w-6 h-6 text-red-600 mx-auto mb-2" />
-                <span className="text-gray-800">{city}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CALL TO ACTION - AMERICAN PRIDE */}
-      <section className="py-20 bg-gradient-to-r from-red-600 via-white to-blue-600">
-        <div className="bg-blue-900 py-20">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h2 className="text-5xl md:text-6xl font-black mb-6 text-white uppercase">
-              Keep America Moving
-            </h2>
-            <p className="text-2xl text-white mb-8 font-semibold">
-              When your truck stops, America stops. We won't let that happen.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
-              <Button 
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
                 size="lg"
-                className="bg-red-600 text-white px-12 py-8 text-xl font-black hover-elevate uppercase"
-                onClick={() => setLocation("/emergency")}
-                data-testid="button-cta-emergency"
+                className="bg-emerald-600 hover:bg-emerald-500"
+                onClick={() => handleNavigate("/emergency")}
+                data-testid="button-hero-emergency"
               >
-                <Phone className="w-6 h-6 mr-2" />
-                CALL FOR EMERGENCY SERVICE
+                <Phone className="w-5 h-5 mr-2" />
+                Request emergency help
               </Button>
-              <Button 
+              <Button
                 size="lg"
                 variant="secondary"
-                className="bg-white text-blue-900 px-12 py-8 text-xl font-black hover-elevate uppercase"
-                onClick={() => setLocation("/fleet")}
-                data-testid="button-cta-fleet"
+                className="border-white/30 text-white bg-white/10 hover:bg-white/20"
+                onClick={() => handleNavigate("/scheduled-booking")}
+                data-testid="button-hero-scheduled"
               >
-                <Users className="w-6 h-6 mr-2" />
-                FLEET SOLUTIONS
+                <Calendar className="w-5 h-5 mr-2" />
+                Schedule maintenance
               </Button>
             </div>
-            
-            <div className="mt-12 flex items-center justify-center gap-8 text-white">
-              <div className="text-center">
-                <div className="text-4xl font-black">50+</div>
-                <div className="text-sm uppercase">States Covered</div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6">
+              {[{
+                title: "Under 60 min", subtitle: "Average on-site arrival in active regions"
+              }, {
+                title: "4.8/5", subtitle: "Service rating from fleet partners"
+              }, {
+                title: "2,500+", subtitle: "Vehicles supported last quarter"
+              }].map((stat) => (
+                <div key={stat.title} className="rounded-xl border border-white/15 bg-white/5 p-4">
+                  <div className="text-2xl font-bold">{stat.title}</div>
+                  <p className="text-sm text-white/70">{stat.subtitle}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="absolute -top-6 -left-6 w-28 h-28 rounded-full bg-emerald-500/20 blur-3xl" />
+            <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/10 blur-3xl" />
+            <div className="rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-white/5 backdrop-blur-sm">
+              <img src={heroEmergencyImage} alt="Technician providing mobile truck repair" className="w-full h-full object-cover" />
+            </div>
+            <div className="absolute -bottom-8 left-6 bg-white text-slate-900 rounded-2xl shadow-xl p-4 w-[260px] border border-slate-100">
+              <div className="flex items-center gap-3 mb-3">
+                <BadgeCheck className="w-5 h-5 text-emerald-600" />
+                <p className="text-sm font-semibold text-slate-800">Live job tracking</p>
               </div>
-              <div className="text-center">
-                <div className="text-4xl font-black">24/7</div>
-                <div className="text-sm uppercase">Always Ready</div>
+              <p className="text-sm text-slate-600">
+                Drivers receive status updates, technician ETA, and contact details automatically.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Value grid */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-10">
+            <div>
+              <p className="text-sm font-semibold text-emerald-700">Why teams choose TruckFixGo</p>
+              <h2 className="text-3xl sm:text-4xl font-black text-slate-900">Balanced support for fleets and owner-operators</h2>
+              <p className="text-base text-slate-600 max-w-2xl mt-2">
+                From a single vehicle to nationwide fleets, we combine rapid response with preventative care to keep utilisation high and downtime low.
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              className="border-slate-300 text-slate-800"
+              onClick={() => handleNavigate("/login")}
+              data-testid="button-start-account"
+            >
+              Create account
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {[{
+              title: "24/7 dispatch", description: "Specialists triage requests immediately and allocate the nearest vetted technician.", icon: Clock
+            }, {
+              title: "Transparent pricing", description: "Clear estimates, approval workflows, and digital invoices for every job.", icon: Shield
+            }, {
+              title: "Certified expertise", description: "Multi-brand diagnostics, tyres, brakes, hydraulics, electrical, and aftertreatment systems.", icon: Wrench
+            }, {
+              title: "Global-ready", description: "Neutral communications and multi-lingual updates keep international teams aligned.", icon: Globe2
+            }, {
+              title: "Driver-first updates", description: "SMS/email progress tracking so drivers know when help arrives.", icon: Target
+            }, {
+              title: "Data you can use", description: "Service history, maintenance reminders, and uptime reports for every vehicle.", icon: Gauge
+            }].map((item) => {
+              const Icon = item.icon;
+              return (
+                <Card key={item.title} className="border-slate-200 hover:shadow-lg transition-shadow">
+                  <CardContent className="p-6 space-y-4">
+                    <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                      <Icon className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl font-bold">{item.title}</CardTitle>
+                      <CardDescription className="text-slate-600 text-base mt-2">
+                        {item.description}
+                      </CardDescription>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Service highlights */}
+      <section className="py-16 bg-slate-900 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-10">
+            <div>
+              <p className="text-sm font-semibold text-emerald-300">On-site specialists</p>
+              <h2 className="text-3xl sm:text-4xl font-black">Repairs that meet your standards</h2>
+              <p className="text-base text-white/80 max-w-2xl mt-2">
+                We pair experienced technicians with modern diagnostics to resolve issues at the roadside, yard, or depot with the same care as a workshop visit.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Badge className="bg-white/10 border border-white/20 text-white">ISO-aligned processes</Badge>
+              <Badge className="bg-white/10 border border-white/20 text-white">Digital sign-off</Badge>
+              <Badge className="bg-white/10 border border-white/20 text-white">Safety-first approach</Badge>
+            </div>
+          </div>
+
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+            {[{
+              title: "Emergency roadside",
+              description: "Breakdowns, no-starts, aftertreatment faults, and warning lights diagnosed on the spot.",
+              image: beforeAfterImage
+            }, {
+              title: "Tyres & wheels",
+              description: "Tyre replacement, balancing, and wheel torque checks with premium inventory on hand.",
+              image: tireServiceImage
+            }, {
+              title: "Preventative maintenance",
+              description: "Scheduled servicing, inspections, and fluid analysis to avoid unplanned stops.",
+              image: fleetMaintenanceImage
+            }, {
+              title: "Fleet projects",
+              description: "Multi-vehicle updates, seasonal readiness, and compliance checks coordinated centrally.",
+              image: heroEmergencyImage
+            }].map((card) => (
+              <Card key={card.title} className="bg-white/5 border border-white/10 overflow-hidden">
+                <CardContent className="p-0">
+                  <div className="h-44 overflow-hidden">
+                    <img src={card.image} alt={card.title} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="p-5 space-y-2">
+                    <CardTitle className="text-lg font-bold text-white">{card.title}</CardTitle>
+                    <CardDescription className="text-white/80 text-sm leading-relaxed">
+                      {card.description}
+                    </CardDescription>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid lg:grid-cols-2 gap-10 items-center">
+            <div>
+              <p className="text-sm font-semibold text-emerald-700">Simple workflow</p>
+              <h2 className="text-3xl sm:text-4xl font-black text-slate-900">From request to repair with clear updates</h2>
+              <p className="text-base text-slate-600 mt-3">
+                The TruckFixGo platform keeps dispatchers, drivers, and finance aligned. Submit requests from web or mobile, track arrival times, and receive digital reports once work is complete.
+              </p>
+
+              <div className="mt-6 space-y-4">
+                {[{
+                  title: "Share the issue",
+                  detail: "Log the vehicle, location, symptoms, and urgency so we can dispatch accurately."
+                }, {
+                  title: "Approve with confidence",
+                  detail: "Receive a clear estimate and confirm with a single tap. Optional approvals for fleets."
+                }, {
+                  title: "Track progress",
+                  detail: "See technician ETA, parts on hand, and completion notes in real time."
+                }].map((step, index) => (
+                  <div key={step.title} className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-slate-900">{step.title}</p>
+                      <p className="text-sm text-slate-600 leading-relaxed">{step.detail}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="text-center">
-                <div className="text-4xl font-black">100%</div>
-                <div className="text-sm uppercase">American Owned</div>
+
+              <div className="mt-6 flex flex-wrap gap-4 text-sm text-slate-700">
+                <div className="flex items-center gap-2">
+                  <BadgeCheck className="w-4 h-4 text-emerald-600" />
+                  <span>Digital job cards</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="w-4 h-4 text-emerald-600" />
+                  <span>Audit-ready history</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Timer className="w-4 h-4 text-emerald-600" />
+                  <span>Realistic ETAs</span>
+                </div>
               </div>
             </div>
+
+            <Card className="border-slate-200 shadow-lg">
+              <CardContent className="p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                  <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200">Live portal</Badge>
+                  <span className="text-xs text-slate-500">Sample timeline</span>
+                </div>
+                <div className="space-y-3 text-sm">
+                  {[{
+                    label: "08:12", text: "Driver reports coolant leak near exit 14."
+                  }, {
+                    label: "08:14", text: "Dispatch assigns technician 3. Parts confirmed on vehicle."
+                  }, {
+                    label: "08:21", text: "ETA shared with driver and dispatcher."
+                  }, {
+                    label: "09:02", text: "Repair completed. Photo proof and notes uploaded."
+                  }].map((item) => (
+                    <div key={item.label} className="flex items-start gap-3">
+                      <div className="w-14 text-xs font-semibold text-slate-500">{item.label}</div>
+                      <div className="flex-1 p-3 rounded-lg bg-slate-50 border border-slate-200 text-slate-800">
+                        {item.text}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <Separator className="bg-slate-200" />
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-500">Avg. acceptance time</p>
+                    <p className="text-xl font-bold text-slate-900">7 minutes</p>
+                  </div>
+                  <Button
+                    className="bg-emerald-600 hover:bg-emerald-500"
+                    onClick={() => handleNavigate("/login")}
+                    data-testid="button-cta-account"
+                  >
+                    Create account
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Fleet & owner benefits */}
+      <section className="py-16 bg-slate-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10 space-y-3">
+            <p className="text-sm font-semibold text-emerald-700">Designed for modern operations</p>
+            <h2 className="text-3xl sm:text-4xl font-black text-slate-900">Support that scales with your routes</h2>
+            <p className="text-base text-slate-600 max-w-3xl mx-auto">
+              Whether you manage a regional fleet or work independently, TruckFixGo balances speed, safety, and cost control.
+            </p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            {[{
+              title: "Fleet leaders",
+              detail: "Centralise approvals, billing, and uptime reporting across all locations.",
+              icon: Users
+            }, {
+              title: "Dispatch teams",
+              detail: "Standardised request forms, live ETAs, and direct technician contact to reduce driver downtime.",
+              icon: MapPin
+            }, {
+              title: "Owner-operators",
+              detail: "Fast assistance, fair pricing, and digital records to keep you on schedule.",
+              icon: Truck
+            }].map((item) => {
+              const Icon = item.icon;
+              return (
+                <Card key={item.title} className="border-slate-200 bg-white">
+                  <CardContent className="p-6 space-y-3">
+                    <div className="w-12 h-12 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                      <Icon className="w-6 h-6" />
+                    </div>
+                    <CardTitle className="text-xl font-bold">{item.title}</CardTitle>
+                    <CardDescription className="text-slate-600 text-base leading-relaxed">{item.detail}</CardDescription>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10 space-y-3">
+            <p className="text-sm font-semibold text-emerald-700">Trusted partners</p>
+            <h2 className="text-3xl sm:text-4xl font-black text-slate-900">Teams appreciate predictable outcomes</h2>
+            <p className="text-base text-slate-600 max-w-3xl mx-auto">
+              Feedback from logistics leaders and drivers who rely on TruckFixGo to keep commitments on time.
+            </p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            {[{
+              quote: "TruckFixGo gives us reliable ETAs and keeps finance in the loop with clean invoices. Downtime per incident is down significantly.",
+              name: "Logistics Manager",
+              role: "International courier fleet",
+              rating: 5
+            }, {
+              quote: "Technicians arrive prepared and communicate clearly. Our drivers feel supported wherever they are.",
+              name: "Operations Lead",
+              role: "Regional distribution fleet",
+              rating: 5
+            }, {
+              quote: "As an owner-operator, I value transparent pricing and quick approvals. The portal makes it straightforward.",
+              name: "Owner-operator",
+              role: "Long-haul transport",
+              rating: 5
+            }].map((testimonial) => (
+              <Card key={testimonial.name} className="border-slate-200">
+                <CardContent className="p-6 space-y-3">
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: testimonial.rating }).map((_, idx) => (
+                      <Star key={idx} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                    ))}
+                  </div>
+                  <p className="text-base text-slate-700 leading-relaxed">“{testimonial.quote}”</p>
+                  <div>
+                    <p className="font-semibold text-slate-900">{testimonial.name}</p>
+                    <p className="text-sm text-slate-500">{testimonial.role}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="py-16 bg-emerald-700 text-white">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
+          <p className="text-sm font-semibold uppercase tracking-wide">Ready when you are</p>
+          <h2 className="text-3xl sm:text-4xl font-black">Create your account and keep your schedule on track</h2>
+          <p className="text-base text-white/80 max-w-3xl mx-auto">
+            Set up once, save vehicle details, payment preferences, and notification settings. Our team monitors requests around the clock.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button
+              size="lg"
+              className="bg-white text-emerald-700 hover:bg-slate-50"
+              onClick={() => handleNavigate("/login")}
+              data-testid="button-final-account"
+            >
+              Create account
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+            <Button
+              size="lg"
+              variant="secondary"
+              className="border-white text-white hover:bg-white/10"
+              onClick={() => handleNavigate("/fleet")}
+              data-testid="button-final-fleet"
+            >
+              Talk with fleet team
+              <Phone className="w-5 h-5 ml-2" />
+            </Button>
+          </div>
+
+          <div className="grid sm:grid-cols-3 gap-4 text-sm mt-4">
+            {["Multi-brand diagnostics", "Electronic job records", "Safety-first procedures"].map((item) => (
+              <div key={item} className="flex items-center justify-center gap-2 bg-white/10 rounded-lg px-3 py-2">
+                <CheckCircle className="w-4 h-4" />
+                <span className="font-semibold">{item}</span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
+      <footer className="bg-slate-950 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <h3 className="text-xl font-bold mb-4 text-red-400 uppercase">Services</h3>
-              <ul className="space-y-2">
-                <li><a href="/emergency" className="hover:text-red-400" data-testid="footer-link-emergency">Emergency Repair</a></li>
-                <li><a href="/scheduled-booking" className="hover:text-red-400" data-testid="footer-link-scheduled">Scheduled Service</a></li>
-                <li><a href="/fleet" className="hover:text-red-400" data-testid="footer-link-fleet-solutions">Fleet Solutions</a></li>
-                <li><a href="/services" className="hover:text-red-400" data-testid="footer-link-all-services">All Services</a></li>
-              </ul>
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-emerald-300">Company</p>
+              <a href="/about" className="block text-white/80 hover:text-white">About TruckFixGo</a>
+              <a href="/contact" className="block text-white/80 hover:text-white">Contact</a>
+              <a href="/contractor/apply" className="block text-white/80 hover:text-white">Become a partner</a>
             </div>
-            
-            <div>
-              <h3 className="text-xl font-bold mb-4 text-red-400 uppercase">Coverage Areas</h3>
-              <ul className="space-y-2">
-                <li className="hover:text-red-400">All Major Interstates</li>
-                <li className="hover:text-red-400">48 Continental States</li>
-                <li className="hover:text-red-400">Major Truck Stops</li>
-                <li className="hover:text-red-400">Weigh Stations</li>
-              </ul>
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-emerald-300">Services</p>
+              <a href="/emergency" className="block text-white/80 hover:text-white" data-testid="footer-link-emergency">Emergency roadside</a>
+              <a href="/scheduled-booking" className="block text-white/80 hover:text-white" data-testid="footer-link-scheduled">Preventative maintenance</a>
+              <a href="/fleet" className="block text-white/80 hover:text-white" data-testid="footer-link-fleet-solutions">Fleet coordination</a>
+              <a href="/services" className="block text-white/80 hover:text-white" data-testid="footer-link-all-services">All services</a>
             </div>
-            
-            <div>
-              <h3 className="text-xl font-bold mb-4 text-red-400 uppercase">Truck Brands</h3>
-              <ul className="space-y-2">
-                <li className="hover:text-red-400">Peterbilt</li>
-                <li className="hover:text-red-400">Kenworth</li>
-                <li className="hover:text-red-400">Freightliner</li>
-                <li className="hover:text-red-400">Mack & More</li>
-              </ul>
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-emerald-300">Support</p>
+              <span className="block text-white/80">24/7 hotline: (800) 555-TRUCK</span>
+              <span className="block text-white/80">Email: support@truckfixgo.com</span>
+              <span className="block text-white/80">Live chat in portal</span>
             </div>
-            
-            <div>
-              <h3 className="text-xl font-bold mb-4 text-red-400 uppercase">Contact</h3>
-              <div className="flex items-center gap-2 mb-2">
-                <Phone className="w-5 h-5" />
-                <span className="font-bold text-xl">24/7 EMERGENCY SERVICE</span>
-              </div>
-              <p className="mb-4">24/7 Emergency Hotline</p>
-              <div className="flex gap-4">
-                <a href="#" className="hover:text-red-400" data-testid="social-facebook"><Facebook className="w-6 h-6" /></a>
-                <a href="#" className="hover:text-red-400" data-testid="social-twitter"><Twitter className="w-6 h-6" /></a>
-                <a href="#" className="hover:text-red-400" data-testid="social-linkedin"><Linkedin className="w-6 h-6" /></a>
-                <a href="#" className="hover:text-red-400" data-testid="social-instagram"><Instagram className="w-6 h-6" /></a>
-              </div>
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-emerald-300">Compliance</p>
+              <span className="block text-white/80">Safety-first operating procedures</span>
+              <span className="block text-white/80">Insurance and certification on file</span>
+              <span className="block text-white/80">Digital service records</span>
             </div>
           </div>
-          
-          <Separator className="bg-gray-700 mb-8" />
-          
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <Flag className="w-5 h-5 text-red-400" />
-              <span className="text-lg font-bold text-red-400">PROUDLY AMERICAN OWNED & OPERATED</span>
-              <Flag className="w-5 h-5 text-red-400" />
+
+          <Separator className="bg-white/10 mb-6" />
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-white/70">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4" />
+              <span>Professional mobile truck repair</span>
             </div>
-            <p className="text-sm text-gray-400">
-              © 2024 TruckFixGo - America's Mobile Truck Repair Network. All rights reserved.
-            </p>
-            <p className="text-xs text-gray-500 mt-2">
-              Serving Peterbilt, Kenworth, Freightliner, Mack, Western Star, Volvo, International & all major truck brands across America
-            </p>
+            <p>© {new Date().getFullYear()} TruckFixGo. All rights reserved.</p>
           </div>
         </div>
       </footer>
