@@ -1703,14 +1703,17 @@ export default function VehicleManagement() {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Assigned Driver (Optional)</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <Select
+                                onValueChange={(value) => field.onChange(value === 'unassigned' ? '' : value)}
+                                value={field.value || 'unassigned'}
+                              >
                                 <FormControl>
                                   <SelectTrigger data-testid="select-driver">
                                     <SelectValue placeholder="Select driver" />
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="">Unassigned</SelectItem>
+                                  <SelectItem value="unassigned">Unassigned</SelectItem>
                                   {drivers.map(driver => (
                                     <SelectItem key={driver.id} value={driver.id}>
                                       {driver.name}

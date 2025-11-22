@@ -74,6 +74,16 @@ export default function Step2VehicleLocation({ onNext, onBack, initialData, flee
   
   // Auto-fill vehicle details when fleet vehicle is selected
   const handleVehicleSelect = (vehicleId: string) => {
+    if (!vehicleId) {
+      form.setValue("vehicleId", "");
+      form.setValue("vin", "");
+      form.setValue("unitNumber", "");
+      form.setValue("vehicleMake", "");
+      form.setValue("vehicleModel", "");
+      form.setValue("vehicleYear", "");
+      return;
+    }
+
     const vehicle = fleetVehicles?.find((v) => v.id === vehicleId);
     if (vehicle) {
       form.setValue("vehicleId", vehicle.id);
@@ -163,10 +173,11 @@ export default function Step2VehicleLocation({ onNext, onBack, initialData, flee
                   <FormItem>
                     <FormLabel>Select Fleet Vehicle</FormLabel>
                     <Select
-                      value={field.value}
+                      value={field.value || "custom"}
                       onValueChange={(value) => {
-                        field.onChange(value);
-                        handleVehicleSelect(value);
+                        const normalizedValue = value === "custom" ? "" : value;
+                        field.onChange(normalizedValue);
+                        handleVehicleSelect(normalizedValue);
                       }}
                     >
                       <FormControl>
@@ -175,7 +186,7 @@ export default function Step2VehicleLocation({ onNext, onBack, initialData, flee
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">Custom Vehicle</SelectItem>
+                        <SelectItem value="custom">Custom Vehicle</SelectItem>
                         {fleetVehicles.map((vehicle) => (
                           <SelectItem key={vehicle.id} value={vehicle.id}>
                             {vehicle.unitNumber} - {vehicle.make} {vehicle.model} ({vehicle.year})

@@ -262,15 +262,20 @@ function ContractorBiddingPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label>Service Type</Label>
-                  <Select 
-                    value={filters.serviceTypeId}
-                    onValueChange={(value) => setFilters({...filters, serviceTypeId: value})}
+                  <Select
+                    value={filters.serviceTypeId || 'all'}
+                    onValueChange={(value) =>
+                      setFilters({
+                        ...filters,
+                        serviceTypeId: value === 'all' ? '' : value
+                      })
+                    }
                   >
                     <SelectTrigger data-testid="select-filter-service">
                       <SelectValue placeholder="All services" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All services</SelectItem>
+                      <SelectItem value="all">All services</SelectItem>
                       {serviceTypes?.serviceTypes?.map((type: any) => (
                         <SelectItem key={type.id} value={type.id}>
                           {type.name}

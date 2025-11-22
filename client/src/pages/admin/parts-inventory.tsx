@@ -128,7 +128,7 @@ export default function PartsInventory() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedManufacturer, setSelectedManufacturer] = useState<string | undefined>();
   const [showInactive, setShowInactive] = useState(false);
   const [selectedPart, setSelectedPart] = useState<any>(null);
@@ -145,7 +145,7 @@ export default function PartsInventory() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (searchQuery) params.append('query', searchQuery);
-      if (selectedCategory) params.append('category', selectedCategory);
+      if (selectedCategory !== 'all') params.append('category', selectedCategory);
       if (selectedManufacturer) params.append('manufacturer', selectedManufacturer);
       params.append('isActive', (!showInactive).toString());
       
@@ -521,7 +521,7 @@ export default function PartsInventory() {
                       <SelectValue placeholder="Category" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Categories</SelectItem>
+                      <SelectItem value="all">All Categories</SelectItem>
                       <SelectItem value="engine">Engine</SelectItem>
                       <SelectItem value="transmission">Transmission</SelectItem>
                       <SelectItem value="brakes">Brakes</SelectItem>

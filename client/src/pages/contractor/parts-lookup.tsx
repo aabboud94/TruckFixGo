@@ -102,7 +102,7 @@ type DefectReportData = z.infer<typeof defectReportSchema>;
 export default function PartsLookup() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedMake, setSelectedMake] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
@@ -139,7 +139,7 @@ export default function PartsLookup() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (searchQuery) params.append('query', searchQuery);
-      if (selectedCategory) params.append('category', selectedCategory);
+      if (selectedCategory !== 'all') params.append('category', selectedCategory);
       params.append('isActive', 'true');
       params.append('limit', '20');
       
@@ -147,7 +147,7 @@ export default function PartsLookup() {
       if (!response.ok) throw new Error('Failed to search parts');
       return response.json();
     },
-    enabled: searchQuery.length > 2 || !!selectedCategory
+    enabled: searchQuery.length > 2 || selectedCategory !== 'all'
   });
 
   // Get current job's parts
@@ -402,7 +402,7 @@ export default function PartsLookup() {
                       <SelectValue placeholder="Category" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Categories</SelectItem>
+                      <SelectItem value="all">All Categories</SelectItem>
                       <SelectItem value="engine">Engine</SelectItem>
                       <SelectItem value="transmission">Transmission</SelectItem>
                       <SelectItem value="brakes">Brakes</SelectItem>
