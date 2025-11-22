@@ -7067,18 +7067,17 @@ export class PostgreSQLStorage implements IStorage {
       lineItems: (invoice as any).lineItems ?? [],
       invoiceNumber
     }).returning();
-    const trimmedInvoiceNumber = invoice.invoiceNumber?.trim?.() ?? "";
-    const invoiceNumber = trimmedInvoiceNumber.length > 0 && trimmedInvoiceNumber.length <= 20
-      ? trimmedInvoiceNumber
-      : this.generateInvoiceNumber();
-
-    const result = await db.insert(invoices).values({ ...invoice, invoiceNumber }).returning();
     return result[0];
   }
 
   async updateInvoice(id: string, updates: Partial<InsertInvoice>): Promise<Invoice | undefined> {
     const result = await db.update(invoices)
-      .set({ ...updates, updatedAt: new Date() })
+      .set({
+        ...updates,
+        // Keep legacy JSON column non-null during updates
+        lineItems: (updates as any)?.lineItems ?? undefined,
+        updatedAt: new Date()
+      })
       .where(eq(invoices.id, id))
       .returning();
     return result[0];

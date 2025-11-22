@@ -4792,6 +4792,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const contractorId = req.session.userId!;
         const { lineItems, notes, sendMethod, recipientEmail, recipientPhone } = req.body;
 
+        const parsedLineItems = Array.isArray(lineItems)
+          ? lineItems
+          : typeof lineItems === 'string'
+            ? (() => {
+                try {
+                  const parsed = JSON.parse(lineItems);
+                  return Array.isArray(parsed) ? parsed : [];
+                } catch {
+                  return [];
+                }
+              })()
+            : [];
+
         // Verify this is the contractor's current job
         const currentJobs = await storage.findJobs({
           id: jobId,
@@ -4816,7 +4829,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Calculate invoice totals
         let subtotal = 0;
-        lineItems.forEach((item: any) => {
+        parsedLineItems.forEach((item: any) => {
           subtotal += parseFloat(item.quantity) * parseFloat(item.unitPrice);
         });
         
@@ -4827,14 +4840,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const invoiceNumber = pdfService.generateInvoiceNumber('JOB');
         
         // Normalize legacy line items payload to satisfy NOT NULL constraint
-        const legacyLineItems = Array.isArray(lineItems)
-          ? lineItems.map((item: any) => ({
-              description: item.description,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              total: parseFloat(item.quantity) * parseFloat(item.unitPrice)
-            }))
-          : [];
+        const legacyLineItems = parsedLineItems.map((item: any) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: parseFloat(item.quantity) * parseFloat(item.unitPrice)
+        }));
 
         // Create invoice in database
         const invoice = await storage.createInvoice({
@@ -4853,8 +4864,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         
         // Create invoice line items
-        for (let i = 0; i < lineItems.length; i++) {
-          const item = lineItems[i];
+        for (let i = 0; i < parsedLineItems.length; i++) {
+          const item = parsedLineItems[i];
           const totalPrice = parseFloat(item.quantity) * parseFloat(item.unitPrice);
           await storage.createInvoiceLineItem({
             invoiceId: invoice.id,
@@ -4909,7 +4920,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 email: contractor?.email,
                 phone: contractor?.phone
               },
-              lineItems: lineItems.map((item: any) => ({
+              lineItems: parsedLineItems.map((item: any) => ({
                 description: item.description,
                 quantity: item.quantity,
                 unitPrice: parseFloat(item.unitPrice),
