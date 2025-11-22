@@ -254,6 +254,15 @@ export default function Homepage() {
                 Whether you're an owner-operator or managing a nationwide fleet, signing up secures VIP treatment on every call.
               </p>
 
+              <div className="grid sm:grid-cols-3 gap-3 text-sm font-semibold text-white/80">
+                {[{ label: "No setup fees", icon: Shield }, { label: "US-based dispatch", icon: PhoneCall }, { label: "Cancel anytime", icon: Timer }].map(({ label, icon: Icon }) => (
+                  <div key={label} className="flex items-center gap-2 bg-white/10 border border-white/15 rounded-lg px-3 py-2">
+                    <Icon className="w-4 h-4 text-green-300" />
+                    <span>{label}</span>
+                  </div>
+                ))}
+              </div>
+
               <div className="grid sm:grid-cols-2 gap-4">
                 {["Instant priority dispatch", "Secure stored payment & locations", "Live job tracking & driver updates", "Fleet-level reporting & maintenance reminders"].map((item) => (
                   <div key={item} className="flex items-start gap-3 bg-white/5 border border-white/10 rounded-lg p-3">
@@ -285,7 +294,7 @@ export default function Homepage() {
                 </Button>
               </div>
 
-              <div className="flex items-center gap-4 text-sm text-white/70">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 text-sm text-white/80">
                 <div className="flex items-center gap-2">
                   <PhoneCall className="w-4 h-4" />
                   Talk to dispatch: <span className="font-semibold text-white">(800) 555-TRUCK</span>
@@ -339,9 +348,12 @@ export default function Homepage() {
 
               <Separator className="my-4" />
 
-              <div className="flex flex-wrap gap-3">
-                {['Owner-operators', 'Private fleets', 'Logistics brokers', 'Dealership partners'].map((tag) => (
-                  <span key={tag} className="px-3 py-1 rounded-full bg-red-100 text-red-800 text-sm font-semibold">{tag}</span>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {["Owner-operators", "Private fleets", "Logistics brokers", "Dealership partners"].map((tag) => (
+                  <div key={tag} className="px-3 py-2 rounded-lg bg-red-50 text-red-800 text-sm font-semibold border border-red-100 flex items-center gap-2">
+                    <CircleCheckBig className="w-4 h-4" />
+                    {tag}
+                  </div>
                 ))}
               </div>
             </div>
