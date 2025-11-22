@@ -37,27 +37,30 @@ export default function FleetDashboard() {
   const [, setLocation] = useLocation();
   const [date, setDate] = useState<Date | undefined>(new Date());
 
-  // Check authentication and fetch user session
+  // Gate access to fleet managers
   const { data: session, isLoading: sessionLoading } = useQuery({
-    queryKey: ['/api/auth/me'],
+    queryKey: ["/api/auth/me"],
+    retry: false,
     queryFn: async () => {
       try {
-        const response = await apiRequest('GET', '/api/auth/me');
-        // The API returns { user: {...} }, extract the user object
+        const response = await apiRequest("GET", "/api/auth/me");
         return response?.user || null;
-      } catch (error) {
-        return null;
+      } catch (error: any) {
+        if (typeof error?.message === "string" && error.message.startsWith("401")) {
+          return null;
+        }
+        throw error;
       }
     }
   });
 
   // Fetch fleet account data
   const { data: fleetData, isLoading: fleetLoading } = useQuery({
-    queryKey: ['/api/fleet/accounts'],
-    enabled: !!session?.id && session?.role === 'fleet_manager',
+    queryKey: ["/api/fleet/accounts"],
+    enabled: !!session?.id && session?.role === "fleet_manager",
     queryFn: async () => {
       // Get all fleet accounts for this user
-      const response = await apiRequest('GET', '/api/fleet/accounts');
+      const response = await apiRequest("GET", "/api/fleet/accounts");
       // API returns { fleets: [...] }
       const fleets = response?.fleets || [];
       // Return the first account (most fleet managers have one account)
@@ -72,9 +75,9 @@ export default function FleetDashboard() {
     queryFn: async () => {
       if (!fleetData?.id) return { vehicles: [] };
       try {
-        return await apiRequest('GET', `/api/fleet/accounts/${fleetData.id}/vehicles`);
+        return await apiRequest("GET", `/api/fleet/accounts/${fleetData.id}/vehicles`);
       } catch (error) {
-        console.error('Failed to fetch vehicles:', error);
+        console.error("Failed to fetch vehicles:", error);
         return { vehicles: [] };
       }
     }
@@ -82,16 +85,16 @@ export default function FleetDashboard() {
 
   // Fetch scheduled services (using jobs endpoint as services)
   const { data: scheduledServices, isLoading: servicesLoading } = useQuery({
-    queryKey: ['/api/jobs'],
+    queryKey: ["/api/jobs"],
     enabled: !!fleetData?.id,
     queryFn: async () => {
       if (!fleetData?.id) return { services: [] };
       try {
         // Get jobs for this fleet account
-        const jobs = await apiRequest('GET', `/api/jobs?fleetAccountId=${fleetData.id}`);
+        const jobs = await apiRequest("GET", `/api/jobs?fleetAccountId=${fleetData.id}`);
         return { services: jobs || [] };
       } catch (error) {
-        console.error('Failed to fetch services:', error);
+        console.error("Failed to fetch services:", error);
         return { services: [] };
       }
     }
@@ -107,7 +110,7 @@ export default function FleetDashboard() {
       // Wrap in try-catch to absolutely prevent any errors
       try {
         const response = await fetch(`/api/fleet/accounts/${fleetData.id}/analytics`, {
-          credentials: 'include'
+          credentials: "include"
         });
         
         if (!response.ok) {

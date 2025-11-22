@@ -1802,6 +1802,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }, 'Phone number must contain at least 7 digits (10 recommended for production). Valid formats: "555-1234", "(555) 123-4567", "+1 555 123 4567"')
       .optional(), // Alternative field name
     guestEmail: z.string().email().optional().or(z.string().length(0)),
+    customerEmail: z.string().email().optional().or(z.string().length(0)),
     email: z.string().email().optional().or(z.string().length(0)),
     
     // Location (required)
@@ -1859,7 +1860,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Normalize customer data (handle different field names)
         const customerPhone = req.body.customerPhone || req.body.guestPhone;
-        const customerEmail = req.body.email || req.body.guestEmail;
+        const customerEmail = req.body.email || req.body.guestEmail || req.body.customerEmail;
 
         // Create emergency job data with proper field mapping
         const jobData = {
@@ -4829,6 +4830,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Generate invoice number
         const invoiceNumber = pdfService.generateInvoiceNumber('JOB');
         
+        // Normalize legacy line items payload to satisfy NOT NULL constraint
+        const legacyLineItems = Array.isArray(lineItems)
+          ? lineItems.map((item: any) => ({
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              total: parseFloat(item.quantity) * parseFloat(item.unitPrice)
+            }))
+          : [];
+
         // Create invoice in database
         const invoice = await storage.createInvoice({
           jobId,
@@ -4841,7 +4852,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tax: tax.toFixed(2),
           totalAmount: total.toFixed(2),
           amountPaid: '0',
-          status: 'pending'
+          status: 'pending',
+          lineItems: legacyLineItems
         });
         
         // Create invoice line items
@@ -9828,12 +9840,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         let fleets = await storage.findFleetAccounts(filters);
-        
+
         // If user is a fleet_manager, filter to only show their fleet accounts
-        if (req.session?.user?.role === 'fleet_manager' && req.session?.user?.email) {
-          fleets = fleets.filter(fleet => 
-            fleet.primaryContactEmail === req.session.user.email
-          );
+        if (req.session.role === 'fleet_manager' && req.session.userId) {
+          const user = await storage.getUser(req.session.userId);
+
+          if (user?.email) {
+            fleets = fleets.filter((fleet) =>
+              fleet.primaryContactEmail === user.email
+            );
+          }
         }
         
         res.json({ fleets });
@@ -21304,7 +21320,7 @@ The TruckFixGo Team
             console.log(`[Emergency Booking] Found best contractor ${bestContractor.userId} for job ${job.id}`);
             
             // Assign the job to the contractor
-            const assignedJob = await storage.assignJobToContractor(job.id, bestContractor.userId, 'ai_dispatch');
+            const assignedJob = await storage.assignJobToContractor(job.id, bestContractor.userId, 'round_robin');
             
             if (assignedJob) {
               console.log(`[Emergency Booking] Successfully assigned job ${job.id} to contractor ${bestContractor.userId}`);
@@ -21356,7 +21372,7 @@ The TruckFixGo Team
         }
 
         // Build tracking link
-        const trackingLink = `${process.env.APP_URL || 'https://truck-fix-go-aabboud94.replit.app'}/tracking?jobId=${job.id}`;
+        const trackingLink = `${process.env.APP_URL || 'https://truck-fix-go-aabboud94.replit.app'}/track/${job.id}`;
 
         // Send notifications asynchronously
         (async () => {

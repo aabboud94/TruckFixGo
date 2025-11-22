@@ -300,7 +300,7 @@ self.addEventListener('notificationclick', (event) => {
       
       switch (action) {
         case 'track':
-          urlToOpen = `/tracking?jobId=${notificationData.jobId}`;
+          urlToOpen = `/track/${notificationData.jobId}`;
           break;
         case 'message':
           urlToOpen = `/jobs/${notificationData.jobId}#messages`;
