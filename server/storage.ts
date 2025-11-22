@@ -7038,6 +7038,28 @@ export class PostgreSQLStorage implements IStorage {
   }
 
   async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
+    // Prefer a provided invoice number (e.g., from pdfService) to avoid violating
+    // the database length constraint (varchar(20)). Fall back to a generated
+    // value that fits within the limit.
+    const fallbackNumber = `INV-${Date.now().toString().slice(-6)}-${Math.random()
+      .toString(36)
+      .toUpperCase()
+      .slice(2, 6)}`;
+
+    const providedInvoiceNumber = invoice.invoiceNumber?.trim();
+    if (providedInvoiceNumber && providedInvoiceNumber.length > 20) {
+      throw new Error(
+        `Invoice number exceeds 20 characters (received ${providedInvoiceNumber.length}). ` +
+          'Please use a shorter value.'
+      );
+    }
+
+    const sanitizedInvoiceNumber = providedInvoiceNumber || fallbackNumber;
+
+    const result = await db
+      .insert(invoices)
+      .values({ ...invoice, invoiceNumber: sanitizedInvoiceNumber })
+      .returning();
     const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     const result = await db.insert(invoices).values({
       ...invoice,

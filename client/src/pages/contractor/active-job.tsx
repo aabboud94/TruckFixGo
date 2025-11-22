@@ -245,14 +245,23 @@ export default function ContractorActiveJob() {
         completionNotes,
         photosCount: selectedPhotos.length
       });
-      
-      const errorMessage = error.response?.data?.message || 
-                          error.message || 
-                          "Failed to complete job. Please ensure all required fields are filled.";
-      
+
+      const responseData = error.response?.data;
+      const messageFromResponse = typeof responseData === 'string'
+        ? responseData
+        : responseData?.message || responseData?.error || responseData?.detail;
+
+      const errorMessage = messageFromResponse ||
+        error.message ||
+        "Failed to complete job. Please ensure all required fields are filled.";
+
+      const debugDetails = responseData && typeof responseData === 'object'
+        ? JSON.stringify(responseData)
+        : undefined;
+
       toast({
         title: "Job Completion Failed",
-        description: errorMessage,
+        description: debugDetails ? `${errorMessage} — Details: ${debugDetails}` : errorMessage,
         variant: "destructive"
       });
     }
