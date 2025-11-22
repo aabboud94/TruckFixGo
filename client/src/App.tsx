@@ -8,6 +8,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import Homepage from "@/pages/Homepage";
 import Login from "@/pages/login";
 import EmergencyBooking from "@/pages/emergency-booking";
+import EmergencyLanding from "@/pages/emergency";
 import ScheduledBooking from "@/pages/scheduled-booking";
 import TrackingPage from "@/pages/tracking";
 import PaymentMethodsPage from "@/pages/payment-methods";
@@ -118,7 +119,8 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password/:token" component={ResetPassword} />
-      <Route path="/emergency" component={EmergencyBooking} />
+      <Route path="/emergency" component={EmergencyLanding} />
+      <Route path="/emergency/request" component={EmergencyBooking} />
       <Route path="/scheduled-booking" component={ScheduledBooking} />
       <Route path="/jobs" component={JobsDashboard} />
       <Route path="/jobs/:jobId" component={TrackingPage} />
