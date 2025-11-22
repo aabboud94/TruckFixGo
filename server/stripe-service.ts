@@ -504,6 +504,54 @@ class StripeService {
     }
   }
 
+  // Create a one-time payment link for an ad-hoc invoice/job
+  async createPaymentLink({
+    amount,
+    description,
+    metadata,
+  }: {
+    amount: number;
+    description: string;
+    metadata?: Record<string, any>;
+  }): Promise<{ url: string; id?: string }> {
+    // Guard against invalid amounts that Stripe would reject (must be at least $0.50)
+    const safeAmount = Math.max(Math.round(amount), 50);
+
+    // STUB MODE - Return a mock payment link when Stripe isn't configured
+    if (!this.checkStripeAvailable()) {
+      return {
+        url: `https://pay.mock/${metadata?.invoiceId || 'invoice'}-${Date.now()}`,
+      };
+    }
+
+    try {
+      // Create a price on-the-fly for the payment link
+      const price = await stripe!.prices.create({
+        currency: 'usd',
+        unit_amount: safeAmount,
+        product_data: {
+          name: description || 'Service Invoice',
+        },
+        metadata,
+      });
+
+      const link = await stripe!.paymentLinks.create({
+        line_items: [
+          {
+            price: price.id,
+            quantity: 1,
+          },
+        ],
+        metadata,
+      });
+
+      return { url: link.url, id: link.id };
+    } catch (error) {
+      console.error('Error creating payment link:', error);
+      throw error;
+    }
+  }
+
   // Retry a failed payment
   async retryFailedPayment(invoiceId: string): Promise<Stripe.Invoice> {
     if (!this.checkStripeAvailable()) {
