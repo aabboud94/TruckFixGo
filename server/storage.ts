@@ -7028,8 +7028,21 @@ export class PostgreSQLStorage implements IStorage {
     return await query;
   }
 
+  private generateInvoiceNumber(prefix: string = "INV"): string {
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const random = Math.floor(Math.random() * 10000).toString().padStart(4, "0");
+    return `${prefix}-${year}${month}${day}-${random}`;
+  }
+
   async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
-    const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const trimmedInvoiceNumber = invoice.invoiceNumber?.trim?.() ?? "";
+    const invoiceNumber = trimmedInvoiceNumber.length > 0 && trimmedInvoiceNumber.length <= 20
+      ? trimmedInvoiceNumber
+      : this.generateInvoiceNumber();
+
     const result = await db.insert(invoices).values({ ...invoice, invoiceNumber }).returning();
     return result[0];
   }
