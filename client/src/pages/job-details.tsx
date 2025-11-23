@@ -1,80 +1,123 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { WeatherWidget } from "@/components/weather-widget";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { WeatherWidget } from "@/components/weather-widget";
 import { InvoiceTemplate } from "@/components/invoice-template";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { format } from "date-fns";
-import { 
-  FileText, 
-  Download, 
-  Mail, 
-  Printer, 
-  MapPin, 
-  Calendar, 
-  User, 
-  Truck, 
-  Clock, 
-  DollarSign,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Building2,
-  MessageSquare,
-  Camera,
+import {
   Activity,
-  Hash,
-  Cloud
+  Camera,
+  Cloud,
+  Download,
+  FileText,
+  Mail,
+  MapPin,
+  MessageSquare,
+  Truck
 } from "lucide-react";
-import type { Job, Invoice, User as UserType, FleetAccount } from "@shared/schema";
+import { format } from "date-fns";
+import type {
+  FleetAccount,
+  Invoice,
+  Job,
+  JobPhoto,
+  JobStatusHistory,
+  User as UserType
+} from "@shared/schema";
+
+interface JobDetailsResponse {
+  job: Job;
+  photos: JobPhoto[];
+  statusHistory: JobStatusHistory[];
+}
+
+const statusStyles: Record<
+  Job["status"],
+  { badge: string; label: string; timelineColor: string }
+> = {
+  new: { badge: "bg-gray-500", label: "New", timelineColor: "bg-gray-500" },
+  assigned: { badge: "bg-blue-500", label: "Assigned", timelineColor: "bg-blue-500" },
+  en_route: { badge: "bg-yellow-500", label: "En Route", timelineColor: "bg-yellow-500" },
+  on_site: { badge: "bg-orange-500", label: "On Site", timelineColor: "bg-orange-500" },
+  completed: { badge: "bg-green-600", label: "Completed", timelineColor: "bg-green-600" },
+  cancelled: { badge: "bg-red-600", label: "Cancelled", timelineColor: "bg-red-600" },
+};
+
+const formatCurrency = (value?: string | number | null) => {
+  if (value === null || value === undefined) return "$0.00";
+  const numeric = typeof value === "string" ? Number(value) : value;
+  if (Number.isNaN(numeric)) return "$0.00";
+  return numeric.toLocaleString("en-US", { style: "currency", currency: "USD" });
+};
+
+const formatDateTime = (value?: string | Date | null, fallback: string = "—") => {
+  if (!value) return fallback;
+  try {
+    return format(new Date(value), "MMM dd, yyyy h:mm a");
+  } catch {
+    return fallback;
+  }
+};
 
 export default function JobDetails() {
-  const [params] = useParams<{ id: string }>();
+  const [params] = useParams<{ jobId: string }>();
+  const jobId = params?.jobId;
   const { toast } = useToast();
   const [showInvoicePreview, setShowInvoicePreview] = useState(false);
 
-  // Query job details
-  const { data: jobData, isLoading: jobLoading } = useQuery({
-    queryKey: ["/api/jobs", params?.id],
-    enabled: !!params?.id,
+  const {
+    data: jobResponse,
+    isLoading: jobLoading,
+    error: jobError,
+  } = useQuery<JobDetailsResponse>({
+    queryKey: ["/api/jobs", jobId],
+    enabled: Boolean(jobId),
+    queryFn: async () => apiRequest(`/api/jobs/${jobId}`, "GET"),
   });
 
-  // Query invoice for job
-  const { data: invoiceData, isLoading: invoiceLoading, refetch: refetchInvoice } = useQuery({
-    queryKey: ["/api/jobs", params?.id, "invoice"],
-    queryFn: () => apiRequest(`/api/jobs/${params?.id}/invoice`, "GET"),
-    enabled: !!params?.id,
+  const {
+    data: invoiceData,
+    isLoading: invoiceLoading,
+    refetch: refetchInvoice,
+  } = useQuery({
+    queryKey: ["/api/jobs", jobId, "invoice"],
+    queryFn: async () => apiRequest(`/api/jobs/${jobId}/invoice`, "GET"),
+    enabled: Boolean(jobId),
   });
 
-  // Mutation to download invoice
+  const invoice: Invoice | undefined = invoiceData?.invoice;
+  const customer: UserType | undefined = invoiceData?.customer;
+  const fleetAccount: FleetAccount | undefined = invoiceData?.fleetAccount;
+  const contractor = invoiceData?.contractor;
+
   const downloadInvoiceMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
       const response = await fetch(`/api/invoices/${invoiceId}/download`, {
         method: "GET",
         credentials: "include",
       });
-      
+
       if (!response.ok) {
         throw new Error("Failed to download invoice");
       }
-      
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `invoice-${invoiceData?.invoice?.invoiceNumber || "download"}.pdf`;
-      document.body.appendChild(a);
-      a.click();
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `invoice-${invoice?.invoiceNumber || "download"}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
       window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      document.body.removeChild(anchor);
     },
     onSuccess: () => {
       toast({
@@ -91,11 +134,14 @@ export default function JobDetails() {
     },
   });
 
-  // Mutation to email invoice
   const emailInvoiceMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
+      const recipientEmail = customer?.email || jobResponse?.job?.customerEmail;
+      if (!recipientEmail) {
+        throw new Error("Missing customer email address");
+      }
       return apiRequest(`/api/invoices/${invoiceId}/email`, "POST", {
-        recipientEmail: jobData?.customer?.email,
+        recipientEmail,
       });
     },
     onSuccess: () => {
@@ -113,81 +159,110 @@ export default function JobDetails() {
     },
   });
 
-  if (jobLoading || invoiceLoading) {
+  if (jobLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading job details...</p>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="text-center space-y-3">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
+          <p className="text-muted-foreground">Loading job details…</p>
         </div>
       </div>
     );
   }
 
-  if (!jobData) {
+  if (jobError) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="max-w-md">
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <Alert className="max-w-lg">
+          <AlertTitle>Unable to load job</AlertTitle>
+          <AlertDescription>
+            {(jobError as Error).message || "Something went wrong while fetching this job."}
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (!jobResponse?.job) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <Card className="w-full max-w-lg">
           <CardHeader>
-            <CardTitle>Job Not Found</CardTitle>
-            <CardDescription>The requested job could not be found.</CardDescription>
+            <CardTitle>Job not found</CardTitle>
+            <CardDescription>The requested job could not be located.</CardDescription>
           </CardHeader>
+          <CardContent>
+            <Button onClick={() => history.back()}>Go Back</Button>
+          </CardContent>
         </Card>
       </div>
     );
   }
 
-  const job: Job = jobData;
-  const invoice: Invoice | undefined = invoiceData?.invoice;
-  const customer: UserType | undefined = invoiceData?.customer;
-  const fleetAccount: FleetAccount | undefined = invoiceData?.fleetAccount;
-  const contractor = invoiceData?.contractor;
+  const job = jobResponse.job;
+  const jobPhotos = jobResponse.photos || [];
+  const statusHistory = jobResponse.statusHistory || [];
+  const statusMeta = statusStyles[job.status] ?? statusStyles.new;
 
-  const getStatusIcon = (status: string) => {
-    const icons: Record<string, any> = {
-      new: AlertCircle,
-      assigned: User,
-      en_route: Truck,
-      on_site: Activity,
-      completed: CheckCircle,
-      cancelled: XCircle,
-    };
-    return icons[status] || AlertCircle;
+  const issueDescription = job.description || "No description provided.";
+  const serviceLocation =
+    job.locationAddress ||
+    (typeof job.location === "object" && job.location && "address" in job.location
+      ? (job.location as any).address
+      : null) ||
+    "On-site service";
+
+  const vehicleInfo = {
+    make: job.vehicleMake,
+    model: job.vehicleModel,
+    year: job.vehicleYear,
+    unitNumber: job.unitNumber,
+    vin: job.vin,
   };
 
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      new: "bg-gray-500",
-      assigned: "bg-blue-500",
-      en_route: "bg-yellow-500",
-      on_site: "bg-orange-500",
-      completed: "bg-green-500",
-      cancelled: "bg-red-500",
-    };
-    return colors[status] || "bg-gray-500";
+  const paymentSummary = {
+    quoted: job.estimatedPrice || job.finalPrice,
+    actual: job.finalPrice || job.estimatedPrice,
   };
 
-  const StatusIcon = getStatusIcon(job.status);
-  const vehicleInfo = job.vehicleInfo as any;
+  const timelineEntries = useMemo(() => {
+    if (statusHistory.length) {
+      return statusHistory.map(item => ({
+        id: item.id,
+        status: item.toStatus,
+        date: item.createdAt,
+        note: item.reason,
+      }));
+    }
+
+    const fallback: Array<{ id: string; status: Job["status"]; date?: Date | string | null; note?: string }> = [
+      { id: "created", status: "new", date: job.createdAt },
+      { id: "assigned", status: "assigned", date: job.assignedAt },
+      { id: "en_route", status: "en_route", date: job.enRouteAt },
+      { id: "on_site", status: "on_site", date: job.arrivedAt },
+      { id: "completed", status: "completed", date: job.completedAt },
+    ];
+
+    return fallback.filter(entry => entry.date);
+  }, [statusHistory, job]);
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Job Details</h1>
-            <p className="text-gray-600 mt-1">Job ID: {job.id}</p>
-          </div>
-          <Badge className={`${getStatusColor(job.status)} text-white px-4 py-2`}>
-            <StatusIcon className="h-4 w-4 mr-2" />
-            {job.status.toUpperCase()}
-          </Badge>
+    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">Job #{job.jobNumber}</p>
+          <h1 className="text-3xl font-bold text-foreground">Job Details</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Created {formatDateTime(job.createdAt)}
+          </p>
         </div>
+        <Badge className={`${statusMeta.badge} text-white px-4 py-2 text-base flex items-center gap-2`}>
+          <Activity className="h-4 w-4" />
+          {statusMeta.label}
+        </Badge>
       </div>
 
-      {/* Job Information Cards */}
-      <div className="grid lg:grid-cols-3 gap-6 mb-6">
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* Job Overview */}
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -195,64 +270,60 @@ export default function JobDetails() {
               <Truck className="h-5 w-5" />
               Job Overview
             </CardTitle>
+            <CardDescription>Core details about this service request.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <p className="text-sm text-gray-600">Job Type</p>
+                <p className="text-sm text-muted-foreground">Job Type</p>
                 <Badge className={job.jobType === "emergency" ? "bg-orange-500" : "bg-blue-500"}>
-                  {job.jobType === "emergency" ? "EMERGENCY" : "SCHEDULED"}
+                  {job.jobType === "emergency" ? "Emergency" : "Scheduled"}
                 </Badge>
               </div>
               <div>
-                <p className="text-sm text-gray-600">Created At</p>
-                <p className="font-semibold">{format(job.createdAt, "MMM dd, yyyy h:mm a")}</p>
+                <p className="text-sm text-muted-foreground">Status</p>
+                <p className="font-semibold text-foreground">{statusMeta.label}</p>
               </div>
             </div>
 
             <Separator />
 
             <div>
-              <p className="text-sm text-gray-600 mb-2">Issue Description</p>
-              <p className="text-gray-900">{job.issueDescription || "No description provided"}</p>
+              <p className="text-sm text-muted-foreground mb-1">Issue Description</p>
+              <p>{issueDescription}</p>
             </div>
 
             <Separator />
 
-            <div>
-              <p className="text-sm text-gray-600 mb-2">Service Location</p>
-              <div className="flex items-start gap-2">
-                <MapPin className="h-4 w-4 text-gray-400 mt-1" />
-                <p className="text-gray-900">{job.serviceLocation || "On-site service"}</p>
+            <div className="flex items-start gap-2">
+              <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="text-sm text-muted-foreground">Service Location</p>
+                <p className="text-sm">{serviceLocation}</p>
               </div>
             </div>
 
-            {vehicleInfo && (
+            {vehicleInfo.make || vehicleInfo.model || vehicleInfo.unitNumber || vehicleInfo.vin ? (
               <>
                 <Separator />
-                <div>
-                  <p className="text-sm text-gray-600 mb-2">Vehicle Information</p>
-                  {vehicleInfo.make && vehicleInfo.model && (
-                    <p className="text-gray-900">
-                      {vehicleInfo.year} {vehicleInfo.make} {vehicleInfo.model}
-                    </p>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Vehicle Information</p>
+                  <p className="text-sm font-medium">
+                    {[vehicleInfo.year, vehicleInfo.make, vehicleInfo.model].filter(Boolean).join(" ")}
+                  </p>
+                  {vehicleInfo.unitNumber && (
+                    <p className="text-xs text-muted-foreground">Unit #: {vehicleInfo.unitNumber}</p>
                   )}
                   {vehicleInfo.vin && (
-                    <p className="text-sm text-gray-600 font-mono">VIN: {vehicleInfo.vin}</p>
-                  )}
-                  {vehicleInfo.unitNumber && (
-                    <p className="text-sm text-gray-600">Unit #: {vehicleInfo.unitNumber}</p>
-                  )}
-                  {vehicleInfo.licensePlate && (
-                    <p className="text-sm text-gray-600">License: {vehicleInfo.licensePlate}</p>
+                    <p className="text-xs text-muted-foreground font-mono">VIN: {vehicleInfo.vin}</p>
                   )}
                 </div>
               </>
-            )}
+            ) : null}
           </CardContent>
         </Card>
 
-        {/* Invoice & Payment Card */}
+        {/* Invoice Card */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -261,84 +332,59 @@ export default function JobDetails() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {invoice ? (
+            {invoiceLoading ? (
+              <p className="text-sm text-muted-foreground">Loading invoice…</p>
+            ) : invoice ? (
               <>
                 <div>
-                  <p className="text-sm text-gray-600">Invoice Number</p>
-                  <p className="font-semibold font-mono">{invoice.invoiceNumber}</p>
+                  <p className="text-sm text-muted-foreground">Invoice Number</p>
+                  <p className="font-mono text-sm">{invoice.invoiceNumber}</p>
                 </div>
-                
                 <div>
-                  <p className="text-sm text-gray-600">Invoice Status</p>
-                  <Badge className={
-                    invoice.status === "paid" ? "bg-green-500" :
-                    invoice.status === "pending" ? "bg-yellow-500" :
-                    invoice.status === "overdue" ? "bg-red-500" :
-                    "bg-gray-500"
-                  }>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <Badge>
                     {invoice.status.toUpperCase()}
                   </Badge>
                 </div>
-
                 <div>
-                  <p className="text-sm text-gray-600">Total Amount</p>
-                  <p className="text-2xl font-bold text-gray-900">${invoice.totalAmount}</p>
+                  <p className="text-sm text-muted-foreground">Total Amount</p>
+                  <p className="text-2xl font-bold">{formatCurrency(invoice.totalAmount)}</p>
                 </div>
-
-                {invoice.dueDate && (
-                  <div>
-                    <p className="text-sm text-gray-600">Due Date</p>
-                    <p className="font-semibold">{format(invoice.dueDate, "MMM dd, yyyy")}</p>
-                  </div>
-                )}
 
                 <Separator />
 
                 <div className="space-y-2">
-                  <Button
-                    className="w-full"
-                    onClick={() => setShowInvoicePreview(true)}
-                    data-testid="button-view-invoice"
-                  >
-                    <FileText className="h-4 w-4 mr-2" />
+                  <Button className="w-full" onClick={() => setShowInvoicePreview(true)}>
                     View Invoice
                   </Button>
-                  
                   <Button
                     variant="outline"
                     className="w-full"
                     onClick={() => downloadInvoiceMutation.mutate(invoice.id)}
                     disabled={downloadInvoiceMutation.isPending}
-                    data-testid="button-download-invoice"
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    {downloadInvoiceMutation.isPending ? "Downloading..." : "Download PDF"}
+                    {downloadInvoiceMutation.isPending ? "Downloading…" : "Download PDF"}
                   </Button>
-
                   {customer?.email && (
                     <Button
                       variant="outline"
                       className="w-full"
                       onClick={() => emailInvoiceMutation.mutate(invoice.id)}
                       disabled={emailInvoiceMutation.isPending}
-                      data-testid="button-email-invoice"
                     >
                       <Mail className="h-4 w-4 mr-2" />
-                      {emailInvoiceMutation.isPending ? "Sending..." : "Email Invoice"}
+                      {emailInvoiceMutation.isPending ? "Sending…" : "Email Invoice"}
                     </Button>
                   )}
                 </div>
               </>
             ) : (
-              <div className="text-center py-4">
-                <FileText className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                <p className="text-gray-600">No invoice generated yet</p>
+              <div className="text-center text-sm text-muted-foreground">
+                <FileText className="h-10 w-10 mx-auto mb-2 text-muted-foreground/60" />
+                <p>No invoice generated yet.</p>
                 {job.status === "completed" && (
-                  <Button
-                    className="mt-4"
-                    onClick={() => refetchInvoice()}
-                    data-testid="button-generate-invoice"
-                  >
+                  <Button className="mt-4" onClick={() => refetchInvoice()}>
                     Generate Invoice
                   </Button>
                 )}
@@ -347,88 +393,66 @@ export default function JobDetails() {
           </CardContent>
         </Card>
 
-        {/* Weather Information Card */}
+        {/* Weather */}
         {job.location && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Cloud className="h-5 w-5" />
-                Weather Information
+                Weather Impact
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <WeatherWidget 
+              <WeatherWidget
                 jobId={job.id}
                 compact={false}
-                showAlerts={true}
+                showAlerts
+                showImpactScore
                 showForecast={false}
-                showImpactScore={true}
               />
             </CardContent>
           </Card>
         )}
       </div>
 
-      {/* Additional Information Tabs */}
-      <Tabs defaultValue="timeline" className="mb-6">
+      <Tabs defaultValue="timeline">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
           <TabsTrigger value="messages">Messages</TabsTrigger>
           <TabsTrigger value="photos">Photos</TabsTrigger>
           <TabsTrigger value="payment">Payment</TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="timeline" className="mt-4">
           <Card>
             <CardHeader>
               <CardTitle>Job Timeline</CardTitle>
+              <CardDescription>Milestones recorded for this job.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                  <div>
-                    <p className="font-semibold">Job Created</p>
-                    <p className="text-sm text-gray-600">{format(job.createdAt, "MMM dd, yyyy h:mm a")}</p>
-                  </div>
+              {timelineEntries.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">
+                  No timeline entries yet.
+                </p>
+              ) : (
+                <div className="space-y-5">
+                  {timelineEntries.map(entry => {
+                    const meta = statusStyles[entry.status] ?? statusStyles.new;
+                    return (
+                      <div key={entry.id} className="flex items-start gap-3">
+                        <div className={`h-3 w-3 rounded-full ${meta.timelineColor} mt-1`} />
+                        <div>
+                          <p className="font-medium">{meta.label}</p>
+                          <p className="text-sm text-muted-foreground">{formatDateTime(entry.date)}</p>
+                          {entry.note && (
+                            <p className="text-xs text-muted-foreground mt-1">{entry.note}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                {job.assignedAt && (
-                  <div className="flex items-center gap-4">
-                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                    <div>
-                      <p className="font-semibold">Contractor Assigned</p>
-                      <p className="text-sm text-gray-600">{format(job.assignedAt, "MMM dd, yyyy h:mm a")}</p>
-                    </div>
-                  </div>
-                )}
-                {job.enRouteAt && (
-                  <div className="flex items-center gap-4">
-                    <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-                    <div>
-                      <p className="font-semibold">Contractor En Route</p>
-                      <p className="text-sm text-gray-600">{format(job.enRouteAt, "MMM dd, yyyy h:mm a")}</p>
-                    </div>
-                  </div>
-                )}
-                {job.arrivedAt && (
-                  <div className="flex items-center gap-4">
-                    <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                    <div>
-                      <p className="font-semibold">Arrived On Site</p>
-                      <p className="text-sm text-gray-600">{format(job.arrivedAt, "MMM dd, yyyy h:mm a")}</p>
-                    </div>
-                  </div>
-                )}
-                {job.completedAt && (
-                  <div className="flex items-center gap-4">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    <div>
-                      <p className="font-semibold">Job Completed</p>
-                      <p className="text-sm text-gray-600">{format(job.completedAt, "MMM dd, yyyy h:mm a")}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -437,11 +461,12 @@ export default function JobDetails() {
           <Card>
             <CardHeader>
               <CardTitle>Messages</CardTitle>
+              <CardDescription>Real-time chat history will appear here.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-gray-500">
-                <MessageSquare className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-                <p>No messages yet</p>
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                <MessageSquare className="mx-auto mb-3 h-10 w-10 text-muted-foreground/60" />
+                No messages yet.
               </div>
             </CardContent>
           </Card>
@@ -451,12 +476,30 @@ export default function JobDetails() {
           <Card>
             <CardHeader>
               <CardTitle>Job Photos</CardTitle>
+              <CardDescription>Visual documentation uploaded by contractors.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-gray-500">
-                <Camera className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-                <p>No photos uploaded</p>
-              </div>
+              {jobPhotos.length === 0 ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  <Camera className="mx-auto mb-3 h-10 w-10 text-muted-foreground/60" />
+                  No photos uploaded.
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {jobPhotos.map(photo => (
+                    <div key={photo.id} className="space-y-2">
+                      <img
+                        src={photo.photoUrl}
+                        alt={photo.description || "Job photo"}
+                        className="w-full rounded-lg border object-cover"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Uploaded {formatDateTime(photo.createdAt)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -467,22 +510,28 @@ export default function JobDetails() {
               <CardTitle>Payment Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <p className="text-sm text-gray-600">Quoted Price</p>
-                  <p className="text-xl font-semibold">${job.quotedPrice || "0.00"}</p>
+                  <p className="text-sm text-muted-foreground">Quoted Price</p>
+                  <p className="text-xl font-semibold">{formatCurrency(paymentSummary.quoted)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Actual Price</p>
-                  <p className="text-xl font-semibold">${job.actualPrice || job.quotedPrice || "0.00"}</p>
+                  <p className="text-sm text-muted-foreground">Actual Price</p>
+                  <p className="text-xl font-semibold">{formatCurrency(paymentSummary.actual)}</p>
                 </div>
               </div>
-              
+
               {fleetAccount && (
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <p className="font-semibold text-blue-900 mb-2">Fleet Account</p>
-                  <p className="text-blue-700">{fleetAccount.companyName}</p>
-                  <p className="text-sm text-blue-600">Tier: {fleetAccount.pricingTier.toUpperCase()}</p>
+                <div className="rounded-lg border bg-muted/40 p-4">
+                  <p className="font-semibold">{fleetAccount.companyName}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Tier: {fleetAccount.pricingTier?.toUpperCase() || "Standard"}
+                  </p>
+                  {fleetAccount.billingStatus && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Billing Status: {fleetAccount.billingStatus}
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -490,16 +539,12 @@ export default function JobDetails() {
         </TabsContent>
       </Tabs>
 
-      {/* Invoice Preview Dialog */}
       <Dialog open={showInvoicePreview} onOpenChange={setShowInvoicePreview}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Invoice Preview</DialogTitle>
-            <DialogDescription>
-              Review the invoice details before downloading or sending.
-            </DialogDescription>
+            <DialogDescription>Review the invoice before sending or downloading.</DialogDescription>
           </DialogHeader>
-          
           {invoice && customer && (
             <InvoiceTemplate
               invoice={invoice}

@@ -27,6 +27,7 @@ export interface EmergencyBookingData {
   jobId?: string;
   jobNumber?: string;
   estimatedArrival?: string;
+  trackingLink?: string;
 }
 
 export default function EmergencyBooking() {

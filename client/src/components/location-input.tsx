@@ -324,7 +324,7 @@ export default function LocationInput({
       <Label>Location *</Label>
       
       <Tabs value={mode} onValueChange={(v) => setMode(v as typeof mode)}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3">
           <TabsTrigger value="address" data-testid="tab-address">
             <Search className="w-4 h-4 mr-2" />
             Address
@@ -353,7 +353,7 @@ export default function LocationInput({
             <Search className="absolute right-3 top-3 w-4 h-4 text-muted-foreground" />
             
             {showSuggestions && addressSuggestions.length > 0 && (
-              <Card className="absolute z-10 w-full mt-1">
+              <Card className="absolute z-10 mt-1 w-full max-h-60 overflow-auto">
                 <CardContent className="p-0">
                   {addressSuggestions.map((suggestion, index) => (
                     <Button

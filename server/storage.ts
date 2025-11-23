@@ -10649,6 +10649,9 @@ export class PostgreSQLStorage implements IStorage {
 
   async createEmergencyBooking(data: {
     guestUserId: string;
+    customerName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
     serviceTypeId: string;
     location: { lat: number; lng: number };
     locationAddress: string;
@@ -10669,37 +10672,55 @@ export class PostgreSQLStorage implements IStorage {
       const jobNumber = `EM-${timestamp}-${random}`;
 
       // Create the emergency job
-      const job = await db.insert(jobs)
+      const [job] = await db.insert(jobs)
         .values({
           jobNumber,
           customerId: data.guestUserId,
+          customerName: data.customerName,
+          customerPhone: data.customerPhone,
+          customerEmail: data.customerEmail,
           serviceTypeId: data.serviceTypeId,
           jobType: 'emergency',
           status: 'new',
           location: data.location,
-          address: data.locationAddress,
+          locationAddress: data.locationAddress,
+          locationNotes: `Guest booking from IP: ${data.ipAddress || 'unknown'}`,
+          unitNumber: data.vehicleInfo.licensePlate,
           vehicleMake: data.vehicleInfo.make,
           vehicleModel: data.vehicleInfo.model,
-          vehicleYear: data.vehicleInfo.year,
-          vehicleLicensePlate: data.vehicleInfo.licensePlate,
-          issueDescription: data.description,
-          photos: data.photos || [],
-          isEmergency: true,
-          priority: 'high',
-          notes: `Guest booking from IP: ${data.ipAddress || 'Unknown'}`
+          vehicleYear: data.vehicleInfo.year ? Number.parseInt(data.vehicleInfo.year, 10) || undefined : undefined,
+          description: data.description,
+          urgencyLevel: 5,
+          priority: 10,
+          estimatedArrival: new Date(Date.now() + 30 * 60 * 1000)
         })
         .returning();
+
+      if (!job) {
+        throw new Error('Failed to create emergency job');
+      }
+
+      if (data.photos?.length) {
+        for (const photo of data.photos) {
+          await this.addJobPhoto({
+            jobId: job.id,
+            photoUrl: photo,
+            uploadedBy: data.guestUserId,
+            photoType: 'damage'
+          });
+        }
+      }
 
       // Add to job status history
       await db.insert(jobStatusHistory)
         .values({
-          jobId: job[0].id,
+          jobId: job.id,
           toStatus: 'new',
           changedBy: data.guestUserId,
           reason: 'Emergency guest booking'
         });
 
-      return job[0];
+      return job;
     } catch (error) {
       console.error('Error creating emergency booking:', error);
       throw error;

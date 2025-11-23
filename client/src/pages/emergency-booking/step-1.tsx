@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { MapPin, Loader2, Navigation, Phone, Mail, User } from "lucide-react";
+import { Phone, Mail, User } from "lucide-react";
 import { EmergencyBookingData } from "./index";
 import LocationInput, { LocationData } from "@/components/location-input";
 
@@ -36,6 +36,7 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
       formattedAddress: initialData.location.address
     } : null
   );
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -55,8 +56,8 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
   }, []);
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
-    // Validate that we have location
     if (!location) {
+      setLocationError("Share your location so dispatch can find you.");
       return;
     }
 
@@ -75,35 +76,51 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="text-center space-y-2">
+      <header className="text-center space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-destructive">Step 1</p>
         <h1 className="text-3xl sm:text-4xl font-bold text-foreground">
-          Where Are You?
+          Share your location & contact info
         </h1>
-        <p className="text-muted-foreground text-lg">
-          We'll dispatch help to your location immediately
+        <p className="text-muted-foreground text-base sm:text-lg">
+          We use this to dispatch a certified mechanic in under 15 minutes.
         </p>
-      </div>
+      </header>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          {/* Location Card */}
-          <Card className="border-2">
-            <CardContent className="p-6">
-              {/* Use the new LocationInput component */}
-              <LocationInput 
-                value={location}
-                onChange={setLocation}
-                defaultMode="gps"
-                placeholder="Enter your location or highway/mile marker"
-              />
-            </CardContent>
-          </Card>
+          <section aria-labelledby="emergency-location">
+            <Card className="border-2" id="emergency-location">
+              <CardContent className="p-6 space-y-6">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-destructive">Location</p>
+                  <p className="text-sm text-muted-foreground">
+                    GPS, mile marker, or street address - we just need enough information to find you quickly.
+                  </p>
+                </div>
+                <LocationInput 
+                  value={location}
+                  onChange={(value) => {
+                    setLocation(value);
+                    setLocationError(null);
+                  }}
+                  defaultMode="gps"
+                  placeholder="Enter your location or highway/mile marker"
+                  error={locationError || undefined}
+                />
+              </CardContent>
+            </Card>
+          </section>
 
-          {/* Contact Information Card */}
-          <Card className="border-2">
-            <CardContent className="p-6 space-y-4">
-              {/* Name Field */}
+          <section aria-labelledby="emergency-contact">
+            <Card className="border-2" id="emergency-contact">
+              <CardContent className="p-6 space-y-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-destructive">Contact & unit owner</p>
+                  <p className="text-sm text-muted-foreground">
+                    We send SMS + email updates with ETA, mechanic details, and invoices.
+                  </p>
+                </div>
+
               <FormField
                 control={form.control}
                 name="name"
@@ -190,16 +207,17 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
               />
             </CardContent>
           </Card>
+          </section>
 
-          {/* Next Button */}
           <Button
             type="submit"
             size="lg"
             variant="destructive"
-            className="w-full h-16 text-lg font-semibold hover-elevate"
+            className="w-full h-16 text-lg font-semibold hover-elevate disabled:opacity-60"
+            disabled={!location}
             data-testid="button-next-step1"
           >
-            NEXT →
+            Continue to issue details
           </Button>
         </form>
       </Form>

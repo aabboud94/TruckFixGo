@@ -23,6 +23,16 @@ import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import Checkout from "@/components/checkout";
 
+const ISSUE_LABELS: Record<string, string> = {
+  flat_tire: "Flat tire",
+  engine_wont_start: "Engine won't start",
+  overheating: "Overheating",
+  out_of_fuel: "Out of fuel",
+  brakes_issue: "Brake issue",
+  electrical: "Electrical problem",
+  other: "Other issue",
+};
+
 interface ConfirmationProps {
   bookingData: EmergencyBookingData;
 }
@@ -32,6 +42,7 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
   const { toast } = useToast();
   const [showPayment, setShowPayment] = useState(false);
   const [paymentComplete, setPaymentComplete] = useState(false);
+  const trackingTarget = bookingData.trackingLink || (bookingData.jobId ? `/track/${bookingData.jobId}` : null);
   
   // Calculate estimated price (this would normally come from backend)
   const estimatedPrice = {
@@ -53,10 +64,20 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
   };
 
   const handleTrack = () => {
-    // Navigate to tracking page with job ID
-    if (bookingData.jobId) {
-      setLocation(`/track/${bookingData.jobId}`);
+    if (!trackingTarget) {
+      toast({
+        title: "Assigning mechanic",
+        description: "We’ll unlock tracking as soon as a mechanic accepts the job."
+      });
+      return;
     }
+
+    if (trackingTarget.startsWith("http")) {
+      window.open(trackingTarget, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    setLocation(trackingTarget);
   };
 
   const handleCreateAccount = () => {
@@ -79,6 +100,17 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
       description: "You can pay after the service is completed",
     });
   };
+
+  const issueLabel = bookingData.issue ? (ISSUE_LABELS[bookingData.issue] || bookingData.issue) : "Emergency roadside repair";
+  const notes = bookingData.issueDescription?.trim() || "No additional notes were provided.";
+  const vehicleSummary = bookingData.unitNumber || bookingData.carrierName
+    ? [bookingData.unitNumber, bookingData.carrierName].filter(Boolean).join(" • ")
+    : "Not provided";
+  const contactSummary = bookingData.name
+    ? `${bookingData.name} - ${bookingData.phone}`
+    : bookingData.phone;
+  const locationSummary = bookingData.manualLocation ||
+    (bookingData.location ? `GPS pinned at ${bookingData.location.lat.toFixed(4)}, ${bookingData.location.lng.toFixed(4)}` : "Captured during intake");
 
   return (
     <div className="space-y-6">
@@ -175,6 +207,40 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
         </Alert>
       )}
 
+      {/* Request Summary */}
+      <Card className="border-2">
+        <CardHeader>
+          <CardTitle>Request summary</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Issue type</p>
+            <p className="font-semibold text-foreground">{issueLabel}</p>
+            <p className="text-muted-foreground">{notes}</p>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Vehicle / carrier</p>
+            <p className="text-foreground">{vehicleSummary}</p>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Contact</p>
+            <p className="text-foreground break-words">{contactSummary}</p>
+            {bookingData.email && (
+              <p className="text-muted-foreground">{bookingData.email}</p>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Location</p>
+            <p className="text-foreground">{locationSummary}</p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Arrival Estimate */}
       <Card className="border-2">
         <CardContent className="p-6">
@@ -197,10 +263,15 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
               <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
               <div className="flex-1">
                 <p className="text-sm font-medium">Location</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground break-words">
                   {bookingData.manualLocation || 
                    (bookingData.location ? `GPS: ${bookingData.location.lat.toFixed(4)}, ${bookingData.location.lng.toFixed(4)}` : "Location captured")}
                 </p>
+                {bookingData.trackingLink && (
+                  <p className="text-xs text-primary mt-2 break-words">
+                    Tracking URL: {bookingData.trackingLink}
+                  </p>
+                )}
               </div>
             </div>
             
@@ -282,9 +353,10 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
           onClick={handleTrack}
           className="w-full h-14 text-lg font-semibold hover-elevate"
           data-testid="button-track-mechanic"
+          disabled={!trackingTarget}
         >
           <MapPin className="w-5 h-5 mr-2" />
-          Track Mechanic Location
+          {trackingTarget ? "Track Mechanic Location" : "Waiting for mechanic assignment"}
         </Button>
         
         <Button

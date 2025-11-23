@@ -21298,6 +21298,14 @@ The TruckFixGo Team
   }
 
   // Create guest emergency booking
+  const serviceTypeIdSchema = z.string()
+    .min(3, 'Service type is required')
+    .max(64, 'Service type is invalid')
+    .refine(
+      value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) || /^[a-z0-9-]+$/i.test(value),
+      { message: 'Service type format is invalid' }
+    );
+
   app.post('/api/emergency/book-guest',
     rateLimiter(10, 60000), // General rate limit: 10 requests per minute
     guestBookingRateLimiter, // Phone-specific rate limit
@@ -21310,7 +21318,7 @@ The TruckFixGo Team
         lng: z.number().min(-180).max(180)
       }),
       locationAddress: z.string().min(5).max(500),
-      serviceTypeId: z.string().uuid(),
+      serviceTypeId: serviceTypeIdSchema,
       vehicleInfo: z.object({
         make: z.string().optional(),
         model: z.string().optional(),
@@ -21333,6 +21341,11 @@ The TruckFixGo Team
           description,
           photos
         } = req.body;
+
+        const serviceType = await storage.getServiceType(serviceTypeId);
+        if (!serviceType) {
+          return res.status(400).json({ message: 'Invalid service type selection' });
+        }
 
         // Validate phone number
         const phoneValidation = validatePhoneNumber(customerPhone);
@@ -21361,7 +21374,10 @@ The TruckFixGo Team
         // Create emergency booking
         const job = await storage.createEmergencyBooking({
           guestUserId: guestUser.id,
-          serviceTypeId,
+          customerName,
+          customerPhone,
+          customerEmail,
+          serviceTypeId: serviceType.id,
           location,
           locationAddress,
           vehicleInfo,

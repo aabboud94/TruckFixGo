@@ -14,6 +14,7 @@ import TrackingPage from "@/pages/tracking";
 import PaymentMethodsPage from "@/pages/payment-methods";
 import BiddingJobsPage from "@/pages/bidding-jobs";
 import JobsDashboard from "@/pages/jobs";
+import JobDetails from "@/pages/job-details";
 
 // Public Pages
 import Contact from "@/pages/contact";
@@ -125,6 +126,7 @@ function Router() {
       <Route path="/scheduled-booking" component={ScheduledBooking} />
       <Route path="/jobs" component={JobsDashboard} />
       <Route path="/jobs/:jobId" component={TrackingPage} />
+      <Route path="/job-details/:jobId" component={JobDetails} />
       
       {/* Public Pages */}
       <Route path="/contact" component={Contact} />

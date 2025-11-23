@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -58,15 +58,47 @@ interface Step2Props {
 }
 
 export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
-  const [selectedIssue, setSelectedIssue] = useState("");
-  const [showOtherInput, setShowOtherInput] = useState(false);
+  const [selectedIssue, setSelectedIssue] = useState(bookingData.issue || "");
+  const [showOtherInput, setShowOtherInput] = useState((bookingData.issue || "") === "other");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [photoAnalysis, setPhotoAnalysis] = useState<any>(null);
   const [showAIAnalysis, setShowAIAnalysis] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const { toast } = useToast();
+
+interface GuestBookingPayload {
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  location: { lat: number; lng: number };
+  locationAddress: string;
+  serviceTypeId: string;
+  vehicleInfo: {
+    make?: string;
+    model?: string;
+    year?: string;
+    licensePlate?: string;
+  };
+  description: string;
+  photos?: string[];
+}
+
+interface JobSubmissionPayload {
+  jobPayload: Record<string, any>;
+  guestPayload: GuestBookingPayload;
+}
+
+interface JobSubmissionResult {
+  source: "guest" | "fallback";
+  jobId?: string;
+  jobNumber?: string;
+  trackingLink?: string;
+  estimatedArrival?: string;
+  status?: string;
+}
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -77,6 +109,23 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
       carrierName: bookingData.carrierName || "",
     },
   });
+
+  useEffect(() => {
+    if (bookingData.issue) {
+      setSelectedIssue(bookingData.issue);
+      setShowOtherInput(bookingData.issue === "other");
+      form.setValue("issue", bookingData.issue);
+    }
+    if (bookingData.issueDescription) {
+      form.setValue("issueDescription", bookingData.issueDescription);
+    }
+    if (bookingData.unitNumber) {
+      form.setValue("unitNumber", bookingData.unitNumber);
+    }
+    if (bookingData.carrierName) {
+      form.setValue("carrierName", bookingData.carrierName);
+    }
+  }, [bookingData, form]);
 
   // Photo analysis mutation
   const analyzePhotoMutation = useMutation({
@@ -117,28 +166,39 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
     },
   });
 
-  // Submit job mutation - using unauthenticated emergency endpoint
-  const submitJobMutation = useMutation({
-    mutationFn: async (data: any) => {
-      return apiRequest('POST', '/api/jobs/emergency', data);
-    },
-    onSuccess: (response) => {
-      // Store job info in localStorage for tracking
-      localStorage.setItem('emergencyJobId', response.job.id);
-      localStorage.setItem('emergencyJobNumber', response.job.jobNumber);
-      
-      onComplete({
-        jobId: response.job.id,
-        jobNumber: response.job.jobNumber,
-        estimatedArrival: response.job.estimatedArrival || "15-30 minutes",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to submit emergency request. Please try again.",
-        variant: "destructive",
-      });
+  // Submit job mutation - prefer full guest workflow, fallback to legacy endpoint
+  const submitJobMutation = useMutation<JobSubmissionResult, Error, JobSubmissionPayload>({
+    mutationFn: async ({ jobPayload, guestPayload }) => {
+      try {
+        const response = await apiRequest('POST', '/api/emergency/book-guest', guestPayload);
+        if (response?.job) {
+          return {
+            source: "guest",
+            jobId: response.job.id,
+            jobNumber: response.job.jobNumber,
+            trackingLink: response.job.trackingLink,
+            estimatedArrival: response.job.estimatedWaitTime || "30-45 minutes",
+            status: response.job.status,
+          };
+        }
+      } catch (error: any) {
+        if (error?.status && error.status < 500) {
+          throw error;
+        }
+        console.warn("[EmergencyBooking] Guest booking failed, falling back to /api/jobs/emergency", error);
+      }
+
+      const fallback = await apiRequest('POST', '/api/jobs/emergency', jobPayload);
+      return {
+        source: "fallback",
+        jobId: fallback?.job?.id,
+        jobNumber: fallback?.job?.jobNumber,
+        trackingLink: fallback?.job?.trackingUrl
+          ? `${window.location.origin}${fallback.job.trackingUrl}`
+          : undefined,
+        estimatedArrival: fallback?.job?.estimatedArrival || "15-30 minutes",
+        status: fallback?.job?.status,
+      };
     },
   });
 
@@ -173,11 +233,11 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
   };
 
   const handleIssueSelect = (issueId: string) => {
-    console.log("[Step2] Issue selected:", issueId);
     setSelectedIssue(issueId);
     form.setValue("issue", issueId);
     form.clearErrors("issue"); // Clear any validation errors when an issue is selected
     setShowOtherInput(issueId === "other");
+    setSubmitError(null);
   };
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -246,9 +306,22 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
     }
   };
 
+  const resolvedLocation = useMemo(() => {
+    if (!bookingData.location) return null;
+    return {
+      lat: bookingData.location.lat,
+      lng: bookingData.location.lng,
+      address: bookingData.manualLocation || bookingData.location.address || "Location provided",
+    };
+  }, [bookingData.location, bookingData.manualLocation]);
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    console.log("[Step2] onSubmit called with values:", values);
-    console.log("[Step2] Form is valid, proceeding with submission");
+    setSubmitError(null);
+
+    if (!resolvedLocation) {
+      setSubmitError("We couldn't read your location. Please go back and share it again.");
+      return;
+    }
     
     // Upload photo if present
     const photoUrl = await uploadPhoto();
@@ -267,46 +340,85 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
       }
     }
 
-    // Prepare job data with correct structure for emergency endpoint
-    const jobData = {
-      // Mark as emergency for the backend
+    const serviceTypeId = mapIssueToServiceType(values.issue);
+    const vehicleInfo = {
+      make: bookingData.carrierName || undefined,
+      model: values.unitNumber || undefined,
+      licensePlate: values.unitNumber || undefined,
+    };
+
+    const jobPayload = {
       type: 'emergency',
       jobType: "emergency",
-
-      // Customer info
       guestPhone: bookingData.phone,
       guestEmail: bookingData.email,
-      customerName: bookingData.name || 'Guest',
+      customerName: bookingData.name || 'Guest Driver',
       customerPhone: bookingData.phone,
       customerEmail: bookingData.email,
       email: bookingData.email,
-
-      // Service details
-      serviceType: mapIssueToServiceType(values.issue),
-      serviceTypeId: mapIssueToServiceType(values.issue),
-      
-      // Location
-      location: bookingData.location || {
-        lat: 0,
-        lng: 0
-      },
-      locationAddress: bookingData.manualLocation || bookingData.location?.address || "Location provided",
-      
-      // Issue details
+      serviceType: serviceTypeId,
+      serviceTypeId,
+      location: { lat: resolvedLocation.lat, lng: resolvedLocation.lng },
+      locationAddress: resolvedLocation.address,
       description: issueText,
       unitNumber: values.unitNumber || undefined,
       carrierName: values.carrierName || undefined,
-      vehicleMake: values.unitNumber ? "Semi Truck" : "Unknown",
-      vehicleModel: values.unitNumber ? "Commercial Vehicle" : "Unknown",
-      urgencyLevel: 5, // Max urgency for emergency
+      vehicleMake: vehicleInfo.make || "Heavy-Duty Truck",
+      vehicleModel: vehicleInfo.model || "Commercial Vehicle",
+      urgencyLevel: 5,
       photoUrl: photoUrl || undefined,
-      
-      // AI analysis if available
-      aiAnalysis: photoAnalysis || undefined
+      aiAnalysis: photoAnalysis || undefined,
     };
 
-    console.log("[Step2] Submitting job data:", jobData);
-    submitJobMutation.mutate(jobData);
+    const guestPayload: GuestBookingPayload = {
+      customerName: bookingData.name || 'Guest Driver',
+      customerPhone: bookingData.phone,
+      customerEmail: bookingData.email,
+      location: { lat: resolvedLocation.lat, lng: resolvedLocation.lng },
+      locationAddress: resolvedLocation.address,
+      serviceTypeId,
+      vehicleInfo: {
+        make: vehicleInfo.make,
+        model: vehicleInfo.model,
+        licensePlate: vehicleInfo.licensePlate,
+      },
+      description: issueText,
+      photos: photoUrl ? [photoUrl] : undefined,
+    };
+
+    try {
+      const response = await submitJobMutation.mutateAsync({ jobPayload, guestPayload });
+
+      if (response?.jobId) {
+        localStorage.setItem('emergencyJobId', response.jobId);
+      }
+      if (response?.jobNumber) {
+        localStorage.setItem('emergencyJobNumber', response.jobNumber);
+      }
+      if (response?.trackingLink) {
+        localStorage.setItem('emergencyTrackingLink', response.trackingLink);
+      }
+
+      onComplete({
+        issue: values.issue,
+        issueDescription: values.issueDescription,
+        unitNumber: values.unitNumber,
+        carrierName: values.carrierName,
+        photoUrl: photoUrl || undefined,
+        jobId: response?.jobId,
+        jobNumber: response?.jobNumber,
+        estimatedArrival: response?.estimatedArrival || "15-30 minutes",
+        trackingLink: response?.trackingLink,
+      });
+    } catch (error: any) {
+      const message = error?.message || "Failed to submit emergency request. Please try again.";
+      setSubmitError(message);
+      toast({
+        title: "Error",
+        description: message,
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -323,12 +435,7 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
 
       <Form {...form}>
         <form 
-          onSubmit={(e) => {
-            console.log("[Step2] Form submission triggered");
-            console.log("[Step2] Form errors before submit:", form.formState.errors);
-            console.log("[Step2] Form values before submit:", form.getValues());
-            form.handleSubmit(onSubmit)(e);
-          }}
+          onSubmit={form.handleSubmit(onSubmit)}
           className="space-y-4"
         >
           {/* Validation Error Alert */}
@@ -338,6 +445,16 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
               <AlertTitle>Required Field Missing</AlertTitle>
               <AlertDescription>
                 Please select an issue type before submitting. Click on one of the buttons below to describe what's wrong with your vehicle.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {!resolvedLocation && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>We need your location</AlertTitle>
+              <AlertDescription>
+                Go back to Step 1 and share your GPS or highway location so dispatch can find you.
               </AlertDescription>
             </Alert>
           )}
@@ -352,7 +469,7 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
                   <FormItem>
                     <FormLabel className="text-base font-medium">Select Issue</FormLabel>
                     <FormControl>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                         {issues.map((issue) => {
                           const Icon = issue.icon;
                           return (
@@ -363,6 +480,7 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
                               className="h-20 flex flex-col items-center justify-center gap-2 hover-elevate active-elevate-2"
                               onClick={() => handleIssueSelect(issue.id)}
                               data-testid={`button-issue-${issue.id}`}
+                              aria-pressed={selectedIssue === issue.id}
                             >
                               <Icon className="w-6 h-6" />
                               <span className="text-xs font-medium text-center leading-tight">
@@ -392,6 +510,27 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
                           placeholder="Please describe what's wrong..."
                           className="min-h-[80px] text-base"
                           data-testid="textarea-issue-description"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {!showOtherInput && (
+                <FormField
+                  control={form.control}
+                  name="issueDescription"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Notes for the mechanic <span className="text-muted-foreground text-xs">(optional)</span></FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          placeholder="Example: Trailer fully loaded, parked on shoulder, need steer tire."
+                          className="min-h-[80px] text-base"
+                          data-testid="textarea-issue-notes"
                         />
                       </FormControl>
                       <FormMessage />
@@ -641,7 +780,7 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
           </Card>
 
           {/* Action Buttons */}
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <Button
               type="button"
               variant="outline"
@@ -656,18 +795,9 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
               type="submit"
               size="lg"
               variant="destructive"
-              disabled={submitJobMutation.isPending || isUploading}
+              disabled={submitJobMutation.isPending || isUploading || !resolvedLocation}
               className="flex-[2] h-16 text-lg font-semibold hover-elevate"
               data-testid="button-get-help"
-              onClick={() => {
-                console.log("[Step2] GET HELP NOW button clicked");
-                console.log("[Step2] Current form state:", {
-                  values: form.getValues(),
-                  errors: form.formState.errors,
-                  isValid: form.formState.isValid,
-                  selectedIssue: selectedIssue
-                });
-              }}
             >
               {submitJobMutation.isPending ? (
                 <>
@@ -679,6 +809,12 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
               )}
             </Button>
           </div>
+
+          {submitError && (
+            <Alert variant="destructive">
+              <AlertDescription>{submitError}</AlertDescription>
+            </Alert>
+          )}
         </form>
       </Form>
 
