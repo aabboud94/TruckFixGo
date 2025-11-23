@@ -110,6 +110,7 @@ export default function Homepage() {
             </div>
 
             <button
+              type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="md:hidden p-2 rounded-md border border-slate-200"
               aria-label="Toggle navigation"

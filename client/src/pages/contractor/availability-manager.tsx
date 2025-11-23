@@ -271,13 +271,14 @@ export default function AvailabilityManager() {
             );
             const isSelected = selectedDates.some(d => format(d, "yyyy-MM-dd") === dateStr);
             
-            return (
-              <button
-                key={dateStr}
-                onClick={() => {
-                  if (isSelected) {
-                    setSelectedDates(selectedDates.filter(d => format(d, "yyyy-MM-dd") !== dateStr));
-                  } else {
+              return (
+                <button
+                  type="button"
+                  key={dateStr}
+                  onClick={() => {
+                    if (isSelected) {
+                      setSelectedDates(selectedDates.filter(d => format(d, "yyyy-MM-dd") !== dateStr));
+                    } else {
                     setSelectedDates([...selectedDates, date]);
                   }
                 }}

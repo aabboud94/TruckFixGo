@@ -128,6 +128,7 @@ export default function ContractorProfile() {
   const contractorId = params.id;
   const [reviewFilter, setReviewFilter] = useState<string>("recent");
   const [selectedService, setSelectedService] = useState<string | null>(null);
+  const [ratingFilter, setRatingFilter] = useState<number | null>(null);
   
   // Fetch contractor profile data
   const { data: profileData, isLoading } = useQuery<ContractorProfileData>({
@@ -177,9 +178,14 @@ export default function ContractorProfile() {
       </div>
     );
   }
-  
+
   const { contractor, reviews, ratingDistribution, stats } = profileData;
-  
+  const reviewsList = reviewsData?.reviews ?? [];
+  const filteredReviews =
+    ratingFilter !== null
+      ? reviewsList.filter((review: any) => Math.round(review.rating) === ratingFilter)
+      : reviewsList;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Back Navigation */}
@@ -498,48 +504,68 @@ export default function ContractorProfile() {
               <TabsContent value="reviews" className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle>Customer Reviews</CardTitle>
-                      <Select value={reviewFilter} onValueChange={setReviewFilter}>
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="recent">Most Recent</SelectItem>
-                          <SelectItem value="highest">Highest Rated</SelectItem>
-                          <SelectItem value="lowest">Lowest Rated</SelectItem>
-                          <SelectItem value="helpful">Most Helpful</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                      <div className="flex items-center justify-between">
+                        <CardTitle>Customer Reviews</CardTitle>
+                        <div className="flex items-center gap-2">
+                          {ratingFilter !== null && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setRatingFilter(null)}
+                              data-testid="button-clear-rating-filter"
+                            >
+                              Clear {ratingFilter}-star filter
+                            </Button>
+                          )}
+                          <Select value={reviewFilter} onValueChange={setReviewFilter}>
+                            <SelectTrigger className="w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="recent">Most Recent</SelectItem>
+                              <SelectItem value="highest">Highest Rated</SelectItem>
+                              <SelectItem value="lowest">Lowest Rated</SelectItem>
+                              <SelectItem value="helpful">Most Helpful</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <RatingBreakdown
-                      distribution={ratingDistribution}
-                      totalReviews={contractor.totalReviews}
-                      categoryAverages={contractor.categoryRatings}
-                    />
+                      <RatingBreakdown
+                        distribution={ratingDistribution}
+                        totalReviews={contractor.totalReviews}
+                        categoryAverages={contractor.categoryRatings}
+                        selectedRating={ratingFilter}
+                        onSelectRating={(rating) =>
+                          setRatingFilter(current => (current === rating ? null : rating))
+                        }
+                      />
                     
                     <Separator />
                     
-                    {reviewsData?.reviews && reviewsData.reviews.length > 0 ? (
-                      <ScrollArea className="h-[600px] pr-4">
-                        <div className="space-y-4">
-                          {reviewsData.reviews.map((review: any) => (
-                            <ReviewItem
-                              key={review.id}
-                              review={review}
-                              isContractor={false}
+                      {filteredReviews.length > 0 ? (
+                        <ScrollArea className="h-[600px] pr-4">
+                          <div className="space-y-4">
+                            {filteredReviews.map((review: any) => (
+                              <ReviewItem
+                                key={review.id}
+                                review={review}
+                                isContractor={false}
                             />
                           ))}
                         </div>
-                      </ScrollArea>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <Star className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p>No reviews yet</p>
-                      </div>
-                    )}
+                        </ScrollArea>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Star className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                          <p>
+                            {ratingFilter !== null
+                              ? `No ${ratingFilter}-star reviews found.`
+                              : "No reviews yet"}
+                          </p>
+                        </div>
+                      )}
                   </CardContent>
                 </Card>
               </TabsContent>
