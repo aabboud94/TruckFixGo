@@ -83,8 +83,11 @@ async function setupViteFixed(app: express.Express, server: Server) {
     allowedHosts: true as const,
   };
 
+  // Resolve the vite config function to get the actual config object
+  const resolvedViteConfig = await viteConfig({ command: 'serve', mode: 'development' });
+
   const vite = await createViteServer({
-    ...viteConfig,
+    ...resolvedViteConfig,
     configFile: false,
     customLogger: {
       ...viteLogger,
