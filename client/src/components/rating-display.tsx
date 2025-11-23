@@ -95,12 +95,16 @@ interface RatingBreakdownProps {
     quality: number;
     value: number;
   };
+  onSelectRating?: (rating: number) => void;
+  selectedRating?: number | null;
 }
 
 export function RatingBreakdown({
   distribution,
   totalReviews,
-  categoryAverages
+  categoryAverages,
+  onSelectRating,
+  selectedRating
 }: RatingBreakdownProps) {
   const stars = [5, 4, 3, 2, 1];
   
@@ -110,12 +114,19 @@ export function RatingBreakdown({
         {stars.map((star) => {
           const count = distribution[star.toString()] || 0;
           const percentage = totalReviews > 0 ? (count / totalReviews) * 100 : 0;
-          
+          const isSelected = selectedRating === star;
+
           return (
             <div key={star} className="flex items-center gap-2">
               <button
-                className="flex items-center gap-1 min-w-[60px] text-sm hover:text-primary transition-colors"
+                type="button"
+                className={cn(
+                  "flex items-center gap-1 min-w-[60px] text-sm hover:text-primary transition-colors",
+                  isSelected && "text-primary font-semibold"
+                )}
                 data-testid={`filter-${star}-stars`}
+                aria-pressed={isSelected}
+                onClick={() => onSelectRating?.(star)}
               >
                 <span>{star}</span>
                 <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />

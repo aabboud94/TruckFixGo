@@ -217,19 +217,20 @@ export function SOSButton({ jobId, className, variant = "default" }: SOSButtonPr
   if (variant === "floating") {
     return (
       <>
-        <div
-          className={cn(
-            "fixed bottom-6 right-6 z-50",
-            className
-          )}
-          data-testid="sos-button-floating"
-        >
-          <button
-            onMouseDown={handleMouseDown}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onTouchStart={handleMouseDown}
-            onTouchEnd={handleMouseUp}
+          <div
+            className={cn(
+              "fixed bottom-6 right-6 z-50",
+              className
+            )}
+            data-testid="sos-button-floating"
+          >
+            <button
+              type="button"
+              onMouseDown={handleMouseDown}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onTouchStart={handleMouseDown}
+              onTouchEnd={handleMouseUp}
             className={cn(
               "relative w-20 h-20 rounded-full bg-red-600 hover-elevate active-elevate-2",
               "flex items-center justify-center shadow-lg transition-all",

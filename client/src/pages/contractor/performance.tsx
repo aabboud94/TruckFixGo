@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -128,11 +128,49 @@ export default function ContractorPerformance() {
   const { toast } = useToast();
   const [timeFilter, setTimeFilter] = useState("month");
   const [activeReviewFilter, setActiveReviewFilter] = useState("all");
+  const [interactiveReviews, setInteractiveReviews] = useState<PerformanceData["recentReviews"]>([]);
 
   // Fetch performance data
   const { data: performanceData, isLoading } = useQuery<PerformanceData>({
     queryKey: ["/api/contractor/performance", timeFilter]
   });
+
+  useEffect(() => {
+    setInteractiveReviews(performanceData?.recentReviews ?? []);
+  }, [performanceData?.recentReviews]);
+
+  const handleHelpfulClick = (reviewId: string) => {
+    setInteractiveReviews(prev =>
+      prev.map(review =>
+        review.id === reviewId
+          ? { ...review, helpful: (review.helpful ?? 0) + 1 }
+          : review
+      )
+    );
+    toast({
+      title: "Thanks for the feedback",
+      description: "We use your vote to highlight the most helpful reviews.",
+    });
+  };
+
+  const handleRespondClick = (reviewId: string) => {
+    setInteractiveReviews(prev =>
+      prev.map(review =>
+        review.id === reviewId
+          ? {
+              ...review,
+              response:
+                review.response ||
+                "Thanks for sharing your experience! We'll follow up to keep improving.",
+            }
+          : review
+      )
+    );
+    toast({
+      title: "Response added",
+      description: "Your reply has been saved for this customer review.",
+    });
+  };
 
   if (isLoading) {
     return (
@@ -151,15 +189,15 @@ export default function ContractorPerformance() {
     );
   }
 
-  const currentTier = performanceData?.currentTier || "bronze";
-  const tierProgress = performanceData?.tierProgress;
-  const metrics = performanceData?.metrics;
-  const ratingDistribution = performanceData?.ratingDistribution || {};
-  const performanceTrends = performanceData?.performanceTrends || [];
-  const recentReviews = performanceData?.recentReviews || [];
-  const achievements = performanceData?.achievements || [];
-  const improvementAreas = performanceData?.improvementAreas || [];
-  const comparisons = performanceData?.comparisons;
+    const currentTier = performanceData?.currentTier || "bronze";
+    const tierProgress = performanceData?.tierProgress;
+    const metrics = performanceData?.metrics;
+    const ratingDistribution = performanceData?.ratingDistribution || {};
+    const performanceTrends = performanceData?.performanceTrends || [];
+    const recentReviews = interactiveReviews;
+    const achievements = performanceData?.achievements || [];
+    const improvementAreas = performanceData?.improvementAreas || [];
+    const comparisons = performanceData?.comparisons;
 
   const ratingData = Object.entries(ratingDistribution).map(([stars, count]) => ({
     stars: parseInt(stars),
@@ -606,18 +644,26 @@ export default function ContractorPerformance() {
                                 <p className="text-sm text-muted-foreground">{review.response}</p>
                               </div>
                             )}
-                            <div className="flex items-center gap-4 mt-3">
-                              <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                                <ThumbsUp className="w-3 h-3" />
-                                Helpful ({review.helpful})
-                              </button>
-                              {!review.response && (
-                                <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                                  <MessageSquare className="w-3 h-3" />
-                                  Respond
+                              <div className="flex items-center gap-4 mt-3">
+                                <button
+                                  type="button"
+                                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                                  onClick={() => handleHelpfulClick(review.id)}
+                                >
+                                  <ThumbsUp className="w-3 h-3" />
+                                  Helpful ({review.helpful})
                                 </button>
-                              )}
-                            </div>
+                                {!review.response && (
+                                  <button
+                                    type="button"
+                                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                                    onClick={() => handleRespondClick(review.id)}
+                                  >
+                                    <MessageSquare className="w-3 h-3" />
+                                    Respond
+                                  </button>
+                                )}
+                              </div>
                           </CardContent>
                         </Card>
                       ))}
