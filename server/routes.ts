@@ -234,13 +234,17 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
 // Role-based access control middleware
 function requireRole(...roles: string[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    if (!req.session.userId || !req.session.role) {
+    const isImpersonatingContractor = !!req.session.originalAdmin &&
+      req.session.userId !== req.session.originalAdmin.adminUserId;
+    const effectiveRole = req.session.role || (isImpersonatingContractor ? 'contractor' : undefined);
+
+    if (!req.session.userId || !effectiveRole) {
       return res.status(403).json({ message: 'Insufficient permissions' });
     }
 
-    if (!roles.includes(req.session.role)) {
-      return res.status(403).json({ 
-        message: `Access denied. Required role: ${roles.join(' or ')}` 
+    if (!roles.includes(effectiveRole)) {
+      return res.status(403).json({
+        message: `Access denied. Required role: ${roles.join(' or ')}`
       });
     }
 

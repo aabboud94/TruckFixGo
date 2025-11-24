@@ -7046,22 +7046,12 @@ export class PostgreSQLStorage implements IStorage {
       .toUpperCase()
       .slice(2, 6)}`;
 
-    const providedInvoiceNumber = invoice.invoiceNumber?.trim();
-    if (providedInvoiceNumber && providedInvoiceNumber.length > 20) {
-      throw new Error(
-        `Invoice number exceeds 20 characters (received ${providedInvoiceNumber.length}). ` +
-          'Please use a shorter value.'
-      );
-    }
+    const sanitizedInvoiceNumber = (invoice.invoiceNumber || fallbackNumber).slice(0, 20);
 
-    const sanitizedInvoiceNumber = providedInvoiceNumber || fallbackNumber;
-
-    const result = await db.insert(invoices).values({
-      ...invoice,
-      // Ensure legacy JSON line items column never receives null values
-      lineItems: (invoice as any).lineItems ?? [],
-      invoiceNumber: sanitizedInvoiceNumber
-    }).returning();
+    const result = await db
+      .insert(invoices)
+      .values({ ...invoice, invoiceNumber: sanitizedInvoiceNumber })
+      .returning();
     return result[0];
   }
 
