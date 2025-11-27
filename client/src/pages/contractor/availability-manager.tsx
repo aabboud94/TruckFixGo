@@ -65,8 +65,9 @@ export default function AvailabilityManager() {
   });
 
   // Fetch time-off requests
-  const { data: timeOffRequests, isLoading: requestsLoading } = useQuery({
+  const { data: timeOffRequests, isLoading: requestsLoading } = useQuery<VacationRequest[]>({
     queryKey: ["/api/contractor/time-off"],
+    queryFn: () => apiRequest("GET", "/api/contractor/time-off"),
   });
 
   // Submit time-off request mutation
@@ -264,7 +265,9 @@ export default function AvailabilityManager() {
                 req.status === "approved"
             );
             const hasJob = calendarData?.calendar?.scheduledJobs?.some(
-              (job: Job) => format(new Date(job.scheduledDate || ""), "yyyy-MM-dd") === dateStr
+              (job: Job) =>
+                job.scheduledAt &&
+                format(new Date(job.scheduledAt), "yyyy-MM-dd") === dateStr
             );
             const override = calendarData?.calendar?.availabilityOverrides?.find(
               (o: AvailabilityOverride) => format(new Date(o.date), "yyyy-MM-dd") === dateStr

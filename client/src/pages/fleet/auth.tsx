@@ -168,7 +168,7 @@ export default function FleetAuth() {
                 <div className="flex items-center justify-between">
                   <Button
                     type="button"
-                    variant="link"
+                    variant="ghost"
                     className="px-0 text-sm"
                     onClick={() => setShowForgotPassword(!showForgotPassword)}
                     data-testid="button-forgot-password"

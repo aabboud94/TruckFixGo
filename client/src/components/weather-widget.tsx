@@ -33,6 +33,26 @@ import {
   formatWeatherImpactWarning
 } from '@/hooks/use-weather';
 
+type CoordinateWeatherData = NonNullable<ReturnType<typeof useWeather>['data']>;
+type JobWeatherQueryData = NonNullable<ReturnType<typeof useJobWeather>['data']>;
+type ForecastData = NonNullable<ReturnType<typeof useWeatherForecast>['data']>;
+type AlertData = NonNullable<ReturnType<typeof useWeatherAlerts>['data']>;
+
+const isJobWeatherData = (
+  data: CoordinateWeatherData | JobWeatherQueryData | null | undefined
+): data is JobWeatherQueryData => {
+  return !!data && typeof data === 'object' && 'current' in data;
+};
+
+const toNumber = (value: number | string | null | undefined, fallback = 0) => {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? fallback : parsed;
+  }
+  return fallback;
+};
+
 interface WeatherWidgetProps {
   lat?: number;
   lng?: number;
@@ -63,14 +83,17 @@ function WeatherIcon({ conditions, className }: { conditions: string; className?
   return <Icon className={className} />;
 }
 
-function WeatherAlertItem({ alert }: { alert: any }) {
+function WeatherAlertItem({ alert }: { alert: AlertData[number] }) {
+  const severityBorderMap: Record<string, string> = {
+    emergency: 'border-red-500',
+    warning: 'border-orange-500',
+    watch: 'border-yellow-500',
+    advisory: 'border-blue-500',
+  };
+  const severityBorder = severityBorderMap[alert.severity] || 'border-blue-500';
+
   return (
-    <Alert className={cn('mb-2', {
-      'border-red-500': alert.severity === 'extreme',
-      'border-orange-500': alert.severity === 'severe',
-      'border-yellow-500': alert.severity === 'moderate',
-      'border-blue-500': alert.severity === 'minor',
-    })}>
+    <Alert className={cn('mb-2', severityBorder)}>
       <AlertTriangle className="h-4 w-4" />
       <AlertTitle className={getAlertSeverityColor(alert.severity)}>
         {alert.alertType} - {alert.severity.toUpperCase()}
@@ -114,14 +137,22 @@ function WeatherSkeleton({ compact }: { compact?: boolean }) {
   );
 }
 
-function CompactWeatherDisplay({ weather }: { weather: any }) {
+function CompactWeatherDisplay({ weather }: { weather: CoordinateWeatherData | null }) {
+  if (!weather) {
+    return (
+      <div className="text-sm text-muted-foreground">
+        Weather data unavailable
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-3">
       <WeatherIcon conditions={weather.conditions} className="h-8 w-8 text-primary" />
       <div>
         <div className="flex items-center gap-2">
           <span className="text-lg font-semibold">
-            {Math.round(weather.temperature)}°F
+            {Math.round(toNumber(weather.temperature))}°F
           </span>
           <span className="text-sm text-muted-foreground">
             {weather.conditions}
@@ -130,11 +161,11 @@ function CompactWeatherDisplay({ weather }: { weather: any }) {
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             <Wind className="h-3 w-3" />
-            {weather.windSpeed} mph
+            {toNumber(weather.windSpeed)} mph
           </span>
           <span className="flex items-center gap-1">
             <Droplets className="h-3 w-3" />
-            {weather.precipitation}%
+            {toNumber(weather.precipitation)}%
           </span>
         </div>
       </div>
@@ -143,8 +174,8 @@ function CompactWeatherDisplay({ weather }: { weather: any }) {
 }
 
 function ExpandedWeatherDisplay({ weather, forecast, impactScore, showForecast, showImpactScore }: {
-  weather: any;
-  forecast?: any;
+  weather: CoordinateWeatherData;
+  forecast?: ForecastData | null;
   impactScore?: number;
   showForecast?: boolean;
   showImpactScore?: boolean;
@@ -173,7 +204,7 @@ function ExpandedWeatherDisplay({ weather, forecast, impactScore, showForecast, 
               <WeatherIcon conditions={weather.conditions} className="h-12 w-12 text-primary" />
               <div>
                 <div className="text-3xl font-bold">
-                  {Math.round(weather.temperature)}°F
+                  {Math.round(toNumber(weather.temperature))}°F
                 </div>
                 <div className="text-lg text-muted-foreground">
                   {weather.conditions}
@@ -209,7 +240,7 @@ function ExpandedWeatherDisplay({ weather, forecast, impactScore, showForecast, 
               <Wind className="h-4 w-4 text-muted-foreground" />
               <div>
                 <div className="text-sm text-muted-foreground">Wind</div>
-                <div className="font-medium">{weather.windSpeed} mph</div>
+                <div className="font-medium">{toNumber(weather.windSpeed)} mph</div>
               </div>
             </div>
 
@@ -217,7 +248,7 @@ function ExpandedWeatherDisplay({ weather, forecast, impactScore, showForecast, 
               <Droplets className="h-4 w-4 text-muted-foreground" />
               <div>
                 <div className="text-sm text-muted-foreground">Precipitation</div>
-                <div className="font-medium">{weather.precipitation}%</div>
+                <div className="font-medium">{toNumber(weather.precipitation)}%</div>
               </div>
             </div>
 
@@ -225,7 +256,7 @@ function ExpandedWeatherDisplay({ weather, forecast, impactScore, showForecast, 
               <Gauge className="h-4 w-4 text-muted-foreground" />
               <div>
                 <div className="text-sm text-muted-foreground">Humidity</div>
-                <div className="font-medium">{weather.humidity}%</div>
+                <div className="font-medium">{toNumber(weather.humidity)}%</div>
               </div>
             </div>
 
@@ -233,7 +264,7 @@ function ExpandedWeatherDisplay({ weather, forecast, impactScore, showForecast, 
               <Eye className="h-4 w-4 text-muted-foreground" />
               <div>
                 <div className="text-sm text-muted-foreground">Visibility</div>
-                <div className="font-medium">{weather.visibility} mi</div>
+                <div className="font-medium">{toNumber(weather.visibility)} mi</div>
               </div>
             </div>
           </div>
@@ -340,17 +371,35 @@ export function WeatherWidget({
     return null;
   }
 
-  const weather = jobId ? weatherQuery.data?.current : weatherQuery.data;
-  const forecast = jobId ? weatherQuery.data?.forecast : (shouldUseForecast ? forecastQuery?.data : null);
-  const alerts = shouldUseAlerts ? (alertsQuery?.data || []) : [];
-  const impactScore = jobId ? weatherQuery.data?.impactScore : undefined;
+  const rawWeatherData = weatherQuery.data;
+  const weather: CoordinateWeatherData | null = rawWeatherData
+    ? isJobWeatherData(rawWeatherData)
+      ? (rawWeatherData.current as CoordinateWeatherData)
+      : (rawWeatherData as CoordinateWeatherData)
+    : null;
+  const forecast: ForecastData | null = jobId
+    ? rawWeatherData && isJobWeatherData(rawWeatherData)
+      ? rawWeatherData.forecast ?? null
+      : null
+    : shouldUseForecast
+      ? forecastQuery?.data ?? null
+      : null;
+  const alerts: AlertData = shouldUseAlerts ? alertsQuery?.data ?? [] : [];
+  const impactScore =
+    jobId && rawWeatherData && isJobWeatherData(rawWeatherData)
+      ? rawWeatherData.impactScore
+      : undefined;
+
+  if (!weather) {
+    return null;
+  }
 
   return (
     <div className={cn('space-y-3', className)}>
       {/* Weather alerts */}
       {showAlerts && alerts.length > 0 && (
         <div>
-          {alerts.map((alert: any) => (
+          {alerts.map((alert) => (
             <WeatherAlertItem key={alert.id} alert={alert} />
           ))}
         </div>
@@ -393,12 +442,21 @@ export function WeatherBadge({ lat, lng, jobId }: {
     return null;
   }
 
-  const weather = jobId ? weatherQuery.data.current : weatherQuery.data;
+  const rawWeatherData = weatherQuery.data;
+  const weather = rawWeatherData
+    ? isJobWeatherData(rawWeatherData)
+      ? rawWeatherData.current
+      : rawWeatherData
+    : null;
+
+  if (!weather) {
+    return null;
+  }
 
   return (
     <Badge variant="secondary" className="gap-1">
       <WeatherIcon conditions={weather.conditions} className="h-3 w-3" />
-      <span>{Math.round(weather.temperature)}°F</span>
+      <span>{Math.round(toNumber(weather.temperature))}°F</span>
       <span className="text-xs opacity-70">{weather.conditions}</span>
     </Badge>
   );

@@ -192,15 +192,26 @@ export default function ContractorPerformance() {
     const currentTier = performanceData?.currentTier || "bronze";
     const tierProgress = performanceData?.tierProgress;
     const metrics = performanceData?.metrics;
-    const ratingDistribution = performanceData?.ratingDistribution || {};
+    const ratingDistribution: PerformanceData["ratingDistribution"] = performanceData?.ratingDistribution ?? {
+      5: 0,
+      4: 0,
+      3: 0,
+      2: 0,
+      1: 0,
+    };
     const performanceTrends = performanceData?.performanceTrends || [];
     const recentReviews = interactiveReviews;
     const achievements = performanceData?.achievements || [];
     const improvementAreas = performanceData?.improvementAreas || [];
     const comparisons = performanceData?.comparisons;
 
-  const ratingData = Object.entries(ratingDistribution).map(([stars, count]) => ({
-    stars: parseInt(stars),
+  const ratingEntries = Object.entries(ratingDistribution) as unknown as Array<[
+    keyof PerformanceData["ratingDistribution"],
+    number
+  ]>;
+
+  const ratingData = ratingEntries.map(([stars, count]) => ({
+    stars: Number(stars),
     count,
     percentage: (count / (metrics?.totalRatings || 1)) * 100
   })).reverse();

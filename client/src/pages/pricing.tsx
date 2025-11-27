@@ -14,6 +14,23 @@ import { Link } from "wouter";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 
+interface ServicePricingInfo {
+  id: string;
+  name: string;
+  description?: string | null;
+  isEmergency: boolean;
+  isSchedulable: boolean;
+  estimatedDuration?: number | null;
+  pricing?: {
+    basePrice?: string | null;
+    perHourRate?: string | null;
+    perMileRate?: string | null;
+    emergencySurcharge?: string | null;
+    nightSurcharge?: string | null;
+    weekendSurcharge?: string | null;
+  } | null;
+}
+
 export default function Pricing() {
   const [estimatedMiles, setEstimatedMiles] = useState([50]);
   const [isEmergency, setIsEmergency] = useState(true);
@@ -21,13 +38,13 @@ export default function Pricing() {
   const [isWeekend, setIsWeekend] = useState(false);
 
   // Fetch service types with pricing from the API
-  const { data: servicesWithPricing, isLoading } = useQuery({
+  const { data: servicesWithPricing = [], isLoading } = useQuery<ServicePricingInfo[]>({
     queryKey: ['/api/public/services-with-pricing'],
   });
 
   // Calculate estimated price
   const calculateEstimate = () => {
-    if (!servicesWithPricing?.length) return 0;
+    if (!servicesWithPricing.length) return 0;
     
     // Find an emergency service to use as base
     const emergencyService = servicesWithPricing.find(s => s.isEmergency);
@@ -55,14 +72,14 @@ export default function Pricing() {
   };
 
   // Generate pricing tables from API data
-  const emergencyPricing = servicesWithPricing?.filter(s => s.isEmergency).map(service => ({
+  const emergencyPricing = servicesWithPricing.filter(s => s.isEmergency).map(service => ({
     service: service.name,
     base: `$${parseFloat(service.pricing?.basePrice || 0).toFixed(0)}`,
     perHour: service.pricing?.perHourRate ? `$${parseFloat(service.pricing.perHourRate).toFixed(0)}/hr` : "Contact for quote",
     response: service.estimatedDuration ? `${service.estimatedDuration} min` : "45-60 min"
   })) || [];
 
-  const scheduledPricing = servicesWithPricing?.filter(s => s.isSchedulable && !s.isEmergency).map(service => ({
+  const scheduledPricing = servicesWithPricing.filter(s => s.isSchedulable && !s.isEmergency).map(service => ({
     service: service.name,
     base: `$${parseFloat(service.pricing?.basePrice || 0).toFixed(0)}`,
     duration: service.estimatedDuration ? `${Math.floor(service.estimatedDuration / 60)} hours` : "2-3 hours",

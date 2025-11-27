@@ -290,10 +290,16 @@ export default function AdminApplications() {
 
   const getCompletionPercentage = (app: ContractorApplication) => {
     const fields = [
-      app.firstName, app.lastName, app.email, app.phone,
-      app.address, app.city, app.state, app.zip
+      app.firstName,
+      app.lastName,
+      app.email,
+      app.phone,
+      app.businessName,
+      app.cdlNumber,
+      app.hasInsurance ? "yes" : "",
+      app.baseLocation,
     ];
-    const completed = fields.filter(f => f).length;
+    const completed = fields.filter((field) => !!field).length;
     return Math.round((completed / fields.length) * 100);
   };
 
@@ -302,8 +308,7 @@ export default function AdminApplications() {
       const data = await apiRequest<string>('POST', '/api/admin/applications/export', { 
         format: 'csv',
         filters: { 
-          status: filterStatus,
-          experience: experienceFilter
+          status: filterStatus
         }
       });
       
@@ -329,14 +334,22 @@ export default function AdminApplications() {
 
   const getVerificationStatus = (app: ContractorApplication) => {
     const verifications = [
-      app.emailVerified,
-      app.phoneVerified,
-      app.dotNumberVerified,
-      app.mcNumberVerified,
-      app.insuranceVerified
+      app.backgroundCheckConsent,
+      app.termsAccepted,
+      app.hasInsurance,
+      app.emergencyAvailable,
+      app.scheduledAvailable,
     ];
-    const verified = verifications.filter(v => v).length;
+    const verified = verifications.filter(Boolean).length;
     return { verified, total: verifications.length };
+  };
+
+  const getExperienceLevelLabel = (years?: number | null) => {
+    if (years === null || years === undefined) return "Not provided";
+    if (years >= 10) return "Expert (10+ years)";
+    if (years >= 5) return "Experienced (5-9 years)";
+    if (years >= 2) return "Intermediate (2-4 years)";
+    return "Entry Level (0-1 years)";
   };
 
   return (
@@ -516,12 +529,12 @@ export default function AdminApplications() {
                       <CardContent className="space-y-3">
                         <div className="flex justify-between">
                           <span className="text-sm text-muted-foreground">Company</span>
-                          <span className="text-sm font-medium">{app.companyName || "Individual"}</span>
+                        <span className="text-sm font-medium">{app.businessName || "Individual"}</span>
                         </div>
-                        {app.dotNumber && (
+                        {app.cdlNumber && (
                           <div className="flex justify-between">
-                            <span className="text-sm text-muted-foreground">DOT Number</span>
-                            <span className="text-sm font-medium">{app.dotNumber}</span>
+                            <span className="text-sm text-muted-foreground">CDL Number</span>
+                            <span className="text-sm font-medium">{app.cdlNumber}</span>
                           </div>
                         )}
                         <div className="flex justify-between">
@@ -533,11 +546,16 @@ export default function AdminApplications() {
                         <div className="flex justify-between">
                           <span className="text-sm text-muted-foreground">Completion</span>
                           {app.status === 'approved' || app.status === 'rejected' || app.status === 'withdrawn' ? (
-                            <Badge variant={
-                              app.status === 'approved' ? 'success' : 
-                              app.status === 'rejected' ? 'destructive' : 
-                              'secondary'
-                            } className="gap-1">
+                            <Badge
+                              variant={
+                                app.status === 'approved'
+                                  ? 'secondary'
+                                  : app.status === 'rejected'
+                                    ? 'destructive'
+                                    : 'outline'
+                              }
+                              className="gap-1"
+                            >
                               {app.status === 'approved' && <CheckCircle className="h-3 w-3" />}
                               {app.status === 'rejected' && <XCircle className="h-3 w-3" />}
                               {app.status === 'withdrawn' && <Ban className="h-3 w-3" />}
@@ -675,10 +693,10 @@ export default function AdminApplications() {
                         </TableCell>
                         <TableCell>
                           <div>
-                            <div className="font-medium">{app.companyName || "Individual"}</div>
-                            {app.dotNumber && (
+                            <div className="font-medium">{app.businessName || "Individual"}</div>
+                            {app.cdlNumber && (
                               <div className="text-sm text-muted-foreground">
-                                DOT: {app.dotNumber}
+                                CDL: {app.cdlNumber}
                               </div>
                             )}
                           </div>
@@ -705,7 +723,7 @@ export default function AdminApplications() {
                         </TableCell>
                         <TableCell>
                           {app.status === 'approved' ? (
-                            <Badge variant="success" className="gap-1">
+                            <Badge variant="secondary" className="gap-1">
                               <CheckCircle className="h-3 w-3" />
                               Approved
                             </Badge>
@@ -851,27 +869,28 @@ export default function AdminApplications() {
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Email</Label>
-                      <p className="font-medium flex items-center gap-1">
+                      <p className="font-medium">
                         {selectedApplication.email}
-                        {selectedApplication.emailVerified && (
-                          <CheckCircle className="h-3 w-3 text-green-600" />
-                        )}
                       </p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Phone</Label>
-                      <p className="font-medium flex items-center gap-1">
+                      <p className="font-medium">
                         {selectedApplication.phone}
-                        {selectedApplication.phoneVerified && (
-                          <CheckCircle className="h-3 w-3 text-green-600" />
-                        )}
                       </p>
                     </div>
                     <div>
-                      <Label className="text-muted-foreground">Address</Label>
+                      <Label className="text-muted-foreground">Base Location</Label>
                       <p className="font-medium">
-                        {selectedApplication.address}<br />
-                        {selectedApplication.city}, {selectedApplication.state} {selectedApplication.zip}
+                        {selectedApplication.baseLocation || "Not provided"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Additional Areas</Label>
+                      <p className="font-medium">
+                        {selectedApplication.additionalAreas && selectedApplication.additionalAreas.length > 0
+                          ? selectedApplication.additionalAreas.join(", ")
+                          : "Not specified"}
                       </p>
                     </div>
                   </div>
@@ -889,7 +908,7 @@ export default function AdminApplications() {
                     <div>
                       <Label className="text-muted-foreground">Company Name</Label>
                       <p className="font-medium">
-                        {selectedApplication.companyName || "Individual Contractor"}
+                        {selectedApplication.businessName || "Individual Contractor"}
                       </p>
                     </div>
                     <div>
@@ -899,27 +918,21 @@ export default function AdminApplications() {
                       </p>
                     </div>
                     <div>
-                      <Label className="text-muted-foreground">DOT Number</Label>
-                      <p className="font-medium flex items-center gap-1">
-                        {selectedApplication.dotNumber || "N/A"}
-                        {selectedApplication.dotNumberVerified && (
-                          <CheckCircle className="h-3 w-3 text-green-600" />
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">MC Number</Label>
-                      <p className="font-medium flex items-center gap-1">
-                        {selectedApplication.mcNumber || "N/A"}
-                        {selectedApplication.mcNumberVerified && (
-                          <CheckCircle className="h-3 w-3 text-green-600" />
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Years in Business</Label>
+                      <Label className="text-muted-foreground">CDL Number</Label>
                       <p className="font-medium">
-                        {selectedApplication.yearsInBusiness || "N/A"}
+                        {selectedApplication.cdlNumber || "N/A"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">CDL Class</Label>
+                      <p className="font-medium">
+                        {selectedApplication.cdlClass || "N/A"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Years Experience</Label>
+                      <p className="font-medium">
+                        {selectedApplication.yearsExperience ?? "N/A"}
                       </p>
                     </div>
                     <div>
@@ -943,13 +956,13 @@ export default function AdminApplications() {
                     <div>
                       <Label className="text-muted-foreground">Experience Level</Label>
                       <p className="font-medium capitalize">
-                        {selectedApplication.experienceLevel}
+                        {getExperienceLevelLabel(selectedApplication.yearsExperience)}
                       </p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Total Years Experience</Label>
                       <p className="font-medium">
-                        {selectedApplication.totalYearsExperience} years
+                        {selectedApplication.yearsExperience ?? 0} years
                       </p>
                     </div>
                     {selectedApplication.certifications && Array.isArray(selectedApplication.certifications) && selectedApplication.certifications.length > 0 && (
@@ -965,11 +978,11 @@ export default function AdminApplications() {
                         </div>
                       </div>
                     )}
-                    {selectedApplication.specializations && Array.isArray(selectedApplication.specializations) && selectedApplication.specializations.length > 0 && (
+                    {selectedApplication.serviceTypes && Array.isArray(selectedApplication.serviceTypes) && selectedApplication.serviceTypes.length > 0 && (
                       <div>
                         <Label className="text-muted-foreground">Specializations</Label>
                         <div className="flex flex-wrap gap-2 mt-1">
-                          {selectedApplication.specializations.map((spec: string) => (
+                          {selectedApplication.serviceTypes.map((spec: string) => (
                             <Badge key={spec} variant="outline">
                               {spec}
                             </Badge>
@@ -999,23 +1012,22 @@ export default function AdminApplications() {
                       <div>
                         <Label className="text-muted-foreground">Own Tools</Label>
                         <p className="font-medium">
-                          {selectedApplication.hasOwnTools ? "Yes" : "No"}
+                          {selectedApplication.tools && selectedApplication.tools.length > 0 ? "Yes" : "No"}
                         </p>
                       </div>
                       <div>
                         <Label className="text-muted-foreground">Own Vehicle</Label>
                         <p className="font-medium">
-                          {selectedApplication.hasOwnVehicle ? "Yes" : "No"}
+                          {selectedApplication.hasServiceTruck ? "Yes" : "No"}
                         </p>
                       </div>
                     </div>
-                    {selectedApplication.vehicleInfo && (
+                    {(selectedApplication.truckMake || selectedApplication.truckModel || selectedApplication.truckYear) && (
                       <div>
                         <Label className="text-muted-foreground">Vehicle Information</Label>
                         <p className="font-medium">
-                          {typeof selectedApplication.vehicleInfo === 'object' 
-                            ? Object.entries(selectedApplication.vehicleInfo).map(([key, value]) => `${key}: ${value}`).join(', ')
-                            : selectedApplication.vehicleInfo}
+                          {selectedApplication.truckYear ? `${selectedApplication.truckYear} ` : ""}
+                          {selectedApplication.truckMake} {selectedApplication.truckModel}
                         </p>
                       </div>
                     )}
@@ -1368,7 +1380,7 @@ export default function AdminApplications() {
                                 <p className="text-sm text-muted-foreground">{driver.email}</p>
                               </div>
                             </div>
-                            <Badge variant="warning">
+                            <Badge variant="secondary">
                               <Clock className="h-3 w-3 mr-1" />
                               Pending
                             </Badge>

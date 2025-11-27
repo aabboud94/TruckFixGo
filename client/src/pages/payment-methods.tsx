@@ -207,7 +207,7 @@ export default function PaymentMethodsPage() {
   });
 
   // Check Stripe configuration
-  const { data: stripeConfig } = useQuery({
+  const { data: stripeConfig } = useQuery<{ hasKeys: boolean }>({
     queryKey: ["/api/payment/config"]
   });
 

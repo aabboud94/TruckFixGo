@@ -25,7 +25,22 @@ import {
   CheckCircle,
   AlertCircle
 } from "lucide-react";
-import type { Job } from "@shared/schema";
+import type { Job, JobPhoto } from "@shared/schema";
+
+type FleetJob = Job & {
+  vehicleLicensePlate?: string | null;
+  vehicleLocation?: {
+    address?: string | null;
+    lat?: number;
+    lng?: number;
+  } | null;
+  totalCost?: string | number | null;
+  contractorName?: string | null;
+};
+
+interface JobPhotosResponse {
+  photos: JobPhoto[];
+}
 
 export default function FleetJobDetails() {
   const [, setLocation] = useLocation();
@@ -33,7 +48,7 @@ export default function FleetJobDetails() {
   const jobId = params?.id;
 
   // Fetch job data
-  const { data: jobData, isLoading: jobLoading, refetch: refetchJob } = useQuery({
+  const { data: jobData, isLoading: jobLoading, refetch: refetchJob } = useQuery<FleetJob | null>({
     queryKey: [`/api/jobs/${jobId}`],
     enabled: !!jobId,
     queryFn: async () => {
@@ -43,7 +58,7 @@ export default function FleetJobDetails() {
   });
 
   // Fetch job photos
-  const { data: photosData, isLoading: photosLoading, refetch: refetchPhotos } = useQuery({
+  const { data: photosData, isLoading: photosLoading, refetch: refetchPhotos } = useQuery<JobPhotosResponse>({
     queryKey: [`/api/jobs/${jobId}/photos`],
     enabled: !!jobId
   });

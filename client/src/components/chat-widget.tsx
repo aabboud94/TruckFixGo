@@ -101,7 +101,7 @@ export function ChatWidget({
   const [messageInput, setMessageInput] = useState('');
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editInput, setEditInput] = useState('');
-  const [replyToMessage, setReplyToMessage] = useState<JobMessage | null>(null);
+  const [replyToMessage, setReplyToMessage] = useState<(JobMessage & { content?: string }) | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
@@ -212,8 +212,9 @@ export function ChatWidget({
   // Toggle reaction
   const handleToggleReaction = useCallback(async (messageId: string, emoji: string) => {
     const message = messages.find(m => m.id === messageId);
-    const reactions = message?.reactions || {};
-    const userReacted = (reactions[emoji] || []).includes(userId);
+    const reactions = (message?.reactions as Record<string, string[]> | undefined) ?? {};
+    const userReactions = reactions[emoji] || [];
+    const userReacted = userReactions.includes(userId);
     
     if (userReacted) {
       await removeReaction(messageId, emoji);
@@ -238,7 +239,7 @@ export function ChatWidget({
       currentGroup = {
         senderId: message.senderId,
         senderRole: message.senderRole || 'customer',
-        senderName: message.senderId === userId ? userName : 'Other User',
+        senderName: message.senderName || (message.senderId === userId ? userName : 'Other User'),
         messages: [message],
         lastMessageTime: messageTime
       };
@@ -372,7 +373,7 @@ export function ChatWidget({
                             </div>
                           ) : (
                             <>
-                              <p className="text-sm">{message.content}</p>
+                              <p className="text-sm">{message.content ?? message.message}</p>
                               {message.isEdited && (
                                 <span className="text-xs opacity-70">(edited)</span>
                               )}
@@ -468,7 +469,7 @@ export function ChatWidget({
                                     className="h-6 w-6 p-0"
                                     onClick={() => {
                                       setEditingMessageId(message.id);
-                                      setEditInput(message.content);
+                                      setEditInput(message.content ?? message.message ?? "");
                                     }}
                                   >
                                     <Edit2 className="w-4 h-4" />
@@ -490,7 +491,9 @@ export function ChatWidget({
                         {/* Reactions Display */}
                         {message.reactions && Object.keys(message.reactions).length > 0 && (
                           <div className="flex gap-1 mt-1">
-                            {Object.entries(message.reactions).map(([emoji, userIds]) => {
+                            {Object.entries(
+                              (message.reactions as Record<string, string[]> | undefined) ?? {},
+                            ).map(([emoji, userIds]) => {
                               const users = Array.isArray(userIds) ? userIds : [];
                               return (
                                 <Button
@@ -557,9 +560,9 @@ export function ChatWidget({
           <div className="flex items-center gap-2 text-sm">
             <Reply className="w-4 h-4" />
             <span>Replying to:</span>
-            <span className="font-medium truncate max-w-[200px]">
-              {replyToMessage.content}
-            </span>
+              <span className="font-medium truncate max-w-[200px]">
+                {replyToMessage.content ?? replyToMessage.message}
+              </span>
           </div>
           <Button
             size="sm"

@@ -56,20 +56,23 @@ function AdminBiddingPage() {
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
 
   // Fetch bidding jobs
-  const { data: biddingJobs, isLoading: loadingJobs } = useQuery({
+  const { data: biddingJobs, isLoading: loadingJobs } = useQuery<any>({
     queryKey: ['/api/jobs', { allowBidding: true }],
-    enabled: selectedTab === 'active-jobs'
+    enabled: selectedTab === 'active-jobs',
+    queryFn: () => apiRequest('GET', '/api/jobs?allowBidding=true'),
   });
 
   // Fetch bidding configuration
-  const { data: biddingConfig, isLoading: loadingConfig } = useQuery({
-    queryKey: ['/api/bidding-config']
+  const { data: biddingConfig, isLoading: loadingConfig } = useQuery<any>({
+    queryKey: ['/api/bidding-config'],
+    queryFn: () => apiRequest('GET', '/api/bidding-config'),
   });
 
   // Fetch bid analytics
-  const { data: analytics, isLoading: loadingAnalytics } = useQuery({
+  const { data: analytics, isLoading: loadingAnalytics } = useQuery<any>({
     queryKey: ['/api/bid-analytics', dateRange],
-    enabled: selectedTab === 'analytics'
+    enabled: selectedTab === 'analytics',
+    queryFn: () => apiRequest('GET', `/api/bid-analytics?range=${dateRange}`),
   });
 
   const configForm = useForm<BiddingConfig>({

@@ -62,8 +62,7 @@ export function FuelCalculator({
       toast({
         title: 'Missing Information',
         description: 'Please provide both origin and destination coordinates.',
-        variant: 'destructive',
-        "data-testid": 'toast-missing-info'
+        variant: 'destructive'
       });
       return;
     }
@@ -88,16 +87,14 @@ export function FuelCalculator({
           }
           toast({
             title: 'Calculation Complete',
-            description: `Estimated fuel cost: $${data.estimatedCost?.toFixed(2) || 'N/A'}`,
-            "data-testid": 'toast-calculation-complete'
+            description: `Estimated fuel cost: $${data.estimatedCost?.toFixed(2) || 'N/A'}`
           });
         },
         onError: (error) => {
           toast({
             title: 'Calculation Failed',
             description: 'Unable to calculate fuel costs. Please try again.',
-            variant: 'destructive',
-            "data-testid": 'toast-calculation-failed'
+            variant: 'destructive'
           });
         }
       }

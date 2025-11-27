@@ -194,7 +194,7 @@ export default function ContractorProfile() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate(-1)}
+            onClick={() => window.history.back()}
             className="gap-1"
             data-testid="button-back"
           >

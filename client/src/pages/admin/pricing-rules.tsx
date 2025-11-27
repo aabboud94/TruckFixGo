@@ -139,11 +139,10 @@ export default function PricingRulesPage() {
   const { data: rulesData, isLoading, refetch } = useQuery({
     queryKey: ['/api/admin/pricing-rules', selectedTab],
     queryFn: async () => {
-      const response = await apiRequest('/api/admin/pricing-rules', {
-        method: 'GET',
-        params: { includeInactive: selectedTab === 'all' }
-      });
-      return response;
+      const params = new URLSearchParams({
+        includeInactive: selectedTab === 'all' ? 'true' : 'false',
+      }).toString();
+      return apiRequest('GET', `/api/admin/pricing-rules?${params}`);
     }
   });
 

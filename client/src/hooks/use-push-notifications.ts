@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 export type NotificationPermission = 'default' | 'granted' | 'denied';
 
 // Notification options for custom notifications
-export interface NotificationOptions {
+export interface PushNotificationOptions {
   title: string;
   body: string;
   icon?: string;
@@ -22,6 +22,16 @@ export interface NotificationOptions {
 }
 
 // Hook return type
+type NotificationPreferencesInput = {
+  pushNotifications?: boolean;
+  categories?: {
+    job_updates?: boolean;
+    messages?: boolean;
+    payments?: boolean;
+    marketing?: boolean;
+  };
+};
+
 interface UsePushNotificationsReturn {
   permission: NotificationPermission;
   isSupported: boolean;
@@ -34,16 +44,8 @@ interface UsePushNotificationsReturn {
   subscribe: () => Promise<void>;
   unsubscribe: () => Promise<void>;
   sendTestNotification: () => Promise<void>;
-  showLocalNotification: (options: NotificationOptions) => void;
-  updatePreferences: (preferences: {
-    pushNotifications?: boolean;
-    categories?: {
-      job_updates?: boolean;
-      messages?: boolean;
-      payments?: boolean;
-      marketing?: boolean;
-    };
-  }) => Promise<void>;
+  showLocalNotification: (options: PushNotificationOptions) => void;
+  updatePreferences: (preferences: NotificationPreferencesInput) => Promise<void>;
 }
 
 // API functions
@@ -165,14 +167,15 @@ export function usePushNotifications(): UsePushNotificationsReturn {
   }, [isSupported, toast]);
 
   // Get VAPID public key
-  const { data: vapidKey } = useQuery({
+  const { data: vapidKey } = useQuery<{ publicKey: string }>({
     queryKey: ['/api/push/vapid-key'],
     enabled: isSupported && permission === 'granted',
     retry: 1,
+    queryFn: () => apiRequest('/api/push/vapid-key'),
   });
 
   // Subscribe to push notifications
-  const subscribeMutation = useMutation({
+  const subscribeMutation = useMutation<any, Error, void>({
     mutationFn: async () => {
       if (!isSupported) {
         throw new Error('Push notifications are not supported');
@@ -247,7 +250,7 @@ export function usePushNotifications(): UsePushNotificationsReturn {
   });
 
   // Unsubscribe from push notifications
-  const unsubscribeMutation = useMutation({
+  const unsubscribeMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
@@ -287,7 +290,7 @@ export function usePushNotifications(): UsePushNotificationsReturn {
   });
 
   // Send test notification
-  const testNotificationMutation = useMutation({
+  const testNotificationMutation = useMutation<any, Error, void>({
     mutationFn: async () => {
       return apiRequest('/api/push/test', { method: 'POST' });
     },
@@ -308,16 +311,8 @@ export function usePushNotifications(): UsePushNotificationsReturn {
   });
 
   // Update notification preferences
-  const updatePreferencesMutation = useMutation({
-    mutationFn: async (preferences: {
-      pushNotifications?: boolean;
-      categories?: {
-        job_updates?: boolean;
-        messages?: boolean;
-        payments?: boolean;
-        marketing?: boolean;
-      };
-    }) => {
+  const updatePreferencesMutation = useMutation<void, Error, NotificationPreferencesInput>({
+    mutationFn: async (preferences: NotificationPreferencesInput) => {
       return apiRequest('/api/notifications/settings', {
         method: 'POST',
         body: JSON.stringify({
@@ -344,7 +339,7 @@ export function usePushNotifications(): UsePushNotificationsReturn {
   });
 
   // Show local notification (fallback for when push is not available)
-  const showLocalNotification = useCallback((options: NotificationOptions) => {
+  const showLocalNotification = useCallback((options: PushNotificationOptions) => {
     if (!isSupported) {
       // Fallback to toast notification
       toast({
@@ -365,14 +360,14 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     }
 
     // Create local notification
+    const { actions: _actions, ...rest } = options;
     const notification = new Notification(options.title, {
-      body: options.body,
-      icon: options.icon || '/icons/icon-192x192.png',
-      badge: options.badge || '/icons/icon-96x96.png',
-      tag: options.tag,
-      data: options.data,
-      requireInteraction: options.requireInteraction,
-      actions: options.actions as any,
+      body: rest.body,
+      icon: rest.icon || '/icons/icon-192x192.png',
+      badge: rest.badge || '/icons/icon-96x96.png',
+      tag: rest.tag,
+      data: rest.data,
+      requireInteraction: rest.requireInteraction,
     });
 
     // Handle notification click
@@ -389,6 +384,18 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     };
   }, [isSupported, permission, toast]);
 
+  const subscribe = useCallback(() => subscribeMutation.mutateAsync().then(() => undefined), [subscribeMutation]);
+  const unsubscribe = useCallback(() => unsubscribeMutation.mutateAsync().then(() => undefined), [unsubscribeMutation]);
+  const sendTestNotification = useCallback(
+    () => testNotificationMutation.mutateAsync().then(() => undefined),
+    [testNotificationMutation],
+  );
+  const updatePreferences = useCallback(
+    (preferences: NotificationPreferencesInput) =>
+      updatePreferencesMutation.mutateAsync(preferences).then(() => undefined),
+    [updatePreferencesMutation],
+  );
+
   return {
     permission,
     isSupported,
@@ -398,10 +405,10 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     subscriptionId,
     error,
     requestPermission,
-    subscribe: subscribeMutation.mutate,
-    unsubscribe: unsubscribeMutation.mutate,
-    sendTestNotification: testNotificationMutation.mutate,
+    subscribe,
+    unsubscribe,
+    sendTestNotification,
     showLocalNotification,
-    updatePreferences: updatePreferencesMutation.mutate,
+    updatePreferences,
   };
 }

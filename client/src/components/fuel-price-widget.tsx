@@ -78,7 +78,6 @@ export function FuelPriceWidget({
       toast({
         title: 'Fuel Price Update',
         description: `${update.fuelType} at ${update.stationId}: $${update.newPrice} (${update.changePercent > 0 ? '+' : ''}${update.changePercent}%)`,
-        "data-testid": 'toast-fuel-update'
       });
     },
     (alert) => {
@@ -86,14 +85,20 @@ export function FuelPriceWidget({
       toast({
         title: 'Fuel Price Alert',
         description: alert.message,
-        variant: alert.severity === 'critical' ? 'destructive' : 'default',
-        "data-testid": 'toast-fuel-alert'
+        variant: alert.severity === 'critical' ? 'destructive' : 'default'
       });
     }
   );
   
   // Calculate average price
-  const avgPrice = prices?.reduce((sum, p) => sum + Number(p.price.pricePerGallon), 0) / (prices?.length || 1);
+  const totalPrice = prices?.reduce(
+    (sum, p) => sum + Number(p.price.pricePerGallon),
+    0,
+  );
+  const avgPrice =
+    prices && prices.length > 0 && typeof totalPrice === "number"
+      ? totalPrice / prices.length
+      : undefined;
   
   // Find cheapest station
   const cheapestStation = prices?.reduce((min, p) => 
@@ -108,22 +113,30 @@ export function FuelPriceWidget({
   })) || [];
   
   const handleCreateAlert = () => {
-    if (cheapestStation) {
-      createAlert({
-        alertType: 'threshold',
-        severity: 'medium',
-        fuelType,
-        stationId: cheapestStation.station.id,
-        thresholdPrice: String(Number(cheapestStation.price.pricePerGallon) - 0.10),
-        location: { lat: effectiveLat!, lng: effectiveLng! }
-      });
-      
+    if (!cheapestStation || !effectiveLat || !effectiveLng) {
       toast({
-        title: 'Alert Created',
-        description: `You'll be notified when ${fuelType} drops below $${(Number(cheapestStation.price.pricePerGallon) - 0.10).toFixed(2)}`,
-        "data-testid": 'toast-alert-created'
+        title: 'Location Required',
+        description: 'We need a valid station and location to create an alert.',
+        variant: 'destructive'
       });
+      return;
     }
+
+    const thresholdValue = Number(cheapestStation.price.pricePerGallon) - 0.1;
+    createAlert({
+      alertType: 'price_drop',
+      severity: 'warning',
+      fuelType,
+      priceThreshold: thresholdValue.toFixed(3),
+      latitude: effectiveLat,
+      longitude: effectiveLng,
+      radius
+    });
+    
+    toast({
+      title: 'Alert Created',
+      description: `You'll be notified when ${fuelType} drops below $${thresholdValue.toFixed(2)}`
+    });
   };
   
   if (isLoading) {
@@ -328,9 +341,10 @@ export function FuelPriceWidget({
               <Alert key={alert.id} data-testid={`alert-${alert.id}`}>
                 <Bell className="h-4 w-4" />
                 <AlertDescription>
-                  {alert.alertType === 'price_drop' && 'Price drop alert'}
-                  {alert.alertType === 'threshold' && `Alert when below $${alert.thresholdPrice}`}
-                  {alert.stationId && ' at saved station'}
+                  {alert.alertType === 'price_drop' && alert.priceThreshold
+                    ? `Alert when below $${Number(alert.priceThreshold).toFixed(2)}`
+                    : 'Fuel price alert'}
+                  {alert.triggeredByStationId && ' at saved station'}
                 </AlertDescription>
               </Alert>
             ))}

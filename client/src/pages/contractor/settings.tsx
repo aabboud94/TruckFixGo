@@ -103,7 +103,23 @@ const preferencesSchema = z.object({
   notifyOnEmergencyJobs: z.boolean()
 });
 
-const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+
+type WorkingHoursFormValues = z.infer<typeof workingHoursSchema>;
+type PreferencesFormValues = z.infer<typeof preferencesSchema>;
+
+interface VacationEntry {
+  id: string;
+  startDate: string;
+  endDate: string;
+  reason?: string;
+}
+
+interface ContractorSettingsResponse {
+  workingHours: WorkingHoursFormValues;
+  preferences: PreferencesFormValues;
+  vacations: VacationEntry[];
+}
 
 export default function ContractorSettings() {
   const [, navigate] = useLocation();
@@ -115,12 +131,12 @@ export default function ContractorSettings() {
   });
 
   // Fetch contractor settings
-  const { data: settings, isLoading } = useQuery({
+  const { data: settings, isLoading } = useQuery<ContractorSettingsResponse>({
     queryKey: ["/api/contractor/settings"]
   });
 
   // Working hours form
-  const workingHoursForm = useForm({
+  const workingHoursForm = useForm<WorkingHoursFormValues>({
     resolver: zodResolver(workingHoursSchema),
     defaultValues: settings?.workingHours || {
       monday: { enabled: true, start: "08:00", end: "18:00" },
@@ -134,7 +150,7 @@ export default function ContractorSettings() {
   });
 
   // Preferences form
-  const preferencesForm = useForm({
+  const preferencesForm = useForm<PreferencesFormValues>({
     resolver: zodResolver(preferencesSchema),
     defaultValues: settings?.preferences || {
       maxJobsPerDay: 10,
@@ -459,7 +475,7 @@ export default function ContractorSettings() {
                   <h3 className="text-lg font-semibold">Scheduled Time Off</h3>
                   {settings?.vacations && settings.vacations.length > 0 ? (
                     <div className="space-y-2">
-                      {settings.vacations.map((vacation: any) => (
+                      {settings.vacations.map((vacation: VacationEntry) => (
                         <div key={vacation.id} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 sm:p-4 border rounded-lg">
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-sm sm:text-base truncate">

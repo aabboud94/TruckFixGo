@@ -1,7 +1,17 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Bell, Check, Trash2, X, AlertCircle, DollarSign, Briefcase, Info } from "lucide-react";
+import {
+  Bell,
+  Check,
+  Trash2,
+  X,
+  AlertCircle,
+  DollarSign,
+  Briefcase,
+  Info,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,13 +36,13 @@ interface Notification {
   isRead: boolean;
   readAt?: string;
   actionUrl?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
   createdAt: string;
   expiresAt?: string;
   deletedAt?: string;
 }
 
-const notificationIcons = {
+const notificationIcons: Record<Notification['type'], LucideIcon> = {
   job_update: Briefcase,
   payment: DollarSign,
   system: Info,
@@ -42,7 +52,7 @@ const notificationIcons = {
   alert: AlertCircle,
 };
 
-const priorityColors = {
+const priorityColors: Record<Notification['priority'], string> = {
   low: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100",
   medium: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100",
   high: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100",
@@ -54,15 +64,17 @@ export function NotificationsPanel() {
   const { toast } = useToast();
 
   // Get unread notification count
-  const { data: countData } = useQuery({
+  const { data: countData } = useQuery<{ count: number }>({
     queryKey: ['/api/notifications/count'],
     refetchInterval: 30000, // Refetch every 30 seconds
+    queryFn: () => apiRequest('/api/notifications/count'),
   });
 
   // Get notifications list
-  const { data: notificationsData, isLoading } = useQuery({
+  const { data: notificationsData, isLoading } = useQuery<{ notifications: Notification[] }>({
     queryKey: ['/api/notifications'],
     enabled: isOpen,
+    queryFn: () => apiRequest('/api/notifications'),
   });
 
   // Mark notification as read mutation
@@ -167,7 +179,10 @@ export function NotificationsPanel() {
                   variant="ghost"
                   size="sm"
                   onClick={() => markAllAsReadMutation.mutate()}
-                  disabled={markAllAsReadMutation.isPending || notifications.every(n => n.isRead)}
+                  disabled={
+                    markAllAsReadMutation.isPending ||
+                    notifications.every((notification) => notification.isRead)
+                  }
                   data-testid="button-mark-all-read"
                 >
                   <Check className="h-4 w-4 mr-1" />

@@ -95,10 +95,12 @@ export default function SplitPaymentModal({
   const { toast } = useToast();
 
   // Fetch split payment templates
-  const { data: templates, isLoading: loadingTemplates } = useQuery({
+  const { data: templates, isLoading: loadingTemplates } = useQuery<{ templates: SplitTemplate[] }>({
     queryKey: ["/api/payments/split/templates"],
-    enabled: isOpen
+    enabled: isOpen,
+    queryFn: () => apiRequest("/api/payments/split/templates"),
   });
+  const templateList = templates?.templates ?? [];
 
   // Create split payment mutation
   const createSplitPayment = useMutation({
@@ -281,7 +283,7 @@ export default function SplitPaymentModal({
           <TabsContent value="template" className="space-y-4">
             <RadioGroup value={selectedTemplate} onValueChange={setSelectedTemplate}>
               <div className="space-y-3">
-                {templates?.templates?.map((template: SplitTemplate) => (
+                {templateList.map((template) => (
                   <Card key={template.id} className={selectedTemplate === template.id ? 'border-primary' : ''}>
                     <CardContent className="p-4">
                       <label className="flex cursor-pointer space-x-3">

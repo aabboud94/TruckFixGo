@@ -62,7 +62,7 @@ export default function FleetJobHistory() {
   const [showFilters, setShowFilters] = useState(false);
 
   // Get fleet account first
-  const { data: fleetAccounts, isLoading: isLoadingFleet } = useQuery({
+  const { data: fleetAccounts, isLoading: isLoadingFleet } = useQuery<{ id: string } | null>({
     queryKey: ['/api/fleet/accounts'],
     enabled: true,
     queryFn: async () => {
@@ -78,7 +78,7 @@ export default function FleetJobHistory() {
     data: jobsData, 
     isLoading: isLoadingJobs, 
     refetch: refetchJobs 
-  } = useQuery({
+  } = useQuery<{ jobs: Job[] }>({
     queryKey: [`/api/fleet/${fleetId}/jobs`, selectedStatus, searchQuery, dateFrom, dateTo],
     enabled: !!fleetId,
     queryFn: async () => {
@@ -101,7 +101,7 @@ export default function FleetJobHistory() {
     }
   });
 
-  const jobs = jobsData?.jobs || [];
+  const jobs: Job[] = jobsData?.jobs || [];
 
   // Export jobs to CSV
   const handleExport = async () => {
@@ -207,20 +207,27 @@ export default function FleetJobHistory() {
     }
   };
 
+  type JobStatusConfig = {
+    label: string;
+    variant: "default" | "secondary" | "destructive" | "outline";
+    icon: typeof Clock;
+    className?: string;
+  };
+
   const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      pending: { label: "Pending", variant: "secondary" as const, icon: Clock },
-      assigned: { label: "Assigned", variant: "default" as const, icon: Clock },
-      in_progress: { label: "In Progress", variant: "default" as const, icon: RefreshCw },
-      completed: { label: "Completed", variant: "success" as const, icon: CheckCircle },
-      cancelled: { label: "Cancelled", variant: "destructive" as const, icon: XCircle }
+    const statusConfig: Record<string, JobStatusConfig> = {
+      pending: { label: "Pending", variant: "secondary", icon: Clock },
+      assigned: { label: "Assigned", variant: "default", icon: Clock },
+      in_progress: { label: "In Progress", variant: "default", icon: RefreshCw },
+      completed: { label: "Completed", variant: "default", icon: CheckCircle, className: "bg-green-500 text-white" },
+      cancelled: { label: "Cancelled", variant: "destructive", icon: XCircle }
     };
 
     const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
     const Icon = config.icon;
 
     return (
-      <Badge variant={config.variant} className="flex items-center gap-1">
+      <Badge variant={config.variant} className={`flex items-center gap-1 ${config.className || ''}`}>
         <Icon className="w-3 h-3" />
         {config.label}
       </Badge>

@@ -89,10 +89,177 @@ const CHART_COLORS = [
   COLORS.secondary
 ];
 
+interface FleetSession {
+  fleetId?: string;
+  user?: {
+    fleetAccountId?: string;
+  };
+}
+
+interface FleetOverviewData {
+  totalVehicles: number;
+  activeJobs: number;
+  completedJobsThisMonth: number;
+  totalSpentThisMonth: number;
+  avgResponseTime: number;
+  satisfactionRating: number;
+  utilizationRate?: number;
+  utilizationTrend?: number;
+  onTimeDeliveryRate?: number;
+  onTimeTrend?: number;
+  costPerMile?: number;
+  costPerMileTrend?: number;
+  avgVehicleHealth?: number;
+  healthTrend?: number;
+}
+
+interface MaintenancePredictionSummary {
+  totalEstimatedCost: number;
+}
+
+interface MaintenancePredictionItem {
+  id: string;
+  vehicleId: string;
+  riskLevel: 'critical' | 'high' | 'medium' | 'low';
+  predictedDate: string;
+  serviceType: string;
+  estimatedCost: number;
+}
+
+interface MaintenancePredictionResponse {
+  summary?: MaintenancePredictionSummary;
+  predictions?: MaintenancePredictionItem[];
+}
+
+interface HighRiskVehiclesResponse {
+  vehicles?: Array<{ id: string }>;
+}
+
+interface MaintenanceAlertEntry {
+  id: string;
+  alertType: string;
+  alertTitle?: string;
+  alertMessage?: string;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  acknowledgedAt?: string | null;
+  createdAt?: string;
+}
+
+interface MaintenanceAlertsResponse {
+  alerts?: MaintenanceAlertEntry[];
+}
+
+interface CostAnalyticsEntry {
+  date: string;
+  maintenanceCost: number;
+  fuelCost: number;
+  totalCost: number;
+}
+
+interface VehicleMaintenanceHistoryEntry {
+  date: Date | string;
+  service: string;
+  cost: number;
+}
+
+interface VehicleUpcomingPmEntry {
+  date: Date | string;
+  service: string;
+  estimatedCost: number;
+}
+
+interface VehicleAnalyticsEntry {
+  vehicleId: string;
+  unitNumber: string;
+  make: string;
+  model: string;
+  year: number;
+  healthScore: number;
+  maintenanceHistory: VehicleMaintenanceHistoryEntry[];
+  totalCost: number;
+  upcomingPM: VehicleUpcomingPmEntry[];
+  breakdownFrequency: number;
+}
+
+interface ServiceAnalyticsEntry {
+  serviceType: string;
+  serviceTypeId: string;
+  jobCount: number;
+  totalCost: number;
+  avgCost: number;
+  percentOfTotal: number;
+  trend: 'up' | 'down' | 'stable';
+}
+
+interface ContractorAnalyticsEntry {
+  contractorId: string;
+  contractorName: string;
+  jobCount: number;
+  avgRating: number;
+  avgResponseTime: number;
+  avgCost: number;
+  totalCost: number;
+  completionRate: number;
+  onTimeRate: number;
+}
+
+interface FleetAlert {
+  id: string;
+  alertType: string;
+  alertTitle?: string;
+  alertMessage?: string;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  acknowledgedAt?: string | null;
+  createdAt?: string;
+}
+
+interface FleetAlertsResponse {
+  alerts: FleetAlert[];
+}
+
+type PeriodOption = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+interface FleetMetricSummary {
+  fleetHealthScore: number;
+  totalMaintenanceCost: number;
+  avgCostPerMile: number;
+  vehiclesAtRisk: number;
+  totalVehicles: number;
+  upcomingMaintenance: Array<{ vehicleId: string; date: Date; service: string }>;
+  utilizationRate: number;
+  utilizationTrend?: number;
+  onTimeDeliveryRate: number;
+  onTimeTrend?: number;
+  costPerMile: number;
+  costPerMileTrend?: number;
+  avgVehicleHealth: number;
+  healthTrend?: number;
+}
+
+type CostTrendRow = {
+  month: string;
+  maintenance: number;
+  fuel: number;
+  total: number;
+};
+
+type BreakdownFrequencyRow = {
+  issueType: string;
+  frequency: number;
+  avgCost: number;
+};
+
+type VehicleHealthRow = {
+  unitNumber: string;
+  healthScore: number;
+  riskScore: number;
+  status: string;
+};
+
 export default function FleetAnalytics() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>('monthly');
   const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('overview');
   const [showSettings, setShowSettings] = useState(false);
@@ -102,35 +269,35 @@ export default function FleetAnalytics() {
   });
 
   // Get fleet ID from session
-  const { data: session } = useQuery({ queryKey: ['/api/auth/session'] });
+  const { data: session } = useQuery<FleetSession>({ queryKey: ['/api/auth/session'] });
   const fleetId = session?.fleetId || session?.user?.fleetAccountId || 'fleet-123';
 
   // Fetch overview data
-  const { data: overviewData, isLoading: isOverviewLoading, refetch: refetchOverview } = useQuery({
+  const { data: overviewData, isLoading: isOverviewLoading, refetch: refetchOverview } = useQuery<FleetOverviewData>({
     queryKey: [`/api/fleet/${fleetId}/analytics/overview`],
     enabled: !!fleetId
   });
 
   // Fetch maintenance predictions
-  const { data: maintenancePredictions, isLoading: isPredictionsLoading } = useQuery({
+  const { data: maintenancePredictions, isLoading: isPredictionsLoading } = useQuery<MaintenancePredictionResponse>({
     queryKey: [`/api/fleet/${fleetId}/maintenance-predictions`],
     enabled: !!fleetId
   });
 
   // Fetch high-risk vehicles
-  const { data: highRiskVehicles, isLoading: isHighRiskLoading } = useQuery({
+  const { data: highRiskVehicles, isLoading: isHighRiskLoading } = useQuery<HighRiskVehiclesResponse>({
     queryKey: [`/api/fleet/${fleetId}/high-risk-vehicles`],
     enabled: !!fleetId
   });
 
   // Fetch maintenance alerts
-  const { data: maintenanceAlerts, isLoading: isAlertsLoading } = useQuery({
+  const { data: maintenanceAlerts, isLoading: isAlertsLoading } = useQuery<MaintenanceAlertsResponse>({
     queryKey: [`/api/fleet/${fleetId}/maintenance-alerts`],
     enabled: !!fleetId
   });
 
   // Fetch cost analytics
-  const { data: costDataRaw, isLoading: isCostLoading, refetch: refetchCosts } = useQuery({
+  const { data: costDataRaw, isLoading: isCostLoading, refetch: refetchCosts } = useQuery<CostAnalyticsEntry[]>({
     queryKey: [`/api/fleet/${fleetId}/analytics/costs`, {
       startDate: dateRange.startDate?.toISOString(),
       endDate: dateRange.endDate?.toISOString(),
@@ -152,13 +319,13 @@ export default function FleetAnalytics() {
   });
 
   // Fetch vehicle analytics
-  const { data: vehicleDataRaw, isLoading: isVehicleLoading, refetch: refetchVehicles } = useQuery({
+  const { data: vehicleDataRaw, isLoading: isVehicleLoading, refetch: refetchVehicles } = useQuery<VehicleAnalyticsEntry[]>({
     queryKey: [`/api/fleet/${fleetId}/analytics/vehicles`],
     enabled: !!fleetId
   });
 
   // Fetch service analytics
-  const { data: serviceDataRaw, isLoading: isServiceLoading } = useQuery({
+  const { data: serviceDataRaw, isLoading: isServiceLoading } = useQuery<ServiceAnalyticsEntry[]>({
     queryKey: [`/api/fleet/${fleetId}/analytics/services`, {
       startDate: dateRange.startDate?.toISOString(),
       endDate: dateRange.endDate?.toISOString()
@@ -178,7 +345,7 @@ export default function FleetAnalytics() {
   });
 
   // Fetch contractor analytics
-  const { data: contractorDataRaw, isLoading: isContractorLoading } = useQuery({
+  const { data: contractorDataRaw, isLoading: isContractorLoading } = useQuery<ContractorAnalyticsEntry[]>({
     queryKey: [`/api/fleet/${fleetId}/analytics/contractors`, {
       startDate: dateRange.startDate?.toISOString(),
       endDate: dateRange.endDate?.toISOString()
@@ -198,7 +365,7 @@ export default function FleetAnalytics() {
   });
 
   // Fetch alerts (existing endpoint)
-  const { data: alertsData, isLoading: isFleetAlertsLoading } = useQuery({
+  const { data: alertsData, isLoading: isFleetAlertsLoading } = useQuery<FleetAlertsResponse>({
     queryKey: [`/api/fleet/${fleetId}/alerts`, { active: true }],
     queryFn: async () => {
       const response = await fetch(`/api/fleet/${fleetId}/alerts?active=true`, {
@@ -219,7 +386,7 @@ export default function FleetAnalytics() {
   };
 
   // Calculate metrics from real data
-  const metrics = useMemo(() => {
+  const metrics = useMemo<FleetMetricSummary>(() => {
     if (!overviewData || !vehicleDataRaw) {
       // Return default values if data not loaded
       return {
@@ -228,39 +395,54 @@ export default function FleetAnalytics() {
         avgCostPerMile: 0,
         vehiclesAtRisk: 0,
         totalVehicles: 0,
-        upcomingMaintenance: []
+        upcomingMaintenance: [],
+        utilizationRate: 0,
+        onTimeDeliveryRate: 0,
+        costPerMile: 0,
+        avgVehicleHealth: 0
       };
     }
 
     // Calculate fleet health score (average of vehicle health scores)
-    const avgHealthScore = vehicleDataRaw?.length > 0 
-      ? Math.round(vehicleDataRaw.reduce((sum: number, v: any) => sum + v.healthScore, 0) / vehicleDataRaw.length)
+    const avgHealthScore = vehicleDataRaw.length > 0 
+      ? Math.round(vehicleDataRaw.reduce((sum, v) => sum + v.healthScore, 0) / vehicleDataRaw.length)
       : 0;
 
     // Calculate vehicles at risk (health score < 50)
-    const atRiskCount = vehicleDataRaw?.filter((v: any) => v.healthScore < 50).length || 0;
+    const atRiskCount = vehicleDataRaw.filter((v) => v.healthScore < 50).length;
 
     // Get upcoming maintenance from vehicle data
-    const upcomingMaintenance = vehicleDataRaw?.flatMap((v: any) => 
-      v.upcomingPM?.map((pm: any) => ({
-        vehicleId: v.unitNumber,
-        date: new Date(pm.date),
-        service: pm.service
-      })) || []
-    ).sort((a: any, b: any) => a.date - b.date).slice(0, 5) || [];
+    const upcomingMaintenance = vehicleDataRaw
+      .flatMap((v) =>
+        (v.upcomingPM || []).map((pm) => ({
+          vehicleId: v.unitNumber,
+          date: new Date(pm.date),
+          service: pm.service
+        }))
+      )
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+      .slice(0, 5);
 
     return {
       fleetHealthScore: avgHealthScore,
       totalMaintenanceCost: overviewData.totalSpentThisMonth || 0,
-      avgCostPerMile: 0.82, // This would need mileage data
+      avgCostPerMile: overviewData.costPerMile ?? 0.82,
       vehiclesAtRisk: atRiskCount,
       totalVehicles: overviewData.totalVehicles || 0,
-      upcomingMaintenance
+      upcomingMaintenance,
+      utilizationRate: overviewData.utilizationRate ?? 0,
+      utilizationTrend: overviewData.utilizationTrend,
+      onTimeDeliveryRate: overviewData.onTimeDeliveryRate ?? 0,
+      onTimeTrend: overviewData.onTimeTrend,
+      costPerMile: overviewData.costPerMile ?? 0.82,
+      costPerMileTrend: overviewData.costPerMileTrend,
+      avgVehicleHealth: overviewData.avgVehicleHealth ?? avgHealthScore,
+      healthTrend: overviewData.healthTrend
     };
   }, [overviewData, vehicleDataRaw]);
 
   // Format cost data for charts
-  const costTrendData = useMemo(() => {
+  const costTrendData = useMemo<CostTrendRow[]>(() => {
     if (!costDataRaw || costDataRaw.length === 0) {
       // Return mock data if no real data
       return [
@@ -273,7 +455,7 @@ export default function FleetAnalytics() {
       ];
     }
 
-    return costDataRaw.map((item: any) => ({
+    return costDataRaw.map((item) => ({
       month: format(new Date(item.date), 'MMM'),
       maintenance: item.maintenanceCost || 0,
       fuel: item.fuelCost || 0,
@@ -282,7 +464,7 @@ export default function FleetAnalytics() {
   }, [costDataRaw]);
 
   // Format breakdown frequency data from service analytics
-  const breakdownFrequencyData = useMemo(() => {
+  const breakdownFrequencyData = useMemo<BreakdownFrequencyRow[]>(() => {
     if (!serviceDataRaw || serviceDataRaw.length === 0) {
       // Return mock data if no real data
       return [
@@ -295,7 +477,7 @@ export default function FleetAnalytics() {
       ];
     }
 
-    return serviceDataRaw.slice(0, 6).map((item: any) => ({
+    return serviceDataRaw.slice(0, 6).map((item) => ({
       issueType: item.serviceType,
       frequency: item.jobCount,
       avgCost: Math.round(item.avgCost)
@@ -303,7 +485,7 @@ export default function FleetAnalytics() {
   }, [serviceDataRaw]);
 
   // Format vehicle health data
-  const vehicleHealthData = useMemo(() => {
+  const vehicleHealthData = useMemo<VehicleHealthRow[]>(() => {
     if (!vehicleDataRaw || vehicleDataRaw.length === 0) {
       // Return mock data if no real data
       return [
@@ -315,7 +497,7 @@ export default function FleetAnalytics() {
       ];
     }
 
-    return vehicleDataRaw.slice(0, 5).map((v: any) => ({
+    return vehicleDataRaw.slice(0, 5).map((v) => ({
       unitNumber: v.unitNumber,
       healthScore: v.healthScore,
       riskScore: 100 - v.healthScore,
@@ -334,7 +516,7 @@ export default function FleetAnalytics() {
   ];
 
   // Format alerts
-  const mockAlerts = useMemo(() => {
+  const mockAlerts = useMemo<FleetAlert[]>(() => {
     if (!alertsData?.alerts || alertsData.alerts.length === 0) {
       // Return mock alerts if no real data
       return [
@@ -412,7 +594,7 @@ export default function FleetAnalytics() {
               <span className="ml-4 text-2xl font-bold text-primary">Fleet Analytics</span>
             </div>
             <div className="flex items-center gap-2">
-              <Select value={selectedPeriod} onValueChange={(v: any) => setSelectedPeriod(v)}>
+              <Select value={selectedPeriod} onValueChange={(value: PeriodOption) => setSelectedPeriod(value)}>
                 <SelectTrigger className="w-32" data-testid="select-period">
                   <SelectValue />
                 </SelectTrigger>
@@ -637,7 +819,7 @@ export default function FleetAnalytics() {
                   </Badge>
                 </div>
               ))}
-              <Button variant="link" size="sm" className="p-0">
+              <Button variant="ghost" size="sm" className="p-0">
                 View all alerts <ChevronRight className="h-3 w-3 ml-1" />
               </Button>
             </AlertDescription>
@@ -846,7 +1028,7 @@ export default function FleetAnalytics() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Button size="sm" variant="link" className="p-0">
+                          <Button size="sm" variant="ghost" className="p-0">
                             View Actions
                           </Button>
                         </TableCell>
@@ -996,7 +1178,7 @@ export default function FleetAnalytics() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold text-orange-600">
-                    {maintenanceAlerts?.alerts?.filter((a: any) => !a.acknowledgedAt).length || 0}
+                    {maintenanceAlerts?.alerts?.filter((alert) => !alert.acknowledgedAt).length || 0}
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
                     Require acknowledgment
@@ -1034,10 +1216,10 @@ export default function FleetAnalytics() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {maintenancePredictions?.predictions?.slice(0, 5).map((prediction: any, index: number) => (
+                    {maintenancePredictions?.predictions?.slice(0, 5).map((prediction, index) => (
                       <TableRow key={prediction.id}>
                         <TableCell className="font-medium">
-                          {vehiclesData?.vehicles?.find((v: any) => v.id === prediction.vehicleId)?.unitNumber || `Vehicle ${index + 1}`}
+                          {vehicleDataRaw?.find((vehicle) => vehicle.vehicleId === prediction.vehicleId)?.unitNumber || `Vehicle ${index + 1}`}
                         </TableCell>
                         <TableCell>
                           <Badge variant={

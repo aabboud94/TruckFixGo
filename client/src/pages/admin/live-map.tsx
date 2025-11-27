@@ -75,6 +75,35 @@ const contractorStatusConfig = {
   on_job: { color: "#3b82f6", label: "On Job" }
 };
 
+interface LiveJob {
+  id: string;
+  status: keyof typeof jobStatusConfig;
+  type?: string;
+  location?: { lat: number; lng: number };
+  contractorId?: string | null;
+  customer?: { name?: string };
+  serviceType?: string;
+  etaMinutes?: number | null;
+  updatedAt?: string;
+}
+
+interface LiveContractor {
+  id: string;
+  status: keyof typeof contractorStatusConfig;
+  name?: string;
+  companyName?: string;
+  location?: { lat: number; lng: number };
+  phone?: string;
+}
+
+interface LiveJobsResponse {
+  jobs: LiveJob[];
+}
+
+interface LiveContractorsResponse {
+  contractors: LiveContractor[];
+}
+
 // Create custom marker icons
 function createJobMarker(status: keyof typeof jobStatusConfig) {
   const config = jobStatusConfig[status];
@@ -257,15 +286,17 @@ export default function AdminLiveMap() {
   });
 
   // Fetch all active jobs
-  const { data: jobsData, refetch: refetchJobs, isLoading: isLoadingJobs } = useQuery({
+  const { data: jobsData, refetch: refetchJobs, isLoading: isLoadingJobs } = useQuery<LiveJobsResponse>({
     queryKey: ['/api/admin/jobs/live'],
     refetchInterval: autoRefresh ? 30000 : false,
+    queryFn: () => apiRequest('GET', '/api/admin/jobs/live'),
   });
 
   // Fetch all online contractors
-  const { data: contractorsData, refetch: refetchContractors, isLoading: isLoadingContractors } = useQuery({
+  const { data: contractorsData, refetch: refetchContractors, isLoading: isLoadingContractors } = useQuery<LiveContractorsResponse>({
     queryKey: ['/api/admin/contractors/online'],
     refetchInterval: autoRefresh ? 30000 : false,
+    queryFn: () => apiRequest('GET', '/api/admin/contractors/online'),
   });
 
   // WebSocket connection for real-time updates

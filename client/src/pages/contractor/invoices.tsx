@@ -310,7 +310,8 @@ export default function ContractorInvoices() {
   }
 
   return (
-    <div className="container mx-auto py-6 px-4">
+    <div className="min-h-[var(--app-height)] bg-muted/10">
+      <div className="mx-auto w-full max-w-6xl px-safe py-6">
       <div className="mb-6">
         <Button
           variant="ghost"
@@ -712,6 +713,7 @@ export default function ContractorInvoices() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

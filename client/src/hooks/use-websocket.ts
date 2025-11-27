@@ -97,7 +97,7 @@ export const useWebSocket = ({
             break;
         }
         
-        if (joinMessage) {
+        if (joinMessage && ws.current) {
           ws.current.send(JSON.stringify(joinMessage));
         }
         

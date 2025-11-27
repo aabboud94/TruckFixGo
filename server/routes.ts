@@ -2822,7 +2822,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         monthStart.setDate(1);
 
         // Get earnings data - returns an object with totalEarnings and transactions
-        const earningsData = await storage.getContractorEarnings(contractorId);
+        const earningsData = await storage.getContractorEarningsSummary(contractorId);
         const transactions = earningsData.transactions || [];
 
         const todayEarnings = transactions
@@ -9410,7 +9410,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const contractorId = req.user.id;
         
         // Fetch contractor earnings data
-        const earnings = await storage.getContractorEarnings(
+        const earnings = await storage.getContractorEarningsSummary(
           contractorId,
           new Date(fromDate as string),
           new Date(toDate as string)
@@ -9484,7 +9484,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const startDate = new Date(year, 0, 1);
         const endDate = new Date(year, 11, 31);
         
-        const taxData = await storage.getContractorEarnings(
+        const taxData = await storage.getContractorEarningsSummary(
           contractorId,
           startDate,
           endDate
@@ -9664,7 +9664,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const isPaid = req.query.isPaid === 'true' ? true : 
                        req.query.isPaid === 'false' ? false : undefined;
         
-        const earnings = await storage.getContractorEarnings(req.params.id, isPaid);
+        const earnings = await storage.listContractorEarnings(req.params.id, isPaid);
         
         // Calculate summary
         const fromDate = req.query.fromDate ? new Date(req.query.fromDate as string) : 
@@ -12742,7 +12742,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         const { startDate, endDate } = req.query;
         
-        const earnings = await storage.getContractorEarnings(
+        const earnings = await storage.getContractorEarningsSummary(
           contractorId,
           startDate ? new Date(startDate as string) : undefined,
           endDate ? new Date(endDate as string) : undefined
@@ -12788,7 +12788,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Get a preview calculation (without creating a transaction)
         const dummyJobId = `preview_${Date.now()}`;
-        const calculation = await storage.calculateCommission(
+        const calculation = await storage.calculateCommissionAmount(
           dummyJobId,
           req.session.userId!,
           amount,
@@ -15241,7 +15241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: 'Contractor profile not found' });
         }
 
-        const earnings = await storage.getContractorEarnings(
+        const earnings = await storage.getContractorEarningsSummary(
           contractorProfile.id,
           fromDate,
           toDate
@@ -21597,7 +21597,10 @@ The TruckFixGo Team
             cancelledAt: jobInfo.job.cancelledAt,
             estimatedArrival: jobInfo.job.estimatedArrival,
             address: jobInfo.job.address,
-            serviceTypeId: jobInfo.job.serviceTypeId
+            serviceTypeId: jobInfo.job.serviceTypeId,
+            location: jobInfo.job.location,
+            locationAddress: jobInfo.job.locationAddress,
+            locationNotes: jobInfo.job.locationNotes
           },
           contractor: jobInfo.contractor ? {
             name: `${jobInfo.contractor.firstName} ${jobInfo.contractor.lastName}`,

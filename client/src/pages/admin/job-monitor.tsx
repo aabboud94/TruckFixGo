@@ -42,6 +42,13 @@ import {
   AlertCircle
 } from "lucide-react";
 
+interface JobMonitorStats {
+  jobsMonitored?: number;
+  alertsSent?: number;
+  autoAssigned?: number;
+  responseTimeAvg?: number;
+  activeAlerts?: number;
+}
 const jobMonitorSchema = z.object({
   monitoringEnabled: z.boolean(),
   refreshInterval: z.number().min(10).max(300),
@@ -102,12 +109,12 @@ export default function JobMonitorPage() {
   const [testMode, setTestMode] = useState(false);
   
   // Fetch current configuration
-  const { data: config, isLoading } = useQuery({
+  const { data: config, isLoading } = useQuery<JobMonitorFormData>({
     queryKey: ["/api/admin/job-monitor-config"]
   });
   
   // Fetch monitoring stats
-  const { data: stats } = useQuery({
+  const { data: stats } = useQuery<JobMonitorStats>({
     queryKey: ["/api/admin/job-monitor-stats"],
     refetchInterval: 30000 // Refresh every 30 seconds
   });

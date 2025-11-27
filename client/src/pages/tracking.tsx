@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useTrackingWebSocket } from "@/hooks/use-tracking-websocket";
+import { apiRequest } from "@/lib/queryClient";
 import {
   MapPin,
   Clock,
@@ -203,17 +204,48 @@ export default function TrackingPage() {
     }
   }, [params, jobId]);
   
-  // Fetch job details
-  const { data: jobData, isLoading: isLoadingJob } = useQuery({
-    queryKey: [`/api/jobs/${jobId}/tracking`],
+  const {
+    data: jobData,
+    isLoading: isLoadingJob,
+    isError: isTrackingError,
+    error: trackingError,
+    refetch: refetchTracking
+  } = useQuery({
+    queryKey: ["public-tracking", jobId],
     enabled: !!jobId,
-    refetchInterval: 30000 // Refetch every 30 seconds
+    retry: false,
+    refetchInterval: jobId ? 30000 : false,
+    queryFn: async () => {
+      if (!jobId) {
+        throw new Error("Missing job identifier");
+      }
+      try {
+        return await apiRequest("GET", `/api/emergency/track/${jobId}`);
+      } catch (error: any) {
+        if (error?.status === 401 || error?.status === 403) {
+          return apiRequest("GET", `/api/jobs/${jobId}/tracking`);
+        }
+        throw error;
+      }
+    }
   });
 
   // Fetch split payment details
   const { data: splitPaymentData } = useQuery({
-    queryKey: [`/api/payments/split/${jobId}`],
-    enabled: !!jobId
+    queryKey: ["split-payment", jobId],
+    enabled: !!jobId,
+    retry: false,
+    queryFn: async () => {
+      if (!jobId) return null;
+      try {
+        return await apiRequest("GET", `/api/payments/split/${jobId}`);
+      } catch (error: any) {
+        if (error?.status === 401 || error?.status === 403) {
+          return null;
+        }
+        throw error;
+      }
+    }
   });
 
   // WebSocket connection for real-time updates
@@ -245,6 +277,7 @@ export default function TrackingPage() {
   }
   const contractor = jobData?.contractor || null;
   const statusHistory = jobData?.statusHistory || [];
+  const jobPhotos = Array.isArray(jobData?.photos) ? jobData.photos : [];
 
   // Demo mode: simulate contractor movement
   useEffect(() => {
@@ -298,6 +331,25 @@ export default function TrackingPage() {
     );
   }
 
+  if (isTrackingError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="p-6 max-w-md text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
+          <div>
+            <p className="font-semibold">Unable to load tracking</p>
+            <p className="text-sm text-muted-foreground">
+              {(trackingError as Error)?.message || "Please double-check the tracking link."}
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => refetchTracking()}>
+            Retry
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
   if (!jobData?.job) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -313,7 +365,7 @@ export default function TrackingPage() {
     <div className="min-h-screen bg-background">
       {/* Map Container */}
       <div className="relative h-[60vh] md:h-[70vh]">
-        {customerLocation && (
+        {customerLocation ? (
           <MapContainer
             center={[customerLocation.lat, customerLocation.lng]}
             zoom={14}
@@ -356,6 +408,16 @@ export default function TrackingPage() {
               contractorLocation={contractorLocation}
             />
           </MapContainer>
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-muted/40 px-4 text-center">
+            <div>
+              <MapPin className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+              <p className="font-semibold">Locking in your location…</p>
+              <p className="text-sm text-muted-foreground">
+                As soon as dispatch confirms your exact coordinates, we’ll display the live map and ETA.
+              </p>
+            </div>
+          </div>
         )}
 
         {/* Connection Status Indicator */}
@@ -433,11 +495,12 @@ export default function TrackingPage() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => window.location.href = `tel:${contractor.phone}`}
+                  onClick={() => contractor?.phone && (window.location.href = `tel:${contractor.phone}`)}
+                  disabled={!contractor?.phone}
                   data-testid="button-call-contractor"
                 >
                   <Phone className="w-4 h-4 mr-2" />
-                  Call Mechanic
+                  {contractor?.phone ? "Call Mechanic" : "Phone unavailable"}
                 </Button>
                 <Button
                   variant="outline" 
@@ -486,7 +549,7 @@ export default function TrackingPage() {
 
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">Service Type</p>
-                <p className="font-medium">{jobData.job.serviceType || "Emergency Repair"}</p>
+                <p className="font-medium">{jobData.job.serviceType || jobData.job.serviceTypeId || "Emergency Repair"}</p>
               </div>
 
               <div className="space-y-2">
@@ -529,6 +592,35 @@ export default function TrackingPage() {
                   </p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <h3 className="font-semibold text-lg">Scene Photos</h3>
+              <p className="text-sm text-muted-foreground">Photos shared by the technician will appear here.</p>
+            </CardHeader>
+            <CardContent>
+              {jobPhotos.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No photos yet. We’ll update this section once the mechanic uploads images.
+                </p>
+              ) : (
+                <div className="grid gap-4">
+                  {jobPhotos.map((photo: any) => (
+                    <div key={photo.id} className="space-y-2">
+                      <img
+                        src={photo.photoUrl}
+                        alt={photo.description || "Job photo"}
+                        className="rounded-lg border object-cover"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Uploaded {format(new Date(photo.createdAt), "MMM d, h:mm a")}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 

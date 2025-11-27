@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 const menuItems = [
   {
@@ -98,6 +99,7 @@ const menuItems = [
 
 export function AdminSidebar() {
   const [location, setLocation] = useLocation();
+  const { toast } = useToast();
 
   // Query for notifications/badges
   const { data: notifications } = useQuery({
@@ -107,10 +109,26 @@ export function AdminSidebar() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/admin/logout', { method: 'POST' });
-      setLocation('/admin/login');
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error('Failed to logout');
+      }
+      toast({
+        title: "Signed out",
+        description: "You have been logged out of the admin dashboard."
+      });
     } catch (error) {
       console.error('Logout failed:', error);
+      toast({
+        title: "Logout failed",
+        description: "We couldn’t end the session cleanly, but we’ll redirect you anyway.",
+        variant: "destructive"
+      });
+    } finally {
+      setLocation('/admin/login');
     }
   };
 

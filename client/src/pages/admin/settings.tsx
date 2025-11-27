@@ -23,6 +23,21 @@ import {
   MessageSquare, CreditCard, Clock, Award, AlertTriangle, ChevronRight
 } from "lucide-react";
 
+interface ServiceBaseRate {
+  id?: string;
+  service: string;
+  description?: string;
+  base: number;
+  perHour?: number;
+  perTruck?: number;
+  perTire?: number;
+  perUnit?: number;
+  unitType?: string;
+  isActive?: boolean;
+  emergencyAvailable?: boolean;
+  scheduledAvailable?: boolean;
+}
+
 export default function AdminSettings() {
   const { toast } = useToast();
   const [testingApi, setTestingApi] = useState<string | null>(null);
@@ -46,13 +61,15 @@ export default function AdminSettings() {
   const [commissionValue, setCommissionValue] = useState<number>(15);
 
   // Query for current settings
-  const { data: settings, isLoading } = useQuery({
+  const { data: settings, isLoading } = useQuery<any>({
     queryKey: ['/api/admin/settings'],
+    queryFn: () => apiRequest('GET', '/api/admin/settings'),
   });
 
   // Query for commission settings
-  const { data: commissionSettings } = useQuery({
+  const { data: commissionSettings } = useQuery<any>({
     queryKey: ['/api/admin/commission-settings'],
+    queryFn: () => apiRequest('GET', '/api/admin/commission-settings'),
   });
 
   // Initialize feature states when settings are loaded
@@ -261,6 +278,12 @@ export default function AdminSettings() {
       allowGuestBooking: true,
     },
   };
+
+  const baseRates: ServiceBaseRate[] = Array.isArray(currentSettings.pricing?.baseRates)
+    ? currentSettings.pricing.baseRates
+    : [];
+
+  const fleetDiscountEntries = Object.entries(currentSettings.pricing?.fleetDiscounts ?? {}) as [string, number][];
 
   const handleSaveSettings = (section: string, data: any) => {
     saveMutation.mutate({
@@ -481,7 +504,7 @@ export default function AdminSettings() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                  {currentSettings.pricing.baseRates.map((rate, index) => {
+                  {baseRates.map((rate, index) => {
                     // Generate a stable ID based on service name if not present
                     const serviceId = rate.id || `service-${rate.service.toLowerCase().replace(/\s+/g, '-')}`;
                     return (
@@ -774,7 +797,7 @@ export default function AdminSettings() {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
-                {Object.entries(currentSettings.pricing.fleetDiscounts).map(([tier, discount]) => (
+                {fleetDiscountEntries.map(([tier, discount]) => (
                   <div key={tier} className="flex items-center justify-between">
                     <Label className="capitalize">{tier} Tier</Label>
                     <div className="flex items-center gap-2">

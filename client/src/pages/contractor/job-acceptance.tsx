@@ -26,9 +26,14 @@ import {
   Activity
 } from "lucide-react";
 import { format } from "date-fns";
+import type { Job } from "@shared/schema";
+
+type ContractorJobDetails = Job & {
+  issueType?: string | null;
+};
 
 export default function ContractorJobAcceptance() {
-  const [params] = useParams<{ jobId: string }>();
+  const params = useParams<{ jobId: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [completionNotes, setCompletionNotes] = useState("");
@@ -38,7 +43,7 @@ export default function ContractorJobAcceptance() {
   const [additionalCost, setAdditionalCost] = useState("");
 
   // Fetch job details
-  const { data: job, isLoading: loadingJob } = useQuery({
+  const { data: job, isLoading: loadingJob } = useQuery<ContractorJobDetails>({
     queryKey: ['/api/jobs', params?.jobId],
     enabled: !!params?.jobId
   });

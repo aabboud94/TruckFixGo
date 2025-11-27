@@ -1,11 +1,11 @@
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 export default defineConfig(async ({ command }) => {
   const isDev = command === "serve";
-  const plugins = [react()];
+  const plugins: PluginOption[] = [react()];
 
   if (isDev) {
     plugins.push(runtimeErrorOverlay());

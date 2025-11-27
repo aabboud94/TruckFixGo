@@ -52,24 +52,24 @@ function ContractorBiddingPage() {
   });
 
   // Fetch available bidding jobs
-  const { data: availableJobs, isLoading: loadingJobs } = useQuery({
+  const { data: availableJobs, isLoading: loadingJobs } = useQuery<any>({
     queryKey: ['/api/jobs/bidding/available', filters],
     enabled: selectedTab === 'available'
   });
 
   // Fetch contractor's bids
-  const { data: myBids, isLoading: loadingMyBids } = useQuery({
+  const { data: myBids, isLoading: loadingMyBids } = useQuery<any>({
     queryKey: ['/api/bids/my-bids'],
     enabled: selectedTab === 'my-bids'
   });
 
   // Fetch bid templates
-  const { data: bidTemplates } = useQuery({
+  const { data: bidTemplates } = useQuery<any>({
     queryKey: ['/api/bid-templates']
   });
 
   // Fetch service types
-  const { data: serviceTypes } = useQuery({
+  const { data: serviceTypes } = useQuery<any>({
     queryKey: ['/api/service-types']
   });
 

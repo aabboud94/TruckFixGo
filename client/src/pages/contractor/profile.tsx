@@ -284,6 +284,50 @@ interface PricingData {
   platformCommissionRate: number;
 }
 
+type CommissionCalculatedPayload = {
+  contractorId: string;
+  jobId: string;
+  amount: number;
+  commissionRate: number;
+  earned: number;
+  serviceType: string;
+  jobType?: string;
+  timestamp: string;
+};
+
+type PayoutProcessedPayload = {
+  contractorId: string;
+  payoutId: string;
+  amount: number;
+  method: string;
+  status: "completed" | "processing" | "failed";
+  referenceNumber?: string;
+  timestamp: string;
+};
+
+type PerformanceUpdatedPayload = {
+  contractorId: string;
+  metric: string;
+  oldValue: number;
+  newValue: number;
+  trend: "up" | "down" | "stable";
+  timestamp: string;
+  message?: string;
+  metricType?: string;
+  achievement?: boolean;
+};
+
+type ContractorPartsUpdatePayload = {
+  contractorId: string;
+  partId: string;
+  partName: string;
+  action: "added" | "used" | "restocked" | "low_stock" | "out_of_stock";
+  quantity?: number;
+  remainingStock?: number;
+  message?: string;
+  timestamp: string;
+};
+
 export default function ContractorProfile() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -299,9 +343,9 @@ export default function ContractorProfile() {
 
   // WebSocket setup for real-time contractor earnings updates
   const { isConnected } = useWebSocket({
-    eventType: 'contractor_updates',
+    eventType: 'earnings_updates',
     role: 'contractor',
-    onCommissionCalculated: (payload) => {
+    onCommissionCalculated: (payload: CommissionCalculatedPayload) => {
       console.log('New commission calculated:', payload);
       // Invalidate queries to refresh commission data
       queryClient.invalidateQueries({ queryKey: [`/api/contractors/${contractorId}/commissions`] });
@@ -312,7 +356,7 @@ export default function ContractorProfile() {
         description: `You earned $${payload.amount} for ${payload.jobType}`,
       });
     },
-    onPayoutProcessed: (payload) => {
+    onPayoutProcessed: (payload: PayoutProcessedPayload) => {
       console.log('Payout processed:', payload);
       // Invalidate queries to refresh payout data
       queryClient.invalidateQueries({ queryKey: [`/api/contractors/${contractorId}/payouts`] });
@@ -323,7 +367,7 @@ export default function ContractorProfile() {
         description: `$${payload.amount} has been sent to your ${payload.method}`,
       });
     },
-    onPerformanceUpdated: (payload) => {
+    onPerformanceUpdate: (payload: PerformanceUpdatedPayload) => {
       console.log('Performance metrics updated:', payload);
       // Invalidate queries to refresh performance data
       queryClient.invalidateQueries({ queryKey: [`/api/contractors/${contractorId}/performance-metrics`] });
@@ -338,7 +382,7 @@ export default function ContractorProfile() {
         });
       }
     },
-    onContractorPartsUpdate: (payload) => {
+    onContractorPartsUpdate: (payload: ContractorPartsUpdatePayload) => {
       console.log('Contractor parts inventory updated:', payload);
       // Invalidate parts inventory query
       queryClient.invalidateQueries({ queryKey: [`/api/contractors/${contractorId}/parts-stock`] });
@@ -359,6 +403,9 @@ export default function ContractorProfile() {
     queryKey: [`/api/contractors/${contractorId}/commissions`, commissionsPage],
     enabled: !!contractorId && activeTab === "earnings"
   });
+  const totalCommissionPages = commissionsData?.totalPages ?? 1;
+  const commissionCurrentPage = commissionsData?.currentPage ?? commissionsPage;
+  const showCommissionPagination = totalCommissionPages > 1;
 
   // Fetch payout data
   const { data: payoutsData, isLoading: payoutsLoading } = useQuery<PayoutData>({
@@ -1131,10 +1178,10 @@ export default function ContractorProfile() {
                     </Table>
 
                     {/* Pagination */}
-                    {commissionsData?.totalPages > 1 && (
+                    {showCommissionPagination && (
                       <div className="flex items-center justify-between mt-4">
                         <p className="text-sm text-muted-foreground">
-                          Page {commissionsData.currentPage} of {commissionsData.totalPages}
+                          Page {commissionCurrentPage} of {totalCommissionPages}
                         </p>
                         <div className="flex gap-2">
                           <Button
@@ -1150,8 +1197,8 @@ export default function ContractorProfile() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setCommissionsPage(prev => Math.min(commissionsData.totalPages, prev + 1))}
-                            disabled={commissionsPage === commissionsData.totalPages}
+                            onClick={() => setCommissionsPage(prev => Math.min(totalCommissionPages, prev + 1))}
+                            disabled={commissionsPage >= totalCommissionPages}
                             data-testid="button-next-page"
                           >
                             Next

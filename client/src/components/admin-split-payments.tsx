@@ -53,6 +53,29 @@ interface SplitPaymentStats {
   };
 }
 
+interface PaymentSplit {
+  id: string;
+  payerType: string;
+  payerName?: string;
+  amountAssigned: string;
+  amountPaid: string;
+  status: string;
+}
+
+interface SplitPaymentRecord {
+  id: string;
+  jobId: string;
+  createdAt: string;
+  totalAmount: string;
+  status: string;
+  paymentSplits?: PaymentSplit[];
+}
+
+interface SplitPaymentsResponse {
+  stats?: SplitPaymentStats;
+  splitPayments?: SplitPaymentRecord[];
+}
+
 export default function AdminSplitPayments() {
   const [selectedSplitPayment, setSelectedSplitPayment] = useState<any>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -62,17 +85,23 @@ export default function AdminSplitPayments() {
   const { toast } = useToast();
 
   // Fetch all split payments
-  const { data: splitPaymentsData, isLoading, refetch } = useQuery({
-    queryKey: ["/api/admin/payments/split", filterStatus, searchQuery, dateRange],
-    enabled: true
+  const { data: splitPaymentsData, isLoading, refetch } = useQuery<SplitPaymentsResponse>({
+    queryKey: ["admin-split-payments", filterStatus, searchQuery, dateRange],
+    enabled: true,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filterStatus !== "all") params.append("status", filterStatus);
+      if (searchQuery) params.append("search", searchQuery);
+      if (dateRange.from) params.append("from", dateRange.from);
+      if (dateRange.to) params.append("to", dateRange.to);
+      const query = params.toString();
+      return apiRequest("GET", `/api/admin/payments/split${query ? `?${query}` : ""}`);
+    }
   });
 
   // Send reminder mutation
   const sendReminder = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/payments/split/remind", {
-      method: "POST",
-      body: JSON.stringify(data)
-    }),
+    mutationFn: (data: any) => apiRequest("POST", "/api/payments/split/remind", data),
     onSuccess: (data) => {
       toast({
         title: "Reminders Sent",
@@ -91,10 +120,7 @@ export default function AdminSplitPayments() {
 
   // Manual payment entry mutation
   const manualPayment = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/admin/payments/split/manual", {
-      method: "POST",
-      body: JSON.stringify(data)
-    }),
+    mutationFn: (data: any) => apiRequest("POST", "/api/admin/payments/split/manual", data),
     onSuccess: () => {
       toast({
         title: "Payment Recorded",
@@ -114,10 +140,7 @@ export default function AdminSplitPayments() {
 
   // Refund payment mutation
   const refundPayment = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/admin/payments/split/refund", {
-      method: "POST",
-      body: JSON.stringify(data)
-    }),
+    mutationFn: (data: any) => apiRequest("POST", "/api/admin/payments/split/refund", data),
     onSuccess: () => {
       toast({
         title: "Refund Initiated",

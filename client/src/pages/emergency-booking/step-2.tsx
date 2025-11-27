@@ -29,9 +29,10 @@ import {
   DollarSign,
   Shield
 } from "lucide-react";
-import { EmergencyBookingData } from "./index";
+import type { EmergencyBookingData } from "@/types/emergency";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useEmergencyWorkflow, type GuestBookingPayload } from "@/hooks/use-emergency-workflow";
 import { useToast } from "@/hooks/use-toast";
 
 const formSchema = z.object({
@@ -68,38 +69,8 @@ export default function Step2({ bookingData, onComplete, onBack }: Step2Props) {
   const [showAIAnalysis, setShowAIAnalysis] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const { toast } = useToast();
+  const { submitEmergencyRequest, isSubmitting } = useEmergencyWorkflow();
 
-interface GuestBookingPayload {
-  customerName: string;
-  customerPhone: string;
-  customerEmail?: string;
-  location: { lat: number; lng: number };
-  locationAddress: string;
-  serviceTypeId: string;
-  vehicleInfo: {
-    make?: string;
-    model?: string;
-    year?: string;
-    licensePlate?: string;
-  };
-  description: string;
-  photos?: string[];
-}
-
-interface JobSubmissionPayload {
-  jobPayload: Record<string, any>;
-  guestPayload: GuestBookingPayload;
-}
-
-interface JobSubmissionResult {
-  source: "guest" | "fallback";
-  jobId?: string;
-  jobNumber?: string;
-  trackingLink?: string;
-  estimatedArrival?: string;
-  status?: string;
-}
-  
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -163,42 +134,6 @@ interface JobSubmissionResult {
         title: "Analysis Failed",
         description: "Unable to analyze photo. You can still continue with manual selection.",
       });
-    },
-  });
-
-  // Submit job mutation - prefer full guest workflow, fallback to legacy endpoint
-  const submitJobMutation = useMutation<JobSubmissionResult, Error, JobSubmissionPayload>({
-    mutationFn: async ({ jobPayload, guestPayload }) => {
-      try {
-        const response = await apiRequest('POST', '/api/emergency/book-guest', guestPayload);
-        if (response?.job) {
-          return {
-            source: "guest",
-            jobId: response.job.id,
-            jobNumber: response.job.jobNumber,
-            trackingLink: response.job.trackingLink,
-            estimatedArrival: response.job.estimatedWaitTime || "30-45 minutes",
-            status: response.job.status,
-          };
-        }
-      } catch (error: any) {
-        if (error?.status && error.status < 500) {
-          throw error;
-        }
-        console.warn("[EmergencyBooking] Guest booking failed, falling back to /api/jobs/emergency", error);
-      }
-
-      const fallback = await apiRequest('POST', '/api/jobs/emergency', jobPayload);
-      return {
-        source: "fallback",
-        jobId: fallback?.job?.id,
-        jobNumber: fallback?.job?.jobNumber,
-        trackingLink: fallback?.job?.trackingUrl
-          ? `${window.location.origin}${fallback.job.trackingUrl}`
-          : undefined,
-        estimatedArrival: fallback?.job?.estimatedArrival || "15-30 minutes",
-        status: fallback?.job?.status,
-      };
     },
   });
 
@@ -348,16 +283,11 @@ interface JobSubmissionResult {
     };
 
     const jobPayload = {
-      type: 'emergency',
       jobType: "emergency",
-      guestPhone: bookingData.phone,
-      guestEmail: bookingData.email,
-      customerName: bookingData.name || 'Guest Driver',
+      serviceTypeId,
+      customerName: bookingData.name || "Guest Driver",
       customerPhone: bookingData.phone,
       customerEmail: bookingData.email,
-      email: bookingData.email,
-      serviceType: serviceTypeId,
-      serviceTypeId,
       location: { lat: resolvedLocation.lat, lng: resolvedLocation.lng },
       locationAddress: resolvedLocation.address,
       description: issueText,
@@ -366,8 +296,6 @@ interface JobSubmissionResult {
       vehicleMake: vehicleInfo.make || "Heavy-Duty Truck",
       vehicleModel: vehicleInfo.model || "Commercial Vehicle",
       urgencyLevel: 5,
-      photoUrl: photoUrl || undefined,
-      aiAnalysis: photoAnalysis || undefined,
     };
 
     const guestPayload: GuestBookingPayload = {
@@ -387,7 +315,18 @@ interface JobSubmissionResult {
     };
 
     try {
-      const response = await submitJobMutation.mutateAsync({ jobPayload, guestPayload });
+      const response = await submitEmergencyRequest({
+        jobPayload,
+        guestPayload,
+        bookingSnapshot: {
+          ...bookingData,
+          issue: values.issue,
+          issueDescription: values.issueDescription,
+          unitNumber: values.unitNumber,
+          carrierName: values.carrierName,
+          photoUrl: photoUrl || undefined,
+        },
+      });
 
       if (response?.jobId) {
         localStorage.setItem('emergencyJobId', response.jobId);
@@ -795,11 +734,11 @@ interface JobSubmissionResult {
               type="submit"
               size="lg"
               variant="destructive"
-              disabled={submitJobMutation.isPending || isUploading || !resolvedLocation}
+              disabled={isSubmitting || isUploading || !resolvedLocation}
               className="flex-[2] h-16 text-lg font-semibold hover-elevate"
               data-testid="button-get-help"
             >
-              {submitJobMutation.isPending ? (
+              {isSubmitting ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                   Submitting...

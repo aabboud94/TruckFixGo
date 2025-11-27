@@ -179,15 +179,15 @@ export function useFuelAlerts() {
   
   const createAlert = useMutation({
     mutationFn: async (alert: {
-      alertType: 'price_drop' | 'price_spike' | 'threshold' | 'comparison' | 'route_optimization';
-      severity: 'low' | 'medium' | 'high' | 'critical';
+      alertType: 'price_drop' | 'price_surge' | 'low_price_nearby' | 'route_savings';
+      severity: 'info' | 'warning' | 'critical';
       fuelType?: 'diesel' | 'regular' | 'premium';
-      stationId?: string;
-      state?: string;
-      thresholdPrice?: string;
-      thresholdPercent?: string;
+      priceThreshold?: string;
+      percentChangeThreshold?: string;
+      latitude?: number;
+      longitude?: number;
       radius?: number;
-      location?: { lat: number; lng: number };
+      state?: string;
       expiresAt?: string;
     }) => {
       return apiRequest('/api/fuel/alerts', {

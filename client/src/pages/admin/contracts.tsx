@@ -132,7 +132,7 @@ export default function AdminContracts() {
   const [customSlaMetrics, setCustomSlaMetrics] = useState<any[]>([]);
 
   // Fetch contracts
-  const { data: contracts = [], isLoading: contractsLoading } = useQuery({
+  const { data: contracts = [], isLoading: contractsLoading } = useQuery<FleetContract[]>({
     queryKey: ['/api/contracts'],
   });
 

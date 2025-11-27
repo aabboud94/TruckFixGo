@@ -348,9 +348,13 @@ export default function ContractorApply() {
       
       // Show specific validation error in toast
       if (errors.serviceTypes) {
+        const errorMessage =
+          typeof errors.serviceTypes?.message === "string"
+            ? errors.serviceTypes.message
+            : "Please select at least one service type";
         toast({
           title: "Validation Error",
-          description: errors.serviceTypes.message || "Please select at least one service type",
+          description: errorMessage,
           variant: "destructive"
         });
       }

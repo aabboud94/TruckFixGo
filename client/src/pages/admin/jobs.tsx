@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
-import JobPhotoGallery from "@/components/job-photo-gallery";
+import JobPhotoGallery, { type JobPhoto } from "@/components/job-photo-gallery";
 import { WeatherBadge } from "@/components/weather-widget";
 import {
   Search, Filter, Download, RefreshCw, MapPin, Clock, DollarSign,
@@ -1523,10 +1523,15 @@ export default function AdminJobs() {
 }
 
 // Component for the photos tab content
+interface JobPhotoListResponse {
+  photos?: JobPhoto[];
+}
+
 function JobPhotoGalleryContent({ jobId }: { jobId: string }) {
-  const { data: photosData, isLoading, refetch } = useQuery({
+  const { data: photosData, isLoading, refetch } = useQuery<JobPhotoListResponse>({
     queryKey: [`/api/jobs/${jobId}/photos`],
     enabled: !!jobId,
+    queryFn: () => apiRequest('GET', `/api/jobs/${jobId}/photos`),
   });
 
   if (isLoading) {

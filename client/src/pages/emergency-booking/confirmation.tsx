@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -16,12 +16,17 @@ import {
   ExternalLink,
   CreditCard,
   AlertCircle,
-  DollarSign
+  DollarSign,
+  Star,
+  RefreshCw,
+  ShieldCheck
 } from "lucide-react";
-import { EmergencyBookingData } from "./index";
+import type { EmergencyBookingData, EmergencyTrackingResponse } from "@/types/emergency";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { loadEmergencyMeta, clearEmergencyMeta } from "@/hooks/use-emergency-workflow";
 import Checkout from "@/components/checkout";
+import { formatDistanceToNow } from "date-fns";
 
 const ISSUE_LABELS: Record<string, string> = {
   flat_tire: "Flat tire",
@@ -35,14 +40,34 @@ const ISSUE_LABELS: Record<string, string> = {
 
 interface ConfirmationProps {
   bookingData: EmergencyBookingData;
+  trackingData?: EmergencyTrackingResponse;
+  trackingError?: string;
+  isTracking?: boolean;
+  onRefreshTracking?: () => void;
 }
 
-export default function Confirmation({ bookingData }: ConfirmationProps) {
+export default function Confirmation({
+  bookingData,
+  trackingData,
+  trackingError,
+  isTracking = false,
+  onRefreshTracking,
+}: ConfirmationProps) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [showPayment, setShowPayment] = useState(false);
   const [paymentComplete, setPaymentComplete] = useState(false);
-  const trackingTarget = bookingData.trackingLink || (bookingData.jobId ? `/track/${bookingData.jobId}` : null);
+  const cachedMeta = loadEmergencyMeta();
+  const mergedBooking = {
+    ...(cachedMeta?.bookingSnapshot ?? {}),
+    ...bookingData,
+  } as EmergencyBookingData;
+  const jobNumber = mergedBooking.jobNumber || cachedMeta?.jobNumber || trackingData?.job?.jobNumber;
+  const jobId = mergedBooking.jobId || cachedMeta?.jobId || trackingData?.job?.id;
+  const estimatedArrival = trackingData?.job?.estimatedArrival || mergedBooking.estimatedArrival || cachedMeta?.estimatedArrival;
+  const trackingLink = mergedBooking.trackingLink || cachedMeta?.trackingLink;
+  const trackingTarget = trackingLink || (jobId ? `/track/${jobId}` : null);
+  const showTrackingCard = Boolean(trackingError || jobId || trackingData?.job);
   
   // Calculate estimated price (this would normally come from backend)
   const estimatedPrice = {
@@ -54,8 +79,8 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
   };
 
   const handleCopyJobId = () => {
-    if (bookingData.jobNumber) {
-      navigator.clipboard.writeText(bookingData.jobNumber);
+    if (jobNumber) {
+      navigator.clipboard.writeText(jobNumber);
       toast({
         title: "Copied!",
         description: "Job ID copied to clipboard",
@@ -85,6 +110,11 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
     setLocation('/signup?from=emergency');
   };
 
+  const handleBackHome = () => {
+    clearEmergencyMeta();
+    setLocation("/");
+  };
+
   const handlePaymentSuccess = (paymentId: string) => {
     setPaymentComplete(true);
     setShowPayment(false);
@@ -101,16 +131,16 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
     });
   };
 
-  const issueLabel = bookingData.issue ? (ISSUE_LABELS[bookingData.issue] || bookingData.issue) : "Emergency roadside repair";
-  const notes = bookingData.issueDescription?.trim() || "No additional notes were provided.";
-  const vehicleSummary = bookingData.unitNumber || bookingData.carrierName
-    ? [bookingData.unitNumber, bookingData.carrierName].filter(Boolean).join(" • ")
+  const issueLabel = mergedBooking.issue ? (ISSUE_LABELS[mergedBooking.issue] || mergedBooking.issue) : "Emergency roadside repair";
+  const notes = mergedBooking.issueDescription?.trim() || "No additional notes were provided.";
+  const vehicleSummary = mergedBooking.unitNumber || mergedBooking.carrierName
+    ? [mergedBooking.unitNumber, mergedBooking.carrierName].filter(Boolean).join(" • ")
     : "Not provided";
-  const contactSummary = bookingData.name
-    ? `${bookingData.name} - ${bookingData.phone}`
-    : bookingData.phone;
-  const locationSummary = bookingData.manualLocation ||
-    (bookingData.location ? `GPS pinned at ${bookingData.location.lat.toFixed(4)}, ${bookingData.location.lng.toFixed(4)}` : "Captured during intake");
+  const contactSummary = mergedBooking.name
+    ? `${mergedBooking.name} - ${mergedBooking.phone}`
+    : mergedBooking.phone;
+  const locationSummary = mergedBooking.manualLocation ||
+    (mergedBooking.location ? `GPS pinned at ${mergedBooking.location.lat.toFixed(4)}, ${mergedBooking.location.lng.toFixed(4)}` : "Captured during intake");
 
   return (
     <div className="space-y-6">
@@ -136,7 +166,7 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
             <div>
               <p className="text-sm text-muted-foreground mb-1">Job ID</p>
               <p className="text-2xl font-bold font-mono" data-testid="text-job-id">
-                {bookingData.jobNumber || "EM-123456"}
+                {jobNumber || "EM-123456"}
               </p>
             </div>
             <Button
@@ -152,6 +182,142 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Scene Photos</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {mergedBooking.photoUrl ? (
+            <>
+              <img
+                src={mergedBooking.photoUrl}
+                alt="Uploaded damage photo"
+                className="rounded-xl border object-cover w-full max-h-72"
+              />
+              <p className="text-xs text-muted-foreground">
+                Thanks for sharing a photo—we’ve attached it to your job ticket.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No photos yet. You can upload one later or text it to dispatch for faster diagnosis.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Live Tracking & Status */}
+      {showTrackingCard && (
+        <Card>
+          <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle className="text-xl">Live Dispatch Status</CardTitle>
+              <CardDescription>
+                {trackingData?.job?.status
+                  ? `Current status: ${trackingData.job.status.replace(/_/g, " ").toUpperCase()}`
+                  : "We’re syncing with dispatch"}
+              </CardDescription>
+            </div>
+            {trackingTarget && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTrack}
+                className="gap-2"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open tracking
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Estimated arrival</p>
+                <p className="text-lg font-semibold">{estimatedArrival || "Dispatch is assigning a nearby tech"}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onRefreshTracking}
+                  disabled={isTracking}
+                  className="gap-2"
+                  data-testid="button-refresh-tracking"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isTracking ? "animate-spin" : ""}`} />
+                  {isTracking ? "Refreshing…" : "Refresh"}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={handleTrack}>
+                  View Map
+                </Button>
+              </div>
+            </div>
+
+            {trackingError && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {trackingError}. We’ll keep retrying automatically.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {trackingData?.contractor && (
+              <div className="rounded-lg border bg-muted/40 p-4">
+                <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+                  Assigned mechanic
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-base font-semibold">{trackingData.contractor.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {trackingData.contractor.company || "Independent partner"} • {trackingData.contractor.totalJobs || 0} jobs completed
+                    </p>
+                  </div>
+                  <div className="flex gap-4 text-sm">
+                    {trackingData.contractor.rating && (
+                      <span className="flex items-center gap-1">
+                        <Star className="h-4 w-4 text-yellow-500" />
+                        {trackingData.contractor.rating.toFixed(1)}
+                      </span>
+                    )}
+                    <span className={`flex items-center gap-1 ${trackingData.contractor.isOnline ? "text-green-600" : "text-muted-foreground"}`}>
+                      <ShieldCheck className="h-4 w-4" />
+                      {trackingData.contractor.isOnline ? "Verified" : "Pending dispatch"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {trackingData?.statusHistory && trackingData.statusHistory.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Recent updates</p>
+                <div className="space-y-2">
+                  {trackingData.statusHistory.slice(0, 4).map((entry, index) => (
+                    <div key={`${entry.createdAt}-${index}`} className="flex items-start gap-3">
+                      <div className="text-xs font-semibold text-muted-foreground min-w-[90px]">
+                        {entry.createdAt
+                          ? `${formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}`
+                          : "Just now"}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium capitalize">
+                          {entry.toStatus?.replace(/_/g, " ") || "Status update"}
+                        </p>
+                        {entry.reason && (
+                          <p className="text-sm text-muted-foreground">{entry.reason}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Payment Information - Service First, Pay Later */}
       {!paymentComplete && (
@@ -229,8 +395,8 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Contact</p>
             <p className="text-foreground break-words">{contactSummary}</p>
-            {bookingData.email && (
-              <p className="text-muted-foreground">{bookingData.email}</p>
+            {mergedBooking.email && (
+              <p className="text-muted-foreground">{mergedBooking.email}</p>
             )}
           </div>
 
@@ -251,7 +417,7 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
             <div>
               <p className="text-sm text-muted-foreground">Estimated Arrival</p>
               <p className="text-2xl font-bold text-destructive" data-testid="text-eta">
-                {bookingData.estimatedArrival || "15-30 minutes"}
+                {estimatedArrival || "15-30 minutes"}
               </p>
             </div>
           </div>
@@ -264,12 +430,12 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
               <div className="flex-1">
                 <p className="text-sm font-medium">Location</p>
                 <p className="text-sm text-muted-foreground break-words">
-                  {bookingData.manualLocation || 
-                   (bookingData.location ? `GPS: ${bookingData.location.lat.toFixed(4)}, ${bookingData.location.lng.toFixed(4)}` : "Location captured")}
+                  {mergedBooking.manualLocation || 
+                   (mergedBooking.location ? `GPS: ${mergedBooking.location.lat.toFixed(4)}, ${mergedBooking.location.lng.toFixed(4)}` : "Location captured")}
                 </p>
-                {bookingData.trackingLink && (
+                {trackingLink && (
                   <p className="text-xs text-primary mt-2 break-words">
-                    Tracking URL: {bookingData.trackingLink}
+                    Tracking URL: {trackingLink}
                   </p>
                 )}
               </div>
@@ -280,7 +446,7 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
               <div className="flex-1">
                 <p className="text-sm font-medium">Contact</p>
                 <p className="text-sm text-muted-foreground">
-                  {bookingData.phone}
+                  {mergedBooking.phone}
                 </p>
               </div>
             </div>
@@ -339,7 +505,7 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
           <div className="flex items-center gap-3">
             <MessageSquare className="w-5 h-5 text-primary" />
             <p className="text-sm">
-              <span className="font-medium">SMS Updates:</span> We'll send real-time updates to {bookingData.phone}
+              <span className="font-medium">SMS Updates:</span> We'll send real-time updates to {mergedBooking.phone}
             </p>
           </div>
         </CardContent>
@@ -373,7 +539,7 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
         <Button
           size="lg"
           variant="ghost"
-          onClick={() => setLocation("/")}
+          onClick={handleBackHome}
           className="w-full h-12"
           data-testid="button-back-home"
         >
@@ -404,7 +570,7 @@ export default function Confirmation({ bookingData }: ConfirmationProps) {
           </DialogHeader>
           <div className="mt-4">
             <Checkout
-              jobId={bookingData.jobId}
+              jobId={jobId}
               amount={estimatedPrice.total}
               serviceCost={estimatedPrice.serviceCost}
               emergencySurcharge={estimatedPrice.emergencySurcharge}

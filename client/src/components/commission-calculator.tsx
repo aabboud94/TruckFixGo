@@ -38,10 +38,7 @@ export function CommissionCalculator({
 
   const calculateMutation = useMutation({
     mutationFn: async (params: { amount: number; surgeMultiplier?: number }) => {
-      return await apiRequest('/api/payments/commissions/calculate', {
-        method: 'POST',
-        body: params
-      });
+      return await apiRequest<CommissionCalculation>('POST', '/api/payments/commissions/calculate', params);
     },
     onSuccess: (data) => {
       setCalculation(data);

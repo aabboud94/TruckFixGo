@@ -15,7 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useTrackingWebSocket } from "@/hooks/use-tracking-websocket";
-import JobPhotoGallery from "@/components/job-photo-gallery";
+import JobPhotoGallery, { type JobPhoto } from "@/components/job-photo-gallery";
 import {
   MapPin,
   Phone,
@@ -103,7 +103,6 @@ export default function ContractorActiveJob() {
     jobId: job?.id || "",
     userId: "contractor-id", // This would come from auth context
     role: "contractor",
-    enabled: !!job?.id
   });
 
   // Update job status mutation
@@ -974,10 +973,15 @@ export default function ContractorActiveJob() {
 }
 
 // Component for the photos tab content
+interface ContractorJobPhotosResponse {
+  photos?: JobPhoto[];
+}
+
 function JobPhotoGalleryForContractor({ jobId }: { jobId: string }) {
-  const { data: photosData, isLoading, refetch } = useQuery({
+  const { data: photosData, isLoading, refetch } = useQuery<ContractorJobPhotosResponse>({
     queryKey: [`/api/jobs/${jobId}/photos`],
     enabled: !!jobId,
+    queryFn: () => apiRequest('GET', `/api/jobs/${jobId}/photos`),
   });
 
   if (isLoading) {
@@ -988,7 +992,7 @@ function JobPhotoGalleryForContractor({ jobId }: { jobId: string }) {
     );
   }
 
-  const photos = photosData?.photos || [];
+  const photos: JobPhoto[] = photosData?.photos || [];
 
   return (
     <JobPhotoGallery

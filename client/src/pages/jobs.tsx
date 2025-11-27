@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
 import { 
   Search, 
@@ -30,6 +32,7 @@ import {
   ChevronRight,
   Filter
 } from "lucide-react";
+import type { Job } from "@shared/schema";
 
 export default function JobsDashboard() {
   const [, setLocation] = useLocation();
@@ -39,9 +42,11 @@ export default function JobsDashboard() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [editingJob, setEditingJob] = useState<Job | null>(null);
+  const [editStatus, setEditStatus] = useState("new");
 
   // Query for all jobs
-  const { data: jobsData, isLoading, error, refetch } = useQuery({
+  const { data: jobsData, isLoading, error, refetch } = useQuery<{ jobs: Job[] }>({
     queryKey: ['/api/jobs', { status: statusFilter, type: typeFilter, search: searchQuery }],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -66,7 +71,7 @@ export default function JobsDashboard() {
     refetchInterval: 30000 // Refresh every 30 seconds
   });
 
-  const jobs = jobsData?.jobs || [];
+  const jobs: Job[] = jobsData?.jobs || [];
 
   // Calculate statistics
   const stats = {
@@ -75,6 +80,7 @@ export default function JobsDashboard() {
     active: jobs.filter(j => ['new', 'assigned', 'en_route', 'on_site'].includes(j.status)).length,
     completed: jobs.filter(j => j.status === 'completed').length
   };
+  const jobStatusOptions = ["new", "assigned", "en_route", "on_site", "completed", "cancelled"];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -112,7 +118,34 @@ export default function JobsDashboard() {
     setLocation(`/track/${jobId}`);
   };
 
+  const handleOpenEdit = (job: Job) => {
+    setEditingJob(job);
+    setEditStatus(job.status);
+  };
+
+  const updateJobStatusMutation = useMutation({
+    mutationFn: async ({ jobId, status }: { jobId: string; status: string }) => {
+      return apiRequest("PUT", `/api/jobs/${jobId}/status`, { status });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Job updated",
+        description: "The job status has been updated."
+      });
+      setEditingJob(null);
+      refetch();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
   return (
+    <>
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b bg-card">
@@ -360,6 +393,14 @@ export default function JobsDashboard() {
                           <Eye className="h-4 w-4 mr-1" />
                           View
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="flex-1 h-10"
+                          onClick={() => handleOpenEdit(job)}
+                        >
+                          Edit
+                        </Button>
                         {['assigned', 'en_route', 'on_site'].includes(job.status) && (
                           <Button
                             size="sm"
@@ -445,6 +486,13 @@ export default function JobsDashboard() {
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => handleOpenEdit(job)}
+                              >
+                                Edit
+                              </Button>
                               {['assigned', 'en_route', 'on_site'].includes(job.status) && (
                                 <Button
                                   size="sm"
@@ -468,5 +516,48 @@ export default function JobsDashboard() {
         </Card>
       </div>
     </div>
+    <Dialog open={!!editingJob} onOpenChange={(open) => {
+        if (!open) {
+          setEditingJob(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Job</DialogTitle>
+            <DialogDescription>
+              Update the status for {editingJob?.jobNumber || editingJob?.id}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={editStatus} onValueChange={(value) => setEditStatus(value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {jobStatusOptions.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status.replace('_', ' ')}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingJob(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => editingJob && updateJobStatusMutation.mutate({ jobId: editingJob.id, status: editStatus })}
+              disabled={updateJobStatusMutation.isPending}
+            >
+              {updateJobStatusMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

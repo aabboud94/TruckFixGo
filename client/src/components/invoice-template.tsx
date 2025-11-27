@@ -4,24 +4,29 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { 
-  Download, 
-  Mail, 
-  Printer, 
-  Eye, 
+import {
+  Download,
+  Mail,
+  Printer,
+  Eye,
   FileText,
   MapPin,
   Calendar,
   Truck,
   DollarSign,
   Building2,
-  User,
-  Hash
+  Hash,
 } from "lucide-react";
 import { format } from "date-fns";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import type { Invoice, Job, User, FleetAccount, Transaction } from "@shared/schema";
+import type {
+  Invoice,
+  Job,
+  User,
+  FleetAccount,
+  Transaction,
+} from "@shared/schema";
 
 interface InvoiceTemplateProps {
   invoice: Invoice;
@@ -48,6 +53,45 @@ export function InvoiceTemplate({
 }: InvoiceTemplateProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const invoiceRef = useRef<HTMLDivElement>(null);
+  const subtotal = Number(invoice.subtotal) || 0;
+  const taxAmount = Number(invoice.taxAmount) || 0;
+  const totalAmount = Number(invoice.totalAmount) || 0;
+
+  const jobLocation =
+    job.locationAddress ||
+    (typeof job.location === "object" && job.location !== null
+      ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (job.location as any).address
+      : null);
+  const vehicleInfo = {
+    year: job.vehicleYear,
+    make: job.vehicleMake,
+    model: job.vehicleModel,
+    vin: job.vin,
+    unitNumber: job.unitNumber,
+  };
+  const laborHours =
+    typeof job.laborHours === "string"
+      ? Number(job.laborHours)
+      : typeof job.laborHours === "number"
+        ? job.laborHours
+        : 1;
+  const laborRate = 125;
+  const taxRate = subtotal ? taxAmount / subtotal : 0.0825;
+  const fleetDiscountRate =
+    fleetAccount?.pricingTier === "gold"
+      ? 0.1
+      : fleetAccount?.pricingTier === "silver"
+        ? 0.05
+        : fleetAccount?.pricingTier === "platinum"
+          ? 0.15
+          : 0;
+  const quotedPrice =
+    typeof job.estimatedPrice === "string"
+      ? Number(job.estimatedPrice)
+      : typeof job.finalPrice === "string"
+        ? Number(job.finalPrice)
+        : subtotal || totalAmount;
 
   // Generate PDF from HTML
   const handleGeneratePDF = async () => {
@@ -138,16 +182,22 @@ export function InvoiceTemplate({
     return methods[method] || method;
   };
 
-  const vehicleInfo = job.vehicleInfo as any;
-  const laborHours = (job.actualDuration || job.estimatedDuration || 60) / 60;
-  const laborRate = 125;
-  const taxRate = 0.0825;
-  const fleetDiscountRate = fleetAccount?.pricingTier === "gold" ? 0.1 : 
-                           fleetAccount?.pricingTier === "silver" ? 0.05 : 
-                           fleetAccount?.pricingTier === "platinum" ? 0.15 : 0;
+  const primaryTransaction = transactions?.[0];
+  const paymentMethodDisplay =
+    primaryTransaction &&
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (primaryTransaction as any).paymentMethodType
+      ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        getPaymentMethodDisplay(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (primaryTransaction as any).paymentMethodType as string,
+        )
+      : undefined;
+
+  const vehicleInfoExists = Object.values(vehicleInfo).some(Boolean);
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-6 space-y-4">
+    <div className="w-full max-w-4xl mx-auto px-safe py-6 space-y-4">
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-2 justify-end no-print">
         <Button
@@ -184,8 +234,8 @@ export function InvoiceTemplate({
       {/* Invoice Template */}
       <Card className="bg-white" ref={invoiceRef}>
         {/* Header */}
-        <div className="bg-blue-900 text-white p-8 rounded-t-lg">
-          <div className="flex justify-between items-start">
+        <div className="bg-blue-900 text-white p-6 sm:p-8 rounded-t-lg">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <h1 className="text-3xl font-bold">TruckFixGo</h1>
               <p className="text-blue-100 mt-1">Professional Truck Repair Services</p>
@@ -255,8 +305,10 @@ export function InvoiceTemplate({
               </div>
               <div className="border border-t-0 border-gray-200 rounded-b-lg p-4">
                 <p className="font-semibold text-gray-900">
-                  {fleetAccount ? fleetAccount.companyName : 
-                   `${customer.firstName || ""} ${customer.lastName || ""}`.trim() || "Guest Customer"}
+                  {fleetAccount
+                    ? fleetAccount.companyName
+                    : `${customer.firstName || ""} ${customer.lastName || ""}`.trim() ||
+                      "Guest Customer"}
                 </p>
                 {fleetAccount && fleetAccount.primaryContactName && (
                   <p className="text-gray-600 text-sm mt-1">Contact: {fleetAccount.primaryContactName}</p>
@@ -286,8 +338,8 @@ export function InvoiceTemplate({
                 </h3>
               </div>
               <div className="border border-t-0 border-gray-200 rounded-b-lg p-4">
-                <p className="text-gray-900">{job.serviceLocation || "On-site service"}</p>
-                {vehicleInfo && (
+                <p className="text-gray-900">{jobLocation || "On-site service"}</p>
+                {vehicleInfoExists && (
                   <>
                     {vehicleInfo.make && vehicleInfo.model && (
                       <p className="text-gray-600 text-sm mt-2">
@@ -296,16 +348,20 @@ export function InvoiceTemplate({
                       </p>
                     )}
                     {vehicleInfo.vin && (
-                      <p className="text-gray-600 text-sm font-mono">VIN: {vehicleInfo.vin}</p>
+                      <p className="text-gray-600 text-sm font-mono">
+                        VIN: {vehicleInfo.vin}
+                      </p>
                     )}
                     {vehicleInfo.unitNumber && (
-                      <p className="text-gray-600 text-sm">Unit #: {vehicleInfo.unitNumber}</p>
+                      <p className="text-gray-600 text-sm">
+                        Unit #: {vehicleInfo.unitNumber}
+                      </p>
                     )}
                   </>
                 )}
                 <p className="text-gray-600 text-sm mt-2">
                   <Calendar className="h-3 w-3 inline mr-1" />
-                  {format(job.scheduledTime || job.createdAt, "MMM dd, yyyy h:mm a")}
+                  {format(job.scheduledAt || job.createdAt, "MMM dd, yyyy h:mm a")}
                 </p>
               </div>
             </div>
@@ -329,11 +385,16 @@ export function InvoiceTemplate({
                 <tbody>
                   <tr className="border-t border-gray-200">
                     <td className="px-4 py-3 text-gray-900">
-                      {job.jobType === "emergency" ? "Emergency" : "Scheduled"} Service - {job.issueDescription || "Truck Repair"}
+                      {job.jobType === "emergency" ? "Emergency" : "Scheduled"} Service -{" "}
+                      {job.description || "Truck Repair"}
                     </td>
                     <td className="text-right px-4 py-3 text-gray-900">1</td>
-                    <td className="text-right px-4 py-3 text-gray-900">${job.quotedPrice?.toFixed(2)}</td>
-                    <td className="text-right px-4 py-3 font-semibold text-gray-900">${job.quotedPrice?.toFixed(2)}</td>
+                    <td className="text-right px-4 py-3 text-gray-900">
+                      ${quotedPrice.toFixed(2)}
+                    </td>
+                    <td className="text-right px-4 py-3 font-semibold text-gray-900">
+                      ${quotedPrice.toFixed(2)}
+                    </td>
                   </tr>
                   <tr className="border-t border-gray-200 bg-gray-50">
                     <td className="px-4 py-3 text-gray-900">Labor</td>
@@ -354,22 +415,24 @@ export function InvoiceTemplate({
               <Separator />
               <div className="flex justify-between text-gray-700">
                 <span>Subtotal:</span>
-                <span className="font-semibold">${invoice.subtotal.toFixed(2)}</span>
+                <span className="font-semibold">${subtotal.toFixed(2)}</span>
               </div>
               {fleetDiscountRate > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>Fleet Discount ({(fleetDiscountRate * 100).toFixed(0)}%):</span>
-                  <span className="font-semibold">-${(invoice.subtotal * fleetDiscountRate).toFixed(2)}</span>
+                  <span className="font-semibold">
+                    -${(subtotal * fleetDiscountRate).toFixed(2)}
+                  </span>
                 </div>
               )}
               <div className="flex justify-between text-gray-700">
                 <span>Tax ({(taxRate * 100).toFixed(2)}%):</span>
-                <span className="font-semibold">${(invoice.subtotal * taxRate).toFixed(2)}</span>
+                <span className="font-semibold">${taxAmount.toFixed(2)}</span>
               </div>
               <Separator />
               <div className="flex justify-between bg-gray-800 text-white p-3 rounded-lg">
                 <span className="text-lg font-semibold">Total Due:</span>
-                <span className="text-xl font-bold">${invoice.totalAmount.toFixed(2)}</span>
+                <span className="text-xl font-bold">${totalAmount.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -382,11 +445,17 @@ export function InvoiceTemplate({
             </h3>
             {invoice.status === "paid" ? (
               <div className="space-y-1 text-sm text-gray-600">
-                <p>Payment received on {invoice.paidDate ? format(invoice.paidDate, "MMM dd, yyyy") : "N/A"}</p>
+                <p>
+                  Payment received on{" "}
+                  {invoice.paidAt ? format(invoice.paidAt, "MMM dd, yyyy") : "N/A"}
+                </p>
                 {transactions && transactions.length > 0 && (
                   <>
-                    <p>Payment Method: {getPaymentMethodDisplay(transactions[0].paymentMethodType)}</p>
-                    <p>Transaction ID: {transactions[0].stripePaymentIntentId || transactions[0].id}</p>
+                    {paymentMethodDisplay && <p>Payment Method: {paymentMethodDisplay}</p>}
+                    <p>
+                      Transaction ID:{" "}
+                      {primaryTransaction?.stripePaymentIntentId || primaryTransaction?.id}
+                    </p>
                   </>
                 )}
               </div>

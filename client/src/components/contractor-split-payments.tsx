@@ -31,22 +31,41 @@ interface ContractorSplitPaymentsProps {
   contractorId?: string;
 }
 
+interface ContractorSplitPaymentJob {
+  jobId: string;
+  jobNumber?: string;
+  createdAt?: string;
+  splitPayment?: {
+    totalAmount?: string;
+    status?: string;
+    paymentSplits?: Array<{
+      id: string;
+      payerType: string;
+      payerName?: string;
+      amountAssigned: string;
+      amountPaid: string;
+      status: string;
+    }>;
+  };
+}
+
+interface ContractorSplitPaymentsResponse {
+  jobs: ContractorSplitPaymentJob[];
+}
+
 export default function ContractorSplitPayments({ contractorId }: ContractorSplitPaymentsProps) {
   const [selectedJob, setSelectedJob] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Fetch contractor's jobs with split payments
-  const { data: splitPaymentJobs, isLoading, refetch } = useQuery({
+  const { data: splitPaymentJobs, isLoading, refetch } = useQuery<ContractorSplitPaymentsResponse>({
     queryKey: ["/api/contractor/split-payments", contractorId],
     enabled: !!contractorId
   });
 
   // Send reminder to specific payer
   const sendReminder = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/payments/split/remind", {
-      method: "POST",
-      body: JSON.stringify(data)
-    }),
+    mutationFn: (data: any) => apiRequest("POST", "/api/payments/split/remind", data),
     onSuccess: () => {
       toast({
         title: "Reminder Sent",

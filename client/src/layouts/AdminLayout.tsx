@@ -134,13 +134,13 @@ export default function AdminLayout({ children, title, breadcrumbs = [] }: Admin
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-screen w-full overflow-hidden">
+      <div className="flex min-h-[var(--app-height)] w-full overflow-hidden bg-muted/20">
         <AdminSidebar />
         
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Header */}
-          <header className="sticky top-0 z-50 flex flex-col border-b bg-background flex-shrink-0">
-            <div className="flex items-center justify-between px-4 py-3 md:px-6">
+          <header className="sticky top-0 z-50 flex flex-col border-b bg-background/95 backdrop-blur flex-shrink-0">
+            <div className="flex items-center justify-between px-safe py-3 md:px-8">
               <div className="flex items-center gap-2 md:gap-4 flex-1">
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
                 
@@ -220,7 +220,7 @@ export default function AdminLayout({ children, title, breadcrumbs = [] }: Admin
 
             {/* Mobile Search Bar - Full Width */}
             {showMobileSearch && (
-              <div className="px-4 pb-3 md:hidden">
+              <div className="px-safe pb-3 md:hidden">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -237,14 +237,14 @@ export default function AdminLayout({ children, title, breadcrumbs = [] }: Admin
 
           {/* Page Title */}
           {title && (
-            <div className="border-b bg-muted/50 px-4 py-3 md:px-6 md:py-4">
+            <div className="border-b bg-muted/50 px-safe py-3 md:px-8 md:py-4">
               <h1 className="text-xl md:text-2xl font-semibold">{title}</h1>
             </div>
           )}
 
           {/* Main Content */}
           <main className="flex-1 overflow-auto bg-muted/30">
-            <div className="container mx-auto px-4 py-4 md:px-6 md:py-6">
+            <div className="mx-auto w-full max-w-screen-2xl px-safe py-4 sm:py-8 space-y-6">
               {children}
             </div>
           </main>

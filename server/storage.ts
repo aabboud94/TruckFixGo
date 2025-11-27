@@ -23,6 +23,7 @@ import {
   contractorCoverage,
   contractorEarnings,
   reviews,
+  reviews as contractorRatings,
   reviewVotes,
   contractorDocuments,
   pricingRules,
@@ -286,6 +287,7 @@ import {
   reminderTypeEnum,
   reminderTimingEnum,
   fleetPricingTierEnum,
+  userRoleEnum,
   jobTypeEnum,
   jobStatusEnum,
   paymentStatusEnum,
@@ -405,11 +407,14 @@ import {
   type InsertContractorPricing,
   type ContractorServiceAreas,
   type InsertContractorServiceAreas,
-  commissionTypeEnum
-} from "@shared/schema";
+  commissionTypeEnum,
+  entityTypeEnum,
+  metricTypeEnum,
+  kpiCategoryEnum
+} from "../shared/schema";
 import { partsInventoryService } from "./services/parts-inventory-service";
 
-export interface IStorage {
+export interface IStorageDeprecated {
   // ==================== PARTS INVENTORY ====================
   
   // Add new part to catalog
@@ -1228,7 +1233,7 @@ export interface IStorage {
   // Commission Settings
   getCommissionSettings(): Promise<CommissionSettings | null>;
   updateCommissionSettings(settings: InsertCommissionSettings): Promise<CommissionSettings>;
-  calculateCommission(jobTotal: number): Promise<{
+  calculateCommissionAmount(jobTotal: number): Promise<{
     commissionType: string;
     commissionValue: number;
     commissionAmount: number;
@@ -1246,9 +1251,9 @@ export interface IStorage {
 }
 
 import { db } from "./db";
-import { eq, and, or, gte, lte, isNull, isNotNull, desc, asc, sql, inArray, ne, gt, lt, ilike } from "drizzle-orm";
+import { eq, and, or, gte, lte, isNull, isNotNull, desc, asc, sql, inArray, ne, gt, lt, ilike, between } from "drizzle-orm";
 import { randomUUID, randomBytes } from "crypto";
-import bcrypt from "bcrypt";
+import * as bcrypt from "bcrypt";
 import memoize from "memoizee";
 
 // Pagination options
@@ -1685,12 +1690,29 @@ export interface IStorage {
   getCurrentPricing(serviceTypeId: string): Promise<ServicePricing | undefined>;
   
   createServiceArea(area: InsertServiceArea): Promise<ServiceArea>;
-  updateServiceArea(id: string, updates: Partial<InsertServiceArea>): Promise<ServiceArea | undefined>;
-  getActiveServiceAreas(): Promise<ServiceArea[]>;
-  getAllServiceAreas(): Promise<ServiceArea[]>;
-  getServiceArea(id: string): Promise<ServiceArea | undefined>;
-  deleteServiceArea(id: string): Promise<boolean>;
-  checkServiceAvailability(location: {lat: number, lng: number}): Promise<boolean>;
+  updateServiceArea(areaId: string, updates: Partial<InsertServiceArea>): Promise<ServiceArea | null>;
+  deleteServiceArea(areaId: string): Promise<boolean>;
+  getServiceArea(areaId: string): Promise<ServiceArea | null>;
+  getAllServiceAreas(filters?: { isActive?: boolean }): Promise<ServiceArea[]>;
+  searchServiceAreasByLocation(lat: number, lng: number, radiusMiles: number): Promise<ServiceArea[]>;
+  assignContractorToServiceArea(contractorId: string, serviceAreaId: string, settings?: {
+    maxDistanceMiles?: number;
+    customRateMultiplier?: number;
+  }): Promise<ContractorServiceAreas>;
+  removeContractorFromServiceArea(contractorId: string, serviceAreaId: string): Promise<boolean>;
+  getContractorServiceAreas(contractorId: string): Promise<Array<{
+    serviceArea: ServiceArea;
+    settings: ContractorServiceAreas;
+  }>>;
+  getServiceAreaContractors(serviceAreaId: string, filters?: {
+    isActive?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<Array<{
+    contractor: ContractorProfile;
+    settings: ContractorServiceAreas;
+  }>>;
+  checkServiceAvailability(location: { lat: number; lng: number }): Promise<boolean>;
   
   createPricingRule(rule: InsertPricingRule): Promise<PricingRule>;
   updatePricingRule(id: string, updates: Partial<InsertPricingRule>): Promise<PricingRule | undefined>;
@@ -1705,7 +1727,17 @@ export interface IStorage {
   
   setContractorAvailability(availability: InsertContractorAvailability): Promise<ContractorAvailability>;
   getContractorAvailability(contractorId: string): Promise<ContractorAvailability[]>;
-  updateContractorLocation(contractorId: string, location: {lat: number, lng: number}): Promise<boolean>;
+  updateContractorLocation(contractorId: string, location: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    altitude?: number;
+    heading?: number;
+    speed?: number;
+    batteryLevel?: number;
+    isCharging?: boolean;
+    networkType?: string;
+  }): Promise<LocationTracking | null>;
   
   // ==================== VACATION AND TIME-OFF MANAGEMENT ====================
   requestTimeOff(contractorId: string, request: InsertVacationRequest): Promise<VacationRequest>;
@@ -1748,7 +1780,19 @@ export interface IStorage {
   }[]>;
   
   addContractorEarning(earning: InsertContractorEarning): Promise<ContractorEarning>;
-  getContractorEarnings(contractorId: string, isPaid?: boolean): Promise<ContractorEarning[]>;
+  listContractorEarnings(contractorId: string, isPaid?: boolean): Promise<ContractorEarning[]>;
+  getContractorEarningsSummary(
+    contractorId: string,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<{
+    totalEarnings: number;
+    totalCommissions: number;
+    netPayout: number;
+    pendingPayouts: number;
+    completedPayouts: number;
+    transactions: CommissionTransaction[];
+  }>;
   calculateContractorEarnings(contractorId: string, fromDate: Date, toDate: Date): Promise<number>;
   markEarningsAsPaid(contractorId: string, earningIds: string[]): Promise<boolean>;
   
@@ -2530,7 +2574,8 @@ export interface IStorage {
   updatePayoutBatchStatus(batchId: string, status: string, failureReason?: string): Promise<PayoutBatch | null>;
   
   // Contractor earnings
-  getContractorEarnings(
+  listContractorEarnings(contractorId: string, isPaid?: boolean): Promise<ContractorEarning[]>;
+  getContractorEarningsSummary(
     contractorId: string,
     startDate?: Date,
     endDate?: Date
@@ -3203,7 +3248,7 @@ export class PostgreSQLStorage implements IStorage {
 
         // Fetch and return updated contractor
         // Directly query with raw SQL to avoid Drizzle query builder issues
-        const result = await tx.execute<any>(sql`
+        const result = await tx.execute(sql`
           SELECT 
             u.id,
             u.first_name as "firstName",
@@ -5938,44 +5983,6 @@ export class PostgreSQLStorage implements IStorage {
     return result[0];
   }
 
-  async createServiceArea(area: InsertServiceArea): Promise<ServiceArea> {
-    const result = await db.insert(serviceAreas).values(area).returning();
-    return result[0];
-  }
-
-  async updateServiceArea(id: string, updates: Partial<InsertServiceArea>): Promise<ServiceArea | undefined> {
-    const result = await db.update(serviceAreas)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(serviceAreas.id, id))
-      .returning();
-    return result[0];
-  }
-
-  async getActiveServiceAreas(): Promise<ServiceArea[]> {
-    return await db.select().from(serviceAreas)
-      .where(eq(serviceAreas.isActive, true))
-      .orderBy(asc(serviceAreas.name));
-  }
-
-  async getAllServiceAreas(): Promise<ServiceArea[]> {
-    return await db.select().from(serviceAreas)
-      .orderBy(asc(serviceAreas.name));
-  }
-
-  async getServiceArea(id: string): Promise<ServiceArea | undefined> {
-    const result = await db.select().from(serviceAreas)
-      .where(eq(serviceAreas.id, id))
-      .limit(1);
-    return result[0];
-  }
-
-  async deleteServiceArea(id: string): Promise<boolean> {
-    const result = await db.delete(serviceAreas)
-      .where(eq(serviceAreas.id, id))
-      .returning();
-    return result.length > 0;
-  }
-
   async checkServiceAvailability(location: {lat: number, lng: number}): Promise<boolean> {
     // This would need PostGIS or similar for proper geographic queries
     // For now, return true as a placeholder
@@ -6457,24 +6464,46 @@ export class PostgreSQLStorage implements IStorage {
     return suggestions.slice(0, 10); // Return top 10 suggestions
   }
   
-  private calculateDistance(loc1: any, loc2: any): number {
-    // Simple distance calculation (you might want to use a proper geolocation library)
-    const lat1 = loc1.lat || loc1.latitude;
-    const lon1 = loc1.lng || loc1.longitude;
-    const lat2 = loc2.lat || loc2.latitude;
-    const lon2 = loc2.lng || loc2.longitude;
-    
-    if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
-    
-    const R = 3959; // Radius of the Earth in miles
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
+  private calculateDistance(loc1: { lat?: number; lng?: number; latitude?: number; longitude?: number }, loc2: { lat?: number; lng?: number; latitude?: number; longitude?: number }): number;
+  private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number;
+  private calculateDistance(...args: any[]): number {
+    const EARTH_RADIUS_MILES = 3959;
+    const toRadians = (value: number) => (value * Math.PI) / 180;
+    const haversine = (aLat: number, aLon: number, bLat: number, bLon: number) => {
+      const dLat = toRadians(bLat - aLat);
+      const dLon = toRadians(bLon - aLon);
+      const sinLat = Math.sin(dLat / 2);
+      const sinLon = Math.sin(dLon / 2);
+      const a =
+        sinLat * sinLat +
+        Math.cos(toRadians(aLat)) * Math.cos(toRadians(bLat)) * sinLon * sinLon;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return EARTH_RADIUS_MILES * c;
+    };
+
+    if (args.length === 4 && args.every((value) => typeof value === "number")) {
+      const [lat1, lon1, lat2, lon2] = args as [number, number, number, number];
+      return haversine(lat1, lon1, lat2, lon2);
+    }
+
+    if (args.length === 2) {
+      const extract = (value: any) => ({
+        lat: value?.lat ?? value?.latitude,
+        lon: value?.lng ?? value?.longitude,
+      });
+      const first = extract(args[0]);
+      const second = extract(args[1]);
+      if (
+        typeof first.lat === "number" &&
+        typeof first.lon === "number" &&
+        typeof second.lat === "number" &&
+        typeof second.lon === "number"
+      ) {
+        return haversine(first.lat, first.lon, second.lat, second.lon);
+      }
+    }
+
+    return 0;
   }
 
 
@@ -6483,7 +6512,7 @@ export class PostgreSQLStorage implements IStorage {
     return result[0];
   }
 
-  async getContractorEarnings(contractorId: string, isPaid?: boolean): Promise<ContractorEarning[]> {
+  async listContractorEarnings(contractorId: string, isPaid?: boolean): Promise<ContractorEarning[]> {
     let query = db.select().from(contractorEarnings)
       .where(eq(contractorEarnings.contractorId, contractorId));
     
@@ -6833,19 +6862,87 @@ export class PostgreSQLStorage implements IStorage {
     return result.length > 0;
   }
 
-  async getContractorPerformanceMetrics(contractorId: string): Promise<ContractorPerformanceMetrics> {
-    const [jobStats, earningsStats, ratingStats, responseStats] = await Promise.all([
+  async getContractorPerformanceMetrics(contractorId: string): Promise<ContractorPerformanceMetrics>;
+  async getContractorPerformanceMetrics(
+    contractorId: string,
+    options: {
+      metricType?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<PerformanceMetric[]>;
+  async getContractorPerformanceMetrics(
+    contractorId: string,
+    options?: {
+      metricType?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<ContractorPerformanceMetrics | PerformanceMetric[]> {
+    const hasDetailedOptions = Boolean(
+      options &&
+      (
+        options.metricType !== undefined ||
+        options.startDate !== undefined ||
+        options.endDate !== undefined ||
+        options.limit !== undefined ||
+        options.offset !== undefined
+      )
+    );
+
+    if (hasDetailedOptions) {
+      const contractorEntityType = 'contractor' as typeof entityTypeEnum.enumValues[number];
+      const conditions = [
+        eq(performanceMetrics.entityType, contractorEntityType),
+        eq(performanceMetrics.entityId, contractorId)
+      ];
+      
+      if (options?.metricType) {
+        conditions.push(
+          eq(
+            performanceMetrics.metricType,
+            options.metricType as typeof metricTypeEnum.enumValues[number]
+          )
+        );
+      }
+      
+      if (options?.startDate) {
+        conditions.push(gte(performanceMetrics.createdAt, options.startDate));
+      }
+      
+      if (options?.endDate) {
+        conditions.push(lte(performanceMetrics.createdAt, options.endDate));
+      }
+      
+      let query = db.select().from(performanceMetrics).where(and(...conditions)).orderBy(desc(performanceMetrics.createdAt));
+      
+      if (options?.limit !== undefined) {
+        query = query.limit(options.limit);
+      }
+      if (options?.offset !== undefined) {
+        query = query.offset(options.offset);
+      }
+      
+      return query;
+    }
+
+    const [jobStats, earningsStats, ratingStats, responseStats, contractorDetails] = await Promise.all([
       // Job statistics
       db.select({
         total: sql<number>`COUNT(*)`,
-        completed: sql<number>`COUNT(*) FILTER (WHERE ${jobs.status} = 'completed')`
+        completed: sql<number>`COUNT(*) FILTER (WHERE ${jobs.status} = 'completed')`,
+        accepted: sql<number>`COUNT(*) FILTER (WHERE ${jobs.status} != 'new' AND ${jobs.status} != 'cancelled')`
       })
       .from(jobs)
       .where(eq(jobs.contractorId, contractorId)),
       
       // Earnings
       db.select({
-        total: sql<number>`SUM(${contractorEarnings.amount})`
+        total: sql<number>`COALESCE(SUM(${contractorEarnings.amount}), 0)`
       })
       .from(contractorEarnings)
       .where(eq(contractorEarnings.contractorId, contractorId)),
@@ -6867,20 +6964,49 @@ export class PostgreSQLStorage implements IStorage {
           eq(jobs.contractorId, contractorId),
           sql`${jobs.assignedAt} IS NOT NULL`
         )
-      )
+      ),
+
+      // Contractor profile and identity details
+      db.select({
+        firstName: users.firstName,
+        lastName: users.lastName,
+        performanceTier: contractorProfiles.performanceTier,
+        onTimeArrivalRate: contractorProfiles.onTimeArrivalRate,
+        lastHeartbeatAt: contractorProfiles.lastHeartbeatAt,
+        profileUpdatedAt: contractorProfiles.updatedAt,
+        lastLoginAt: users.lastLoginAt
+      })
+      .from(contractorProfiles)
+      .innerJoin(users, eq(contractorProfiles.userId, users.id))
+      .where(eq(contractorProfiles.userId, contractorId))
+      .limit(1)
     ]);
     
     const totalJobs = jobStats[0]?.total || 0;
     const completedJobs = jobStats[0]?.completed || 0;
+    const acceptedJobs = jobStats[0]?.accepted || 0;
+    const contractorInfo = contractorDetails[0];
+    const contractorName = `${contractorInfo?.firstName ?? ''} ${contractorInfo?.lastName ?? ''}`.trim() || 'Unknown Contractor';
+    const onTimeArrivalRate = contractorInfo?.onTimeArrivalRate ? Number(contractorInfo.onTimeArrivalRate) : 0;
+    const tier = contractorInfo?.performanceTier || 'bronze';
+    const lastActive = contractorInfo?.lastHeartbeatAt
+      || contractorInfo?.lastLoginAt
+      || contractorInfo?.profileUpdatedAt
+      || new Date(0);
     
     return {
       contractorId,
+      contractorName,
       totalJobs,
       completedJobs,
       averageRating: ratingStats[0]?.avg || 0,
-      totalEarnings: earningsStats[0]?.total || 0,
+      totalEarnings: Number(earningsStats[0]?.total || 0),
       averageResponseTime: responseStats[0]?.avg || 0,
-      completionRate: totalJobs > 0 ? (completedJobs / totalJobs) * 100 : 0
+      completionRate: totalJobs > 0 ? (completedJobs / totalJobs) * 100 : 0,
+      acceptanceRate: totalJobs > 0 ? (acceptedJobs / totalJobs) * 100 : 0,
+      onTimeArrivalRate,
+      tier,
+      lastActive
     };
   }
 
@@ -8115,14 +8241,14 @@ export class PostgreSQLStorage implements IStorage {
 
   async getEmailTemplate(templateKey: string): Promise<EmailTemplate | undefined> {
     const result = await db.select().from(emailTemplates)
-      .where(eq(emailTemplates.templateKey, templateKey))
+      .where(eq(emailTemplates.code, templateKey))
       .limit(1);
     return result[0];
   }
 
   async getIntegration(provider: string): Promise<IntegrationsConfig | undefined> {
     const result = await db.select().from(integrationsConfig)
-      .where(eq(integrationsConfig.provider, provider))
+      .where(eq(integrationsConfig.service, provider))
       .limit(1);
     return result[0];
   }
@@ -8130,18 +8256,18 @@ export class PostgreSQLStorage implements IStorage {
   async updateIntegration(provider: string, config: any): Promise<IntegrationsConfig> {
     const existing = await this.getIntegration(provider);
     
-    if (existing) {
-      const result = await db.update(integrationsConfig)
-        .set({ config, updatedAt: new Date() })
-        .where(eq(integrationsConfig.provider, provider))
-        .returning();
-      return result[0];
-    } else {
-      const result = await db.insert(integrationsConfig)
-        .values({ provider, config })
-        .returning();
-      return result[0];
-    }
+      if (existing) {
+        const result = await db.update(integrationsConfig)
+          .set({ config, updatedAt: new Date() })
+          .where(eq(integrationsConfig.service, provider))
+          .returning();
+        return result[0];
+      } else {
+        const result = await db.insert(integrationsConfig)
+          .values({ service: provider, config })
+          .returning();
+        return result[0];
+      }
   }
 
   // ==================== ANALYTICS OPERATIONS ====================
@@ -8349,11 +8475,16 @@ export class PostgreSQLStorage implements IStorage {
     return {
       fromDate,
       toDate,
-      totalRevenue: totalRevenue[0]?.total || 0,
+      totalRevenue: Number(totalRevenue[0]?.total || 0),
       revenueByService,
       revenueByFleet,
-      averageJobValue: transactionMetrics[0]?.avgAmount || 0,
-      transactionCount: transactionMetrics[0]?.count || 0
+      averageJobValue: Number(transactionMetrics[0]?.avgAmount || 0),
+      transactionCount: Number(transactionMetrics[0]?.count || 0),
+      platformFees: 0,
+      outstandingPayments: 0,
+      paymentMethodBreakdown: {},
+      emergencyVsScheduled: { emergency: 0, scheduled: 0 },
+      surgePricingRevenue: 0
     };
   }
 
@@ -8362,7 +8493,7 @@ export class PostgreSQLStorage implements IStorage {
     if (fromDate) dateConditions.push(gte(jobs.createdAt, fromDate));
     if (toDate) dateConditions.push(lte(jobs.createdAt, toDate));
 
-    const [jobStats, vehicleCount, spendingStats, serviceStats] = await Promise.all([
+    const [jobStats, vehicleCount, spendingStats, serviceStats, fleetInfo] = await Promise.all([
       // Job statistics
       db.select({
         total: sql<number>`COUNT(*)`
@@ -8406,29 +8537,46 @@ export class PostgreSQLStorage implements IStorage {
       .where(and(...dateConditions))
       .groupBy(jobs.serviceTypeId)
       .orderBy(desc(sql`COUNT(*)`))
-      .limit(5)
+      .limit(5),
+
+      this.getFleetAccount(fleetId)
     ]);
 
     const totalJobs = jobStats[0]?.total || 0;
     const totalVehicles = vehicleCount[0]?.count || 0;
+    const totalSpent = Number(spendingStats[0]?.total || 0);
 
+    const serviceUsageStats = serviceStats as Array<{ serviceTypeId: string | null; count: number | string }>;
     const mostUsedServices = await Promise.all(
-      serviceStats.map(async (stat) => {
+      serviceUsageStats.map(async (stat) => {
+        if (!stat.serviceTypeId) {
+          return {
+            serviceType: 'Unknown',
+            count: Number(stat.count)
+          };
+        }
+
         const service = await this.getServiceType(stat.serviceTypeId);
         return {
           serviceType: service?.name || 'Unknown',
-          count: stat.count
+          count: Number(stat.count)
         };
       })
     );
 
     return {
       fleetId,
-      totalJobs,
-      totalVehicles,
-      totalSpent: spendingStats[0]?.total || 0,
-      averageJobsPerVehicle: totalVehicles > 0 ? totalJobs / totalVehicles : 0,
-      mostUsedServices
+      fleetName: fleetInfo?.companyName || 'Fleet Account',
+      totalJobs: Number(totalJobs),
+      totalVehicles: Number(totalVehicles),
+      totalSpent,
+      averageJobsPerVehicle: totalVehicles > 0 ? Number(totalJobs) / Number(totalVehicles) : 0,
+      mostUsedServices,
+      pmComplianceRate: 0,
+      breakdownFrequency: 0,
+      costPerMile: 0,
+      tier: fleetInfo?.pricingTier || 'standard',
+      savings: 0
     };
   }
 
@@ -9772,12 +9920,13 @@ export class PostgreSQLStorage implements IStorage {
     )
     .groupBy(paymentSplits.payerType);
 
-    return result.reduce((acc, row) => {
-      if (row.payerType) {
-        acc[row.payerType] = Number(row.total || 0);
-      }
-      return acc;
-    }, {} as Record<string, number>);
+    return (result as Array<{ payerType: string | null; total: number | string | null }>).
+      reduce((acc: Record<string, number>, row) => {
+        if (row.payerType) {
+          acc[row.payerType] = Number(row.total || 0);
+        }
+        return acc;
+      }, {});
   }
 
   // Additional split payment methods for comprehensive API
@@ -9828,10 +9977,11 @@ export class PostgreSQLStorage implements IStorage {
     const paymentSplitsList = await this.getPaymentSplitsBySplitPaymentId(splitId);
     
     const totalAmount = parseFloat(split.totalAmount);
-    const totalPaid = paymentSplitsList.reduce((sum, ps) => 
-      sum + parseFloat(ps.amountPaid || '0'), 0
+    const totalPaid = paymentSplitsList.reduce(
+      (sum: number, ps: PaymentSplit) => sum + parseFloat(ps.amountPaid || '0'),
+      0
     );
-    const totalPending = paymentSplitsList.reduce((sum, ps) => 
+    const totalPending = paymentSplitsList.reduce<number>((sum, ps) => 
       ps.status === 'pending' ? sum + parseFloat(ps.amountAssigned) : sum, 0
     );
 
@@ -9897,8 +10047,9 @@ export class PostgreSQLStorage implements IStorage {
     const { splitPayment, paymentSplits, totalAmount, totalPaid } = splitStatus;
 
     // Check if all splits are accounted for
-    const totalAssigned = paymentSplits.reduce((sum: number, ps: any) => 
-      sum + parseFloat(ps.amountAssigned), 0
+    const totalAssigned = paymentSplits.reduce(
+      (sum: number, ps: PaymentSplit) => sum + parseFloat(ps.amountAssigned),
+      0
     );
 
     if (Math.abs(totalAmount - totalAssigned) > 0.01) {
@@ -9994,9 +10145,9 @@ export class PostgreSQLStorage implements IStorage {
       .where(inArray(transactions.id, transactionIds))
       .orderBy(desc(transactions.createdAt));
     
-    return transactionHistory.map(t => ({
+    return transactionHistory.map((t: Transaction) => ({
       ...t,
-      payerInfo: splits.find(s => s.transactionId === t.id)
+      payerInfo: splits.find((s: PaymentSplit) => s.transactionId === t.id)
     }));
   }
 
@@ -10327,12 +10478,13 @@ export class PostgreSQLStorage implements IStorage {
     .from(fleetContracts)
     .groupBy(fleetContracts.status);
     
-    return result.reduce((acc, row) => {
-      if (row.status) {
-        acc[row.status] = Number(row.total || 0);
-      }
-      return acc;
-    }, {} as Record<string, number>);
+    return (result as Array<{ status: string | null; total: number | string | null }>).
+      reduce((acc: Record<string, number>, row) => {
+        if (row.status) {
+          acc[row.status] = Number(row.total || 0);
+        }
+        return acc;
+      }, {});
   }
 
   async checkSlaBreachForJob(jobId: string): Promise<{
@@ -10445,9 +10597,10 @@ export class PostgreSQLStorage implements IStorage {
     .from(jobs)
     .groupBy(jobs.status);
 
-    const total = stats.reduce((sum, s) => sum + Number(s.count), 0);
+    const jobStats = stats as Array<{ status: Job['status']; count: number | string }>;
+    const total = jobStats.reduce((sum: number, s) => sum + Number(s.count), 0);
     const byStatus: Record<string, number> = {};
-    stats.forEach(s => {
+    jobStats.forEach((s) => {
       byStatus[s.status] = Number(s.count);
     });
 
@@ -10481,9 +10634,10 @@ export class PostgreSQLStorage implements IStorage {
     .where(gte(transactions.createdAt, thirtyDaysAgo))
     .groupBy(transactions.status);
 
-    const totalTransactions = stats.reduce((sum, s) => sum + Number(s.count), 0);
-    const totalAmount = stats.reduce((sum, s) => sum + Number(s.total || 0), 0);
-    const failedCount = stats.find(s => s.status === 'failed')?.count || 0;
+    const paymentStats = stats as Array<{ status: string; count: number | string; total: number | string | null }>;
+    const totalTransactions = paymentStats.reduce((sum: number, s) => sum + Number(s.count), 0);
+    const totalAmount = paymentStats.reduce((sum: number, s) => sum + Number(s.total || 0), 0);
+    const failedCount = paymentStats.find(s => s.status === 'failed')?.count || 0;
 
     return {
       totalTransactions,
@@ -10529,9 +10683,14 @@ export class PostgreSQLStorage implements IStorage {
     .groupBy(invoices.status);
 
     return {
-      total: stats.reduce((sum, s) => sum + Number(s.count), 0),
-      byStatus: Object.fromEntries(stats.map(s => [s.status, Number(s.count)])),
-      totalAmount: stats.reduce((sum, s) => sum + Number(s.total || 0), 0)
+      total: (stats as Array<{ count: number | string }>).
+        reduce((sum: number, s) => sum + Number(s.count), 0),
+      byStatus: Object.fromEntries(
+        (stats as Array<{ status: string; count: number | string }>).
+          map((s) => [s.status, Number(s.count)])
+      ),
+      totalAmount: (stats as Array<{ total: number | string | null }>).
+        reduce((sum: number, s) => sum + Number(s.total || 0), 0)
     };
   }
 
@@ -10818,7 +10977,7 @@ export class PostgreSQLStorage implements IStorage {
         return [];
       }
 
-      const guestUserIds = guestUsers.map(u => u.id);
+      const guestUserIds = guestUsers.map((u: User) => u.id);
 
       // Get jobs created by these guest users within the time limit
       const recentJobs = await db.select()
@@ -11267,7 +11426,7 @@ export class PostgreSQLStorage implements IStorage {
       .where(eq(locationHistory.sessionId, sessionId))
       .orderBy(asc(locationHistory.recordedAt));
     
-    const routePoints = points.map(p => ({
+    const routePoints = (points as LocationHistory[]).map((p) => ({
       lat: parseFloat(p.latitude),
       lng: parseFloat(p.longitude),
       timestamp: p.recordedAt
@@ -11275,7 +11434,7 @@ export class PostgreSQLStorage implements IStorage {
     
     // Simple polyline encoding (in production, use Google's polyline encoder)
     const polyline = routePoints
-      .map(p => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`)
+      .map((p: { lat: number; lng: number }) => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`)
       .join('|');
     
     return {
@@ -12211,7 +12370,7 @@ export class PostgreSQLStorage implements IStorage {
     .from(users)
     .where(inArray(users.id, userIds));
     
-    return result.map(r => ({
+    return result.map((r: { userId: string; email: string; firstName: string | null; lastName: string | null }) => ({
       userId: r.userId,
       email: r.email,
       name: `${r.firstName || ''} ${r.lastName || ''}`.trim() || 'User'
@@ -12232,7 +12391,13 @@ export class PostgreSQLStorage implements IStorage {
     .innerJoin(users, eq(contractorProfiles.userId, users.id))
     .where(inArray(contractorProfiles.userId, contractorIds));
     
-    return result.map(r => ({
+    return result.map((r: {
+      contractorId: string;
+      email: string;
+      firstName: string | null;
+      lastName: string | null;
+      company: string | null;
+    }) => ({
       contractorId: r.contractorId,
       email: r.email,
       name: `${r.firstName || ''} ${r.lastName || ''}`.trim() || r.company || 'Contractor'
@@ -12522,17 +12687,19 @@ export class PostgreSQLStorage implements IStorage {
         model: vehicle.model || 'Unknown',
         year: vehicle.year || 0,
         healthScore,
-        maintenanceHistory: history.map(h => ({
-          date: h.date || new Date(),
-          service: h.service || 'Service',
-          cost: Number(h.cost) || 0
-        })),
+        maintenanceHistory: (history as Array<{ date?: Date | null; service?: string | null; cost?: number | string | null }>).
+          map((h) => ({
+            date: h.date || new Date(),
+            service: h.service || 'Service',
+            cost: Number(h.cost) || 0
+          })),
         totalCost: Number(totalCostResult[0]?.total) || 0,
-        upcomingPM: upcomingPM.map(pm => ({
-          date: pm.date,
-          service: pm.service,
-          estimatedCost: Number(pm.estimatedCost) || 0
-        })),
+        upcomingPM: (upcomingPM as Array<{ date?: Date | null; service?: string | null; estimatedCost?: number | string | null }>).
+          map((pm) => ({
+            date: pm.date || new Date(),
+            service: pm.service || 'Service',
+            estimatedCost: Number(pm.estimatedCost) || 0
+          })),
         breakdownFrequency: Number(breakdownCount[0]?.count) || 0
       });
     }
@@ -12559,6 +12726,14 @@ export class PostgreSQLStorage implements IStorage {
     const endDate = options?.endDate || new Date();
     
     // Get service analytics
+    type ServiceAnalyticsRow = {
+      serviceTypeId: string;
+      serviceType: string | null;
+      jobCount: number | string;
+      totalCost: number | string | null;
+      avgCost: number | string | null;
+    };
+
     const serviceData = await db.select({
       serviceTypeId: serviceTypes.id,
       serviceType: serviceTypes.name,
@@ -12583,10 +12758,11 @@ export class PostgreSQLStorage implements IStorage {
       .orderBy(desc(sql`count(distinct ${jobs.id})`));
     
     // Calculate total for percentage
-    const total = serviceData.reduce((sum, item) => sum + Number(item.totalCost), 0);
+    const typedServiceData = serviceData as ServiceAnalyticsRow[];
+    const total = typedServiceData.reduce((sum: number, item) => sum + Number(item.totalCost), 0);
     
     // Calculate trends (simplified - comparing to previous period)
-    const results = await Promise.all(serviceData.map(async (service) => {
+    const results = await Promise.all(typedServiceData.map(async (service: ServiceAnalyticsRow) => {
       // Get previous period count
       const previousPeriodStart = new Date(startDate);
       previousPeriodStart.setMonth(previousPeriodStart.getMonth() - 3);
@@ -12647,6 +12823,17 @@ export class PostgreSQLStorage implements IStorage {
     const endDate = options?.endDate || new Date();
     
     // Get contractor performance data
+    type ContractorAnalyticsRow = {
+      contractorId: string | null;
+      contractorName: string | null;
+      jobCount: number | string;
+      totalCost: number | string | null;
+      avgCost: number | string | null;
+      completedCount: number | string | null;
+      avgResponseTime: number | string | null;
+      avgRating: number | string | null;
+    };
+
     const contractorData = await db.select({
       contractorId: jobs.contractorId,
       contractorName: sql<string>`CONCAT(${users.firstName}, ' ', ${users.lastName})`,
@@ -12677,7 +12864,8 @@ export class PostgreSQLStorage implements IStorage {
       .orderBy(desc(sql`count(distinct ${jobs.id})`));
     
     // Calculate on-time rate
-    const results = await Promise.all(contractorData.map(async (contractor) => {
+    const typedContractorData = contractorData as ContractorAnalyticsRow[];
+    const results = await Promise.all(typedContractorData.map(async (contractor: ContractorAnalyticsRow) => {
       // Get on-time completion rate
       const onTimeJobs = await db.select({
         count: sql<number>`count(*)`
@@ -12895,25 +13083,21 @@ export class PostgreSQLStorage implements IStorage {
       .select({
         id: contractorProfiles.id,
         userId: contractorProfiles.userId,
-        businessName: contractorProfiles.businessName,
+        businessName: contractorProfiles.companyName,
         email: users.email,
         phone: users.phone,
-        status: contractorProfiles.status,
+        status: sql<string>`CASE WHEN ${users.isActive} THEN 'active' ELSE 'inactive' END`,
         performanceTier: contractorProfiles.performanceTier,
         averageRating: contractorProfiles.averageRating,
         totalJobsCompleted: contractorProfiles.totalJobsCompleted,
-        totalEarnings: contractorProfiles.totalEarnings,
+        totalEarnings: sql<number>`0`,
         serviceRadius: contractorProfiles.serviceRadius,
         baseLocationLat: contractorProfiles.baseLocationLat,
         baseLocationLon: contractorProfiles.baseLocationLon,
         isAvailable: contractorProfiles.isAvailable,
         isOnline: contractorProfiles.isOnline,
         createdAt: contractorProfiles.createdAt,
-        verifiedAt: contractorProfiles.verifiedAt,
-        licenseNumber: contractorProfiles.licenseNumber,
-        insuranceProvider: contractorProfiles.insuranceProvider,
-        insurancePolicyNumber: contractorProfiles.insurancePolicyNumber,
-        insuranceExpiry: contractorProfiles.insuranceExpiry
+        verified: contractorProfiles.isVerifiedContractor
       })
       .from(contractorProfiles)
       .innerJoin(users, eq(contractorProfiles.userId, users.id));
@@ -12921,15 +13105,24 @@ export class PostgreSQLStorage implements IStorage {
     const conditions: any[] = [];
     
     if (filters?.status) {
-      conditions.push(eq(contractorProfiles.status, filters.status));
+      if (filters.status === 'active') {
+        conditions.push(eq(users.isActive, true));
+      } else if (filters.status === 'inactive') {
+        conditions.push(eq(users.isActive, false));
+      }
     }
     if (filters?.tier) {
-      conditions.push(eq(contractorProfiles.performanceTier, filters.tier));
+      conditions.push(
+        eq(
+          contractorProfiles.performanceTier,
+          filters.tier as typeof performanceTierEnum.enumValues[number]
+        )
+      );
     }
     if (filters?.search) {
       conditions.push(
         or(
-          ilike(contractorProfiles.businessName, `%${filters.search}%`),
+          ilike(contractorProfiles.companyName, `%${filters.search}%`),
           ilike(users.email, `%${filters.search}%`),
           ilike(users.phone, `%${filters.search}%`)
         )
@@ -12960,15 +13153,15 @@ export class PostgreSQLStorage implements IStorage {
       .select({
         id: transactions.id,
         createdAt: transactions.createdAt,
-        type: transactions.type,
-        fleetAccountName: fleetAccounts.name,
-        fleetAccountId: transactions.fleetAccountId,
+        type: sql<string>`COALESCE(${transactions.metadata}->>'type', 'transaction')`,
+        fleetAccountName: fleetAccounts.companyName,
+        fleetAccountId: jobs.fleetAccountId,
         jobId: transactions.jobId,
         jobNumber: jobs.jobNumber,
-        description: transactions.description,
+        description: jobs.description,
         amount: transactions.amount,
         status: transactions.status,
-        paymentMethod: transactions.paymentMethod,
+        paymentMethod: paymentMethods.type,
         invoiceId: transactions.invoiceId,
         invoiceNumber: invoices.invoiceNumber,
         stripePaymentIntentId: transactions.stripePaymentIntentId,
@@ -12976,20 +13169,23 @@ export class PostgreSQLStorage implements IStorage {
         metadata: transactions.metadata
       })
       .from(transactions)
-      .leftJoin(fleetAccounts, eq(transactions.fleetAccountId, fleetAccounts.id))
       .leftJoin(jobs, eq(transactions.jobId, jobs.id))
-      .leftJoin(invoices, eq(transactions.invoiceId, invoices.id));
+      .leftJoin(fleetAccounts, eq(jobs.fleetAccountId, fleetAccounts.id))
+      .leftJoin(invoices, eq(transactions.invoiceId, invoices.id))
+      .leftJoin(paymentMethods, eq(transactions.paymentMethodId, paymentMethods.id));
 
     const conditions: any[] = [];
     
     if (filters?.fleetAccountId) {
-      conditions.push(eq(transactions.fleetAccountId, filters.fleetAccountId));
+      conditions.push(eq(jobs.fleetAccountId, filters.fleetAccountId));
     }
     if (filters?.status) {
-      conditions.push(eq(transactions.status, filters.status));
-    }
-    if (filters?.type) {
-      conditions.push(eq(transactions.type, filters.type));
+      conditions.push(
+        eq(
+          transactions.status,
+          filters.status as typeof paymentStatusEnum.enumValues[number]
+        )
+      );
     }
     if (filters?.dateFrom) {
       conditions.push(gte(transactions.createdAt, filters.dateFrom));
@@ -13060,7 +13256,22 @@ export class PostgreSQLStorage implements IStorage {
     details: any[];
   }> {
     // Get maintenance jobs
-    const maintenanceJobs = await db
+    type MaintenanceJobDetail = {
+      id: string;
+      jobNumber: string | null;
+      vehicleId: string | null;
+      vehicleUnit: string | null;
+      serviceType: string | null;
+      description: string | null;
+      createdAt: Date;
+      completedAt: Date | null;
+      status: string;
+      cost: string | number | null;
+      contractorName: string | null;
+    };
+
+    const maintenanceJobs = await (
+      db
       .select({
         id: jobs.id,
         jobNumber: jobs.jobNumber,
@@ -13086,12 +13297,13 @@ export class PostgreSQLStorage implements IStorage {
       .where(
         and(
           eq(jobs.fleetAccountId, fleetId),
-          eq(jobs.jobType, 'maintenance'),
+          eq(jobs.jobType, 'maintenance' as any),
           gte(jobs.createdAt, dateFrom),
           lte(jobs.createdAt, dateTo)
         )
       )
-      .orderBy(desc(jobs.createdAt));
+      .orderBy(desc(jobs.createdAt))
+    ) as MaintenanceJobDetail[];
 
     // Get vehicle count
     const vehicleCount = await db
@@ -13100,7 +13312,14 @@ export class PostgreSQLStorage implements IStorage {
       .where(eq(fleetVehicles.fleetAccountId, fleetId));
 
     // Get issue frequency
-    const issueFrequency = await db
+    type IssueFrequencyRecord = {
+      serviceType: string | null;
+      count: number;
+      totalCost: string | number | null;
+    };
+
+    const issueFrequency = await (
+      db
       .select({
         serviceType: serviceTypes.name,
         count: sql<number>`COUNT(${jobs.id})`,
@@ -13115,16 +13334,20 @@ export class PostgreSQLStorage implements IStorage {
       .where(
         and(
           eq(jobs.fleetAccountId, fleetId),
-          eq(jobs.jobType, 'maintenance'),
+          eq(jobs.jobType, 'maintenance' as any),
           gte(jobs.createdAt, dateFrom),
           lte(jobs.createdAt, dateTo)
         )
       )
       .groupBy(serviceTypes.name)
       .orderBy(desc(sql`COUNT(${jobs.id})`))
-      .limit(5);
+      .limit(5)
+    ) as IssueFrequencyRecord[];
 
-    const totalCost = maintenanceJobs.reduce((sum, job) => sum + (job.cost || 0), 0);
+    const totalCost = maintenanceJobs.reduce<number>(
+      (sum, job) => sum + Number(job.cost || 0),
+      0
+    );
     const totalVehicles = vehicleCount[0]?.count || 0;
 
     return {
@@ -13155,7 +13378,13 @@ export class PostgreSQLStorage implements IStorage {
     details: any[];
   }> {
     // Get costs by job type
-    const costsByType = await db
+    type CostByTypeRecord = {
+      jobType: string | null;
+      totalCost: string | number | null;
+    };
+
+    const costsByType = await (
+      db
       .select({
         jobType: jobs.jobType,
         totalCost: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
@@ -13172,10 +13401,17 @@ export class PostgreSQLStorage implements IStorage {
           lte(jobs.createdAt, dateTo)
         )
       )
-      .groupBy(jobs.jobType);
+      .groupBy(jobs.jobType)
+    ) as CostByTypeRecord[];
 
     // Get costs by month
-    const costsByMonth = await db
+    type CostByMonthRecord = {
+      month: string;
+      totalCost: string | number | null;
+    };
+
+    const costsByMonth = await (
+      db
       .select({
         month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${jobs.createdAt}), 'YYYY-MM')`,
         totalCost: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
@@ -13193,10 +13429,17 @@ export class PostgreSQLStorage implements IStorage {
         )
       )
       .groupBy(sql`DATE_TRUNC('month', ${jobs.createdAt})`)
-      .orderBy(sql`DATE_TRUNC('month', ${jobs.createdAt})`);
+      .orderBy(sql`DATE_TRUNC('month', ${jobs.createdAt})`)
+    ) as CostByMonthRecord[];
 
     // Get costs by vehicle
-    const costsByVehicle = await db
+    type CostByVehicleRecord = {
+      vehicleUnit: string | null;
+      totalCost: string | number | null;
+    };
+
+    const costsByVehicle = await (
+      db
       .select({
         vehicleUnit: fleetVehicles.unitNumber,
         totalCost: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
@@ -13216,10 +13459,23 @@ export class PostgreSQLStorage implements IStorage {
       )
       .groupBy(fleetVehicles.unitNumber)
       .orderBy(desc(sql`COALESCE(SUM(${transactions.amount}), 0)`))
-      .limit(10);
+      .limit(10)
+    ) as CostByVehicleRecord[];
 
     // Get detailed transactions
-    const details = await db
+    type CostDetailRecord = {
+      date: Date;
+      jobNumber: string | null;
+      jobType: string;
+      vehicleUnit: string | null;
+      serviceType: string | null;
+      description: string | null;
+      amount: string | number | null;
+      status: string;
+    };
+
+    const details = await (
+      db
       .select({
         date: jobs.createdAt,
         jobNumber: jobs.jobNumber,
@@ -13244,16 +13500,17 @@ export class PostgreSQLStorage implements IStorage {
           lte(jobs.createdAt, dateTo)
         )
       )
-      .orderBy(desc(jobs.createdAt));
+      .orderBy(desc(jobs.createdAt))
+    ) as CostDetailRecord[];
 
-    const costByType = costsByType.reduce((acc, item) => {
+    const costByType = costsByType.reduce<Record<string, number>>((acc, item) => {
       acc[item.jobType || 'other'] = Number(item.totalCost);
       return acc;
     }, {} as Record<string, number>);
 
     return {
       summary: {
-        totalCost: Object.values(costByType).reduce((sum, cost) => sum + cost, 0),
+        totalCost: Object.values(costByType).reduce<number>((sum, cost) => sum + cost, 0),
         maintenanceCost: costByType['maintenance'] || 0,
         emergencyRepairCost: costByType['emergency'] || 0,
         scheduledServiceCost: costByType['scheduled'] || 0,
@@ -13480,15 +13737,16 @@ export class PostgreSQLStorage implements IStorage {
       .select({
         id: transactions.id,
         createdAt: transactions.createdAt,
-        type: transactions.type,
-        fleetAccountId: transactions.fleetAccountId,
-        fleetName: fleetAccounts.name,
+        type: sql<string>`COALESCE(${transactions.metadata}->>'type', 'transaction')`,
+        fleetAccountId: jobs.fleetAccountId,
+        fleetName: fleetAccounts.companyName,
         amount: transactions.amount,
         status: transactions.status,
-        description: transactions.description
+        description: jobs.description
       })
       .from(transactions)
-      .leftJoin(fleetAccounts, eq(transactions.fleetAccountId, fleetAccounts.id))
+      .leftJoin(jobs, eq(transactions.jobId, jobs.id))
+      .leftJoin(fleetAccounts, eq(jobs.fleetAccountId, fleetAccounts.id))
       .where(
         and(
           eq(transactions.status, 'completed'),
@@ -13501,12 +13759,12 @@ export class PostgreSQLStorage implements IStorage {
     // Get subscription revenue
     const subscriptionRevenue = await db
       .select({
-        totalRevenue: sql<number>`COALESCE(SUM(${billingHistory.amount}), 0)`
+        totalRevenue: sql<number>`COALESCE(SUM(${billingHistory.totalAmount}), 0)`
       })
       .from(billingHistory)
       .where(
         and(
-          eq(billingHistory.status, 'paid'),
+          eq(billingHistory.status, 'paid' as any),
           gte(billingHistory.createdAt, dateFrom),
           lte(billingHistory.createdAt, dateTo)
         )
@@ -13520,7 +13778,7 @@ export class PostgreSQLStorage implements IStorage {
       .from(refunds)
       .where(
         and(
-          eq(refunds.status, 'completed'),
+          eq(refunds.status, 'completed' as any),
           gte(refunds.createdAt, dateFrom),
           lte(refunds.createdAt, dateTo)
         )
@@ -13529,7 +13787,7 @@ export class PostgreSQLStorage implements IStorage {
     // Get revenue by fleet
     const revenueByFleet = await db
       .select({
-        fleetName: fleetAccounts.name,
+        fleetName: fleetAccounts.companyName,
         totalRevenue: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`
       })
       .from(transactions)
@@ -13541,7 +13799,7 @@ export class PostgreSQLStorage implements IStorage {
           lte(transactions.createdAt, dateTo)
         )
       )
-      .groupBy(fleetAccounts.name)
+      .groupBy(fleetAccounts.companyName)
       .orderBy(desc(sql`COALESCE(SUM(${transactions.amount}), 0)`))
       .limit(10);
 
@@ -13562,7 +13820,10 @@ export class PostgreSQLStorage implements IStorage {
       .groupBy(sql`DATE_TRUNC('month', ${transactions.createdAt})`)
       .orderBy(sql`DATE_TRUNC('month', ${transactions.createdAt})`);
 
-    const transactionRevenue = revenueTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const transactionRevenue = revenueTransactions.reduce(
+      (sum: number, t: { amount: number | string | null }) => sum + Number(t.amount || 0),
+      0
+    );
     const subscriptionTotal = Number(subscriptionRevenue[0]?.totalRevenue) || 0;
     const refundTotal = Number(refundAmount[0]?.totalRefunds) || 0;
     const totalRevenue = transactionRevenue + subscriptionTotal;
@@ -13574,11 +13835,11 @@ export class PostgreSQLStorage implements IStorage {
         transactionRevenue,
         refunds: refundTotal,
         netRevenue: totalRevenue - refundTotal,
-        revenueByFleet: revenueByFleet.map(item => ({
+        revenueByFleet: revenueByFleet.map((item: { fleetName: string | null; totalRevenue: number | string | null }) => ({
           fleetName: item.fleetName || 'Unknown',
           revenue: Number(item.totalRevenue)
         })),
-        revenueByMonth: revenueByMonth.map(item => ({
+        revenueByMonth: revenueByMonth.map((item: { month: string; totalRevenue: number | string | null }) => ({
           month: item.month,
           revenue: Number(item.totalRevenue)
         }))
@@ -14015,13 +14276,6 @@ export class PostgreSQLStorage implements IStorage {
       );
   }
 
-  async updateContractorProfile(contractorId: string, updates: Partial<ContractorProfile>): Promise<void> {
-    await db
-      .update(contractorProfiles)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(contractorProfiles.userId, contractorId));
-  }
-
   async getAssignmentEffectiveness(period: 'day' | 'week' | 'month'): Promise<{
     totalAssignments: number;
     successfulAssignments: number;
@@ -14055,6 +14309,11 @@ export class PostgreSQLStorage implements IStorage {
     predictions: MaintenancePrediction[];
     vehicles: FleetVehicle[];
   }> {
+    type MaintenancePredictionJoin = {
+      maintenance_predictions: MaintenancePrediction;
+      fleet_vehicles: FleetVehicle;
+    };
+
     let query = db
       .select()
       .from(maintenancePredictions)
@@ -14070,10 +14329,14 @@ export class PostgreSQLStorage implements IStorage {
       );
     }
 
-    const results = await query;
+    const results = await query as MaintenancePredictionJoin[];
     
-    const predictions = results.map(r => r.maintenance_predictions);
-    const vehicles = [...new Map(results.map(r => [r.fleet_vehicles.id, r.fleet_vehicles])).values()];
+    const predictions = results.map(record => record.maintenance_predictions);
+    const vehicles = Array.from(
+      new Map(
+        results.map(record => [record.fleet_vehicles.id, record.fleet_vehicles])
+      ).values()
+    );
     
     return { predictions, vehicles };
   }
@@ -14182,13 +14445,14 @@ export class PostgreSQLStorage implements IStorage {
   }> {
     const whereClause = modelId ? eq(maintenanceModels.id, modelId) : eq(maintenanceModels.isActive, true);
     
-    const model = await db
+    const modelRows = await db
       .select()
       .from(maintenanceModels)
       .where(whereClause)
       .orderBy(desc(maintenanceModels.trainedAt))
-      .limit(1)
-      .then(rows => rows[0]);
+      .limit(1);
+
+    const model = modelRows[0];
 
     if (!model) {
       return {
@@ -14285,8 +14549,8 @@ export class PostgreSQLStorage implements IStorage {
       query = query.limit(options.limit);
     }
 
-    const results = await query;
-    return results.map(r => r.maintenance_alerts);
+    const results = await query as Array<{ maintenance_alerts: MaintenanceAlert }>;
+    return results.map(record => record.maintenance_alerts);
   }
 
   async getVehicleMaintenancePredictions(vehicleId: string, options?: {
@@ -14732,7 +14996,7 @@ export class PostgreSQLStorage implements IStorage {
   
   async getWeatherAlertsForLocation(lat: number, lng: number): Promise<WeatherAlert[]> {
     const now = new Date();
-    const alerts = await db.select()
+    const alerts: WeatherAlert[] = await db.select()
       .from(weatherAlerts)
       .where(and(
         eq(weatherAlerts.isActive, true),
@@ -14762,19 +15026,6 @@ export class PostgreSQLStorage implements IStorage {
       .orderBy(desc(jobs.createdAt));
   }
   
-  // Helper function to calculate distance between two coordinates (in miles)
-  private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 3959; // Earth's radius in miles
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  }
-
   // Proper Haversine distance calculation for service area checks (used in simplified assignment)
   private calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 3959; // Earth's radius in miles
@@ -15449,7 +15700,7 @@ export class PostgreSQLStorage implements IStorage {
   }
   
   // Contractor earnings
-  async getContractorEarnings(
+  async getContractorEarningsSummary(
     contractorId: string,
     startDate?: Date,
     endDate?: Date
@@ -15728,7 +15979,7 @@ export class PostgreSQLStorage implements IStorage {
     });
     
     // Calculate statistics
-    const totalCost = history.reduce((sum, s) => sum + parseFloat(s.totalCost || '0'), 0);
+    const totalCost = history.reduce<number>((sum, s) => sum + parseFloat(s.totalCost || '0'), 0);
     const totalServices = history.length;
     const avgCostPerService = totalServices > 0 ? totalCost / totalServices : 0;
     
@@ -15819,23 +16070,6 @@ export class PostgreSQLStorage implements IStorage {
     }
     
     return await query;
-  }
-
-  async getFleetVehicle(vehicleId: string): Promise<FleetVehicle | null> {
-    const result = await db
-      .select()
-      .from(fleetVehicles)
-      .where(eq(fleetVehicles.id, vehicleId))
-      .limit(1);
-    
-    return result[0] || null;
-  }
-
-  async getFleetContacts(fleetAccountId: string): Promise<FleetContact[]> {
-    return await db
-      .select()
-      .from(fleetContacts)
-      .where(eq(fleetContacts.fleetAccountId, fleetAccountId));
   }
 
   async serviceHistoryExistsForJob(jobId: string): Promise<boolean> {
@@ -16109,7 +16343,7 @@ export class PostgreSQLStorage implements IStorage {
     await this.recordTemplateUsage(templateId);
     
     // Convert template to job data
-    const jobData: Partial<Job> = {
+    const jobData: Partial<Job> & Record<string, unknown> = {
       serviceTypeId: template.serviceType || undefined,
       vehicleId: template.vehicleId || undefined,
       specialInstructions: template.specialInstructions || undefined
@@ -16387,7 +16621,7 @@ export class PostgreSQLStorage implements IStorage {
       
       // Clean up old records (keep only the most recent)
       if (allSettings.length > 1) {
-        const idsToDelete = allSettings.slice(1).map(s => s.id);
+        const idsToDelete = allSettings.slice(1).map((setting: CommissionSettings) => setting.id);
         await db.delete(commissionSettings).where(inArray(commissionSettings.id, idsToDelete));
       }
       
@@ -16402,7 +16636,7 @@ export class PostgreSQLStorage implements IStorage {
     return created;
   }
   
-  async calculateCommission(jobTotal: number): Promise<{
+  async calculateCommissionAmount(jobTotal: number): Promise<{
     commissionType: string;
     commissionValue: number;
     commissionAmount: number;
@@ -16507,9 +16741,10 @@ export class PostgreSQLStorage implements IStorage {
     // Apply service area multiplier if provided
     if (serviceAreaId) {
       // Get service area
-      const area = await this.getServiceArea(serviceAreaId);
-      if (area?.baseRateMultiplier) {
-        areaMultiplier = parseFloat(area.baseRateMultiplier);
+      const area = (await this.getServiceArea(serviceAreaId)) as (ServiceArea & { baseRateMultiplier?: string | null }) | null;
+      const multiplierValue = area?.baseRateMultiplier;
+      if (multiplierValue) {
+        areaMultiplier = parseFloat(multiplierValue);
         effectiveRate *= areaMultiplier;
       }
       
@@ -16542,43 +16777,6 @@ export class PostgreSQLStorage implements IStorage {
 
   // ==================== PERFORMANCE METRICS & GOALS IMPLEMENTATION ====================
   
-  async getContractorPerformanceMetrics(
-    contractorId: string,
-    options?: {
-      metricType?: string;
-      startDate?: Date;
-      endDate?: Date;
-      limit?: number;
-      offset?: number;
-    }
-  ): Promise<PerformanceMetric[]> {
-    const conditions = [eq(performanceMetrics.contractorId, contractorId)];
-    
-    if (options?.metricType) {
-      conditions.push(eq(performanceMetrics.metricType, options.metricType));
-    }
-    
-    if (options?.startDate) {
-      conditions.push(gte(performanceMetrics.createdAt, options.startDate));
-    }
-    
-    if (options?.endDate) {
-      conditions.push(lte(performanceMetrics.createdAt, options.endDate));
-    }
-    
-    let query = db.select().from(performanceMetrics).where(and(...conditions));
-    query = query.orderBy(desc(performanceMetrics.createdAt));
-    
-    if (options?.limit) {
-      query = query.limit(options.limit);
-    }
-    if (options?.offset) {
-      query = query.offset(options.offset);
-    }
-    
-    return await query;
-  }
-  
   async getContractorPerformanceGoals(
     contractorId: string,
     options?: {
@@ -16592,8 +16790,10 @@ export class PostgreSQLStorage implements IStorage {
     kpi?: KpiDefinition;
     progress?: number;
   }>> {
+    const contractorEntityType = 'contractor' as typeof entityTypeEnum.enumValues[number];
     const conditions = [
-      eq(performanceGoals.contractorId, contractorId)
+      eq(performanceGoals.entityType, contractorEntityType),
+      eq(performanceGoals.entityId, contractorId)
     ];
     
     if (options?.status) {
@@ -16604,7 +16804,7 @@ export class PostgreSQLStorage implements IStorage {
       .select()
       .from(performanceGoals)
       .where(and(...conditions))
-      .orderBy(asc(performanceGoals.targetDate));
+      .orderBy(asc(performanceGoals.deadline));
     
     if (options?.limit) {
       query = query.limit(options.limit);
@@ -16662,7 +16862,7 @@ export class PostgreSQLStorage implements IStorage {
       return await db
         .select()
         .from(kpiDefinitions)
-        .where(eq(kpiDefinitions.category, category))
+        .where(eq(kpiDefinitions.category, category as typeof kpiCategoryEnum.enumValues[number]))
         .orderBy(asc(kpiDefinitions.name));
     }
     
@@ -16694,20 +16894,29 @@ export class PostgreSQLStorage implements IStorage {
     
     const inventoryItems = await inventoryQuery;
     
+    type InventoryResult = { inventory: PartsInventory; part: PartsCatalog; reorderNeeded: boolean };
+
     // Filter and process results
-    let results = inventoryItems.map(item => ({
-      inventory: item.parts_inventory,
-      part: item.parts_catalog,
-      reorderNeeded: item.parts_inventory.quantityOnHand <= item.parts_inventory.reorderPoint
-    }));
+    let results: InventoryResult[] = inventoryItems.map((item: {
+      parts_inventory: PartsInventory;
+      parts_catalog: PartsCatalog;
+    }): InventoryResult => {
+      const quantity = Number(item.parts_inventory.quantity || 0);
+      const reorderLevel = Number(item.parts_inventory.reorderLevel || 0);
+      return {
+        inventory: item.parts_inventory,
+        part: item.parts_catalog,
+        reorderNeeded: quantity <= reorderLevel
+      };
+    });
     
     // Apply filters
     if (options?.category) {
-      results = results.filter(r => r.part.category === options.category);
+      results = results.filter((record: InventoryResult) => record.part.category === options.category);
     }
     
     if (options?.lowStockOnly) {
-      results = results.filter(r => r.reorderNeeded);
+      results = results.filter((record: InventoryResult) => record.reorderNeeded);
     }
     
     // Apply pagination
@@ -16736,10 +16945,7 @@ export class PostgreSQLStorage implements IStorage {
     job?: Job;
   }>> {
     const conditions = [
-      or(
-        eq(partsTransactions.fromWarehouseId, contractorId),
-        eq(partsTransactions.toWarehouseId, contractorId)
-      )
+      eq(partsTransactions.contractorId, contractorId)
     ];
     
     if (options?.transactionType) {
@@ -16771,7 +16977,11 @@ export class PostgreSQLStorage implements IStorage {
     
     const results = await query;
     
-    return results.map(r => ({
+    return results.map((r: {
+      parts_transactions: PartsTransaction;
+      parts_catalog: PartsCatalog;
+      jobs: Job | null;
+    }): { transaction: PartsTransaction; part: PartsCatalog; job?: Job } => ({
       transaction: r.parts_transactions,
       part: r.parts_catalog,
       job: r.jobs || undefined
@@ -16788,6 +16998,11 @@ export class PostgreSQLStorage implements IStorage {
     }
     
     // Get active commission rules that apply to contractors
+    type ContractorCommissionRule = CommissionRule & {
+      monthlyVolumeThreshold?: number;
+      performanceRatingThreshold?: number;
+    };
+
     const rules = await db
       .select()
       .from(commissionRules)
@@ -16800,7 +17015,7 @@ export class PostgreSQLStorage implements IStorage {
       .orderBy(desc(commissionRules.priority), asc(commissionRules.commissionPercentage));
     
     // Filter rules based on contractor's profile
-    return rules.filter(rule => {
+    return (rules as ContractorCommissionRule[]).filter((rule) => {
       // Check monthly volume threshold
       if (rule.monthlyVolumeThreshold) {
         // This would need actual volume calculation
@@ -16808,8 +17023,8 @@ export class PostgreSQLStorage implements IStorage {
       }
       
       // Check performance rating threshold  
-      if (rule.performanceRatingThreshold && contractor.rating) {
-        if (contractor.rating < rule.performanceRatingThreshold) {
+      if (rule.performanceRatingThreshold && contractor.averageRating) {
+        if (contractor.averageRating < rule.performanceRatingThreshold) {
           return false;
         }
       }
@@ -16875,7 +17090,7 @@ export class PostgreSQLStorage implements IStorage {
       .where(eq(payoutBatches.contractorId, contractorId));
     
     const reconciliationIds = payouts
-      .map(p => p.reconciliationId)
+      .map((p: PayoutBatch): string | null => p.reconciliationId)
       .filter(Boolean) as string[];
     
     if (reconciliationIds.length === 0) {

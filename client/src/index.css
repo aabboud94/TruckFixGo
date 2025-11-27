@@ -8,10 +8,20 @@
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
   }
+
+  body {
+    margin: 0;
+    min-height: var(--app-height);
+    font-family: var(--font-sans);
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    text-rendering: optimizeLegibility;
+  }
   
   /* Ensure body and root can scroll properly on mobile */
   body,
   #root {
+    min-height: var(--app-height);
     overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -64,12 +74,24 @@
   .touch-manipulation {
     touch-action: manipulation;
   }
+
+  img,
+  svg,
+  video,
+  canvas {
+    max-width: 100%;
+    height: auto;
+  }
 }
 
 /* LIGHT MODE */
 :root {
+  --app-height: 100vh;
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
+  --page-padding: clamp(1rem, 4vw, 2.5rem);
+  --page-max-width: 1200px;
+  --page-gap: clamp(1rem, 3vw, 2rem);
 
   /* Automatic computation of border around primary / danger buttons */
   --opaque-button-border-intensity: -8; /* In terms of percentages */
@@ -184,6 +206,73 @@
   /* Fallback for older browsers */
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+.px-safe {
+  padding-left: max(var(--page-padding), env(safe-area-inset-left));
+  padding-right: max(var(--page-padding), env(safe-area-inset-right));
+}
+
+.py-safe {
+  padding-top: max(var(--page-padding) / 2, env(safe-area-inset-top));
+  padding-bottom: max(var(--page-padding) / 2, env(safe-area-inset-bottom));
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.page-shell {
+  width: 100%;
+  max-width: var(--page-max-width);
+  margin-inline: auto;
+  padding-inline: max(var(--page-padding), env(safe-area-inset-left));
+}
+
+.card-grid {
+  display: grid;
+  gap: var(--page-gap);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.dashboard-grid {
+  display: grid;
+  gap: var(--page-gap);
+  grid-auto-rows: 1fr;
+}
+
+@media (min-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+}
+
+.stack-y {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.75rem, 2vw, 1.5rem);
+}
+
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.form-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .form-grid.two-column {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .page-shell {
+    padding-inline: max(calc(var(--page-padding) * 1.25), env(safe-area-inset-left));
+  }
 }
 
 .dark {

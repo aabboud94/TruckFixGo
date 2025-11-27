@@ -237,9 +237,14 @@ export default function PerformanceWidget({
                   <RechartsTooltip
                     content={({ active, payload }) => {
                       if (active && payload && payload[0]) {
+                        const value = payload[0].value;
+                        const formatted =
+                          typeof value === "number"
+                            ? value.toFixed(1)
+                            : value ?? "--";
                         return (
                           <div className="bg-background border rounded p-2 text-xs">
-                            {payload[0].value?.toFixed(1)}
+                            {formatted}
                           </div>
                         );
                       }

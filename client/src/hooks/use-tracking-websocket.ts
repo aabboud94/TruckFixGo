@@ -70,6 +70,7 @@ export const useTrackingWebSocket = ({
 
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) return;
+    if (!jobId && !routeId) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;

@@ -191,15 +191,15 @@ export function useJobWeather(jobId?: string) {
               if (!old) {
                 return {
                   current: message.payload.weather,
-                  forecast: old?.forecast || { daily: [] },
-                  impactScore: old?.impactScore || 0,
-                  warnings: old?.warnings || []
+                  forecast: { daily: [] },
+                  impactScore: 0,
+                  warnings: [],
                 };
               }
-              
+
               return {
                 ...old,
-                current: message.payload.weather
+                current: message.payload.weather,
               };
             }
           );

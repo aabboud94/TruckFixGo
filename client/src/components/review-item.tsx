@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { RatingDisplay } from "./rating-display";
 import { useToast } from "@/hooks/use-toast";
+import type { LucideIcon } from "lucide-react";
 import {
   ThumbsUp,
   ThumbsDown,
@@ -74,8 +75,19 @@ export function ReviewItem({
   const [responseText, setResponseText] = useState("");
   const [showImages, setShowImages] = useState(false);
   
-  const photos = Array.isArray(review.photoUrls) ? review.photoUrls : 
-                 review.photoUrls ? JSON.parse(review.photoUrls as string) : [];
+  let parsedPhotos: unknown = [];
+  if (Array.isArray(review.photoUrls)) {
+    parsedPhotos = review.photoUrls;
+  } else if (typeof review.photoUrls === "string") {
+    try {
+      parsedPhotos = JSON.parse(review.photoUrls);
+    } catch {
+      parsedPhotos = [];
+    }
+  }
+  const photos: string[] = Array.isArray(parsedPhotos)
+    ? parsedPhotos.filter((photo): photo is string => typeof photo === "string")
+    : [];
   
   const isOwner = currentUserId === review.customerId;
   
@@ -145,7 +157,7 @@ export function ReviewItem({
   });
   
   const getCategoryIcon = (category: string) => {
-    const icons: Record<string, any> = {
+    const icons: Record<string, LucideIcon> = {
       timeliness: Clock,
       professionalism: Users,
       quality: Wrench,
@@ -329,9 +341,9 @@ export function ReviewItem({
             </p>
             {shouldShowReadMore && (
               <Button
-                variant="link"
+                variant="ghost"
                 size="sm"
-                className="px-0 h-auto mt-1"
+                className="px-0 h-auto mt-1 text-primary underline underline-offset-4"
                 onClick={() => setShowFullReview(!showFullReview)}
                 data-testid="button-read-more"
               >

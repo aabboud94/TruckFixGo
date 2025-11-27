@@ -43,6 +43,295 @@ const COLORS = {
 // Chart colors
 const chartColors = Object.values(COLORS);
 
+const mockData = {
+  // Platform Overview
+  platformMetrics: {
+    activeJobs: 47,
+    onlineContractors: 112,
+    avgResponseTime: 11.5,
+    completionRate: 94.8,
+    totalRevenue: 847250,
+    totalFleets: 156,
+    totalUsers: 8421,
+    platformUptime: 99.9,
+  },
+
+  // SLA Metrics
+  slaMetrics: {
+    overallCompliance: 92.5,
+    avgResponseTime: 11.5,
+    breachedCount: 23,
+    byServiceType: [
+      { service: "Emergency Repair", compliance: 89, avgTime: 9 },
+      { service: "Fleet PM", compliance: 96, avgTime: 24 },
+      { service: "Truck Wash", compliance: 98, avgTime: 45 },
+      { service: "Tire Service", compliance: 91, avgTime: 12 },
+    ],
+    trends: Array.from({ length: 30 }, (_, i) => ({
+      date: format(subDays(new Date(), 30 - i), "MMM dd"),
+      compliance: 88 + Math.random() * 12,
+      responseTime: 10 + Math.random() * 5,
+    })),
+  },
+
+  // Response Time Analytics
+  responseTimeMetrics: {
+    acceptance: { actual: 3.2, target: 5, variance: -36 },
+    travel: { actual: 15.8, target: 20, variance: -21 },
+    service: { actual: 42.5, target: 45, variance: -5.6 },
+    total: { actual: 61.5, target: 70, variance: -12.1 },
+    hourlyPattern: Array.from({ length: 24 }, (_, hour) => ({
+      hour: `${hour}:00`,
+      avgTime: 10 + Math.sin(hour / 3) * 5 + Math.random() * 3,
+      jobs: Math.floor(5 + Math.sin(hour / 2) * 3 + Math.random() * 2),
+    })),
+  },
+
+  // Contractor Performance
+  contractorMetrics: {
+    topPerformers: [
+      { name: "Mike Johnson", jobs: 342, earnings: 45600, rating: 4.8, acceptance: 92, onTime: 96, tier: "Gold" },
+      { name: "Sarah Williams", jobs: 285, earnings: 38500, rating: 4.7, acceptance: 88, onTime: 94, tier: "Gold" },
+      { name: "John Davis", jobs: 245, earnings: 32100, rating: 4.9, acceptance: 95, onTime: 97, tier: "Silver" },
+      { name: "Lisa Anderson", jobs: 212, earnings: 28400, rating: 4.6, acceptance: 85, onTime: 91, tier: "Silver" },
+      { name: "Tom Wilson", jobs: 198, earnings: 26300, rating: 4.5, acceptance: 82, onTime: 89, tier: "Bronze" },
+    ],
+    tierDistribution: [
+      { tier: "Gold", count: 28, percentage: 15 },
+      { tier: "Silver", count: 65, percentage: 35 },
+      { tier: "Bronze", count: 93, percentage: 50 },
+    ],
+    performanceTrends: Array.from({ length: 12 }, (_, i) => ({
+      month: format(subMonths(new Date(), 11 - i), "MMM"),
+      avgRating: 4.3 + Math.random() * 0.4,
+      avgJobs: 15 + Math.random() * 10,
+      avgEarnings: 3000 + Math.random() * 2000,
+    })),
+  },
+
+  // Revenue Analytics
+  revenueMetrics: {
+    total: 847250,
+    growth: 12.5,
+    byService: [
+      { name: "Emergency Repair", value: 380260, percentage: 45 },
+      { name: "Fleet Services", value: 254175, percentage: 30 },
+      { name: "Truck Wash", value: 127087, percentage: 15 },
+      { name: "PM Services", value: 85728, percentage: 10 },
+    ],
+    emergencyVsScheduled: { emergency: 507450, scheduled: 339800 },
+    paymentMethods: [
+      { method: "Credit Card", amount: 423625, percentage: 50 },
+      { method: "Fleet Account", amount: 254175, percentage: 30 },
+      { method: "EFS Check", amount: 84725, percentage: 10 },
+      { method: "Comdata", amount: 84725, percentage: 10 },
+    ],
+    dailyRevenue: Array.from({ length: 30 }, (_, i) => ({
+      date: format(subDays(new Date(), 30 - i), "MMM dd"),
+      revenue: 20000 + Math.random() * 15000,
+      jobs: 30 + Math.floor(Math.random() * 20),
+    })),
+    platformFees: 42362,
+    outstanding: 23450,
+    surgeRevenue: 15670,
+  },
+
+  // Geographic Metrics
+  geographicMetrics: {
+    topMarkets: [
+      { city: "Dallas", jobs: 462, revenue: 98500, growth: 12 },
+      { city: "Atlanta", jobs: 398, revenue: 84500, growth: 18 },
+      { city: "Chicago", jobs: 356, revenue: 79200, growth: 9 },
+      { city: "Phoenix", jobs: 312, revenue: 74500, growth: 15 },
+      { city: "Denver", jobs: 278, revenue: 69200, growth: 22 },
+    ],
+    coverage: [
+      { region: "South", coverage: 92, growth: 14 },
+      { region: "Midwest", coverage: 85, growth: 11 },
+      { region: "West", coverage: 78, growth: 18 },
+      { region: "Northeast", coverage: 68, growth: 9 },
+    ],
+    regions: [
+      { region: "South", jobs: 620, avgResponse: 12 },
+      { region: "Midwest", jobs: 480, avgResponse: 14 },
+      { region: "West", jobs: 390, avgResponse: 16 },
+      { region: "Northeast", jobs: 355, avgResponse: 13 },
+    ],
+  },
+
+  // Job Metrics
+  jobMetrics: {
+    totalJobs: 1845,
+    jobComposition: [
+      { type: "Emergency", value: 62 },
+      { type: "Scheduled", value: 28 },
+      { type: "Fleet PM", value: 7 },
+      { type: "Special Projects", value: 3 },
+    ],
+    jobQueues: {
+      urgent: 18,
+      high: 42,
+      normal: 86,
+      low: 27,
+    },
+    byStatus: {
+      completed: 1420,
+      inProgress: 210,
+      assigned: 135,
+      new: 80,
+    },
+    peakHours: Array.from({ length: 24 }, (_, hour) => ({
+      hour: `${hour}:00`,
+      jobs: 20 + Math.floor(Math.random() * 15),
+    })),
+    jobFunnel: [
+      { stage: "Requests", count: 2350 },
+      { stage: "Qualified", count: 2120 },
+      { stage: "Scheduled", count: 1845 },
+      { stage: "Completed", count: 1742 },
+      { stage: "Paid", count: 1625 },
+    ],
+  },
+
+  fleetMetrics: {
+    activeFleets: 156,
+    totalVehicles: 4820,
+    pmCompliance: 91,
+    costPerMile: 2.35,
+    savings: 425000,
+    avgVehiclesPerFleet: 31,
+    breakdownRate: 4.2,
+    topFleets: [
+      { name: "TriState Logistics", tier: "Platinum", vehicles: 320, jobs: 540, spent: 185000, pmCompliance: 96 },
+      { name: "Express Freight Co", tier: "Gold", vehicles: 210, jobs: 410, spent: 142500, pmCompliance: 92 },
+      { name: "National Carriers", tier: "Gold", vehicles: 185, jobs: 360, spent: 128400, pmCompliance: 89 },
+      { name: "Midwest Transport", tier: "Silver", vehicles: 140, jobs: 280, spent: 96500, pmCompliance: 87 },
+      { name: "Frontier Haulage", tier: "Silver", vehicles: 120, jobs: 240, spent: 84200, pmCompliance: 85 },
+    ],
+    tierDistribution: [
+      { tier: "Platinum", count: 12, revenue: 420000 },
+      { tier: "Gold", count: 44, revenue: 315000 },
+      { tier: "Silver", count: 60, revenue: 198000 },
+      { tier: "Bronze", count: 40, revenue: 96000 },
+    ],
+  },
+
+  // Invoice Metrics
+  invoiceMetrics: {
+    outstanding: 84,
+    overdue: 17,
+    avgDaysToPay: 8.4,
+    collectionRate: 96.2,
+    disputeRate: 1.8,
+    automationRate: 78,
+    invoices: Array.from({ length: 50 }, (_, i) => ({
+      invoiceNumber: `INV-${1000 + i}`,
+      customer: `Fleet ${(i % 10) + 1}`,
+      amount: 500 + Math.floor(Math.random() * 5000),
+      status: ["paid", "pending", "overdue"][i % 3],
+      issuedDate: format(subDays(new Date(), i), "MMM dd, yyyy"),
+      dueDate: format(subDays(new Date(), i - 7), "MMM dd, yyyy"),
+    })),
+  },
+
+  // Alerts & Notifications
+  operationalAlerts: {
+    active: [
+      { id: 1, type: "SLA Breach", severity: "high", region: "Dallas", jobsAffected: 5, eta: "15m" },
+      { id: 2, type: "Fleet Outage", severity: "medium", region: "Chicago", jobsAffected: 3, eta: "2h" },
+      { id: 3, type: "Weather Impact", severity: "high", region: "Denver", jobsAffected: 8, eta: "4h" },
+    ],
+    resolved: 128,
+    avgResolutionTime: 28,
+  },
+
+  // Customer Feedback
+  customerFeedback: {
+    avgSatisfaction: 4.7,
+    nps: 68,
+    responseRate: 42,
+    topFeedback: [
+      { category: "Speed", score: 4.8 },
+      { category: "Quality", score: 4.6 },
+      { category: "Communication", score: 4.5 },
+      { category: "Value", score: 4.3 },
+    ],
+    reviews: Array.from({ length: 6 }, (_, i) => ({
+      id: i + 1,
+      customer: `Customer ${i + 1}`,
+      rating: 4 + Math.random(),
+      comment: "Great service and quick response time. Highly recommend!",
+      date: format(subDays(new Date(), i), "MMM dd, yyyy"),
+      jobType: ["Emergency", "Scheduled", "Fleet"][i % 3],
+    })),
+  },
+
+  // Risk Metrics
+  riskMetrics: {
+    complianceScore: 92,
+    auditFindings: 3,
+    fraudAlerts: 1,
+    dataIncidents: 0,
+    insuranceClaims: 4,
+    riskByRegion: [
+      { region: "South", score: 18 },
+      { region: "Midwest", score: 12 },
+      { region: "West", score: 20 },
+      { region: "Northeast", score: 15 },
+    ],
+  },
+
+  // Operational Efficiency
+  efficiency: {
+    contractorUtilization: 78.5,
+    avgIdleTime: 2.3,
+    routeSavings: 23450,
+    batchingRate: 34.5,
+    platformUptime: 99.92,
+    apiResponseTime: 145,
+    errorRate: 0.3,
+    systemHealth: {
+      database: true,
+      api: true,
+      websocket: true,
+      payments: true,
+    },
+    performanceTrends: Array.from({ length: 7 }, (_, i) => ({
+      day: format(subDays(new Date(), 6 - i), "EEE"),
+      utilization: 70 + Math.random() * 20,
+      efficiency: 80 + Math.random() * 15,
+    })),
+  },
+
+  // Predictive Analytics
+  predictions: {
+    demandForecast: Array.from({ length: 7 }, (_, i) => ({
+      date: format(new Date(Date.now() + i * 86400000), "MMM dd"),
+      predicted: 120 + Math.floor(Math.random() * 40),
+      confidence: 85 + Math.random() * 10,
+    })),
+    contractorNeeds: Array.from({ length: 24 }, (_, hour) => ({
+      hour,
+      predicted: Math.floor(15 + 10 * Math.sin((hour - 6) * Math.PI / 12)),
+      needed: Math.floor(18 + 12 * Math.sin((hour - 6) * Math.PI / 12)),
+    })),
+    revenueProjection: Array.from({ length: 6 }, (_, i) => ({
+      month: format(new Date(Date.now() + i * 30 * 86400000), "MMM"),
+      projected: 850000 + Math.floor(Math.random() * 100000),
+      confidence: 80 + Math.random() * 15,
+    })),
+    growthRate: { current: 12.5, projected: 15.8, target: 20 },
+    seasonalImpact: [
+      { period: "Summer", trend: "High", impact: 25 },
+      { period: "Hurricane Season", trend: "Peak", impact: 40 },
+      { period: "Winter", trend: "Low", impact: -15 },
+      { period: "Spring", trend: "Normal", impact: 0 },
+    ],
+  },
+};
+
+type AnalyticsData = typeof mockData;
+
 // Custom Gauge Chart Component
 function GaugeChart({ value, title, subtitle, target = 100 }: { value: number; title: string; subtitle?: string; target?: number }) {
   const data = [{ value, fill: value >= target * 0.9 ? COLORS.success : value >= target * 0.7 ? COLORS.warning : COLORS.danger }];
@@ -98,9 +387,21 @@ export default function AdminAnalytics() {
   };
 
   // Main analytics query
-  const { data: analytics, isLoading, refetch } = useQuery({
+  const { data: analytics, isLoading, refetch } = useQuery<AnalyticsData>({
     queryKey: ['/api/admin/analytics', { range: dateRange }],
     refetchInterval: 60000, // Refresh every minute
+    queryFn: async () => {
+      try {
+        const response = await apiRequest('/api/admin/analytics', {
+          method: 'POST',
+          body: JSON.stringify({ range: dateRange }),
+        });
+        return (response?.analytics as AnalyticsData | undefined) ?? mockData;
+      } catch (error) {
+        console.error('Failed to fetch analytics data, using mock data', error);
+        return mockData;
+      }
+    },
   });
 
   // Export function
@@ -122,251 +423,6 @@ export default function AdminAnalytics() {
         description: "Failed to export analytics report",
       });
     }
-  };
-
-  // Mock data for comprehensive analytics
-  const mockData = {
-    // Platform Overview
-    platformMetrics: {
-      activeJobs: 47,
-      onlineContractors: 112,
-      avgResponseTime: 11.5,
-      completionRate: 94.8,
-      totalRevenue: 847250,
-      totalFleets: 156,
-      totalUsers: 8421,
-      platformUptime: 99.9,
-    },
-    
-    // SLA Metrics
-    slaMetrics: {
-      overallCompliance: 92.5,
-      avgResponseTime: 11.5,
-      breachedCount: 23,
-      byServiceType: [
-        { service: "Emergency Repair", compliance: 89, avgTime: 9 },
-        { service: "Fleet PM", compliance: 96, avgTime: 24 },
-        { service: "Truck Wash", compliance: 98, avgTime: 45 },
-        { service: "Tire Service", compliance: 91, avgTime: 12 },
-      ],
-      trends: Array.from({ length: 30 }, (_, i) => ({
-        date: format(subDays(new Date(), 30 - i), "MMM dd"),
-        compliance: 88 + Math.random() * 12,
-        responseTime: 10 + Math.random() * 5,
-      })),
-    },
-    
-    // Response Time Analytics
-    responseTimeMetrics: {
-      acceptance: { actual: 3.2, target: 5, variance: -36 },
-      travel: { actual: 15.8, target: 20, variance: -21 },
-      service: { actual: 42.5, target: 45, variance: -5.6 },
-      total: { actual: 61.5, target: 70, variance: -12.1 },
-      hourlyPattern: Array.from({ length: 24 }, (_, hour) => ({
-        hour: `${hour}:00`,
-        avgTime: 10 + Math.sin(hour / 3) * 5 + Math.random() * 3,
-        jobs: Math.floor(5 + Math.sin(hour / 2) * 3 + Math.random() * 2),
-      })),
-    },
-    
-    // Contractor Performance
-    contractorMetrics: {
-      topPerformers: [
-        { name: "Mike Johnson", jobs: 342, earnings: 45600, rating: 4.8, acceptance: 92, onTime: 96, tier: "Gold" },
-        { name: "Sarah Williams", jobs: 285, earnings: 38500, rating: 4.7, acceptance: 88, onTime: 94, tier: "Gold" },
-        { name: "John Davis", jobs: 245, earnings: 32100, rating: 4.9, acceptance: 95, onTime: 97, tier: "Silver" },
-        { name: "Lisa Anderson", jobs: 212, earnings: 28400, rating: 4.6, acceptance: 85, onTime: 91, tier: "Silver" },
-        { name: "Tom Wilson", jobs: 198, earnings: 26300, rating: 4.5, acceptance: 82, onTime: 89, tier: "Bronze" },
-      ],
-      tierDistribution: [
-        { tier: "Gold", count: 28, percentage: 15 },
-        { tier: "Silver", count: 65, percentage: 35 },
-        { tier: "Bronze", count: 93, percentage: 50 },
-      ],
-      performanceTrends: Array.from({ length: 12 }, (_, i) => ({
-        month: format(subMonths(new Date(), 11 - i), "MMM"),
-        avgRating: 4.3 + Math.random() * 0.4,
-        avgJobs: 15 + Math.random() * 10,
-        avgEarnings: 3000 + Math.random() * 2000,
-      })),
-    },
-    
-    // Revenue Analytics
-    revenueMetrics: {
-      total: 847250,
-      growth: 12.5,
-      byService: [
-        { name: "Emergency Repair", value: 380260, percentage: 45 },
-        { name: "Fleet Services", value: 254175, percentage: 30 },
-        { name: "Truck Wash", value: 127087, percentage: 15 },
-        { name: "PM Services", value: 85728, percentage: 10 },
-      ],
-      emergencyVsScheduled: { emergency: 507450, scheduled: 339800 },
-      paymentMethods: [
-        { method: "Credit Card", amount: 423625, percentage: 50 },
-        { method: "Fleet Account", amount: 254175, percentage: 30 },
-        { method: "EFS Check", amount: 84725, percentage: 10 },
-        { method: "Comdata", amount: 84725, percentage: 10 },
-      ],
-      dailyRevenue: Array.from({ length: 30 }, (_, i) => ({
-        date: format(subDays(new Date(), 30 - i), "MMM dd"),
-        revenue: 20000 + Math.random() * 15000,
-        jobs: 30 + Math.floor(Math.random() * 20),
-      })),
-      platformFees: 42362,
-      outstanding: 23450,
-      surgeRevenue: 15670,
-    },
-    
-    // Fleet Analytics
-    fleetMetrics: {
-      activeFleets: 132,
-      totalVehicles: 3456,
-      avgVehiclesPerFleet: 26,
-      topFleets: [
-        { name: "ABC Transport", vehicles: 125, jobs: 456, spent: 67800, pmCompliance: 92, tier: "Platinum" },
-        { name: "XYZ Logistics", vehicles: 98, jobs: 389, spent: 54200, pmCompliance: 88, tier: "Gold" },
-        { name: "Quick Fleet", vehicles: 76, jobs: 312, spent: 43100, pmCompliance: 85, tier: "Gold" },
-        { name: "Reliable Hauling", vehicles: 65, jobs: 278, spent: 38900, pmCompliance: 91, tier: "Silver" },
-      ],
-      pmCompliance: 87.5,
-      breakdownRate: 3.2,
-      costPerMile: 1.85,
-      savings: 125600,
-      tierDistribution: [
-        { tier: "Platinum", count: 12, revenue: 234500 },
-        { tier: "Gold", count: 34, revenue: 187600 },
-        { tier: "Silver", count: 56, revenue: 142300 },
-        { tier: "Standard", count: 30, revenue: 89400 },
-      ],
-    },
-    
-    // Geographic Analytics
-    geographicMetrics: {
-      regions: [
-        { region: "Miami", jobs: 892, revenue: 145200, contractors: 28, avgResponse: 10 },
-        { region: "Orlando", jobs: 756, revenue: 123400, contractors: 22, avgResponse: 12 },
-        { region: "Tampa", jobs: 623, revenue: 98700, contractors: 18, avgResponse: 11 },
-        { region: "Jacksonville", jobs: 534, revenue: 87600, contractors: 15, avgResponse: 14 },
-        { region: "Fort Lauderdale", jobs: 451, revenue: 73500, contractors: 12, avgResponse: 9 },
-      ],
-      heatmapData: Array.from({ length: 50 }, () => ({
-        lat: 25.7617 + (Math.random() - 0.5) * 2,
-        lng: -80.1918 + (Math.random() - 0.5) * 2,
-        intensity: Math.random(),
-      })),
-      coverageGaps: [
-        { area: "Homestead", demand: 45, coverage: 12, gap: 33 },
-        { area: "Key Largo", demand: 28, coverage: 5, gap: 23 },
-        { area: "Belle Glade", demand: 31, coverage: 8, gap: 23 },
-      ],
-      avgTravelDistance: 18.5,
-    },
-    
-    // Job Analytics
-    jobMetrics: {
-      total: 3456,
-      byStatus: { 
-        completed: 3215, 
-        inProgress: 115, 
-        assigned: 78, 
-        new: 48 
-      },
-      completionRate: 93.1,
-      cancellationRate: 3.2,
-      cancellationReasons: {
-        "Customer cancelled": 45,
-        "Contractor unavailable": 23,
-        "Weather": 18,
-        "Vehicle fixed": 12,
-        "Other": 13,
-      },
-      typeDistribution: [
-        { type: "Tire Service", count: 1382, percentage: 40 },
-        { type: "Engine Repair", count: 864, percentage: 25 },
-        { type: "Electrical", count: 518, percentage: 15 },
-        { type: "PM Service", count: 345, percentage: 10 },
-        { type: "Other", count: 347, percentage: 10 },
-      ],
-      peakHours: Array.from({ length: 24 }, (_, hour) => ({
-        hour,
-        jobs: Math.floor(50 + 100 * Math.sin((hour - 6) * Math.PI / 12) + Math.random() * 20),
-      })),
-      repeatRate: 68.5,
-      avgDuration: 52.3,
-    },
-    
-    // Customer Analytics
-    customerMetrics: {
-      total: 8421,
-      new: 342,
-      acquisitionTrend: Array.from({ length: 12 }, (_, i) => ({
-        month: format(subMonths(new Date(), 11 - i), "MMM"),
-        new: 200 + Math.floor(Math.random() * 150),
-        total: 7000 + i * 120 + Math.floor(Math.random() * 50),
-      })),
-      lifetimeValue: 2847,
-      retentionRate: 82.3,
-      guestVsRegistered: { guest: 2105, registered: 6316 },
-      satisfactionScore: 4.6,
-      nps: 68,
-      referrals: 456,
-      referralConversion: 34.5,
-      churnRate: 5.2,
-      topCustomers: [
-        { name: "Fleet Corp", jobs: 234, spent: 45600 },
-        { name: "Logistics Inc", jobs: 189, spent: 38900 },
-        { name: "Transport Co", jobs: 167, spent: 32100 },
-      ],
-    },
-    
-    // Operational Efficiency
-    efficiency: {
-      contractorUtilization: 78.5,
-      avgIdleTime: 2.3,
-      routeSavings: 23450,
-      batchingRate: 34.5,
-      platformUptime: 99.92,
-      apiResponseTime: 145,
-      errorRate: 0.3,
-      systemHealth: {
-        database: true,
-        api: true,
-        websocket: true,
-        payments: true,
-      },
-      performanceTrends: Array.from({ length: 7 }, (_, i) => ({
-        day: format(subDays(new Date(), 6 - i), "EEE"),
-        utilization: 70 + Math.random() * 20,
-        efficiency: 80 + Math.random() * 15,
-      })),
-    },
-    
-    // Predictive Analytics
-    predictions: {
-      demandForecast: Array.from({ length: 7 }, (_, i) => ({
-        date: format(new Date(Date.now() + i * 86400000), "MMM dd"),
-        predicted: 120 + Math.floor(Math.random() * 40),
-        confidence: 85 + Math.random() * 10,
-      })),
-      contractorNeeds: Array.from({ length: 24 }, (_, hour) => ({
-        hour,
-        predicted: Math.floor(15 + 10 * Math.sin((hour - 6) * Math.PI / 12)),
-        needed: Math.floor(18 + 12 * Math.sin((hour - 6) * Math.PI / 12)),
-      })),
-      revenueProjection: Array.from({ length: 6 }, (_, i) => ({
-        month: format(new Date(Date.now() + i * 30 * 86400000), "MMM"),
-        projected: 850000 + Math.floor(Math.random() * 100000),
-        confidence: 80 + Math.random() * 15,
-      })),
-      growthRate: { current: 12.5, projected: 15.8, target: 20 },
-      seasonalImpact: [
-        { period: "Summer", trend: "High", impact: 25 },
-        { period: "Hurricane Season", trend: "Peak", impact: 40 },
-        { period: "Winter", trend: "Low", impact: -15 },
-        { period: "Spring", trend: "Normal", impact: 0 },
-      ],
-    },
   };
 
   const analyticsData = analytics || mockData;

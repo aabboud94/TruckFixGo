@@ -1,41 +1,103 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Clock3, MapPin, PhoneCall, ShieldCheck } from "lucide-react";
 import { useLocation } from "wouter";
+import PageShell from "@/components/page-shell";
+import type { EmergencyBookingData, EmergencyTrackingResponse } from "@/types/emergency";
+import { loadEmergencyMeta, persistEmergencyMeta } from "@/hooks/use-emergency-workflow";
+import { apiRequest } from "@/lib/queryClient";
 import Step1 from "./step-1";
 import Step2 from "./step-2";
 import Confirmation from "./confirmation";
 
-export interface EmergencyBookingData {
-  // Step 1
-  name?: string;
-  location?: { lat: number; lng: number; address?: string };
-  manualLocation?: string;
-  phone: string;
-  email?: string;
-  
-  // Step 2
-  issue: string;
-  issueDescription?: string;
-  unitNumber?: string;
-  carrierName?: string;
-  photoUrl?: string;
-  
-  // Response
-  jobId?: string;
-  jobNumber?: string;
-  estimatedArrival?: string;
-  trackingLink?: string;
-}
-
 export default function EmergencyBooking() {
   const [currentStep, setCurrentStep] = useState(1);
-  const [bookingData, setBookingData] = useState<EmergencyBookingData>({
-    phone: "",
+  const [bookingData, setBookingData] = useState<EmergencyBookingData>(() => {
+    const cached = loadEmergencyMeta();
+    const snapshot = cached?.bookingSnapshot ?? {};
+
+    return {
+      ...snapshot,
+      phone: snapshot.phone || "",
+      issue: snapshot.issue || "",
+      jobId: snapshot.jobId || cached?.jobId,
+      jobNumber: snapshot.jobNumber || cached?.jobNumber,
+      trackingLink: snapshot.trackingLink || cached?.trackingLink,
+      estimatedArrival: snapshot.estimatedArrival || cached?.estimatedArrival,
+    } as EmergencyBookingData;
   });
   const [, setLocation] = useLocation();
+  const trackingJobId = bookingData.jobId;
+
+  const {
+    data: trackingData,
+    isFetching: isTracking,
+    error: trackingError,
+    refetch: refetchTracking,
+  } = useQuery<EmergencyTrackingResponse>({
+    queryKey: ["emergency-tracking", trackingJobId],
+    enabled: Boolean(trackingJobId),
+    refetchInterval: trackingJobId ? 15000 : false,
+    queryFn: async () => {
+      if (!trackingJobId) {
+        throw new Error("Missing job identifier");
+      }
+      return apiRequest("GET", `/api/emergency/track/${trackingJobId}`);
+    },
+  });
+
+  useEffect(() => {
+    if (!trackingData?.job) return;
+
+    setBookingData(prev => {
+      const next = { ...prev };
+      let changed = false;
+
+      if (trackingData.job?.id && trackingData.job.id !== prev.jobId) {
+        next.jobId = trackingData.job.id;
+        changed = true;
+      }
+      if (trackingData.job?.jobNumber && trackingData.job.jobNumber !== prev.jobNumber) {
+        next.jobNumber = trackingData.job.jobNumber;
+        changed = true;
+      }
+      if (trackingData.job?.estimatedArrival && trackingData.job.estimatedArrival !== prev.estimatedArrival) {
+        next.estimatedArrival = trackingData.job.estimatedArrival;
+        changed = true;
+      }
+      if (trackingData.job?.status && trackingData.job.status !== prev.status) {
+        next.status = trackingData.job.status;
+        changed = true;
+      }
+      if (!prev.trackingLink && trackingData.job?.id) {
+        next.trackingLink = `/track/${trackingData.job.id}`;
+        changed = true;
+      }
+
+      if (changed) {
+        persistEmergencyMeta({
+          jobId: next.jobId,
+          jobNumber: next.jobNumber,
+          trackingLink: next.trackingLink,
+          estimatedArrival: next.estimatedArrival,
+          updatedAt: Date.now(),
+          bookingSnapshot: next,
+        });
+        return next;
+      }
+
+      return prev;
+    });
+  }, [trackingData]);
+
+  useEffect(() => {
+    if ((bookingData.jobId || bookingData.jobNumber) && currentStep !== 3) {
+      setCurrentStep(3);
+    }
+  }, [bookingData.jobId, bookingData.jobNumber, currentStep]);
 
   const handleStepComplete = (stepData: Partial<EmergencyBookingData>) => {
     setBookingData(prev => ({ ...prev, ...stepData }));
@@ -59,11 +121,10 @@ export default function EmergencyBooking() {
   const progress = currentStep === 3 ? 100 : (currentStep / 2) * 100;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[var(--app-height)] bg-background">
       {/* Emergency Header */}
       <header className="sticky top-0 z-50 border-b bg-background/90 backdrop-blur">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
+        <div className="mx-auto flex h-16 w-full items-center justify-between px-safe">
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
@@ -84,12 +145,11 @@ export default function EmergencyBooking() {
               <span className="hidden sm:inline">Avg dispatch in 6 minutes</span>
             </div>
           </div>
-        </div>
       </header>
 
       {/* Step Content */}
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="grid gap-6 lg:grid-cols-[1.6fr,1fr]">
+      <PageShell maxWidth="xl" padding="sm" className="pb-10">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr),minmax(0,1fr)]">
           <section className="space-y-4">
             {currentStep < 3 && (
               <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 text-sm text-muted-foreground shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -142,6 +202,10 @@ export default function EmergencyBooking() {
                 {currentStep === 3 && (
                   <Confirmation
                     bookingData={bookingData}
+                    trackingData={trackingData}
+                    trackingError={trackingError instanceof Error ? trackingError.message : undefined}
+                    isTracking={isTracking}
+                    onRefreshTracking={() => void refetchTracking()}
                   />
                 )}
               </div>
@@ -198,7 +262,7 @@ export default function EmergencyBooking() {
             </div>
           </aside>
         </div>
-      </main>
+      </PageShell>
     </div>
   );
 }

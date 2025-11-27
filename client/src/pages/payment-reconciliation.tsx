@@ -137,13 +137,19 @@ export default function PaymentReconciliationPage() {
     }
   };
 
+  type StatusBadgeConfig = {
+    variant: 'default' | 'secondary' | 'destructive' | 'outline';
+    icon: typeof Clock;
+    className?: string;
+  };
+
   const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      pending: { variant: 'secondary' as const, icon: Clock },
-      processing: { variant: 'default' as const, icon: RefreshCw },
-      completed: { variant: 'default' as const, icon: CheckCircle, className: 'bg-green-500' },
-      failed: { variant: 'destructive' as const, icon: XCircle },
-      disputed: { variant: 'outline' as const, icon: AlertCircle }
+    const statusConfig: Record<string, StatusBadgeConfig> = {
+      pending: { variant: 'secondary', icon: Clock },
+      processing: { variant: 'default', icon: RefreshCw },
+      completed: { variant: 'default', icon: CheckCircle, className: 'bg-green-500 text-white' },
+      failed: { variant: 'destructive', icon: XCircle },
+      disputed: { variant: 'outline', icon: AlertCircle }
     };
     
     const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
@@ -372,7 +378,7 @@ export default function PaymentReconciliationPage() {
                             {payout.batchId && (
                               <Button
                                 size="sm"
-                                onClick={() => handleProcessPayout(payout.batchId)}
+                                onClick={() => handleProcessPayout(payout.batchId!)}
                                 disabled={payout.status === 'completed'}
                                 data-testid={`button-process-payout-${payout.batchId}`}
                               >
@@ -424,9 +430,9 @@ export default function PaymentReconciliationPage() {
                         <TableCell className="font-mono text-xs">{tx.id.slice(0, 8)}</TableCell>
                         <TableCell className="font-mono text-xs">{tx.jobId.slice(0, 8)}</TableCell>
                         <TableCell>{format(new Date(tx.createdAt), 'MMM d, yyyy')}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(tx.baseAmount)}</TableCell>
-                        <TableCell className="text-right">{(tx.commissionRate * 100).toFixed(1)}%</TableCell>
-                        <TableCell className="text-right">{formatCurrency(tx.commissionAmount)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(Number(tx.baseAmount || 0))}</TableCell>
+                        <TableCell className="text-right">{(Number(tx.commissionRate || 0) * 100).toFixed(1)}%</TableCell>
+                        <TableCell className="text-right">{formatCurrency(Number(tx.commissionAmount || 0))}</TableCell>
                         <TableCell>{getStatusBadge(tx.status)}</TableCell>
                       </TableRow>
                     ))}

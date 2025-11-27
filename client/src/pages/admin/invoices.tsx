@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import AdminLayout from "@/layouts/AdminLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -54,6 +55,7 @@ interface InvoiceFilters {
 
 export default function AdminInvoices() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const isMobile = useIsMobile();
   const [filters, setFilters] = useState<InvoiceFilters>({
     fromDate: startOfMonth(new Date()),
@@ -64,23 +66,35 @@ export default function AdminInvoices() {
   const [invoiceSettingsDialog, setInvoiceSettingsDialog] = useState(false);
 
   // Query invoices
+  const buildInvoiceQuery = () => {
+    const params = new URLSearchParams();
+    if (filters.status) params.set("status", filters.status);
+    if (filters.customerId) params.set("customerId", filters.customerId);
+    if (filters.fromDate) params.set("fromDate", filters.fromDate.toISOString());
+    if (filters.toDate) params.set("toDate", filters.toDate.toISOString());
+    return params.toString();
+  };
+
   const { data: invoicesData, isLoading: invoicesLoading, refetch: refetchInvoices } = useQuery({
     queryKey: ["/api/admin/invoices", filters],
-    queryFn: () => apiRequest("/api/admin/invoices", "GET", undefined, {
-      status: filters.status,
-      customerId: filters.customerId,
-      fromDate: filters.fromDate?.toISOString(),
-      toDate: filters.toDate?.toISOString(),
-    }),
+    queryFn: () => {
+      const query = buildInvoiceQuery();
+      const url = query ? `/api/admin/invoices?${query}` : "/api/admin/invoices";
+      return apiRequest("GET", url);
+    },
   });
 
   // Query invoice metrics
   const { data: metricsData } = useQuery({
     queryKey: ["/api/admin/invoices/metrics", filters],
-    queryFn: () => apiRequest("/api/admin/invoices/metrics", "GET", undefined, {
-      fromDate: filters.fromDate?.toISOString(),
-      toDate: filters.toDate?.toISOString(),
-    }),
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (filters.fromDate) params.set("fromDate", filters.fromDate.toISOString());
+      if (filters.toDate) params.set("toDate", filters.toDate.toISOString());
+      const query = params.toString();
+      const url = query ? `/api/admin/invoices/metrics?${query}` : "/api/admin/invoices/metrics";
+      return apiRequest("GET", url);
+    },
   });
 
   // Mutation to update invoice status
@@ -217,8 +231,9 @@ export default function AdminInvoices() {
 
   return (
     <AdminLayout title="Invoice Management">
-      {/* Metrics Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6">
+      <div className="space-y-6">
+        {/* Metrics Cards */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Invoices</CardTitle>
@@ -276,7 +291,7 @@ export default function AdminInvoices() {
       </div>
 
       {/* Filters and Actions */}
-      <Card className="mb-6">
+      <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>Invoice Filters</CardTitle>
@@ -494,6 +509,21 @@ export default function AdminInvoices() {
                           <Download className="h-4 w-4 mr-2" />
                           Download
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-11 flex-1"
+                          disabled={!invoice.jobId}
+                          onClick={() => invoice.jobId && navigate(`/job-details/${invoice.jobId}`)}
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          View Job
+                        </Button>
+                        {!invoice.jobId && (
+                          <p className="text-xs text-muted-foreground w-full text-center">
+                            Invoice isn’t linked to a job record yet.
+                          </p>
+                        )}
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button size="sm" className="h-11 flex-1" data-testid={`button-actions-${invoice.id}`}>
@@ -553,6 +583,7 @@ export default function AdminInvoices() {
           ) : (
             // Desktop table layout
             <div className="rounded-lg border">
+              <div className="table-scroll">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -643,6 +674,16 @@ export default function AdminInvoices() {
                               >
                                 <RefreshCw className="h-4 w-4" />
                               </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => invoice.jobId && navigate(`/job-details/${invoice.jobId}`)}
+                                disabled={!invoice.jobId}
+                                title={invoice.jobId ? undefined : "No linked job"}
+                                data-testid={`button-job-details-${invoice.id}`}
+                              >
+                                <FileText className="h-4 w-4" />
+                              </Button>
                               <Popover>
                                 <PopoverTrigger asChild>
                                   <Button size="sm" variant="ghost">
@@ -692,10 +733,13 @@ export default function AdminInvoices() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
+
+      </div>
 
       {/* Bulk Export Dialog */}
       <Dialog open={bulkExportDialog} onOpenChange={setBulkExportDialog}>

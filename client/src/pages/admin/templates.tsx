@@ -33,6 +33,10 @@ const AVAILABLE_VARIABLES = {
   platform: ["{{platformName}}", "{{supportEmail}}", "{{supportPhone}}"],
 };
 
+interface TemplatesResponse {
+  data?: any[];
+}
+
 export default function AdminTemplates() {
   const { toast } = useToast();
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
@@ -43,8 +47,12 @@ export default function AdminTemplates() {
   const [selectedCategory, setSelectedCategory] = useState("all");
 
   // Query for templates
-  const { data: templates, isLoading } = useQuery({
+  const { data: templates, isLoading } = useQuery<TemplatesResponse>({
     queryKey: ['/api/admin/templates', { category: selectedCategory }],
+    queryFn: () => {
+      const query = selectedCategory === "all" ? "" : `?category=${encodeURIComponent(selectedCategory)}`;
+      return apiRequest('GET', `/api/admin/templates${query}`);
+    },
   });
 
   // Mutation for saving template
@@ -265,7 +273,7 @@ Best regards,
                               )}
                               {template.type}
                             </Badge>
-                            <Badge variant={template.enabled ? 'success' : 'secondary'}>
+                            <Badge variant={template.enabled ? 'default' : 'secondary'}>
                               {template.enabled ? 'Active' : 'Disabled'}
                             </Badge>
                           </div>

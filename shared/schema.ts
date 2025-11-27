@@ -29,6 +29,7 @@ export const jobStatusEnum = pgEnum('job_status', ['new', 'assigned', 'en_route'
 export const jobAssignmentMethodEnum = pgEnum('job_assignment_method', ['round_robin', 'manual', 'ai_dispatch']);
 export const paymentMethodTypeEnum = pgEnum('payment_method_type', ['credit_card', 'efs_check', 'comdata_check', 'fleet_account', 'cash']);
 export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'processing', 'completed', 'failed', 'refunded']);
+export const contractorStatusEnum = pgEnum('contractor_status', ['pending', 'active', 'suspended', 'rejected']);
 export const refundStatusEnum = pgEnum('refund_status', ['requested', 'approved', 'rejected', 'processed']);
 export const documentTypeEnum = pgEnum('document_type', ['insurance', 'certification', 'license', 'tax_id', 'compliance']);
 export const serviceAreaSurchargeTypeEnum = pgEnum('service_area_surcharge_type', ['distance', 'zone', 'time_based']);
@@ -105,7 +106,11 @@ export const users = pgTable("users", {
   password: text("password"),
   isActive: boolean("is_active").notNull().default(true),
   isGuest: boolean("is_guest").notNull().default(false),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  phoneVerified: boolean("phone_verified").notNull().default(false),
+  notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
   lastLoginAt: timestamp("last_login_at"),
+  lastLogin: timestamp("last_login"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   deletedAt: timestamp("deleted_at")
@@ -171,6 +176,9 @@ export const driverProfiles = pgTable("driver_profiles", {
 export const contractorProfiles = pgTable("contractor_profiles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  company: text("company"),
   companyName: text("company_name"),
   performanceTier: performanceTierEnum("performance_tier").notNull().default('bronze'),
   serviceRadius: integer("service_radius").notNull().default(50),
@@ -204,6 +212,7 @@ export const contractorProfiles = pgTable("contractor_profiles", {
   isVerifiedContractor: boolean("is_verified_contractor").notNull().default(false),
   isFeaturedContractor: boolean("is_featured_contractor").notNull().default(false),
   profileCompleteness: integer("profile_completeness").notNull().default(0), // 0-100
+  status: contractorStatusEnum("status").notNull().default('pending'),
   
   isFleetCapable: boolean("is_fleet_capable").notNull().default(false),
   hasMobileWaterSource: boolean("has_mobile_water_source").notNull().default(false),
@@ -262,6 +271,7 @@ export const fleetAccounts = pgTable("fleet_accounts", {
   isAutoAuthorized: boolean("is_auto_authorized").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
   notes: text("notes"),
+  billingStatus: varchar("billing_status", { length: 50 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   deletedAt: timestamp("deleted_at")
@@ -303,6 +313,7 @@ export const pmSchedules = pgTable("pm_schedules", {
   frequency: pmScheduleFrequencyEnum("frequency").notNull(),
   nextServiceDate: timestamp("next_service_date").notNull(),
   lastServiceDate: timestamp("last_service_date"),
+  estimatedCost: decimal("estimated_cost", { precision: 10, scale: 2 }),
   isActive: boolean("is_active").notNull().default(true),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -482,6 +493,7 @@ export const jobs = pgTable("jobs", {
   status: jobStatusEnum("status").notNull().default('new'),
   customerId: varchar("customer_id").references(() => users.id),
   contractorId: varchar("contractor_id").references(() => users.id),
+  driverId: varchar("driver_id").references(() => users.id),
   fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id),
   vehicleId: varchar("vehicle_id").references(() => fleetVehicles.id),
   serviceTypeId: varchar("service_type_id").notNull().references(() => serviceTypes.id),
@@ -501,10 +513,14 @@ export const jobs = pgTable("jobs", {
   vehicleMake: varchar("vehicle_make", { length: 50 }),
   vehicleModel: varchar("vehicle_model", { length: 50 }),
   vehicleYear: integer("vehicle_year"),
+  vehicleLicensePlate: varchar("vehicle_license_plate", { length: 20 }),
+  vehicleType: varchar("vehicle_type", { length: 50 }),
+  vehicleLocation: jsonb("vehicle_location"),
   
   // Scheduling
   scheduledAt: timestamp("scheduled_at"),
   assignedAt: timestamp("assigned_at"),
+  acceptedAt: timestamp("accepted_at"),
   enRouteAt: timestamp("en_route_at"),
   arrivedAt: timestamp("arrived_at"),
   completedAt: timestamp("completed_at"),
@@ -517,6 +533,7 @@ export const jobs = pgTable("jobs", {
   
   // Job details
   description: text("description"),
+  notes: text("notes"),
   urgencyLevel: integer("urgency_level").notNull().default(1),
   requiresWaterSource: boolean("requires_water_source").notNull().default(false),
   hasWaterSource: boolean("has_water_source"),
@@ -524,6 +541,8 @@ export const jobs = pgTable("jobs", {
   // Pricing
   estimatedPrice: decimal("estimated_price", { precision: 10, scale: 2 }),
   finalPrice: decimal("final_price", { precision: 10, scale: 2 }),
+  estimatedCost: decimal("estimated_cost", { precision: 10, scale: 2 }),
+  totalCost: decimal("total_cost", { precision: 10, scale: 2 }),
   laborHours: decimal("labor_hours", { precision: 5, scale: 2 }),
   partsTotal: decimal("parts_total", { precision: 10, scale: 2 }),
   surchargeTotal: decimal("surcharge_total", { precision: 10, scale: 2 }),
@@ -551,6 +570,8 @@ export const jobs = pgTable("jobs", {
   // Completion
   completionNotes: text("completion_notes"),
   customerSignature: text("customer_signature"),
+  contractorName: text("contractor_name"),
+  estimatedCompletionTime: integer("estimated_completion_time"),
   rating: integer("rating"),
   reviewText: text("review_text"),
   
@@ -559,6 +580,7 @@ export const jobs = pgTable("jobs", {
   lastAssignmentAttemptAt: timestamp("last_assignment_attempt_at"),
   assignmentMethod: jobAssignmentMethodEnum("assignment_method").default('manual'),
   assignmentExpiresAt: timestamp("assignment_expires_at"),
+  isTestData: boolean("is_test_data").notNull().default(false),
   
   // Assignment tracking - commented out until migration is run
   // assignmentAttemptedAt: timestamp("assignment_attempted_at"),
@@ -648,7 +670,7 @@ export const jobMessages = pgTable("job_messages", {
   // Enhanced fields for real-time chat
   isEdited: boolean("is_edited").notNull().default(false),
   editedAt: timestamp("edited_at"),
-  replyToId: varchar("reply_to_id").references(() => jobMessages.id),
+  replyToId: varchar("reply_to_id"),
   attachmentUrl: varchar("attachment_url", { length: 500 }),
   attachmentType: varchar("attachment_type", { length: 50 }), // image, document, etc.
   reactions: jsonb("reactions").default('{}'), // { emoji: [userId1, userId2] }
@@ -1112,7 +1134,7 @@ export const jobBids = pgTable("job_bids", {
   
   // Counter offers
   isCounterOffer: boolean("is_counter_offer").notNull().default(false),
-  originalBidId: varchar("original_bid_id").references(() => jobBids.id),
+  originalBidId: varchar("original_bid_id"),
   counterOfferAmount: decimal("counter_offer_amount", { precision: 10, scale: 2 }),
   counterOfferMessage: text("counter_offer_message"),
   
@@ -1343,6 +1365,7 @@ export const reviews = pgTable("reviews", {
   
   // Overall rating
   overallRating: integer("overall_rating").notNull(), // 1-5 stars
+  rating: integer("rating"),
   
   // Category ratings (1-5 each)
   timelinessRating: integer("timeliness_rating"), // Arrived on time
@@ -1532,7 +1555,7 @@ export const applicationDocuments = pgTable("application_documents", {
   
   // Version control
   version: integer("version").notNull().default(1),
-  replacedBy: varchar("replaced_by").references(() => applicationDocuments.id),
+  replacedBy: varchar("replaced_by"),
   isActive: boolean("is_active").notNull().default(true),
   
   uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
@@ -1627,6 +1650,7 @@ export const transactions = pgTable("transactions", {
   jobId: varchar("job_id").references(() => jobs.id),
   userId: varchar("user_id").notNull().references(() => users.id),
   invoiceId: varchar("invoice_id").references(() => invoices.id),
+  fleetAccountId: varchar("fleet_account_id").references(() => fleetAccounts.id),
   paymentMethodId: varchar("payment_method_id").references(() => paymentMethods.id),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   currency: varchar("currency", { length: 3 }).notNull().default('USD'),
@@ -1642,7 +1666,8 @@ export const transactions = pgTable("transactions", {
   jobIdx: index("idx_transactions_job").on(table.jobId),
   userIdx: index("idx_transactions_user").on(table.userId),
   invoiceIdx: index("idx_transactions_invoice").on(table.invoiceId),
-  statusIdx: index("idx_transactions_status").on(table.status)
+  statusIdx: index("idx_transactions_status").on(table.status),
+  fleetIdx: index("idx_transactions_fleet").on(table.fleetAccountId)
 }));
 
 export const invoices = pgTable("invoices", {
@@ -1852,8 +1877,10 @@ export const billingSubscriptions = pgTable("billing_subscriptions", {
   currentPeriodStart: timestamp("current_period_start"), // Database column: current_period_start 
   currentPeriodEnd: timestamp("current_period_end"), // Database column: current_period_end
   cancelledAt: timestamp("cancelled_at"), // Database column: cancelled_at
-  // Note: The following columns are not mentioned in the task as existing:
-  // nextBillingDate, lastBillingDate, pausedAt, cancellationReason
+  nextBillingDate: timestamp("next_billing_date"),
+  lastBillingDate: timestamp("last_billing_date"),
+  pausedAt: timestamp("paused_at"),
+  cancellationReason: text("cancellation_reason"),
   
   // Contract details (these columns may not exist in the database)
   // contractTermMonths: integer("contract_term_months"), // Column doesn't exist
@@ -1962,6 +1989,9 @@ export const billingUsageTracking = pgTable("billing_usage_tracking", {
   emergencyRepairsCount: integer("emergency_repairs_count").notNull().default(0),
   scheduledServicesCount: integer("scheduled_services_count").notNull().default(0),
   activeVehiclesCount: integer("active_vehicles_count").notNull().default(0),
+  vehiclesUsed: integer("vehicles_used").notNull().default(0),
+  emergencyRepairsUsed: integer("emergency_repairs_used").notNull().default(0),
+  scheduledServicesUsed: integer("scheduled_services_used").notNull().default(0),
   
   // Usage alerts
   usageAlert80Sent: boolean("usage_alert_80_sent").notNull().default(false),
@@ -2383,13 +2413,14 @@ export const insertFleetAccountSchema = createInsertSchema(fleetAccounts).omit({
 export type InsertFleetAccount = z.infer<typeof insertFleetAccountSchema>;
 export type FleetAccount = typeof fleetAccounts.$inferSelect;
 
-export const insertFleetVehicleSchema = createInsertSchema(fleetVehicles).omit({ 
-  id: true, 
-  createdAt: true, 
-  updatedAt: true 
+export const insertFleetVehicleSchema = createInsertSchema(fleetVehicles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
 });
 export type InsertFleetVehicle = z.infer<typeof insertFleetVehicleSchema>;
 export type FleetVehicle = typeof fleetVehicles.$inferSelect;
+export type SelectFleetVehicle = FleetVehicle;
 
 export const insertFleetContactSchema = createInsertSchema(fleetContacts).omit({ 
   id: true, 
@@ -2623,12 +2654,6 @@ export type ContractorDocument = typeof contractorDocuments.$inferSelect;
 export const insertContractorApplicationSchema = createInsertSchema(contractorApplications).omit({ 
   id: true, 
   status: true,
-  emailVerified: true,
-  phoneVerified: true,
-  dotNumberVerified: true,
-  mcNumberVerified: true,
-  insuranceVerified: true,
-  referencesVerified: true,
   createdAt: true, 
   updatedAt: true 
 });
@@ -3086,7 +3111,7 @@ export const contractAmendments = pgTable("contract_amendments", {
   
   // Version control
   versionNumber: integer("version_number").notNull(),
-  parentAmendmentId: varchar("parent_amendment_id").references(() => contractAmendments.id),
+  parentAmendmentId: varchar("parent_amendment_id"),
   
   // Digital signature (ready for integration)
   signatureRequired: boolean("signature_required").notNull().default(true),
@@ -3171,7 +3196,7 @@ export const contractPerformanceMetrics = pgTable("contract_performance_metrics"
 
 export const payerTypeEnum = pgEnum('payer_type', ['carrier', 'driver', 'fleet', 'insurance', 'other']);
 export const splitPaymentStatusEnum = pgEnum('split_payment_status', ['pending', 'partial', 'completed', 'failed', 'cancelled']);
-export const paymentSplitStatusEnum = pgEnum('payment_split_status', ['pending', 'paid', 'failed', 'refunded', 'cancelled']);
+export const paymentSplitStatusEnum = pgEnum('payment_split_status', ['pending', 'paid', 'failed', 'refunded', 'cancelled', 'expired']);
 
 // Split payments master table
 export const splitPayments = pgTable("split_payments", {
@@ -4000,6 +4025,7 @@ export const insertMaintenancePredictionSchema = createInsertSchema(maintenanceP
 });
 export type InsertMaintenancePrediction = z.infer<typeof insertMaintenancePredictionSchema>;
 export type MaintenancePrediction = typeof maintenancePredictions.$inferSelect;
+export type SelectMaintenancePrediction = MaintenancePrediction;
 
 export const insertVehicleTelemetrySchema = createInsertSchema(vehicleTelemetry).omit({
   id: true,
@@ -4022,6 +4048,7 @@ export const insertMaintenanceAlertSchema = createInsertSchema(maintenanceAlerts
 });
 export type InsertMaintenanceAlert = z.infer<typeof insertMaintenanceAlertSchema>;
 export type MaintenanceAlert = typeof maintenanceAlerts.$inferSelect;
+export type SelectMaintenanceAlert = MaintenanceAlert;
 
 // ====================
 // PERFORMANCE METRICS
@@ -5539,4 +5566,3 @@ export const insertContractorServiceAreasSchema = createInsertSchema(contractorS
 });
 export type InsertContractorServiceAreas = z.infer<typeof insertContractorServiceAreasSchema>;
 export type ContractorServiceAreas = typeof contractorServiceAreas.$inferSelect;
-

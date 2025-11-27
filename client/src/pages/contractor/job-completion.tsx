@@ -73,8 +73,18 @@ const lineItemSchema = z.object({
 
 type LineItemFormData = z.infer<typeof lineItemSchema>;
 
+interface InvoiceDefaultCharge {
+  id: string;
+  name: string;
+  type: "part" | "labor" | "fee";
+  amount: number;
+  applyByDefault?: boolean;
+  active?: boolean;
+}
+
 export default function JobCompletion() {
-  const { id: jobId } = useParams();
+  const params = useParams<{ id: string }>();
+  const jobId = params?.id;
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -101,16 +111,16 @@ export default function JobCompletion() {
   });
 
   // Fetch default line items
-  const { data: defaultCharges } = useQuery({
+  const { data: defaultCharges = [] } = useQuery<InvoiceDefaultCharge[]>({
     queryKey: ["/api/admin/invoice-defaults"],
   });
 
   // Initialize default line items
   useEffect(() => {
-    if (defaultCharges && lineItems.length === 0) {
+    if (defaultCharges.length && lineItems.length === 0) {
       const defaults = defaultCharges
-        .filter((charge: any) => charge.applyByDefault && charge.active)
-        .map((charge: any) => ({
+        .filter((charge) => charge.applyByDefault && charge.active)
+        .map((charge) => ({
           id: `default-${Date.now()}-${Math.random()}`,
           type: charge.type as "part" | "labor" | "fee",
           description: charge.name,

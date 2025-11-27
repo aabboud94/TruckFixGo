@@ -129,7 +129,8 @@ export default function ContractorSignup() {
     resolver: zodResolver(coverageSchema),
     defaultValues: {
       serviceRadius: formData.serviceRadius || 50,
-      baseLocation: formData.baseLocation || {}
+      baseLocation: formData.baseLocation || {},
+      additionalAreas: formData.additionalAreas || []
     }
   });
 
@@ -535,7 +536,7 @@ export default function ContractorSignup() {
                                   field.onChange(
                                     checked
                                       ? [...current, service]
-                                      : current.filter((s) => s !== service)
+                                      : current.filter((serviceName: string) => serviceName !== service)
                                   );
                                 }}
                                 data-testid={`checkbox-service-${service.toLowerCase().replace(/\s+/g, '-')}`}
@@ -734,7 +735,7 @@ export default function ContractorSignup() {
                                   field.onChange(
                                     checked
                                       ? [...current, item]
-                                      : current.filter((e) => e !== item)
+                                      : current.filter((equipmentItem: string) => equipmentItem !== item)
                                   );
                                 }}
                                 data-testid={`checkbox-equipment-${item.toLowerCase().replace(/\s+/g, '-')}`}

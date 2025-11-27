@@ -39,7 +39,7 @@ import {
   Info,
   XCircle
 } from "lucide-react";
-import type { SelectMaintenancePrediction, SelectMaintenanceAlert, SelectFleetVehicle } from "@shared/schema";
+import type { MaintenancePrediction, MaintenanceAlert, FleetVehicle } from "@shared/schema";
 
 // Risk level color mapping
 const getRiskColor = (level: string) => {
@@ -89,7 +89,7 @@ export default function MaintenancePredictor() {
   const [selectedVehicle, setSelectedVehicle] = useState<string>("all");
   const [selectedRiskLevel, setSelectedRiskLevel] = useState<string>("all");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [selectedAlert, setSelectedAlert] = useState<SelectMaintenanceAlert | null>(null);
+  const [selectedAlert, setSelectedAlert] = useState<MaintenanceAlert | null>(null);
   const [acknowledgeNotes, setAcknowledgeNotes] = useState("");
   const [showROICalculator, setShowROICalculator] = useState(false);
   const [roiVehicleId, setRoiVehicleId] = useState<string>("");
@@ -99,7 +99,7 @@ export default function MaintenancePredictor() {
 
   // Fetch maintenance predictions
   const { data: predictions, isLoading: loadingPredictions, refetch: refetchPredictions } = useQuery<{ 
-    predictions: SelectMaintenancePrediction[], 
+    predictions: MaintenancePrediction[], 
     summary: { 
       total: number, 
       byRiskLevel: Record<string, number>,
@@ -117,13 +117,13 @@ export default function MaintenancePredictor() {
   });
 
   // Fetch maintenance alerts
-  const { data: alertsData, isLoading: loadingAlerts, refetch: refetchAlerts } = useQuery<{ alerts: SelectMaintenanceAlert[] }>({
+  const { data: alertsData, isLoading: loadingAlerts, refetch: refetchAlerts } = useQuery<{ alerts: MaintenanceAlert[] }>({
     queryKey: ['/api/fleet', fleetId, 'maintenance-alerts'],
     queryFn: async () => apiRequest('GET', `/api/fleet/${fleetId}/maintenance-alerts?active=true`)
   });
 
   // Fetch high-risk vehicles
-  const { data: highRiskData, isLoading: loadingHighRisk } = useQuery<{ vehicles: SelectFleetVehicle[] }>({
+  const { data: highRiskData, isLoading: loadingHighRisk } = useQuery<{ vehicles: FleetVehicle[] }>({
     queryKey: ['/api/fleet', fleetId, 'high-risk-vehicles'],
     queryFn: async () => apiRequest('GET', `/api/fleet/${fleetId}/high-risk-vehicles`)
   });

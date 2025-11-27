@@ -367,28 +367,35 @@ export default function Checkout({
   };
 
   // Fetch saved payment methods
-  const { data: paymentMethods, isLoading: loadingMethods } = useQuery({
+  const { data: paymentMethods, isLoading: loadingMethods } = useQuery<any>({
     queryKey: ["/api/payment-methods"],
     enabled: !!savedPaymentMethodId
   });
 
   // Check for Stripe configuration
-  const { data: stripeConfig, isLoading: loadingConfig } = useQuery({
+  const { data: stripeConfig, isLoading: loadingConfig } = useQuery<{ hasKeys: boolean }>({
     queryKey: ["/api/payment/config"]
   });
 
   // Check for existing split payment
-  const { data: splitPaymentData } = useQuery({
-    queryKey: [`/api/payments/split/${jobId}`],
+  const { data: splitPaymentData } = useQuery<{
+    splitPayment?: { id: string; status: string; totalAmount: string; createdAt: string };
+    paymentSplits?: Array<{
+      id: string;
+      payerType: string;
+      payerName?: string;
+      amountAssigned: string;
+      amountPaid: string;
+      status: string;
+    }>;
+  }>({
+    queryKey: ["split-payment-detail", jobId],
     enabled: !!jobId
   });
 
   // Create payment intent mutation
   const createPaymentIntent = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/payment/create-intent", {
-      method: "POST",
-      body: JSON.stringify(data)
-    }),
+    mutationFn: (data: any) => apiRequest("POST", "/api/payment/create-intent", data),
     onSuccess: (data) => {
       if (data.clientSecret) {
         setClientSecret(data.clientSecret);

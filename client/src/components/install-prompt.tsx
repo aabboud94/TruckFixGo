@@ -4,6 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
+declare global {
+  interface Window {
+    gtag?: (...args: any[]) => void;
+  }
+}
+
 export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
@@ -53,8 +59,8 @@ export default function InstallPrompt() {
       console.log('[PWA] App installed successfully');
       
       // Track installation
-      if (typeof gtag !== 'undefined') {
-        (window as any).gtag('event', 'pwa_installed', {
+      if (window.gtag) {
+        window.gtag('event', 'pwa_installed', {
           event_category: 'engagement',
           event_label: 'PWA Installation'
         });
@@ -99,8 +105,8 @@ export default function InstallPrompt() {
       console.log(`[PWA] User response: ${outcome}`);
       
       // Track the outcome
-      if (typeof gtag !== 'undefined') {
-        (window as any).gtag('event', 'pwa_install_prompt_response', {
+      if (window.gtag) {
+        window.gtag('event', 'pwa_install_prompt_response', {
           event_category: 'engagement',
           event_label: outcome
         });
@@ -125,8 +131,8 @@ export default function InstallPrompt() {
     localStorage.setItem('pwa-install-dismissed', Date.now().toString());
     
     // Track dismissal
-    if (typeof gtag !== 'undefined') {
-      (window as any).gtag('event', 'pwa_install_dismissed', {
+    if (window.gtag) {
+      window.gtag('event', 'pwa_install_dismissed', {
         event_category: 'engagement',
         event_label: 'PWA Install Prompt Dismissed'
       });

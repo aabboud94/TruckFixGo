@@ -4,7 +4,10 @@ import { apiRequest } from '@/lib/queryClient';
 import { JobMessage, MessageReadReceipt } from '@shared/schema';
 import { useToast } from '@/hooks/use-toast';
 
-interface ChatMessage extends JobMessage {
+export interface ChatMessage extends JobMessage {
+  content?: string;
+  senderRole?: string;
+  senderName?: string;
   readReceipts?: MessageReadReceipt[];
   isDelivered?: boolean;
   isPending?: boolean;
@@ -141,15 +144,17 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   const { data: unreadData } = useQuery<{ unreadCount: number }>({
     queryKey: [`/api/jobs/${jobId}/messages/unread`],
     refetchInterval: isConnected ? 30000 : false, // Refresh every 30s when connected
-    enabled: !!jobId
+    enabled: !!jobId,
+    queryFn: () => apiRequest(`/api/jobs/${jobId}/messages/unread`),
   });
 
   const unreadCount = unreadData?.unreadCount || 0;
 
   // Query for initial messages
-  const { data: initialMessages, isLoading: isLoadingInitial } = useQuery<{ messages: ChatMessage[], hasMore: boolean }>({
+  const { data: initialMessages, isLoading: isLoadingInitial } = useQuery<{ messages: ChatMessage[]; hasMore: boolean }>({
     queryKey: [`/api/jobs/${jobId}/messages/history`, { limit: messagePageSize }],
-    enabled: !!jobId
+    enabled: !!jobId,
+    queryFn: () => apiRequest(`/api/jobs/${jobId}/messages/history?limit=${messagePageSize}`),
   });
 
   useEffect(() => {
@@ -196,7 +201,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         ws.send(JSON.stringify({
           type: 'SEND_MESSAGE',
           jobId,
-          content: msg.content,
+          content: msg.content ?? msg.message,
           replyToId: msg.replyToId,
           attachmentUrl: msg.attachmentUrl,
           attachmentType: msg.attachmentType,
@@ -273,9 +278,19 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         break;
 
       case 'MESSAGE_EDITED':
-        setMessages(prev => prev.map(m => 
-          m.id === data.messageId ? { ...m, content: data.content, isEdited: true, editedAt: data.editedAt } : m
-        ));
+        setMessages(prev =>
+          prev.map((m) => {
+            if (m.id !== data.messageId) return m;
+            const editedAt = data.editedAt ? new Date(data.editedAt) : new Date();
+            return {
+              ...m,
+              content: data.content,
+              message: data.content,
+              isEdited: true,
+              editedAt,
+            };
+          }),
+        );
         break;
 
       case 'MESSAGE_DELETED':
@@ -320,14 +335,19 @@ export function useChat(options: UseChatOptions): UseChatReturn {
             const receipts = m.readReceipts || [];
             const exists = receipts.some(r => r.userId === data.userId);
             if (!exists) {
+              const readTimestamp = data.readAt ? new Date(data.readAt) : new Date();
               return {
                 ...m,
-                readReceipts: [...receipts, {
-                  id: data.receiptId,
-                  messageId: data.messageId,
-                  userId: data.userId,
-                  readAt: data.readAt
-                }]
+                readReceipts: [
+                  ...receipts,
+                  {
+                    id: data.receiptId,
+                    messageId: data.messageId,
+                    userId: data.userId,
+                    readAt: readTimestamp,
+                    createdAt: readTimestamp,
+                  },
+                ],
               };
             }
           }
@@ -362,53 +382,68 @@ export function useChat(options: UseChatOptions): UseChatReturn {
       case 'ROOM_STATE':
         // Update room state when joining
         if (data.participants) {
-          setOnlineUsers(data.participants.map((p: any) => ({
-            userId: p.userId,
-            userName: p.userName,
-            avatar: p.avatar,
-            lastSeen: Date.now()
-          })));
+          type ParticipantPayload = {
+            userId: string;
+            userName?: string;
+            avatar?: string;
+          };
+          setOnlineUsers(
+            (data.participants as ParticipantPayload[]).map((participant) => ({
+              userId: participant.userId,
+              userName: participant.userName,
+              avatar: participant.avatar,
+              lastSeen: Date.now(),
+            })),
+          );
         }
         break;
 
       case 'REACTION_ADDED':
-        setMessages(prev => prev.map(m => {
-          if (m.id === data.messageId) {
-            const reactions = m.reactions || {};
-            const emojiReactions = reactions[data.emoji] || [];
-            if (!emojiReactions.includes(data.userId)) {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id === data.messageId) {
+              const reactions = (m.reactions as Record<string, string[]> | undefined) ?? {};
+              const emojiKey = String(data.emoji);
+              const emojiReactions = reactions[emojiKey] || [];
+              if (!emojiReactions.includes(data.userId)) {
+                return {
+                  ...m,
+                  reactions: {
+                    ...reactions,
+                    [emojiKey]: [...emojiReactions, data.userId],
+                  },
+                };
+              }
+            }
+            return m;
+          }),
+        );
+        break;
+
+      case 'REACTION_REMOVED':
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id === data.messageId) {
+              const reactions = (m.reactions as Record<string, string[]> | undefined) ?? {};
+              const emojiKey = String(data.emoji);
+              const emojiReactions = (reactions[emojiKey] || []).filter(
+                (reactionUserId: string) => reactionUserId !== data.userId,
+              );
+              if (emojiReactions.length === 0) {
+                const { [emojiKey]: _removed, ...rest } = reactions;
+                return { ...m, reactions: rest };
+              }
               return {
                 ...m,
                 reactions: {
                   ...reactions,
-                  [data.emoji]: [...emojiReactions, data.userId]
-                }
+                  [emojiKey]: emojiReactions,
+                },
               };
             }
-          }
-          return m;
-        }));
-        break;
-
-      case 'REACTION_REMOVED':
-        setMessages(prev => prev.map(m => {
-          if (m.id === data.messageId) {
-            const reactions = m.reactions || {};
-            const emojiReactions = (reactions[data.emoji] || []).filter(id => id !== data.userId);
-            if (emojiReactions.length === 0) {
-              const { [data.emoji]: _, ...rest } = reactions;
-              return { ...m, reactions: rest };
-            }
-            return {
-              ...m,
-              reactions: {
-                ...reactions,
-                [data.emoji]: emojiReactions
-              }
-            };
-          }
-          return m;
-        }));
+            return m;
+          }),
+        );
         break;
 
       case 'ERROR':
@@ -443,13 +478,18 @@ export function useChat(options: UseChatOptions): UseChatReturn {
       senderId: userId,
       senderRole: 'customer', // Will be updated by server
       content,
+      message: content,
       replyToId: replyToId || null,
       attachmentUrl: attachmentUrl || null,
       attachmentType: attachmentType || null,
       reactions: {},
       isEdited: false,
       editedAt: null,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+      isSystemMessage: false,
+      isDeleted: false,
       readAt: null,
       isPending: true,
       isDelivered: false
@@ -501,9 +541,19 @@ export function useChat(options: UseChatOptions): UseChatReturn {
       }
       
       // Update local state
-      setMessages(prev => prev.map(m => 
-        m.id === variables.messageId ? { ...m, content: variables.newContent, isEdited: true, editedAt: new Date().toISOString() } : m
-      ));
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === variables.messageId
+              ? {
+                  ...m,
+                  content: variables.newContent,
+                  message: variables.newContent,
+                  isEdited: true,
+                  editedAt: new Date(),
+                }
+              : m,
+          ),
+        );
       
       queryClient.invalidateQueries({ queryKey: [`/api/jobs/${jobId}/messages`] });
     },

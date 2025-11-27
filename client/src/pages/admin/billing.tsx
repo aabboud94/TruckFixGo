@@ -114,7 +114,7 @@ export default function AdminBilling() {
   });
 
   // Fetch subscriptions and statistics
-  const { data: billingData, isLoading } = useQuery({
+  const { data: billingDataRaw, isLoading } = useQuery<any>({
     queryKey: ['/api/admin/billing/subscriptions', filterStatus],
     queryFn: async () => {
       const response = await fetch('/api/admin/billing/subscriptions');
@@ -122,9 +122,10 @@ export default function AdminBilling() {
       return response.json();
     }
   });
+  const billingData = billingDataRaw ?? { subscriptions: [], invoices: [], billingHistory: [] };
 
   // Fetch billing statistics
-  const { data: statistics } = useQuery({
+  const { data: statistics } = useQuery<any>({
     queryKey: ['/api/admin/billing/statistics'],
     queryFn: async () => {
       const response = await fetch('/api/admin/billing/statistics');
@@ -134,8 +135,9 @@ export default function AdminBilling() {
   });
 
   // Fetch fleet accounts for dropdown
-  const { data: fleetAccounts } = useQuery({
+  const { data: fleetAccounts = [] } = useQuery<any[]>({
     queryKey: ['/api/fleet-accounts'],
+    queryFn: () => apiRequest('GET', '/api/fleet-accounts'),
   });
 
   // Create subscription mutation
@@ -311,10 +313,13 @@ export default function AdminBilling() {
   const filteredSubscriptions = billingData?.subscriptions?.filter((sub: SubscriptionWithFleet) => {
     const matchesStatus = filterStatus === 'all' || sub.status === filterStatus;
     const matchesSearch = searchTerm === '' || 
-      sub.fleetAccount?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      sub.fleetAccount?.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       sub.planName?.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesStatus && matchesSearch;
   }) || [];
+
+  const getAddOns = (subscription: SubscriptionWithFleet) =>
+    Array.isArray(subscription.addOns) ? (subscription.addOns as string[]) : [];
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -493,7 +498,7 @@ export default function AdminBilling() {
                           <div className="flex items-start justify-between">
                             <div>
                               <CardTitle className="text-base">
-                                {subscription.fleetAccount?.name || 'Unknown Fleet'}
+                                {subscription.fleetAccount?.companyName || 'Unknown Fleet'}
                               </CardTitle>
                               <CardDescription className="mt-1">
                                 ID: {subscription.fleetAccountId?.slice(0, 8)}...
@@ -518,8 +523,8 @@ export default function AdminBilling() {
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Next Billing:</span>
                               <span className="font-medium">
-                                {subscription.nextBillingDate
-                                  ? format(new Date(subscription.nextBillingDate), 'MMM d, yyyy')
+                                {subscription.currentPeriodEnd
+                                  ? format(new Date(subscription.currentPeriodEnd), 'MMM d, yyyy')
                                   : 'N/A'}
                               </span>
                             </div>
@@ -539,10 +544,12 @@ export default function AdminBilling() {
                                 </div>
                               </>
                             )}
-                            {subscription.addOns?.length > 0 && (
+                            {getAddOns(subscription).length > 0 && (
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Add-ons:</span>
-                                <span className="font-medium">+{subscription.addOns.length} add-ons</span>
+                                <span className="font-medium">
+                                  +{getAddOns(subscription).length} add-ons
+                                </span>
                               </div>
                             )}
                           </div>
@@ -620,7 +627,7 @@ export default function AdminBilling() {
                       <TableRow key={subscription.id}>
                         <TableCell>
                           <div>
-                            <div className="font-medium">{subscription.fleetAccount?.name || 'Unknown Fleet'}</div>
+                            <div className="font-medium">{subscription.fleetAccount?.companyName || 'Unknown Fleet'}</div>
                             <div className="text-sm text-muted-foreground">
                               ID: {subscription.fleetAccountId?.slice(0, 8)}...
                             </div>
@@ -629,9 +636,9 @@ export default function AdminBilling() {
                         <TableCell>
                           <div className="space-y-1">
                             {getPlanBadge(subscription.planType)}
-                            {subscription.addOns?.length > 0 && (
+                            {getAddOns(subscription).length > 0 && (
                               <div className="text-xs text-muted-foreground">
-                                +{subscription.addOns.length} add-ons
+                                +{getAddOns(subscription).length} add-ons
                               </div>
                             )}
                           </div>
@@ -642,8 +649,8 @@ export default function AdminBilling() {
                         </TableCell>
                         <TableCell>{getStatusBadge(subscription.status)}</TableCell>
                         <TableCell>
-                          {subscription.nextBillingDate
-                            ? format(new Date(subscription.nextBillingDate), 'MMM d, yyyy')
+                          {subscription.currentPeriodEnd
+                            ? format(new Date(subscription.currentPeriodEnd), 'MMM d, yyyy')
                             : 'N/A'}
                         </TableCell>
                         <TableCell>
@@ -753,7 +760,7 @@ export default function AdminBilling() {
                         <TableCell>
                           <Badge
                             variant={
-                              invoice.status === 'paid' ? 'success' :
+                              invoice.status === 'paid' ? 'secondary' :
                               invoice.status === 'overdue' ? 'destructive' :
                               invoice.status === 'pending' ? 'secondary' : 'outline'
                             }
@@ -907,7 +914,7 @@ export default function AdminBilling() {
                 <SelectContent>
                   {fleetAccounts?.map((fleet: FleetAccount) => (
                     <SelectItem key={fleet.id} value={fleet.id}>
-                      {fleet.name}
+                      {fleet.companyName}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1073,7 +1080,7 @@ export default function AdminBilling() {
               <div>
                 <Label>Fleet Account</Label>
                 <Input
-                  value={selectedSubscription.fleetAccount?.name || ''}
+                  value={selectedSubscription.fleetAccount?.companyName || ''}
                   disabled
                   className="bg-muted"
                 />
@@ -1170,7 +1177,7 @@ export default function AdminBilling() {
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground">Fleet Account</p>
-                <p className="font-medium">{selectedSubscription.fleetAccount?.name}</p>
+                <p className="font-medium">{selectedSubscription.fleetAccount?.companyName}</p>
               </div>
               <Separator />
               <div>

@@ -82,13 +82,13 @@ export function BottomNav() {
   return (
     <nav 
       className={cn(
-        "fixed bottom-0 left-0 right-0 z-50 bg-background border-t",
+        "fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur border-t",
         "md:hidden", // Only show on mobile
         "shadow-lg"
       )}
       data-testid="bottom-navigation"
     >
-      <div className="flex items-center justify-around h-[60px]">
+      <div className="flex items-center justify-around h-[60px] px-2 safe-area-bottom">
         {visibleItems.map((item) => {
           const Icon = item.icon;
           const isActive = location === item.href || 

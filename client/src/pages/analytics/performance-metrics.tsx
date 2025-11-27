@@ -374,7 +374,12 @@ export default function PerformanceMetrics() {
                       <p className="text-sm font-medium capitalize">
                         {category.replace(/([A-Z])/g, ' $1').trim()}
                       </p>
-                      <RatingDisplay rating={rating} size="sm" showCount={false} />
+                      <RatingDisplay
+                        rating={rating}
+                        size="sm"
+                        showCount={false}
+                        totalReviews={data.overview.totalReviews}
+                      />
                     </div>
                     <div className="text-2xl font-bold">{rating.toFixed(1)}</div>
                   </div>
@@ -419,7 +424,12 @@ export default function PerformanceMetrics() {
                       <Badge variant="outline">{service.jobCount} jobs</Badge>
                     </div>
                     <div className="flex items-center gap-2">
-                      <RatingDisplay rating={service.averageRating} size="sm" showCount={false} />
+                      <RatingDisplay
+                        rating={service.averageRating}
+                        size="sm"
+                        showCount={false}
+                        totalReviews={service.jobCount}
+                      />
                       <span className="text-sm font-semibold">{service.averageRating.toFixed(2)}</span>
                     </div>
                   </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
   Truck,
   Calendar as CalendarIcon,
@@ -36,6 +37,7 @@ import {
 export default function FleetDashboard() {
   const [, setLocation] = useLocation();
   const [date, setDate] = useState<Date | undefined>(new Date());
+  const { toast } = useToast();
 
   // Gate access to fleet managers
   const { data: session, isLoading: sessionLoading } = useQuery({
@@ -84,7 +86,7 @@ export default function FleetDashboard() {
   });
 
   // Fetch scheduled services (using jobs endpoint as services)
-  const { data: scheduledServices, isLoading: servicesLoading } = useQuery({
+  const { data: scheduledServices, isLoading: servicesLoading, refetch: refetchServices } = useQuery({
     queryKey: ["/api/jobs"],
     enabled: !!fleetData?.id,
     queryFn: async () => {
@@ -143,7 +145,7 @@ export default function FleetDashboard() {
   if (sessionLoading || fleetLoading || vehiclesLoading || servicesLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <div className="w-full px-3 py-4 md:max-w-7xl md:mx-auto md:px-4 lg:px-8">
+        <div className="mx-auto w-full max-w-7xl px-safe py-4">
           <Skeleton className="h-10 w-48 mb-6" />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4 mb-6">
             {[1, 2, 3, 4].map(i => (
@@ -228,6 +230,25 @@ export default function FleetDashboard() {
     monthlySpend: fleetAccount.totalSpent || 0,
     complianceRate: fleetAccount.complianceRate || 95
   };
+  const updateJobStatusMutation = useMutation({
+    mutationFn: async ({ jobId, status }: { jobId: string; status: string }) => {
+      return apiRequest("PUT", `/api/jobs/${jobId}/status`, { status });
+    },
+    onSuccess: (_, variables) => {
+      toast({
+        title: "Status updated",
+        description: `Job marked as ${variables.status.replace('_', ' ')}.`
+      });
+      refetchServices();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -311,10 +332,10 @@ export default function FleetDashboard() {
     .slice(0, 3);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-[var(--app-height)] bg-muted/10">
       {/* Header - Mobile Optimized */}
-      <header className="sticky top-0 z-50 bg-background border-b">
-        <div className="w-full px-3 py-3 md:max-w-7xl md:mx-auto md:px-4 lg:px-8">
+      <header className="sticky top-0 z-50 border-b bg-background">
+        <div className="mx-auto w-full max-w-7xl px-safe py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-lg font-bold text-primary truncate sm:text-xl md:text-2xl">
@@ -345,7 +366,7 @@ export default function FleetDashboard() {
         </div>
       </header>
 
-      <div className="w-full px-3 py-4 md:max-w-7xl md:mx-auto md:px-4 lg:px-8">
+      <div className="mx-auto w-full max-w-7xl px-safe py-4">
         {/* Welcome Section - Mobile Optimized */}
         <div className="mb-6">
           <h1 className="text-xl font-bold sm:text-2xl md:text-3xl">Fleet Dashboard</h1>
@@ -624,6 +645,25 @@ export default function FleetDashboard() {
                               <MapPin className="h-3 w-3 inline mr-1" />
                               {service.location || 'TBD'}
                             </p>
+                            <div className="flex flex-wrap gap-2 pt-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8"
+                                disabled={updateJobStatusMutation.isPending || service.status === 'en_route'}
+                                onClick={() => updateJobStatusMutation.mutate({ jobId: service.id, status: 'en_route' })}
+                              >
+                                Mark In Progress
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="h-8"
+                                disabled={updateJobStatusMutation.isPending || service.status === 'completed'}
+                                onClick={() => updateJobStatusMutation.mutate({ jobId: service.id, status: 'completed' })}
+                              >
+                                Mark Completed
+                              </Button>
+                            </div>
                           </div>
                           <div className="flex items-center gap-2 self-end sm:self-center">
                             {getStatusBadge(service.status || 'pending')}
@@ -631,6 +671,7 @@ export default function FleetDashboard() {
                               variant="ghost" 
                               size="icon"
                               className="h-8 w-8"
+                              onClick={() => setLocation(`/fleet/job-details/${service.id}`)}
                               data-testid={`button-view-service-${service.id}`}
                             >
                               <ChevronRight className="h-4 w-4" />

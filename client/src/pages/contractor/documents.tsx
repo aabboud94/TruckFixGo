@@ -12,6 +12,11 @@ import {
   X, Calendar, Shield, Car, FileCheck
 } from "lucide-react";
 import { format } from "date-fns";
+import type { ContractorProfile } from "@shared/schema";
+
+type ContractorProfileResponse = ContractorProfile & {
+  status?: string | null;
+};
 
 // Document types configuration
 const REQUIRED_DOCUMENTS = [
@@ -49,7 +54,7 @@ export default function ContractorDocuments() {
   });
 
   // Query for contractor profile to check approval status
-  const { data: profile } = useQuery({
+  const { data: profile } = useQuery<ContractorProfileResponse>({
     queryKey: ['/api/contractor/profile']
   });
 

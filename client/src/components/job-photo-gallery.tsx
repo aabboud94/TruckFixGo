@@ -16,7 +16,7 @@ import {
   Image as ImageIcon, ChevronLeft, ChevronRight, Loader2, FileImage 
 } from "lucide-react";
 
-interface JobPhoto {
+export interface JobPhoto {
   id: string;
   jobId: string;
   uploadedBy: string;

@@ -28,6 +28,7 @@ import {
   XCircle
 } from "lucide-react";
 import { SiVisa, SiMastercard, SiAmericanexpress, SiDiscover } from "react-icons/si";
+import type { PaymentSplit } from "@shared/schema";
 
 // Initialize Stripe
 let stripePromise: Promise<any> | null = null;
@@ -43,6 +44,17 @@ const getStripe = () => {
   }
   return stripePromise;
 };
+
+interface SplitPaymentVerificationResponse {
+  paymentSplit: PaymentSplit;
+  job?: {
+    id: string;
+    serviceType?: string | null;
+    location?: unknown;
+    totalAmount?: string | null;
+    status?: string;
+  } | null;
+}
 
 // Payment Form Component
 function PaymentForm({ 
@@ -304,8 +316,8 @@ function ComdataCheckForm({
 }
 
 export default function SplitPaymentPage() {
-  const params = useParams();
-  const token = params.token;
+  const params = useParams<{ token: string }>();
+  const token = params?.token;
   const [, setLocation] = useLocation();
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("card");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -314,15 +326,17 @@ export default function SplitPaymentPage() {
   const { toast } = useToast();
 
   // Fetch split payment details
-  const { data: splitData, isLoading, error } = useQuery({
+  const { data: splitData, isLoading, error } = useQuery<SplitPaymentVerificationResponse | null>({
     queryKey: [`/api/payments/split/verify/${token}`],
     retry: false
   });
 
   // Check Stripe configuration
-  const { data: stripeConfig } = useQuery({
+  const { data: stripeConfig } = useQuery<{ hasKeys: boolean }>({
     queryKey: ["/api/payment/config"]
   });
+
+  const split = splitData?.paymentSplit;
 
   // Create payment intent for card payments
   const createPaymentIntent = useMutation({
@@ -332,8 +346,8 @@ export default function SplitPaymentPage() {
         amount,
         metadata: {
           splitPaymentToken: token,
-          payerType: splitData?.paymentSplit?.payerType,
-          payerName: splitData?.paymentSplit?.payerName
+          payerType: split?.payerType,
+          payerName: split?.payerName
         }
       })
     }),
@@ -377,11 +391,11 @@ export default function SplitPaymentPage() {
 
   // Initialize payment intent for card payments
   useEffect(() => {
-    if (splitData?.paymentSplit && selectedPaymentMethod === "card" && !clientSecret && stripeConfig?.hasKeys) {
-      const amount = parseFloat(splitData.paymentSplit.amountAssigned);
+    if (split && selectedPaymentMethod === "card" && !clientSecret && stripeConfig?.hasKeys) {
+      const amount = parseFloat(split.amountAssigned);
       createPaymentIntent.mutate(amount);
     }
-  }, [splitData, selectedPaymentMethod, stripeConfig]);
+  }, [split, selectedPaymentMethod, stripeConfig]);
 
   // Handle card payment success
   const handleCardPaymentSuccess = (paymentIntentId: string) => {
@@ -425,7 +439,7 @@ export default function SplitPaymentPage() {
   }
 
   // Error states
-  if (error || !splitData?.paymentSplit) {
+  if (error || !split) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -443,7 +457,7 @@ export default function SplitPaymentPage() {
     );
   }
 
-  const paymentSplit = splitData.paymentSplit;
+  const paymentSplit = split;
   const job = splitData.job;
   const amount = parseFloat(paymentSplit.amountAssigned);
 

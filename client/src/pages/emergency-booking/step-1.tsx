@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Phone, Mail, User } from "lucide-react";
-import { EmergencyBookingData } from "./index";
+import type { EmergencyBookingData } from "@/types/emergency";
 import LocationInput, { LocationData } from "@/components/location-input";
 
 const formSchema = z.object({
@@ -28,13 +28,15 @@ interface Step1Props {
 }
 
 export default function Step1({ initialData, onComplete }: Step1Props) {
-  const [location, setLocation] = useState<LocationData | null>(
-    initialData.location ? {
-      lat: initialData.location.lat,
-      lng: initialData.location.lng,
-      address: initialData.location.address || initialData.manualLocation || "",
-      formattedAddress: initialData.location.address
-    } : null
+  const [location, setLocation] = useState<LocationData | undefined>(
+    initialData.location
+      ? {
+          lat: initialData.location.lat,
+          lng: initialData.location.lng,
+          address: initialData.location.address || initialData.manualLocation || "",
+          formattedAddress: initialData.location.address
+        }
+      : undefined
   );
   const [locationError, setLocationError] = useState<string | null>(null);
 
@@ -100,7 +102,7 @@ export default function Step1({ initialData, onComplete }: Step1Props) {
                 <LocationInput 
                   value={location}
                   onChange={(value) => {
-                    setLocation(value);
+                    setLocation(value ?? undefined);
                     setLocationError(null);
                   }}
                   defaultMode="gps"

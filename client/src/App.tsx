@@ -1,4 +1,5 @@
 import { Switch, Route, useLocation } from "wouter";
+import { useViewportHeight } from "@/hooks/use-viewport-height";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -261,19 +262,21 @@ function AppWithSidebar() {
 
   return (
     <SidebarProvider defaultOpen={false}>
-      <div className="flex h-screen w-full">
+      <div className="flex min-h-[var(--app-height)] w-full bg-background">
         <AppSidebar />
-        <SidebarInset className="flex flex-col flex-1">
-          <header className="flex h-16 items-center gap-4 border-b bg-background px-4">
+        <SidebarInset className="flex flex-1 flex-col">
+          <header className="flex h-16 items-center gap-4 border-b bg-background px-safe">
             <SidebarTrigger className="md:hidden" data-testid="button-sidebar-toggle" />
             <div className="flex-1">
               <h1 className="text-lg font-semibold md:text-xl">TruckFixGo</h1>
             </div>
           </header>
-          <main className="flex-1 overflow-y-auto pb-[60px] md:pb-0">
-            <ErrorBoundary componentName="Main Router">
-              <Router />
-            </ErrorBoundary>
+          <main className="flex-1 overflow-y-auto bg-muted/20 pb-[72px] md:pb-0">
+            <div className="min-h-[var(--app-height)] w-full px-safe py-4 md:px-6">
+              <ErrorBoundary componentName="Main Router">
+                <Router />
+              </ErrorBoundary>
+            </div>
           </main>
         </SidebarInset>
       </div>
@@ -282,6 +285,8 @@ function AppWithSidebar() {
 }
 
 function App() {
+  useViewportHeight();
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

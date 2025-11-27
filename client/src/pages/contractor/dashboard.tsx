@@ -102,7 +102,9 @@ import {
   MessageCircle,
   Send,
   Edit,
-  Wallet
+  Wallet,
+  Eye,
+  Receipt
 } from "lucide-react";
 import { format, formatDistanceToNow, addHours } from "date-fns";
 import PerformanceWidget from "@/components/performance-widget";
@@ -168,6 +170,8 @@ interface DashboardData {
     satisfactionScore: number;
     responseRate: number;
     completionRate: number;
+    responseTime?: number;
+    vehicleId?: string;
     categoryRatings: {
       timeliness: number;
       professionalism: number;
@@ -183,6 +187,10 @@ interface DashboardData {
     weekJobs: number;
     totalJobs: number;
     pendingPayout: number;
+    completionRateTrend?: Array<{ label: string; value: number }>;
+    responseTimeTrend?: Array<{ label: string; value: number }>;
+    revenueTrend?: Array<{ label: string; value: number }>;
+    satisfactionTrend?: Array<{ label: string; value: number }>;
   };
   activeJob?: ActiveJob;
   queuedJobs: QueuedJob[];
@@ -196,6 +204,14 @@ interface DashboardData {
     totalInQueue: number;
     queuedCount: number;
   };
+  completedToday?: number;
+  recentCompletedJobs?: Array<{
+    id: string;
+    jobNumber?: string;
+    customerName?: string;
+    serviceType?: string;
+    completedAt?: string;
+  }>;
 }
 
 const tierColors = {
@@ -671,7 +687,7 @@ export default function ContractorDashboard() {
   if (sessionLoading || dashboardLoading) {
     return (
       <div className="min-h-screen bg-background p-4">
-        <div className="max-w-7xl mx-auto">
+        <div className="mx-auto w-full max-w-7xl px-safe">
           <div className="animate-pulse space-y-4">
             <div className="h-20 bg-muted rounded-lg"></div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -726,12 +742,20 @@ export default function ContractorDashboard() {
   }
 
   const contractor = dashboardData?.contractor;
+  const contractorRating = contractor?.averageRating ?? 0;
   const metrics = dashboardData?.metrics;
   const activeJob = dashboardData?.activeJob;
   const queuedJobs = dashboardData?.queuedJobs || [];
   const availableJobs = dashboardData?.availableJobs || [];
   const scheduledJobs = dashboardData?.scheduledJobs || [];
   const queueInfo = dashboardData?.queueInfo;
+  const ratingTrend = dashboardData?.ratingTrend ?? [];
+  const getTrendDelta = (series?: Array<{ value: number }>) => {
+    if (!series || series.length < 2) return 0;
+    const latest = series[series.length - 1].value;
+    const previous = series[series.length - 2].value;
+    return latest - previous;
+  };
   const pendingPayoutAmount = Number(payoutData?.pendingTotal ?? metrics?.pendingPayout ?? 0);
   const pendingPayouts = payoutData?.payouts || [];
   
@@ -761,10 +785,10 @@ export default function ContractorDashboard() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[var(--app-height)] bg-muted/10 pb-20">
       {/* Header - Mobile Optimized */}
       <div className="bg-card border-b">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+        <div className="mx-auto w-full max-w-7xl px-safe py-3 sm:py-4">
           <div className="flex flex-col gap-3 sm:gap-4">
             {/* Top Row - User Info */}
             <div className="flex items-start justify-between gap-3">
@@ -944,7 +968,7 @@ export default function ContractorDashboard() {
       </div>
 
       {/* Main Content - Mobile Optimized */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
+      <div className="mx-auto w-full max-w-7xl px-safe py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Active Job Section - MOVED TO TOP FOR VISIBILITY */}
         {activeJob && (
           <Card className="border-l-4 border-l-green-600 shadow-lg animate-in fade-in-50 slide-in-from-top-2 duration-500 bg-gradient-to-r from-green-50/50 to-transparent dark:from-green-950/20">
@@ -1036,6 +1060,16 @@ export default function ContractorDashboard() {
                     data-testid="button-view-details"
                   >
                     View Details
+                    <ChevronRight className="w-5 h-5 sm:w-4 sm:h-4 ml-2" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="default"
+                    className="h-12 sm:h-10 text-base sm:text-sm w-full sm:w-auto"
+                    onClick={() => navigate(`/job-details/${activeJob.id}`)}
+                    data-testid="button-job-timeline"
+                  >
+                    Job timeline
                     <ChevronRight className="w-5 h-5 sm:w-4 sm:h-4 ml-2" />
                   </Button>
                 </div>
@@ -1434,6 +1468,15 @@ export default function ContractorDashboard() {
                               Decline
                             </Button>
                             <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-9 text-xs"
+                              onClick={() => navigate(`/job-details/${job.id}`)}
+                              data-testid={`button-view-${job.id}`}
+                            >
+                              Details
+                            </Button>
+                            <Button
                               size="sm"
                               className="h-9 text-xs"
                               onClick={() => acceptJobMutation.mutate(job.id)}
@@ -1655,19 +1698,19 @@ export default function ContractorDashboard() {
                   />
                   
                   {/* Tier Progression */}
-                  {contractor?.performanceTier && (
+                  {contractor && contractor.performanceTier && (
                     <div className="space-y-2">
                       <h4 className="text-sm font-medium">Tier Progression</h4>
                       {contractor.performanceTier === 'bronze' && (
                         <div className="text-xs text-muted-foreground">
                           <p>Maintain 4.0+ rating to reach Silver tier</p>
-                          <Progress value={(contractor.averageRating / 4.0) * 100} className="h-2 mt-1" />
+                          <Progress value={(contractorRating / 4.0) * 100} className="h-2 mt-1" />
                         </div>
                       )}
                       {contractor.performanceTier === 'silver' && (
                         <div className="text-xs text-muted-foreground">
                           <p>Maintain 4.5+ rating to reach Gold tier</p>
-                          <Progress value={(contractor.averageRating / 4.5) * 100} className="h-2 mt-1" />
+                          <Progress value={(contractorRating / 4.5) * 100} className="h-2 mt-1" />
                         </div>
                       )}
                       {contractor.performanceTier === 'gold' && (
@@ -1683,19 +1726,19 @@ export default function ContractorDashboard() {
                   <div className="space-y-2">
                     <h4 className="text-sm font-medium">Your Benefits</h4>
                     <div className="space-y-1">
-                      {contractor?.averageRating >= 4.8 && (
+                      {contractorRating >= 4.8 && (
                         <div className="flex items-center gap-2 text-xs">
                           <CheckCircle className="h-3 w-3 text-green-600" />
                           <span>Reduced platform fees (15% → 12%)</span>
                         </div>
                       )}
-                      {contractor?.averageRating >= 4.5 && (
+                      {contractorRating >= 4.5 && (
                         <div className="flex items-center gap-2 text-xs">
                           <CheckCircle className="h-3 w-3 text-green-600" />
                           <span>Priority job assignments</span>
                         </div>
                       )}
-                      {contractor?.averageRating >= 4.0 && (
+                      {contractorRating >= 4.0 && (
                         <div className="flex items-center gap-2 text-xs">
                           <CheckCircle className="h-3 w-3 text-green-600" />
                           <span>Featured contractor badge</span>
@@ -1802,7 +1845,7 @@ export default function ContractorDashboard() {
                 title="Completion Rate"
                 value={contractor?.completionRate || 0}
                 unit="percentage"
-                trend={metrics?.completionRateTrend}
+                trend={getTrendDelta(metrics?.completionRateTrend)}
                 status={
                   (contractor?.completionRate || 0) >= 95 ? 'green' :
                   (contractor?.completionRate || 0) >= 85 ? 'yellow' :
@@ -1816,7 +1859,7 @@ export default function ContractorDashboard() {
                 title="Response Time"
                 value={contractor?.responseTime || 0}
                 unit="minutes"
-                trend={metrics?.responseTimeTrend}
+                trend={getTrendDelta(metrics?.responseTimeTrend)}
                 status={
                   (contractor?.responseTime || 0) <= 30 ? 'green' :
                   (contractor?.responseTime || 0) <= 60 ? 'yellow' :
@@ -1830,19 +1873,19 @@ export default function ContractorDashboard() {
                 title="Weekly Revenue"
                 value={metrics?.weekEarnings || 0}
                 unit="dollars"
-                trend={metrics?.revenueTrend}
+                trend={getTrendDelta(metrics?.revenueTrend)}
                 status="neutral"
                 icon={DollarSign}
                 variant="default"
               />
               <PerformanceWidget
                 title="Customer Satisfaction"
-                value={contractor?.satisfactionScore || contractor?.averageRating || 0}
+                value={contractor?.satisfactionScore || contractorRating || 0}
                 unit="rating"
-                trend={metrics?.satisfactionTrend}
+                trend={getTrendDelta(metrics?.satisfactionTrend)}
                 status={
-                  (contractor?.averageRating || 0) >= 4.5 ? 'green' :
-                  (contractor?.averageRating || 0) >= 4.0 ? 'yellow' :
+                  contractorRating >= 4.5 ? 'green' :
+                  contractorRating >= 4.0 ? 'yellow' :
                   'red'
                 }
                 target={4.5}
@@ -1857,9 +1900,9 @@ export default function ContractorDashboard() {
                   <CardTitle>Rating Trend</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {dashboardData?.ratingTrend && dashboardData.ratingTrend.length > 0 ? (
+                  {ratingTrend.length > 0 ? (
                     <div className="space-y-3">
-                      {dashboardData.ratingTrend.map((point, index) => (
+                      {ratingTrend.map((point, index) => (
                         <div key={index} className="flex items-center justify-between">
                           <span className="text-sm text-muted-foreground">
                             {format(new Date(point.date), 'MMM d')}
@@ -1873,15 +1916,15 @@ export default function ContractorDashboard() {
                             />
                             {index > 0 && (
                               <span className={`text-xs ${
-                                point.rating > dashboardData.ratingTrend[index - 1].rating 
+                                point.rating > ratingTrend[index - 1].rating 
                                   ? 'text-green-600' 
-                                  : point.rating < dashboardData.ratingTrend[index - 1].rating
+                                  : point.rating < ratingTrend[index - 1].rating
                                   ? 'text-red-600'
                                   : 'text-muted-foreground'
                               }`}>
-                                {point.rating > dashboardData.ratingTrend[index - 1].rating ? (
+                                {point.rating > ratingTrend[index - 1].rating ? (
                                   <ArrowUp className="h-3 w-3" />
-                                ) : point.rating < dashboardData.ratingTrend[index - 1].rating ? (
+                                ) : point.rating < ratingTrend[index - 1].rating ? (
                                   <ArrowDown className="h-3 w-3" />
                                 ) : '–'}
                               </span>

@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { WeatherWidget } from "@/components/weather-widget";
 import { InvoiceTemplate } from "@/components/invoice-template";
+import PageShell from "@/components/page-shell";
 import {
   Activity,
   Camera,
@@ -21,7 +22,8 @@ import {
   Mail,
   MapPin,
   MessageSquare,
-  Truck
+  Truck,
+  Loader2
 } from "lucide-react";
 import { format } from "date-fns";
 import type {
@@ -30,13 +32,32 @@ import type {
   Job,
   JobPhoto,
   JobStatusHistory,
-  User as UserType
+  User as UserType,
+  ContractorProfile,
+  Transaction
 } from "@shared/schema";
 
 interface JobDetailsResponse {
-  job: Job;
+  job: Job & {
+    vehicleLicensePlate?: string | null;
+    vehicleLocation?: {
+      address?: string | null;
+    } | null;
+    totalCost?: string | number | null;
+    contractorName?: string | null;
+    completionNotes?: string | null;
+  };
   photos: JobPhoto[];
   statusHistory: JobStatusHistory[];
+}
+
+interface JobInvoiceResponse {
+  invoice?: Invoice;
+  job: Job;
+  customer?: UserType;
+  contractor?: ContractorProfile | null;
+  fleetAccount?: FleetAccount | null;
+  transactions?: Transaction[];
 }
 
 const statusStyles: Record<
@@ -68,7 +89,7 @@ const formatDateTime = (value?: string | Date | null, fallback: string = "—") 
 };
 
 export default function JobDetails() {
-  const [params] = useParams<{ jobId: string }>();
+  const params = useParams<{ jobId: string }>();
   const jobId = params?.jobId;
   const { toast } = useToast();
   const [showInvoicePreview, setShowInvoicePreview] = useState(false);
@@ -87,16 +108,36 @@ export default function JobDetails() {
     data: invoiceData,
     isLoading: invoiceLoading,
     refetch: refetchInvoice,
-  } = useQuery({
+  } = useQuery<JobInvoiceResponse | null>({
     queryKey: ["/api/jobs", jobId, "invoice"],
     queryFn: async () => apiRequest(`/api/jobs/${jobId}/invoice`, "GET"),
     enabled: Boolean(jobId),
   });
 
-  const invoice: Invoice | undefined = invoiceData?.invoice;
-  const customer: UserType | undefined = invoiceData?.customer;
-  const fleetAccount: FleetAccount | undefined = invoiceData?.fleetAccount;
-  const contractor = invoiceData?.contractor;
+  const invoice: Invoice | undefined = invoiceData?.invoice ?? undefined;
+  const customer: UserType | undefined = invoiceData?.customer ?? undefined;
+  const fleetAccount: FleetAccount | undefined = invoiceData?.fleetAccount ?? undefined;
+  const contractor: ContractorProfile | undefined = invoiceData?.contractor ?? undefined;
+
+  const createInvoiceMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      return apiRequest("POST", "/api/invoices", { jobId });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Invoice generated",
+        description: "Refreshing invoice details…",
+      });
+      refetchInvoice();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Unable to create invoice",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const downloadInvoiceMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
@@ -247,175 +288,196 @@ export default function JobDetails() {
   }, [statusHistory, job]);
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">Job #{job.jobNumber}</p>
-          <h1 className="text-3xl font-bold text-foreground">Job Details</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Created {formatDateTime(job.createdAt)}
-          </p>
+    <div className="min-h-[var(--app-height)] bg-slate-50">
+      <PageShell maxWidth="xl" padding="sm" className="pb-12">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-fit text-muted-foreground"
+            onClick={() => window.history.length > 1 ? window.history.back() : window.location.assign("/jobs")}
+            data-testid="button-back-to-jobs"
+          >
+            ← Back to jobs
+          </Button>
+          <div>
+            <p className="text-sm text-muted-foreground">Job #{job.jobNumber}</p>
+            <h1 className="text-3xl font-bold text-foreground">Job Details</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Created {formatDateTime(job.createdAt)}
+            </p>
+          </div>
+          <Badge className={`${statusMeta.badge} flex items-center gap-2 px-4 py-2 text-base text-white`}>
+            <Activity className="h-4 w-4" />
+            {statusMeta.label}
+          </Badge>
         </div>
-        <Badge className={`${statusMeta.badge} text-white px-4 py-2 text-base flex items-center gap-2`}>
-          <Activity className="h-4 w-4" />
-          {statusMeta.label}
-        </Badge>
-      </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Job Overview */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Truck className="h-5 w-5" />
-              Job Overview
-            </CardTitle>
-            <CardDescription>Core details about this service request.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <p className="text-sm text-muted-foreground">Job Type</p>
-                <Badge className={job.jobType === "emergency" ? "bg-orange-500" : "bg-blue-500"}>
-                  {job.jobType === "emergency" ? "Emergency" : "Scheduled"}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Status</p>
-                <p className="font-semibold text-foreground">{statusMeta.label}</p>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Issue Description</p>
-              <p>{issueDescription}</p>
-            </div>
-
-            <Separator />
-
-            <div className="flex items-start gap-2">
-              <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-              <div>
-                <p className="text-sm text-muted-foreground">Service Location</p>
-                <p className="text-sm">{serviceLocation}</p>
-              </div>
-            </div>
-
-            {vehicleInfo.make || vehicleInfo.model || vehicleInfo.unitNumber || vehicleInfo.vin ? (
-              <>
-                <Separator />
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Vehicle Information</p>
-                  <p className="text-sm font-medium">
-                    {[vehicleInfo.year, vehicleInfo.make, vehicleInfo.model].filter(Boolean).join(" ")}
-                  </p>
-                  {vehicleInfo.unitNumber && (
-                    <p className="text-xs text-muted-foreground">Unit #: {vehicleInfo.unitNumber}</p>
-                  )}
-                  {vehicleInfo.vin && (
-                    <p className="text-xs text-muted-foreground font-mono">VIN: {vehicleInfo.vin}</p>
-                  )}
-                </div>
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        {/* Invoice Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Invoice & Payment
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {invoiceLoading ? (
-              <p className="text-sm text-muted-foreground">Loading invoice…</p>
-            ) : invoice ? (
-              <>
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Job Overview */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Truck className="h-5 w-5" />
+                Job Overview
+              </CardTitle>
+              <CardDescription>Core details about this service request.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <p className="text-sm text-muted-foreground">Invoice Number</p>
-                  <p className="font-mono text-sm">{invoice.invoiceNumber}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <Badge>
-                    {invoice.status.toUpperCase()}
+                  <p className="text-sm text-muted-foreground">Job Type</p>
+                  <Badge className={job.jobType === "emergency" ? "bg-orange-500" : "bg-blue-500"}>
+                    {job.jobType === "emergency" ? "Emergency" : "Scheduled"}
                   </Badge>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Amount</p>
-                  <p className="text-2xl font-bold">{formatCurrency(invoice.totalAmount)}</p>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <p className="font-semibold text-foreground">{statusMeta.label}</p>
                 </div>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  <Button className="w-full" onClick={() => setShowInvoicePreview(true)}>
-                    View Invoice
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => downloadInvoiceMutation.mutate(invoice.id)}
-                    disabled={downloadInvoiceMutation.isPending}
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    {downloadInvoiceMutation.isPending ? "Downloading…" : "Download PDF"}
-                  </Button>
-                  {customer?.email && (
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => emailInvoiceMutation.mutate(invoice.id)}
-                      disabled={emailInvoiceMutation.isPending}
-                    >
-                      <Mail className="h-4 w-4 mr-2" />
-                      {emailInvoiceMutation.isPending ? "Sending…" : "Email Invoice"}
-                    </Button>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="text-center text-sm text-muted-foreground">
-                <FileText className="h-10 w-10 mx-auto mb-2 text-muted-foreground/60" />
-                <p>No invoice generated yet.</p>
-                {job.status === "completed" && (
-                  <Button className="mt-4" onClick={() => refetchInvoice()}>
-                    Generate Invoice
-                  </Button>
-                )}
               </div>
-            )}
-          </CardContent>
-        </Card>
 
-        {/* Weather */}
-        {job.location && (
+              <Separator />
+
+              <div>
+                <p className="mb-1 text-sm text-muted-foreground">Issue Description</p>
+                <p>{issueDescription}</p>
+              </div>
+
+              <Separator />
+
+              <div className="flex items-start gap-2">
+                <MapPin className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Service Location</p>
+                  <p className="text-sm">{serviceLocation}</p>
+                </div>
+              </div>
+
+              {vehicleInfo.make || vehicleInfo.model || vehicleInfo.unitNumber || vehicleInfo.vin ? (
+                <>
+                  <Separator />
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Vehicle Information</p>
+                    <p className="text-sm font-medium">
+                      {[vehicleInfo.year, vehicleInfo.make, vehicleInfo.model].filter(Boolean).join(" ")}
+                    </p>
+                    {vehicleInfo.unitNumber && (
+                      <p className="text-xs text-muted-foreground">Unit #: {vehicleInfo.unitNumber}</p>
+                    )}
+                    {vehicleInfo.vin && (
+                      <p className="font-mono text-xs text-muted-foreground">VIN: {vehicleInfo.vin}</p>
+                    )}
+                  </div>
+                </>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          {/* Invoice Card */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Cloud className="h-5 w-5" />
-                Weather Impact
+                <FileText className="h-5 w-5" />
+                Invoice & Payment
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <WeatherWidget
-                jobId={job.id}
-                compact={false}
-                showAlerts
-                showImpactScore
-                showForecast={false}
-              />
+            <CardContent className="space-y-4">
+              {invoiceLoading ? (
+                <p className="text-sm text-muted-foreground">Loading invoice…</p>
+              ) : invoice ? (
+                <>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Invoice Number</p>
+                    <p className="font-mono text-sm">{invoice.invoiceNumber}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Status</p>
+                    <Badge>
+                      {invoice.status.toUpperCase()}
+                    </Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Amount</p>
+                    <p className="text-2xl font-bold">{formatCurrency(invoice.totalAmount)}</p>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-2">
+                    <Button className="w-full" onClick={() => setShowInvoicePreview(true)}>
+                      View Invoice
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => downloadInvoiceMutation.mutate(invoice.id)}
+                      disabled={downloadInvoiceMutation.isPending}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      {downloadInvoiceMutation.isPending ? "Downloading…" : "Download PDF"}
+                    </Button>
+                    {customer?.email && (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => emailInvoiceMutation.mutate(invoice.id)}
+                        disabled={emailInvoiceMutation.isPending}
+                      >
+                        <Mail className="mr-2 h-4 w-4" />
+                        {emailInvoiceMutation.isPending ? "Sending…" : "Email Invoice"}
+                      </Button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center text-sm text-muted-foreground">
+                  <FileText className="mx-auto mb-2 h-10 w-10 text-muted-foreground/60" />
+                  <p>No invoice generated yet.</p>
+                  {job.status === "completed" && (
+                    <Button
+                      className="mt-4"
+                      onClick={() => createInvoiceMutation.mutate(job.id)}
+                      disabled={createInvoiceMutation.isPending}
+                    >
+                      {createInvoiceMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Generating…
+                        </>
+                      ) : (
+                        "Generate Invoice"
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
-        )}
-      </div>
 
-      <Tabs defaultValue="timeline">
+          {/* Weather */}
+          {job.location && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Cloud className="h-5 w-5" />
+                  Weather Impact
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <WeatherWidget
+                  jobId={job.id}
+                  compact={false}
+                  showAlerts
+                  showImpactScore
+                  showForecast={false}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        <Tabs defaultValue="timeline">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
           <TabsTrigger value="messages">Messages</TabsTrigger>
@@ -527,17 +589,13 @@ export default function JobDetails() {
                   <p className="text-sm text-muted-foreground">
                     Tier: {fleetAccount.pricingTier?.toUpperCase() || "Standard"}
                   </p>
-                  {fleetAccount.billingStatus && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Billing Status: {fleetAccount.billingStatus}
-                    </p>
-                  )}
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+      </PageShell>
 
       <Dialog open={showInvoicePreview} onOpenChange={setShowInvoicePreview}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">

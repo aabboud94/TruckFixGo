@@ -70,7 +70,7 @@ export function usePaymentReconciliation(
         jobCount: payout.jobCount || 0,
         totalAmount: parseFloat(payout.totalAmount),
         commissionAmount: parseFloat(payout.commissionAmount),
-        netAmount: parseFloat(payout.netAmount),
+        netAmount: parseFloat(payout.netPayoutAmount),
         status: payout.status,
         batchId: payout.id
       })) as PendingPayout[];
@@ -80,13 +80,10 @@ export function usePaymentReconciliation(
   // Process reconciliation mutation
   const processReconciliationMutation = useMutation({
     mutationFn: async ({ periodStart, periodEnd }: { periodStart: Date; periodEnd: Date }) => {
-      return await apiRequest('/api/payments/reconciliation/process', {
-        method: 'POST',
-        body: {
-          periodType,
-          periodStart: periodStart.toISOString(),
-          periodEnd: periodEnd.toISOString()
-        }
+      return await apiRequest('POST', '/api/payments/reconciliation/process', {
+        periodType,
+        periodStart: periodStart.toISOString(),
+        periodEnd: periodEnd.toISOString(),
       });
     },
     onSuccess: () => {
@@ -110,14 +107,11 @@ export function usePaymentReconciliation(
       periodEnd: Date;
       reconciliationId?: string;
     }) => {
-      return await apiRequest('/api/payments/payouts/batch', {
-        method: 'POST',
-        body: {
-          contractorId,
-          periodStart: periodStart.toISOString(),
-          periodEnd: periodEnd.toISOString(),
-          reconciliationId
-        }
+      return await apiRequest('POST', '/api/payments/payouts/batch', {
+        contractorId,
+        periodStart: periodStart.toISOString(),
+        periodEnd: periodEnd.toISOString(),
+        reconciliationId,
       });
     },
     onSuccess: () => {
@@ -137,12 +131,9 @@ export function usePaymentReconciliation(
       paymentMethod: string;
       paymentReference?: string;
     }) => {
-      return await apiRequest(`/api/payments/payouts/batch/${batchId}/process`, {
-        method: 'POST',
-        body: {
-          paymentMethod,
-          paymentReference
-        }
+      return await apiRequest('POST', `/api/payments/payouts/batch/${batchId}/process`, {
+        paymentMethod,
+        paymentReference,
       });
     },
     onSuccess: () => {
@@ -221,10 +212,7 @@ export function useCommissionRules() {
 
   const createRuleMutation = useMutation({
     mutationFn: async (rule: Partial<CommissionRule>) => {
-      return await apiRequest('/api/payments/commissions/rules', {
-        method: 'POST',
-        body: rule
-      });
+      return await apiRequest('POST', '/api/payments/commissions/rules', rule);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/payments/commissions/rules'] });
@@ -233,10 +221,7 @@ export function useCommissionRules() {
 
   const updateRuleMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<CommissionRule> }) => {
-      return await apiRequest(`/api/payments/commissions/rules/${id}`, {
-        method: 'PUT',
-        body: updates
-      });
+      return await apiRequest('PUT', `/api/payments/commissions/rules/${id}`, updates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/payments/commissions/rules'] });

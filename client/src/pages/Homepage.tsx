@@ -32,6 +32,7 @@ import heroEmergencyImage from "@assets/generated_images/Hero_emergency_truck_re
 import beforeAfterImage from "@assets/generated_images/Before_after_truck_repair_3bf1fc17.png";
 import fleetMaintenanceImage from "@assets/generated_images/Fleet_maintenance_service_e4d45b61.png";
 import tireServiceImage from "@assets/generated_images/Professional_tire_service_ba62f28d.png";
+import PageShell from "@/components/page-shell";
 
 export default function Homepage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -42,7 +43,7 @@ export default function Homepage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-[var(--app-height)] bg-slate-50 text-slate-900">
       <SEOHead
         title="Mobile Truck Repair & Fleet Support | 24/7 Roadside Service | TruckFixGo"
         description="24/7 mobile truck repair, preventative maintenance, and emergency roadside support for fleets and owner-operators. Professional technicians, transparent pricing, and rapid dispatch wherever you are."
@@ -51,28 +52,30 @@ export default function Homepage() {
 
       {/* Top contact bar */}
       <div className="bg-slate-900 text-white">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 py-2 text-sm">
-          <div className="flex items-center gap-3">
-            <Badge className="bg-emerald-600 text-white font-semibold">Live 24/7</Badge>
+        <div className="mx-auto w-full max-w-7xl px-safe py-2 text-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-3 text-white/80">
+              <Badge className="bg-emerald-600 text-white font-semibold">Live 24/7</Badge>
+              <span className="flex items-center gap-2">
+                <Phone className="h-4 w-4" />
+                Emergency desk: (800) 555-TRUCK
+              </span>
+              <span className="flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Avg dispatch under 10 min
+              </span>
+            </div>
             <div className="flex items-center gap-2 text-white/80">
-              <Phone className="h-4 w-4" />
-              <span>Emergency desk: (800) 555-TRUCK</span>
+              <Shield className="h-4 w-4" />
+              <span>Certified technicians • Fully insured</span>
             </div>
-            <div className="hidden sm:flex items-center gap-2 text-white/80">
-              <Clock className="h-4 w-4" />
-              <span>Average dispatch confirmation in under 10 minutes</span>
-            </div>
-          </div>
-          <div className="hidden sm:flex items-center gap-4 text-white/80">
-            <Shield className="h-4 w-4" />
-            <span>Certified technicians | Fully insured</span>
           </div>
         </div>
       </div>
 
       {/* Navigation */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-sm border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
+        <div className="mx-auto w-full max-w-7xl px-safe">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
               <Truck className="w-8 h-8 text-emerald-600" />
@@ -153,7 +156,7 @@ export default function Homepage() {
       {/* Hero */}
       <section className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white">
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_10%_20%,_#10b981,_transparent_25%),radial-gradient(circle_at_80%_0%,_#22c55e,_transparent_20%)]" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-24 grid lg:grid-cols-2 gap-12 items-center relative">
+        <div className="relative mx-auto grid w-full max-w-7xl gap-12 px-safe py-16 lg:grid-cols-2 lg:py-24">
           <div className="space-y-6">
             <Badge className="bg-white/10 text-white border border-white/20 px-3 py-1">Professional mobile repair</Badge>
             <h1 className="text-4xl sm:text-5xl font-black leading-tight">
@@ -221,8 +224,8 @@ export default function Homepage() {
       </section>
 
       {/* Value grid */}
-      <section className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="bg-white">
+        <PageShell maxWidth="xl" padding="none" className="py-16">
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-10">
             <div>
               <p className="text-sm font-semibold text-emerald-700">Why teams choose TruckFixGo</p>
@@ -274,12 +277,12 @@ export default function Homepage() {
               );
             })}
           </div>
-        </div>
+        </PageShell>
       </section>
 
       {/* Service highlights */}
-      <section className="py-16 bg-slate-900 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="bg-slate-900 text-white">
+        <PageShell maxWidth="xl" padding="none" className="py-16">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-10">
             <div>
               <p className="text-sm font-semibold text-emerald-300">On-site specialists</p>
@@ -328,12 +331,12 @@ export default function Homepage() {
               </Card>
             ))}
           </div>
-        </div>
+        </PageShell>
       </section>
 
       {/* How it works */}
-      <section className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="bg-white">
+        <PageShell maxWidth="xl" padding="none" className="py-16">
           <div className="grid lg:grid-cols-2 gap-10 items-center">
             <div>
               <p className="text-sm font-semibold text-emerald-700">Simple workflow</p>
@@ -425,12 +428,12 @@ export default function Homepage() {
               </CardContent>
             </Card>
           </div>
-        </div>
+        </PageShell>
       </section>
 
       {/* Fleet & owner benefits */}
-      <section className="py-16 bg-slate-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="bg-slate-100">
+        <PageShell maxWidth="xl" padding="none" className="py-16">
           <div className="text-center mb-10 space-y-3">
             <p className="text-sm font-semibold text-emerald-700">Designed for modern operations</p>
             <h2 className="text-3xl sm:text-4xl font-black text-slate-900">Support that scales with your routes</h2>
@@ -467,12 +470,12 @@ export default function Homepage() {
               );
             })}
           </div>
-        </div>
+        </PageShell>
       </section>
 
       {/* Testimonials */}
-      <section className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="bg-white">
+        <PageShell maxWidth="xl" padding="none" className="py-16">
           <div className="text-center mb-10 space-y-3">
             <p className="text-sm font-semibold text-emerald-700">Trusted partners</p>
             <h2 className="text-3xl sm:text-4xl font-black text-slate-900">Teams appreciate predictable outcomes</h2>
@@ -514,12 +517,12 @@ export default function Homepage() {
               </Card>
             ))}
           </div>
-        </div>
+        </PageShell>
       </section>
 
       {/* Final CTA */}
-      <section className="py-16 bg-emerald-700 text-white">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
+      <section className="bg-emerald-700 text-white">
+        <PageShell maxWidth="lg" padding="none" className="py-16 text-center space-y-6">
           <p className="text-sm font-semibold uppercase tracking-wide">Ready when you are</p>
           <h2 className="text-3xl sm:text-4xl font-black">Create your account and keep your schedule on track</h2>
           <p className="text-base text-white/80 max-w-3xl mx-auto">
@@ -555,12 +558,12 @@ export default function Homepage() {
               </div>
             ))}
           </div>
-        </div>
+        </PageShell>
       </section>
 
       {/* Footer */}
-      <footer className="bg-slate-950 text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <footer className="bg-slate-950 text-white">
+        <PageShell maxWidth="xl" padding="none" className="py-12">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div className="space-y-3">
               <p className="text-sm font-semibold text-emerald-300">Company</p>
@@ -598,7 +601,7 @@ export default function Homepage() {
             </div>
             <p>© {new Date().getFullYear()} TruckFixGo. All rights reserved.</p>
           </div>
-        </div>
+        </PageShell>
       </footer>
     </div>
   );

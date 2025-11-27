@@ -53,22 +53,29 @@ function BiddingJobsPage() {
   const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
 
   // Fetch user's bidding jobs
-  const { data: biddingJobs, isLoading: loadingJobs } = useQuery({
+  const { data: biddingJobs, isLoading: loadingJobs } = useQuery<{ jobs?: any[] }>({
     queryKey: ['/api/jobs', { allowBidding: true }],
-    enabled: selectedTab === 'my-jobs'
+    enabled: selectedTab === 'my-jobs',
+    queryFn: () => apiRequest('GET', '/api/jobs?allowBidding=true'),
   });
 
   // Fetch service types
-  const { data: serviceTypes } = useQuery({
+  const { data: serviceTypes } = useQuery<{ serviceTypes?: any[] } | any[]>({
     queryKey: ['/api/service-types'],
+    queryFn: () => apiRequest('GET', '/api/service-types'),
   });
 
   // Fetch bids for selected job
-  const { data: jobBids, isLoading: loadingBids } = useQuery({
-    queryKey: selectedJobId ? [`/api/bids/job/${selectedJobId}`] : null,
+  const { data: jobBids, isLoading: loadingBids } = useQuery<{ bids?: any[]; total?: number }>({
+    queryKey: ['/api/bids/job', selectedJobId],
     enabled: !!selectedJobId,
-    refetchInterval: 30000 // Refresh every 30 seconds
+    refetchInterval: 30000,
+    queryFn: () => apiRequest('GET', `/api/bids/job/${selectedJobId}`),
   });
+
+  const availableServiceTypes = Array.isArray(serviceTypes)
+    ? serviceTypes
+    : serviceTypes?.serviceTypes ?? [];
 
   const form = useForm<CreateBiddingJobForm>({
     resolver: zodResolver(createBiddingJobSchema),
@@ -214,7 +221,7 @@ function BiddingJobsPage() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {serviceTypes?.serviceTypes?.filter((st: any) => !st.emergencyOnly).map((type: any) => (
+                              {availableServiceTypes.filter((st: any) => !st.emergencyOnly).map((type: any) => (
                                 <SelectItem key={type.id} value={type.id}>
                                   {type.name}
                                 </SelectItem>

@@ -36,7 +36,6 @@ import {
   Receipt,
   FileSpreadsheet,
   Printer,
-  FileTax2,
   FileUp,
   Zap,
   MapPin,
@@ -532,7 +531,7 @@ export default function ContractorEarnings() {
                           {paymentMethod?.bankName || "Debit Card"} ••••{paymentMethod?.last4}
                         </span>
                         <Button
-                          variant="link"
+                          variant="ghost"
                           size="sm"
                           className="ml-auto p-0 h-auto"
                           onClick={() => navigate("/contractor/profile")}

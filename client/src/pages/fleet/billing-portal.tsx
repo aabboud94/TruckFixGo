@@ -78,6 +78,16 @@ interface FleetSubscription extends BillingSubscription {
       scheduledServices: number;
     };
   };
+  nextBillingDate?: string | null;
+}
+
+interface SubscriptionResponse {
+  subscription: FleetSubscription;
+  usage?: BillingUsageTracking;
+}
+
+interface BillingHistoryResponse {
+  history: BillingHistory[];
 }
 
 const PLAN_DETAILS = {
@@ -137,7 +147,7 @@ export default function FleetBillingPortal() {
   const [newPaymentMethod, setNewPaymentMethod] = useState('');
 
   // Fetch subscription data
-  const { data: subscriptionData, isLoading } = useQuery({
+  const { data: subscriptionData, isLoading } = useQuery<SubscriptionResponse>({
     queryKey: ['/api/billing/my-subscription'],
     queryFn: async () => {
       // This would fetch the current fleet's subscription
@@ -148,7 +158,7 @@ export default function FleetBillingPortal() {
   });
 
   // Fetch billing history
-  const { data: billingHistory } = useQuery({
+  const { data: billingHistory } = useQuery<BillingHistoryResponse>({
     queryKey: ['/api/billing/history'],
     queryFn: async () => {
       const response = await fetch('/api/billing/history');
@@ -157,10 +167,27 @@ export default function FleetBillingPortal() {
     },
   });
 
+  const historyItems = billingHistory?.history ?? [];
+
+  const subscription = subscriptionData?.subscription;
+  const usage = subscriptionData?.usage
+    ? {
+        vehiclesUsed: subscriptionData.usage.activeVehiclesCount,
+        emergencyRepairsUsed: subscriptionData.usage.emergencyRepairsCount,
+        scheduledServicesUsed: subscriptionData.usage.scheduledServicesCount,
+        overageCharges: 0,
+        usagePercentage: {
+          vehicles: 0,
+          emergencyRepairs: 0,
+          scheduledServices: 0,
+        },
+      }
+    : subscription?.currentUsage;
+
   // Update subscription mutation
   const updateSubscriptionMutation = useMutation({
     mutationFn: async ({ planType }: { planType: string }) => {
-      return await apiRequest(`/api/billing/subscriptions/${subscriptionData?.subscription?.id}`, {
+      return await apiRequest(`/api/billing/subscriptions/${subscription?.id}`, {
         method: 'PUT',
         body: JSON.stringify({ planType }),
       });
@@ -185,7 +212,7 @@ export default function FleetBillingPortal() {
   // Cancel subscription mutation
   const cancelSubscriptionMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest(`/api/billing/subscriptions/${subscriptionData?.subscription?.id}/cancel`, {
+      return await apiRequest(`/api/billing/subscriptions/${subscription?.id}/cancel`, {
         method: 'POST',
         body: JSON.stringify({ immediately: false, reason: cancelReason }),
       });
@@ -210,7 +237,7 @@ export default function FleetBillingPortal() {
   // Update payment method mutation
   const updatePaymentMethodMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest(`/api/billing/subscriptions/${subscriptionData?.subscription?.id}/payment-method`, {
+      return await apiRequest(`/api/billing/subscriptions/${subscription?.id}/payment-method`, {
         method: 'PUT',
         body: JSON.stringify({ paymentMethodId: newPaymentMethod }),
       });
@@ -233,9 +260,8 @@ export default function FleetBillingPortal() {
     },
   });
 
-  const subscription = subscriptionData?.subscription as FleetSubscription;
-  const usage = subscriptionData?.usage;
   const currentPlan = subscription?.planType ? PLAN_DETAILS[subscription.planType as keyof typeof PLAN_DETAILS] : null;
+  const nextBillingDate = subscription?.nextBillingDate ?? subscription?.currentPeriodEnd ?? null;
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -297,6 +323,13 @@ export default function FleetBillingPortal() {
     );
   }
 
+  const maxVehiclesLimit = subscription.maxVehicles ?? 0;
+  const emergencyIncluded = subscription.includedEmergencyRepairs ?? 0;
+  const scheduledIncluded = subscription.includedScheduledServices ?? 0;
+  const addOns = Array.isArray(subscription.addOns)
+    ? (subscription.addOns as Array<string | { id?: string; name?: string; description?: string }>)
+    : [];
+
   return (
     <div className="container mx-auto px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8 space-y-4 sm:space-y-6 md:space-y-8">
       {/* Header */}
@@ -328,9 +361,7 @@ export default function FleetBillingPortal() {
             <div>
               <p className="text-xs sm:text-sm text-muted-foreground">Next Billing Date</p>
               <p className="text-sm sm:text-base md:text-lg font-semibold">
-                {subscription.nextBillingDate
-                  ? format(new Date(subscription.nextBillingDate), 'MMM d, yyyy')
-                  : 'N/A'}
+                {nextBillingDate ? format(new Date(nextBillingDate), 'MMM d, yyyy') : 'N/A'}
               </p>
             </div>
             <div className="sm:col-span-2 md:col-span-1">
@@ -355,12 +386,12 @@ export default function FleetBillingPortal() {
                   <span>Vehicles</span>
                 </div>
                 <span className="font-medium">
-                  {usage?.vehiclesUsed || 0} / {subscription.maxVehicles === 999999 ? 'Unlimited' : subscription.maxVehicles}
+                  {usage?.vehiclesUsed || 0} / {maxVehiclesLimit === 999999 ? 'Unlimited' : maxVehiclesLimit}
                 </span>
               </div>
-              {subscription.maxVehicles !== 999999 && (
+              {maxVehiclesLimit !== 999999 && maxVehiclesLimit > 0 && (
                 <Progress
-                  value={(usage?.vehiclesUsed || 0) / subscription.maxVehicles * 100}
+                  value={((usage?.vehiclesUsed || 0) / maxVehiclesLimit) * 100}
                   className="h-2"
                 />
               )}
@@ -374,12 +405,12 @@ export default function FleetBillingPortal() {
                   <span>Emergency Repairs</span>
                 </div>
                 <span className="font-medium">
-                  {usage?.emergencyRepairsUsed || 0} / {subscription.includedEmergencyRepairs === 999999 ? 'Unlimited' : subscription.includedEmergencyRepairs}
+                  {usage?.emergencyRepairsUsed || 0} / {emergencyIncluded === 999999 ? 'Unlimited' : emergencyIncluded}
                 </span>
               </div>
-              {subscription.includedEmergencyRepairs !== 999999 && (
+              {emergencyIncluded !== 999999 && emergencyIncluded > 0 && (
                 <Progress
-                  value={(usage?.emergencyRepairsUsed || 0) / subscription.includedEmergencyRepairs * 100}
+                  value={((usage?.emergencyRepairsUsed || 0) / emergencyIncluded) * 100}
                   className="h-2"
                 />
               )}
@@ -393,30 +424,26 @@ export default function FleetBillingPortal() {
                   <span>Scheduled Services</span>
                 </div>
                 <span className="font-medium">
-                  {usage?.scheduledServicesUsed || 0} / {subscription.includedScheduledServices === 999999 ? 'Unlimited' : subscription.includedScheduledServices}
+                  {usage?.scheduledServicesUsed || 0} / {scheduledIncluded === 999999 ? 'Unlimited' : scheduledIncluded}
                 </span>
               </div>
-              {subscription.includedScheduledServices !== 999999 && (
+              {scheduledIncluded !== 999999 && scheduledIncluded > 0 && (
                 <Progress
-                  value={(usage?.scheduledServicesUsed || 0) / subscription.includedScheduledServices * 100}
+                  value={((usage?.scheduledServicesUsed || 0) / scheduledIncluded) * 100}
                   className="h-2"
                 />
               )}
             </div>
 
             {/* Usage Alerts */}
-            {usage && (
-              <>
-                {usage.vehiclesUsed / subscription.maxVehicles > 0.8 && subscription.maxVehicles !== 999999 && (
-                  <Alert>
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Vehicle Limit Alert</AlertTitle>
-                    <AlertDescription>
-                      You're using {Math.round(usage.vehiclesUsed / subscription.maxVehicles * 100)}% of your vehicle limit. Consider upgrading your plan.
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </>
+            {usage && maxVehiclesLimit > 0 && maxVehiclesLimit !== 999999 && (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Vehicle Limit Alert</AlertTitle>
+                <AlertDescription>
+                  You're using {Math.round((usage.vehiclesUsed / maxVehiclesLimit) * 100)}% of your vehicle limit. Consider upgrading your plan.
+                </AlertDescription>
+              </Alert>
             )}
           </div>
 
@@ -438,12 +465,17 @@ export default function FleetBillingPortal() {
                   <span className="text-sm">Dedicated Account Manager</span>
                 </div>
               )}
-              {subscription.addOns?.map((addon) => (
-                <div key={addon} className="flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-                  <span className="text-sm">{addon.replace('_', ' ')}</span>
-                </div>
-              ))}
+              {addOns.map((addon, index) => {
+                const label = typeof addon === 'string' ? addon : addon.name;
+                const key = typeof addon === 'string' ? addon : addon.id || addon.name || `addon-${index}`;
+                if (!label) return null;
+                return (
+                  <div key={key} className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    <span className="text-sm">{label.replace(/_/g, ' ')}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </CardContent>
@@ -483,7 +515,7 @@ export default function FleetBillingPortal() {
           <CardDescription className="text-xs sm:text-sm">View your past invoices and payments</CardDescription>
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
-          {billingHistory?.history?.length > 0 ? (
+          {historyItems.length > 0 ? (
             <div className="overflow-x-auto -mx-3 sm:-mx-6">
               <div className="min-w-[500px] px-3 sm:px-6">
                 <Table>
@@ -497,7 +529,7 @@ export default function FleetBillingPortal() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                {billingHistory.history.map((item: BillingHistory) => (
+                {historyItems.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="text-xs sm:text-sm">
                       {format(new Date(item.billingDate), 'MMM d, yyyy')}

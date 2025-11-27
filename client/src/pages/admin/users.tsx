@@ -84,9 +84,10 @@ export default function AdminUsers() {
   });
 
   // Query for activity logs
-  const { data: activityLogs } = useQuery({
+  const { data: activityLogs } = useQuery<any>({
     queryKey: ['/api/admin/users/activity', selectedUser?.id],
     enabled: !!selectedUser,
+    queryFn: () => apiRequest('GET', `/api/admin/users/${selectedUser?.id}/activity`),
   });
 
   // Mutation for updating user role
@@ -258,22 +259,22 @@ export default function AdminUsers() {
   const activityData = activityLogs?.data || [];
 
   const getRoleBadge = (role: string) => {
-    const colors: any = {
+    const variants: Record<string, "default" | "destructive" | "secondary" | "outline"> = {
       admin: 'destructive',
       contractor: 'default',
       driver: 'secondary',
       fleet: 'outline',
     };
-    return <Badge variant={colors[role] || 'secondary'}>{role}</Badge>;
+    return <Badge variant={variants[role] || 'secondary'}>{role}</Badge>;
   };
 
   const getStatusBadge = (status: string) => {
-    const colors: any = {
-      active: 'success',
+    const variants: Record<string, "default" | "destructive" | "secondary" | "outline"> = {
+      active: 'secondary',
       suspended: 'destructive',
-      pending: 'warning',
+      pending: 'outline',
     };
-    return <Badge variant={colors[status] || 'secondary'}>{status}</Badge>;
+    return <Badge variant={variants[status] || 'secondary'}>{status}</Badge>;
   };
 
   const getActionIcon = (action: string) => {
