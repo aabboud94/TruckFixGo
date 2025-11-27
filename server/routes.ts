@@ -384,7 +384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       secure: process.env.NODE_ENV === 'production', // Only secure in production
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax', // lax for development
+      sameSite: 'lax', // Use 'lax' for both dev and production to allow redirects after login
       path: '/', // Ensure cookie is available for all paths
       domain: undefined // Let the browser handle domain
     },

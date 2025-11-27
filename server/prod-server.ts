@@ -39,7 +39,7 @@ app.use(
       maxAge: 24 * 60 * 60 * 1000, // 24 hours (aligned with routes.ts)
       secure: isProduction, // Use HTTPS in production
       httpOnly: true,
-      sameSite: isProduction ? 'strict' : 'lax' // Add CSRF protection
+      sameSite: 'lax' // Use 'lax' to allow redirects after login while still protecting against CSRF
     }
   })
 );
