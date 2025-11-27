@@ -762,6 +762,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Update last login
         await storage.updateUser(user.id, { lastLoginAt: new Date() });
 
+        // Clear all existing sessions for this user to prevent "already logged in" issues
+        try {
+          await db.execute(sql`DELETE FROM user_sessions WHERE sess->>'userId' = ${user.id}`);
+          console.log(`[login] Cleared existing sessions for user ${user.id}`);
+        } catch (sessionClearError) {
+          console.log(`[login] Could not clear existing sessions (non-fatal):`, sessionClearError);
+        }
+
         // Create session
         req.session.userId = user.id;
         req.session.role = user.role;
@@ -861,6 +869,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Update last login
         await storage.updateUser(user.id, { lastLoginAt: new Date() });
+        
+        // Clear all existing sessions for this user to prevent "already logged in" issues
+        try {
+          await db.execute(sql`DELETE FROM user_sessions WHERE sess->>'userId' = ${user.id}`);
+          console.log(`[test-login] Cleared existing sessions for user ${user.id}`);
+        } catch (sessionClearError) {
+          console.log(`[test-login] Could not clear existing sessions (non-fatal):`, sessionClearError);
+        }
         
         // Create session
         req.session.userId = user.id;
