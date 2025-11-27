@@ -251,7 +251,7 @@ export default function Homepage() {
             }, {
               title: "Transparent pricing", description: "Clear estimates, approval workflows, and digital invoices for every job.", icon: Shield
             }, {
-              title: "Certified expertise", description: "Multi-brand diagnostics, tyres, brakes, hydraulics, electrical, and aftertreatment systems.", icon: Wrench
+              title: "Certified expertise", description: "Multi-brand diagnostics, tires, brakes, hydraulics, electrical, and aftertreatment systems.", icon: Wrench
             }, {
               title: "Global-ready", description: "Neutral communications and multi-lingual updates keep international teams aligned.", icon: Globe2
             }, {
@@ -304,8 +304,8 @@ export default function Homepage() {
               description: "Breakdowns, no-starts, aftertreatment faults, and warning lights diagnosed on the spot.",
               image: beforeAfterImage
             }, {
-              title: "Tyres & wheels",
-              description: "Tyre replacement, balancing, and wheel torque checks with premium inventory on hand.",
+              title: "Tires & wheels",
+              description: "Tire replacement, balancing, and wheel torque checks with premium inventory on hand.",
               image: tireServiceImage
             }, {
               title: "Preventative maintenance",
